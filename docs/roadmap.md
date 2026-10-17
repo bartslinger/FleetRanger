@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Phase 1: backend skeleton.
+Local development setup, and the start of the web app (design system under discussion).
 
 ## Phase 1: backend skeleton
 
@@ -13,8 +13,8 @@ Phase 1: backend skeleton.
 - [x] PostgreSQL with migrations
 - [x] Docker image, cross-built for x86_64
 - [x] Compose stack and image shipping script
-- [ ] Ansible role in the deployment repo
-- [ ] Deployed to the first install, with no public route yet
+- [x] Ansible role in the deployment repo
+- [x] Deployed to the first install, with no public route yet
 
 ## Phase 2: ingest
 

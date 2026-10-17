@@ -59,7 +59,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 ## Clients
 
 - **Backend:** Rust with axum.
-- **Web:** SvelteKit with server-side rendering (Node).
+- **Web:** SvelteKit with server-side rendering (Node), TypeScript, pnpm, Prettier and ESLint.
 - **Remote controller app:** Kotlin, for DJI Enterprise controllers running DJI Pilot 2. The controller is configured to launch FleetRanger on boot. After a pilot is selected (default: the last pilot), the app starts DJI Pilot 2. Finished logs sync only over Wi-Fi networks chosen in the app.
 
 ## Customer-specific needs
