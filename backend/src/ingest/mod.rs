@@ -2,5 +2,6 @@
 
 mod db;
 mod dji;
+mod flight;
 pub mod import;
 pub mod process;

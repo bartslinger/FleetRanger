@@ -1,5 +1,5 @@
 //! Processes pending raw logs, one at a time: requests decryption keys from DJI
-//! when needed, decrypts and parses the log.
+//! when needed, decrypts and parses the log, and saves the flight in it.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -12,6 +12,7 @@ use dji_log_parser::record::Record;
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
+use super::flight::{self, Flight, Serials};
 use super::{db, dji};
 
 /// How long to wait before looking for new logs when none are pending.
@@ -30,11 +31,14 @@ const KNOWN_RECORD_TYPES: [u8; 24] = [
 
 /// The result of processing one log: what it contains, or why it can't be processed.
 /// Problems that may go away are errors instead, and leave the log pending.
-type Processed = std::result::Result<Summary, String>;
+type Processed = std::result::Result<Decoded, String>;
 
-struct Summary {
-    frames: usize,
-    airborne_frames: usize,
+struct Decoded {
+    /// `None` if the aircraft never took off.
+    flight: Option<Flight>,
+    /// The summary DJI's app wrote into the log, logged for comparison with ours.
+    dji_total_time_s: f64,
+    dji_total_distance_m: f32,
 }
 
 pub async fn run(db: PgPool, log_dir: PathBuf, dji_app_key: Option<String>) {
@@ -61,14 +65,19 @@ async fn process_next(db: &PgPool, log_dir: &Path, dji_app_key: Option<&str>) ->
         .await
         .with_context(|| format!("while processing {}", log.path))?;
     match processed {
-        Ok(summary) => {
-            db::mark_done(db, log.id).await?;
-            tracing::info!(
-                path = log.path,
-                frames = summary.frames,
-                airborne_frames = summary.airborne_frames,
-                "processed log"
-            );
+        Ok(decoded) => {
+            db::save_result(db, log.id, decoded.flight.as_ref()).await?;
+            match &decoded.flight {
+                Some(flight) => tracing::info!(
+                    path = log.path,
+                    air_time_s = flight.air_time_s,
+                    distance_m = flight.distance_m.round(),
+                    dji_total_time_s = decoded.dji_total_time_s.round(),
+                    dji_total_distance_m = decoded.dji_total_distance_m.round(),
+                    "processed log"
+                ),
+                None => tracing::info!(path = log.path, "processed log: no takeoff"),
+            }
         }
         Err(reason) => {
             db::mark_failed(db, log.id, &reason).await?;
@@ -175,12 +184,10 @@ fn decode(log: &DJILog, keychains: Option<Vec<Vec<KeychainFeaturePoint>>>) -> Pr
     }
 
     let frames = records_to_frames(records, log.details.clone());
-    Ok(Summary {
-        frames: frames.len(),
-        airborne_frames: frames
-            .iter()
-            .filter(|frame| !frame.osd.is_on_ground)
-            .count(),
+    Ok(Decoded {
+        flight: flight::derive(&frames, Serials::from_details(&log.details)),
+        dji_total_time_s: log.details.total_time,
+        dji_total_distance_m: log.details.total_distance,
     })
 }
 

@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
+use anyhow::Result;
 use sqlx::PgPool;
 use sqlx::types::Uuid;
+
+use super::flight::Flight;
 
 pub struct PendingLog {
     pub id: Uuid,
@@ -53,14 +56,53 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
     .await
 }
 
-pub async fn mark_done(db: &PgPool, id: Uuid) -> sqlx::Result<()> {
+/// Saves the flight found in a raw log, or removes an earlier one if the log turned
+/// out to have none, and marks the log done. Re-processing updates the flight in
+/// place, so its id stays the same.
+pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<()> {
+    let mut tx = db.begin().await?;
+    match flight {
+        Some(flight) => {
+            sqlx::query!(
+                "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
+                                      aircraft_serial, rc_serial, track, metrics)
+                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                 on conflict (raw_log_id) do update set
+                     takeoff_at = excluded.takeoff_at,
+                     landed_at = excluded.landed_at,
+                     air_time_s = excluded.air_time_s,
+                     distance_m = excluded.distance_m,
+                     aircraft_serial = excluded.aircraft_serial,
+                     rc_serial = excluded.rc_serial,
+                     track = excluded.track,
+                     metrics = excluded.metrics",
+                raw_log_id,
+                flight.takeoff_at,
+                flight.landed_at,
+                flight.air_time_s,
+                flight.distance_m,
+                flight.aircraft_serial,
+                flight.rc_serial,
+                flight.track,
+                serde_json::to_value(&flight.metrics)?,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        None => {
+            sqlx::query!("delete from flights where raw_log_id = $1", raw_log_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
     sqlx::query!(
         "update raw_logs set status = 'done', last_error = null, processed_at = now()
          where id = $1",
-        id,
+        raw_log_id,
     )
-    .execute(db)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(())
 }
 
