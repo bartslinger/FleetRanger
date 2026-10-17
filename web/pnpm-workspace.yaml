@@ -1,0 +1,10 @@
+# Install scripts that pnpm may run. The Carbon and IBM Plex packages only run
+# IBM's install telemetry, so they are denied.
+allowBuilds:
+  '@carbon/colors': false
+  '@carbon/grid': false
+  '@carbon/layout': false
+  '@carbon/themes': false
+  '@carbon/type': false
+  '@ibm/plex-mono': false
+  '@ibm/plex-sans': false

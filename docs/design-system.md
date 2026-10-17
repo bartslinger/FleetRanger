@@ -11,9 +11,10 @@ FleetRanger follows the [Carbon Design System](https://carbondesignsystem.com) a
 
 ## Foundations
 
-- **Tokens:** colour, layering, spacing, type scale and motion values come from Carbon's official packages (`@carbon/themes`, `@carbon/layout`, `@carbon/type`, Apache-2.0). They are exported once to CSS custom properties in `web/src/lib/ui/tokens.css`. Components use only these variables, never literal values.
+- **Tokens:** colour, layering, spacing, type scale and motion values come from Carbon's official packages (`@carbon/themes`, `@carbon/layout`, `@carbon/type`, Apache-2.0). `pnpm tokens` (`web/scripts/tokens.js`) exports them to CSS custom properties in `web/src/lib/ui/tokens.css`, which is committed so upgrades show as a diff. Names follow Carbon's (`--cds-layer-01`, `--cds-spacing-05`, `--cds-heading-01-font-size`). Components use only these variables, never literal values.
+- **No install telemetry.** The Carbon and Plex packages run IBM's telemetry on install; `web/pnpm-workspace.yaml` denies those scripts.
 - **Themes:** Carbon's White (`white`) for light and Gray 100 (`g100`) for dark. The app follows the system setting.
-- **Typography:** IBM Plex Sans and IBM Plex Mono (SIL Open Font License), self-hosted. Numbers in tables and statistics use tabular figures.
+- **Typography:** IBM Plex Sans and IBM Plex Mono (SIL Open Font License), self-hosted from the `@ibm/plex-*` packages and bundled by Vite. Numbers in tables and statistics use tabular figures.
 - **Styling:** plain CSS with custom properties, scoped per Svelte component. No utility framework.
 
 ## Components

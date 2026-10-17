@@ -1,0 +1,99 @@
+/* Global styles: fonts, tokens and a minimal reset. Everything else is scoped
+   to components. */
+
+@import '@ibm/plex-sans/css/ibm-plex-sans-default.min.css';
+@import '@ibm/plex-mono/css/ibm-plex-mono-default.min.css';
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--cds-background);
+	color: var(--cds-text-primary);
+	font-family: var(--cds-font-family-sans);
+	font-size: var(--cds-body-01-font-size);
+	font-weight: var(--cds-body-01-font-weight);
+	line-height: var(--cds-body-01-line-height);
+	letter-spacing: var(--cds-body-01-letter-spacing);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd {
+	margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-size: inherit;
+	font-weight: inherit;
+}
+
+ul,
+ol {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	letter-spacing: inherit;
+	color: inherit;
+}
+
+code,
+kbd,
+pre,
+samp {
+	font-family: var(--cds-font-family-mono);
+}
+
+a {
+	color: var(--cds-link-primary);
+}
+
+a:hover {
+	color: var(--cds-link-primary-hover);
+}
+
+/* Carbon's focus indicator: a 2px inset outline in the focus colour. */
+:focus-visible {
+	outline: 2px solid var(--cds-focus);
+	outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}
