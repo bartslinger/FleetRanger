@@ -3,6 +3,7 @@
 allowBuilds:
   '@carbon/colors': false
   '@carbon/grid': false
+  '@carbon/icons': false
   '@carbon/layout': false
   '@carbon/themes': false
   '@carbon/type': false
