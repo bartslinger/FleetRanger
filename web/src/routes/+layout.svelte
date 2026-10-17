@@ -1,13 +1,20 @@
 <script lang="ts">
 	import '#lib/ui/base.css';
+	import { resolve } from '$app/paths';
 	import favicon from '#lib/assets/favicon.svg';
+	import Shell, { type NavItem } from '#lib/ui/Shell.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+
+	const nav: NavItem[] = [{ href: resolve('/'), label: 'Logbook' }];
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
+	<title>FleetRanger</title>
 </svelte:head>
 
-{@render children()}
+<Shell name="FleetRanger" {nav}>
+	{@render children()}
+</Shell>
