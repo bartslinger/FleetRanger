@@ -11,6 +11,12 @@ that commit.
 It is vendored so it can be patched. Each patch has its own section below, with the reason for
 it. Drop a patch once upstream fixes the problem.
 
+### Compiler warnings
+
+Unnecessary parentheses in `#[br(map = …)]` closures are removed, and the auxiliary info's
+version and signature, which are read but never used, are marked `temp`. This changes no
+behaviour. Cargo shows warnings for vendored code, and these drowned out our own.
+
 ### Record types 253 and 254
 
 In `src/keychain/feature_point.rs`, record types 253 and 254 are mapped to the DJIFlyCustom
