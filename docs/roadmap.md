@@ -70,7 +70,6 @@ Phase 2: ingest. The patched parser is vendored; the schema for raw logs, DJI ke
 ## Open questions
 
 - Re-uploads with the same file name but different content (a log synced while still being written): how should they replace the earlier version? Decide in phase 6; until then files are only deduplicated by hash.
-- A log with several takeoffs: one flight or several?
 - Session time-gap threshold. The proposal is 2 hours, configurable.
 - Do session "time on/off" values mean first takeoff and last landing?
 - Who sees flights with no pilot and no team?
