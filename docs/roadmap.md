@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Local development setup, and the start of the web app (design system under discussion).
+Phase 2: ingest. The patched parser is vendored; the schema for raw logs, DJI key requests and flights is agreed in outline.
 
 ## Phase 1: backend skeleton
 
@@ -18,6 +18,7 @@ Local development setup, and the start of the web app (design system under discu
 
 ## Phase 2: ingest
 
+- [x] Vendored dji-log-parser with fixes
 - [ ] Import existing raw logs from disk
 - [ ] DJI keychain requests, recorded per log
 - [ ] Parse into flights: times, time in air, distance, track, drone/controller/battery serials
@@ -68,7 +69,8 @@ Local development setup, and the start of the web app (design system under discu
 
 ## Open questions
 
-- Re-uploads with the same file name but different content (a log synced while still being written): keep them as versions, or name files by hash?
+- Re-uploads with the same file name but different content (a log synced while still being written): how should they replace the earlier version? Decide in phase 6; until then files are only deduplicated by hash.
+- A log with several takeoffs: one flight or several?
 - Session time-gap threshold. The proposal is 2 hours, configurable.
 - Do session "time on/off" values mean first takeoff and last landing?
 - Who sees flights with no pilot and no team?

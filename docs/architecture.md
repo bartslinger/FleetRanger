@@ -14,7 +14,9 @@ The decisions made so far, each with a short reason. Open questions are listed i
 ## Data
 
 - **PostgreSQL**, without PostGIS for now. Flight tracks are stored as GeoJSON LineStrings in `jsonb`, in their own table so flight listings stay light. Moving to PostGIS later is a single backfill with `ST_GeomFromGeoJSON`.
-- **Raw logs are files on disk**, never modified after upload. The database records their SHA-256 hash and origin.
+- **Raw logs are files on disk**, never modified after upload. The database records their SHA-256 hash and origin, and identical files are stored once. Existing files are registered where they are; new uploads are stored as `uploads/<sha256>.txt`.
+- **Raw logs and flights are separate tables.** A raw log is a file and its processing state; a flight is what was derived from it. A log without a takeoff has no flight. Re-processing updates a flight in place, so what is attached to it (pilot, session) survives.
+- **Flight tracks are kept at one point per second.** More detail can be derived from the raw log when needed.
 - **Raw logs and full telemetry are not exposed** to any user, admins included. They exist so logs can be re-processed when the parser improves. Users only see derived data (times, distance, track, statistics).
 - **Every DJI keychain request is recorded** per log: the exact request sent (API key redacted), the time, the response status and the keys returned.
 
@@ -48,6 +50,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 
 - **One crate, organised by feature** (`flights/`, `sessions/`, `ingest/`, and so on). Each feature has `routes.rs` (HTTP), `service.rs` (policy checks, logic, audit) and `db.rs` (sqlx queries). Cross-cutting concerns (`auth/`, `policy/`, `audit/`) are top-level modules.
 - **sqlx** with plain SQL migrations and compile-time checked queries.
+- **dji-log-parser is vendored** in `backend/vendor/` with our patches, each explained in `backend/vendor/README.md`.
 - **Background work** (DJI keychain requests, parsing, re-processing) runs as a loop in the same binary. There is no separate queue: each raw log has a processing status (pending, done, failed) with attempts and the last error. The loop picks up pending logs, and re-processing means setting logs back to pending. CPU-heavy parsing has a concurrency limit.
 
 ## Web and API
