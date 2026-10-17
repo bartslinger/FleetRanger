@@ -24,6 +24,8 @@ services:
 
   backend:
     image: fleetranger-backend:${FLEETRANGER_VERSION:?}
+    # Loaded onto the server by ship-image.sh; never fetched from a registry.
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       postgres:
