@@ -1,0 +1,29 @@
+# Design system
+
+FleetRanger follows the [Carbon Design System](https://carbondesignsystem.com) as its design language. We use Carbon's official tokens and its component and pattern guidelines, but build our own components. We don't depend on a Carbon component library.
+
+## Principles
+
+- **Laptop first.** The main use is reviewing flights, sessions and reports at a desk, so the layout and density follow Carbon's defaults for that.
+- **A useful subset on mobile.** Pilots check their own sessions and fill in reports on a phone. Those screens must work at phone width, with touch-sized controls.
+- **The same look on the remote controller.** The Android app uses the same tokens (colours, type, spacing), translated to a Jetpack Compose theme.
+- **No third-party requests.** Fonts and assets are bundled with the app. The browser never contacts an outside host.
+
+## Foundations
+
+- **Tokens:** colour, layering, spacing, type scale and motion values come from Carbon's official packages (`@carbon/themes`, `@carbon/layout`, `@carbon/type`, Apache-2.0). They are exported once to CSS custom properties in `web/src/lib/ui/tokens.css`. Components use only these variables, never literal values.
+- **Themes:** Carbon's White (`white`) for light and Gray 100 (`g100`) for dark. The app follows the system setting.
+- **Typography:** IBM Plex Sans and IBM Plex Mono (SIL Open Font License), self-hosted. Numbers in tables and statistics use tabular figures.
+- **Styling:** plain CSS with custom properties, scoped per Svelte component. No utility framework.
+
+## Components
+
+- **Location:** `web/src/lib/ui/`, as our own code.
+- **Behaviour:** interactive components (dialog, select, combobox, menu, tooltip, date picker) use [Bits UI](https://bits-ui.com) for keyboard handling, focus management and accessibility. Simple components (button, tag, tile, notification) are plain Svelte.
+- **Spec:** each component follows the matching Carbon component's usage and style guidelines. Where we deviate, the component's file says why.
+- **Rule for pages:** pages compose components and use CSS only for layout (grid, flex, gap). Colour, type and spacing decisions belong in components and tokens.
+
+## Status
+
+- Exploration: three directions were compared, and the Carbon-like direction was chosen.
+- Next: tokens file, fonts, and the first components (button, text input, select, data table, tag, notification, UI shell).
