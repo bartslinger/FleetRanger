@@ -40,6 +40,7 @@ RUN set -eu; \
 
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY vendor vendor
 COPY src src
 COPY migrations migrations
 
