@@ -1,1 +1,5 @@
-<h1>Logbook</h1>
+<script lang="ts">
+	import PageHeader from '#lib/ui/PageHeader.svelte';
+</script>
+
+<PageHeader title="Logbook" />

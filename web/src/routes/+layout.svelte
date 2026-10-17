@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '#lib/ui/base.css';
+	import { dev } from '$app/env';
 	import { resolve } from '$app/paths';
 	import favicon from '#lib/assets/favicon.svg';
 	import Shell, { type NavItem } from '#lib/ui/Shell.svelte';
@@ -7,7 +8,10 @@
 
 	let { children }: LayoutProps = $props();
 
-	const nav: NavItem[] = [{ href: resolve('/'), label: 'Logbook' }];
+	const nav: NavItem[] = [
+		{ href: resolve('/'), label: 'Logbook' },
+		...(dev ? [{ href: resolve('/design'), label: 'Components' }] : [])
+	];
 </script>
 
 <svelte:head>
