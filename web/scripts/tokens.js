@@ -16,7 +16,8 @@ const DARK = { theme: themes.g100, key: 'g100' };
 const SKIPPED = /^(ai|chat|syntax)/;
 const COMPONENT_TOKENS = ['buttonTokens', 'tagTokens', 'notificationTokens', 'statusTokens'];
 
-const name = (token) => `--cds-${themes.formatTokenName(token)}`;
+// Lowercased like Carbon's Sass names (size2XLarge -> --cds-size-2xlarge).
+const name = (token) => `--cds-${themes.formatTokenName(token).toLowerCase()}`;
 
 function colors({ theme, key }) {
 	const values = Object.entries(theme).filter(
