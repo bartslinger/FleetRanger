@@ -33,3 +33,19 @@ inside the flight; with the patch, 5,125, all inside the flight. A log from 2025
 10,524 to 12,585 (all inside the flight). No other record type changes in number, and the
 type-254 records themselves then decrypt to clean, structured data (`05 00 02 00 00 …`). With
 253 as well, not a single record of a type the parser knows fails any more.
+
+### Errors instead of silent garbage
+
+In `src/lib.rs`, where upstream carries on without saying so:
+
+- `DJILog::records` and `DJILog::keychains_request` stop at the first record they can't read
+  and return what they have, so the rest of the log (or the keys it needs) goes missing. Here
+  that's an error.
+- `DJILog::keychains_request` reads every record to find the key ones, before it has any keys.
+  An encrypted record between the key records (the aircraft's serial number, in 6 of 2,068
+  logs tested) then reads as garbage, can run past its own end, and upstream loses its place
+  and skips ahead past the remaining key records: half the keys never get requested, and the
+  records they unlock decrypt to garbage. Here records other than the key ones are skipped by
+  their length without being read.
+- `DJILog::records` continues with an empty keychain when a log switches to a key set that
+  wasn't provided, which decrypts everything after it to garbage. Here that's an error.

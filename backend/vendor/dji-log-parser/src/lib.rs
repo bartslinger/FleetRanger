@@ -305,7 +305,23 @@ impl DJILog {
 
         let mut keychain: Vec<EncodedKeychainFeaturePoint> = Vec::new();
 
-        while cursor.position() < self.prefix.records_end_offset(self.inner.len() as u64) {
+        let end = self.prefix.records_end_offset(self.inner.len() as u64);
+        while cursor.position() < end {
+            // fleetranger patch (see backend/vendor/README.md): skip every record but the key ones
+            // by its framing (type, u16 length, content, 0xFF) instead of reading it. There are
+            // no keys yet, so its content is garbage, and reading that can run past the record
+            // (a garbage string length, say): upstream then lost the record boundaries and
+            // skipped ahead, past key records that came later in the log. Anything that doesn't
+            // look like a framed record (a JPEG, damage) still goes the upstream way.
+            let start = cursor.position() as usize;
+            if let Some(&[t, l0, l1]) = self.inner.get(start..start + 3) {
+                let next = start + 3 + u16::from_le_bytes([l0, l1]) as usize + 1;
+                if t != 50 && t != 56 && [t, l0] != [0xFF, 0xD8] && next as u64 <= end && self.inner[next - 1] == 0xFF {
+                    cursor.set_position(next as u64);
+                    continue;
+                }
+            }
+
             let empty_keychain = &RefCell::new(Keychain::empty());
             let record = match Record::read_args(
                 &mut cursor,
@@ -315,7 +331,9 @@ impl DJILog {
                 },
             ) {
                 Ok(record) => record,
-                Err(_) => break,
+                // fleetranger patch (see backend/vendor/README.md): upstream stops here and returns
+                // what it has, silently dropping the rest of the log.
+                Err(e) => return Err(e.into()),
             };
 
             match record {
@@ -441,11 +459,17 @@ impl DJILog {
                 },
             ) {
                 Ok(record) => record,
-                Err(_) => break,
+                // fleetranger patch (see backend/vendor/README.md): upstream stops here and returns
+                // what it has, silently dropping the rest of the log.
+                Err(e) => return Err(e.into()),
             };
 
             if let Record::KeyStorageRecover(_) = record {
-                keychain = RefCell::new(keychains.pop_front().unwrap_or(Keychain::empty()));
+                // fleetranger patch: upstream carries on with an empty keychain here, which
+                // decrypts every following record to garbage without an error.
+                keychain = RefCell::new(keychains.pop_front().ok_or_else(|| {
+                    Error::MissingAuxilliaryData("keychain for a later part of the log".into())
+                })?);
             }
 
             records.push(record);
