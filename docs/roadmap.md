@@ -19,8 +19,8 @@ Phase 2: ingest. The patched parser is vendored; the schema for raw logs, DJI ke
 ## Phase 2: ingest
 
 - [x] Vendored dji-log-parser with fixes
-- [ ] Import existing raw logs from disk
-- [ ] DJI keychain requests, recorded per log
+- [~] Import existing raw logs from disk (works locally; not yet on the server)
+- [x] DJI keychain requests, recorded per log
 - [ ] Parse into flights: times, time in air, distance, track, drone/controller/battery serials
 - [ ] Re-processing of all logs after parser changes
 
