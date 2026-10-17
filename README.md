@@ -13,10 +13,19 @@ Licensed under the GNU Affero General Public License v3.0, see [LICENSE](LICENSE
 
 Requirements: Docker, [rustup](https://rustup.rs) (the toolchain version is pinned in `backend/rust-toolchain.toml`), and [watchexec](https://github.com/watchexec/watchexec) 2.8.0 (`cargo install --locked watchexec-cli --version 2.8.0`).
 
-Start PostgreSQL:
+Start PostgreSQL and the web dev server (SvelteKit with hot reload, in a container):
 
 ```
 docker compose -f compose.dev.yaml up -d
+```
+
+The web app is served on http://127.0.0.1:5173. It proxies `/api` and `/auth` to the backend. If edits don't trigger a reload (file events may not cross a VM's shared folder), start it with `VITE_POLL=1`.
+
+Run web checks inside the container:
+
+```
+docker compose -f compose.dev.yaml exec web pnpm check
+docker compose -f compose.dev.yaml exec web pnpm lint
 ```
 
 Run the backend, rebuilding and restarting on every change:

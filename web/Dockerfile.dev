@@ -1,0 +1,16 @@
+# Development image for the SvelteKit dev server (see compose.dev.yaml).
+FROM node:24.22.0-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315
+
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+# Created here so the named volumes mounted on them start out owned by the
+# node user (uid 1000) instead of root.
+RUN mkdir -p /repo/web/node_modules && chown -R node:node /repo
+
+# pnpm is provided through corepack, pinned by package.json's packageManager field.
+RUN corepack enable pnpm
+
+USER node
+RUN corepack install --global pnpm@12.14.0
+
+WORKDIR /repo/web

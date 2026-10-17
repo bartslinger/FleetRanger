@@ -15,5 +15,21 @@ services:
     ports:
       - 127.0.0.1:5432:5432
 
+  # SvelteKit dev server with hot reload. Host networking lets it reach the
+  # natively running backend on 127.0.0.1:8080 and serve on 127.0.0.1:5173.
+  web:
+    build:
+      context: web
+      dockerfile: Dockerfile.dev
+    network_mode: host
+    environment:
+      VITE_POLL: ${VITE_POLL:-}
+    command: sh -c "pnpm install --frozen-lockfile && pnpm dev --host 127.0.0.1"
+    volumes:
+      - ./web:/repo/web
+      # Kept out of the shared folder: faster, and no host-specific binaries in the repo.
+      - web-node-modules:/repo/web/node_modules
+
 volumes:
   postgres:
+  web-node-modules:
