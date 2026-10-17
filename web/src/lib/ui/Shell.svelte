@@ -32,8 +32,10 @@
 	const home = resolve('/');
 
 	function isCurrent(href: string): boolean {
-		const path = page.url.pathname;
-		return href === home ? path === home : path === href || path.startsWith(`${href}/`);
+		// resolve() can return relative paths (`./`), so compare absolute ones.
+		const absolute = (path: string) => new URL(path, page.url.href).pathname.replace(/\/$/, '');
+		const [path, target] = [absolute(page.url.pathname), absolute(href)];
+		return href === home ? path === target : path === target || path.startsWith(`${target}/`);
 	}
 </script>
 
