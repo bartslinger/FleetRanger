@@ -1,0 +1,98 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m, aircraft_serial, rc_serial\n         from flights\n         order by takeoff_at desc",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "takeoff_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "takeoff_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "landed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "landed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "air_time_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "air_time_s"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "distance_m",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "distance_m"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "aircraft_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "aircraft_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "rc_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "rc_serial"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "566bd4d7a4f9c75d2f2528f1b1fe646a2b72d50a65cded589ccb1b9c81ffdf7a"
+}

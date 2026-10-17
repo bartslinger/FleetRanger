@@ -1,4 +1,5 @@
 mod config;
+mod flights;
 mod health;
 mod ingest;
 
@@ -52,9 +53,12 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         config.dji_app_key.clone(),
     ));
 
-    let app = Router::new()
-        .route("/healthz", get(health::check))
-        .with_state(db);
+    let mut app = Router::new().route("/healthz", get(health::check));
+    if config.insecure_dev_api {
+        tracing::warn!("serving the flight API without login (FLEETRANGER_INSECURE_DEV_API)");
+        app = app.merge(flights::routes::router());
+    }
+    let app = app.with_state(db);
 
     let listener = TcpListener::bind(config.bind)
         .await

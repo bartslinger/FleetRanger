@@ -14,6 +14,9 @@ pub struct Config {
     /// DJI app key for requesting log decryption keys (`DJI_APP_KEY`). Logs from
     /// format version 13 on can't be processed without it.
     pub dji_app_key: Option<String>,
+    /// Serves the flight API without login (`FLEETRANGER_INSECURE_DEV_API=true`).
+    /// For local development only, until login exists.
+    pub insecure_dev_api: bool,
 }
 
 impl Config {
@@ -29,12 +32,15 @@ impl Config {
         let dji_app_key = std::env::var("DJI_APP_KEY")
             .ok()
             .filter(|key| !key.is_empty());
+        let insecure_dev_api =
+            std::env::var("FLEETRANGER_INSECURE_DEV_API").is_ok_and(|value| value == "true");
 
         Ok(Self {
             bind,
             database_url,
             log_dir,
             dji_app_key,
+            insecure_dev_api,
         })
     }
 }

@@ -9,7 +9,7 @@ publish = false
 anyhow = "1.0.104"
 axum = "0.8.9"
 # Same date/time library as dji-log-parser.
-chrono = { version = "0.4.45", default-features = false }
+chrono = { version = "0.4.45", default-features = false, features = ["serde"] }
 dji-log-parser = { path = "vendor/dji-log-parser" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
@@ -20,3 +20,4 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 # 2.x rather than 3.x: dji-log-parser already depends on it.
 ureq = "2.12.1"
+uuid = { version = "1.28.0", features = ["serde"] }
