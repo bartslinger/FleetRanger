@@ -9,10 +9,11 @@ Phase 1: backend skeleton.
 ## Phase 1: backend skeleton
 
 - [x] Repository, license, docs
-- [ ] axum app with config, logging and a health endpoint
-- [ ] PostgreSQL with migrations
-- [ ] Docker image, cross-built for x86_64
-- [ ] Compose stack and an Ansible role in the deployment repo
+- [x] axum app with config, logging and a health endpoint
+- [x] PostgreSQL with migrations
+- [x] Docker image, cross-built for x86_64
+- [x] Compose stack and image shipping script
+- [ ] Ansible role in the deployment repo
 - [ ] Deployed to the first install, with no public route yet
 
 ## Phase 2: ingest
@@ -49,6 +50,12 @@ Phase 1: backend skeleton.
 - [ ] Launching DJI Pilot 2
 - [ ] Syncing finished logs over selected Wi-Fi networks
 - [ ] Device enrollment
+
+## Before production use
+
+- [ ] Backups: PostgreSQL dumps and raw logs
+- [ ] Restrict development access to servers: a deploy user without sudo, or no access at all
+- [ ] External secrets (DJI app key, OIDC client secret) only in a vault that developers can't decrypt
 
 ## Later
 
