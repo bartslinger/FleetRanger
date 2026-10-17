@@ -13,10 +13,12 @@ The decisions made so far, each with a short reason. Open questions are listed i
 
 ## Data
 
-- **PostgreSQL**, without PostGIS for now. Flight tracks are stored as GeoJSON LineStrings in `jsonb`, in their own table so flight listings stay light. Moving to PostGIS later is a single backfill with `ST_GeomFromGeoJSON`.
+- **PostgreSQL**, without PostGIS for now. Flight tracks are stored as GeoJSON LineStrings in a `jsonb` column on `flights`. Postgres keeps large values out of line, so listings that don't select the track stay light. Moving to PostGIS later is a single backfill with `ST_GeomFromGeoJSON`.
 - **Raw logs are files on disk**, never modified after upload. The database records their SHA-256 hash and origin, and identical files are stored once. Existing files are registered where they are; new uploads are stored as `uploads/<sha256>.txt`.
 - **Raw logs and flights are separate tables.** A raw log is a file and its processing state; a flight is what was derived from it. A log without a takeoff has no flight, and a log is assumed to hold at most one flight until one turns up with several. Re-processing updates a flight in place, so what is attached to it (pilot, session) survives.
 - **Flight tracks are kept at one point per second.** More detail can be derived from the raw log when needed.
+- **Columns only for what features use**: shown in lists, sorted, filtered, summed or needed by access rules. Display-only summaries go in a `metrics` jsonb column, typed in code, and are promoted to a column when a feature needs one. `metrics` never holds time series. Everything else stays in the raw log until a feature needs it, then logs are re-processed.
+- **Statistics are computed by FleetRanger from the frames**, not taken from the summary DJI's app writes into the log, so they match the track and the method is known.
 - **Raw logs and full telemetry are not exposed** to any user, admins included. They exist so logs can be re-processed when the parser improves. Users only see derived data (times, distance, track, statistics).
 - **Every DJI keychain request is recorded** per log: the exact request sent (API key redacted), the time, the response status and the keys returned.
 
