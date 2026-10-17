@@ -158,6 +158,9 @@ use frame::{records_to_frames, Frame};
 use keychain::{EncodedKeychainFeaturePoint, Keychain, KeychainFeaturePoint, KeychainsRequest};
 use layout::auxiliary::{Auxiliary, Department};
 use layout::details::Details;
+
+/// Written between records where a log's recording resumed (12345, little-endian u32).
+const RESUME_MARKER: [u8; 4] = [0x39, 0x30, 0x00, 0x00];
 use layout::prefix::Prefix;
 use record::Record;
 
@@ -450,6 +453,14 @@ impl DJILog {
         let mut records = Vec::new();
 
         while cursor.position() < self.prefix.records_end_offset(self.inner.len() as u64) {
+            // fleetranger patch (see backend/vendor/README.md): skip the marker DJI writes where
+            // recording resumed (12345 as a u32) instead of reading it as damaged data.
+            let at = cursor.position() as usize;
+            if self.inner.get(at..at + 4) == Some(&RESUME_MARKER[..]) {
+                cursor.set_position(at as u64 + 4);
+                continue;
+            }
+
             // decode record
             let record = match Record::read_args(
                 &mut cursor,

@@ -86,6 +86,10 @@ pub fn seek_to_next_record() -> BinResult<Vec<u8>> {
         }
         if temp_buffer[0] == 0xFF {
             buffer.push(temp_buffer[0]);
+            // fleetranger patch (see backend/vendor/README.md): the second byte read is the next
+            // record's first; upstream kept it consumed, so every record after this one was
+            // read one byte late and failed too.
+            reader.seek(SeekFrom::Current(-1))?;
             break;
         }
         buffer.push(temp_buffer[0]);

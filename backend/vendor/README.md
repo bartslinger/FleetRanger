@@ -49,3 +49,15 @@ In `src/lib.rs`, where upstream carries on without saying so:
   their length without being read.
 - `DJILog::records` continues with an empty keychain when a log switches to a key set that
   wasn't provided, which decrypts everything after it to garbage. Here that's an error.
+
+### Resume markers in older logs
+
+Older logs (format version 11) carry a 4-byte marker, `39 30 00 00` (12345), between records
+wherever recording resumed; newer ones only end with it. Upstream reads it as damaged data and
+recovers with `utils::seek_to_next_record`, which scans to the 0xFF that ends a record but also
+consumes the byte after it: the next record's type. Every record after that was then read one
+byte late and failed too, often for hundreds of records, until the misreading happened to line
+up again. 30 of 167 version-11 logs tested lost data this way.
+
+Here `DJILog::records` skips the marker, and `seek_to_next_record` steps back over that byte.
+All 167 then read without invalid data or failed records.
