@@ -67,3 +67,16 @@ up again. 30 of 167 version-11 logs tested lost data this way.
 
 Here `DJILog::records` skips the marker, and `seek_to_next_record` steps back over that byte.
 All 167 then read without invalid data or failed records.
+
+### Tips and warnings in older logs
+
+In `src/record/mod.rs`, the text of tip and warning records (types 9, 10 and 24) is read with
+the length `Record::Unknown` uses: in versions 7 to 12 the content is 2 bytes shorter than the
+record length. Upstream read the full length, ran past the record's end, failed the end-byte
+check, and fell back to `Unknown`, so in version 11 logs not one tip or warning decoded.
+Versions 13 and up are unchanged; there the AES decoder pads short reads with zeros, which the
+text mapping trims.
+
+**Evidence.** In 9 version-11 logs, all 27 tips and warnings now decode to clean text ("Home
+Point recorded. Return-to-Home Altitude:50.0 m"); before, none did. In 35 version-14 logs the
+counts of these records are the same before and after (176, 677 and 18).

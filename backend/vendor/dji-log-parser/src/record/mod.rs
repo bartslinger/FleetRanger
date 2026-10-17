@@ -59,6 +59,18 @@ use virtual_stick::VirtualStick;
 
 const END_BYTE: u8 = 0xFF;
 
+/// fleetranger patch (see backend/vendor/README.md): the text length of a tip or warning
+/// record. In versions 7 to 12 the content is 2 bytes shorter than the record length, as
+/// `Record::Unknown` already accounts for; reading the full length ran past the record's
+/// end, so these records never decoded.
+fn text_length(record_length: u16, version: u8) -> u16 {
+    if (7..=12).contains(&version) {
+        record_length.saturating_sub(2)
+    } else {
+        record_length
+    }
+}
+
 /// Represents the different types of records.
 ///
 /// Each variant of this enum corresponds to a specific type of record in the log file.
@@ -162,7 +174,7 @@ pub enum Record {
         #[br(
             pad_size_to = self_0,
             map_stream = |reader| record_decoder(reader, 9, version, keychain, self_0),
-            args { length: self_0 }
+            args { length: text_length(self_0, version) }
         )]
         AppTip,
         #[br(temp, assert(self_2 == END_BYTE))] u8,
@@ -173,7 +185,7 @@ pub enum Record {
         #[br(
             pad_size_to = self_0,
             map_stream = |reader| record_decoder(reader, 10, version, keychain, self_0),
-            args { length: self_0 }
+            args { length: text_length(self_0, version) }
         )]
         AppWarn,
         #[br(temp, assert(self_2 == END_BYTE))] u8,
@@ -245,7 +257,7 @@ pub enum Record {
         #[br(
             pad_size_to = self_0,
             map_stream = |reader| record_decoder(reader, 24, version, keychain, self_0),
-            args { length: self_0 }
+            args { length: text_length(self_0, version) }
         )]
         AppSeriousWarn,
         #[br(temp, assert(self_2 == END_BYTE))] u8,
