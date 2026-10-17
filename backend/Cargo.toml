@@ -9,8 +9,11 @@ publish = false
 anyhow = "1.0.104"
 axum = "0.8.9"
 dji-log-parser = { path = "vendor/dji-log-parser" }
+serde_json = "1.0.154"
 sha2 = "0.11.1"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate", "uuid", "time"] }
-tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "signal"] }
+tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "signal", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+# 2.x rather than 3.x: dji-log-parser already depends on it.
+ureq = "2.12.1"

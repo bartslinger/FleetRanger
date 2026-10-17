@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update raw_logs set status = 'done', last_error = null, processed_at = now()\n         where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "89baedee51f6f6a434a92496610fc59dc061b8112e6981283d8f7303ea155210"
+}

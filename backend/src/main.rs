@@ -46,6 +46,12 @@ async fn main() -> Result<()> {
 }
 
 async fn serve(config: &Config, db: PgPool) -> Result<()> {
+    tokio::spawn(ingest::process::run(
+        db.clone(),
+        config.log_dir.clone(),
+        config.dji_app_key.clone(),
+    ));
+
     let app = Router::new()
         .route("/healthz", get(health::check))
         .with_state(db);

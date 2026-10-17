@@ -11,6 +11,9 @@ pub struct Config {
     pub database_url: String,
     /// Directory holding the raw flight logs (`FLEETRANGER_LOG_DIR`).
     pub log_dir: PathBuf,
+    /// DJI app key for requesting log decryption keys (`DJI_APP_KEY`). Logs from
+    /// format version 13 on can't be processed without it.
+    pub dji_app_key: Option<String>,
 }
 
 impl Config {
@@ -23,11 +26,15 @@ impl Config {
         let log_dir = std::env::var("FLEETRANGER_LOG_DIR")
             .unwrap_or_else(|_| "/data/flightlogs".to_owned())
             .into();
+        let dji_app_key = std::env::var("DJI_APP_KEY")
+            .ok()
+            .filter(|key| !key.is_empty());
 
         Ok(Self {
             bind,
             database_url,
             log_dir,
+            dji_app_key,
         })
     }
 }

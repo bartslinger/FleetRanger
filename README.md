@@ -38,7 +38,7 @@ DATABASE_URL=postgres://fleetranger:fleetranger@127.0.0.1/fleetranger \
 
 The backend listens on http://127.0.0.1:8080.
 
-Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default). To register logs that are already in that directory, run the backend with the `import` command:
+Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default). The backend processes pending logs in the background. Encrypted logs need a DJI app key in `DJI_APP_KEY`; keep it in `backend/.env` (ignored by git) and load it with `set -a; . ./.env; set +a` before starting the backend. To register logs that are already in that directory, run the backend with the `import` command:
 
 ```
 FLEETRANGER_LOG_DIR=~/fleetranger-testlogs cargo run --locked -- import
