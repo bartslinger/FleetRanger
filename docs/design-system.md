@@ -20,7 +20,7 @@ FleetRanger follows the [Carbon Design System](https://carbondesignsystem.com) a
 ## Components
 
 - **Location:** `web/src/lib/ui/`, as our own code.
-- **Behaviour:** interactive components (dialog, combobox, menu, tooltip, date picker) use [Bits UI](https://bits-ui.com) for keyboard handling, focus management and accessibility. Simple components (button, tag, tile, notification) are plain Svelte. Select is a styled native select, as in Carbon, because native menus work best on phones.
+- **Behaviour:** interactive components (dialog, combobox, menu, tooltip, date picker) use [Bits UI](https://bits-ui.com) for keyboard handling, focus management and accessibility. Simple components (button, tag, tile, notification) are plain Svelte. Select is a styled native select, as in Carbon, because native menus work best on phones. Its open menu is the operating system's, also on desktop.
 - **Icons:** from `@carbon/icons` (Apache-2.0), imported one at a time and rendered by `Icon.svelte`.
 - **Overview:** `/design` on the dev server shows every component in its states.
 - **Spec:** each component follows the matching Carbon component's usage and style guidelines. Where we deviate, the component's file says why.
