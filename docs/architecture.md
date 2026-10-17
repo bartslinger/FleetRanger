@@ -12,7 +12,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 ## Data
 
 - **PostgreSQL**, without PostGIS for now. Flight tracks are stored as GeoJSON LineStrings in `jsonb`, in their own table so flight listings stay light. Moving to PostGIS later is a single backfill with `ST_GeomFromGeoJSON`.
-- **Raw logs are files on disk**, never modified after upload. The database records their SHA-256 hash and origin. Re-uploads with the same name but different content are kept as separate versions, not overwritten.
+- **Raw logs are files on disk**, never modified after upload. The database records their SHA-256 hash and origin.
 - **Raw logs and full telemetry are not exposed** to any user, admins included. They exist so logs can be re-processed when the parser improves. Users only see derived data (times, distance, track, statistics).
 - **Every DJI keychain request is recorded** per log: the exact request sent (API key redacted), the time, the response status and the keys returned.
 
@@ -32,7 +32,8 @@ The decisions made so far, each with a short reason. Open questions are listed i
   - later, people it has been shared with
 - **Within a team**, any member can change a flight's pilot to another member, or to nobody. No acceptance is needed. "This wasn't me" means setting the pilot to nobody, and the flight stays in the team.
 - **Admins** manage users, pilots, teams and devices, and can move flights between teams.
-- **All access decisions go through one policy module** in the backend, never through ad-hoc checks in handlers.
+- **All access decisions go through one policy module** in the backend, never through ad-hoc checks in handlers. Service functions take an `Actor` (who is acting), so a handler can't skip the check.
+- **Simplicity first.** The visibility condition is written directly in the flight queries, with a test that list and single-flight access agree. It gets extracted (for example into a SQL function) only when duplication becomes a problem.
 - **Audit log:** append-only, recording every view, change, reassignment, move and merge, with the user, session, time and IP. There is no hash chain.
 
 ## Sessions and operations
@@ -41,10 +42,22 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **Selecting a pilot on the remote controller** sets who is flying from that moment on.
 - **An operation groups flights across teams**, for example a joint operation. Anyone can create one. Anyone with a flight in an operation sees all of its flights. Flights can only be added by people who can already see them, and must overlap the operation's time window. One operation per flight for now, through a link table, so this can be relaxed later.
 
+## Backend structure
+
+- **One crate, organised by feature** (`flights/`, `sessions/`, `ingest/`, and so on). Each feature has `routes.rs` (HTTP), `service.rs` (policy checks, logic, audit) and `db.rs` (sqlx queries). Cross-cutting concerns (`auth/`, `policy/`, `audit/`) are top-level modules.
+- **sqlx** with plain SQL migrations and compile-time checked queries.
+- **Background work** (DJI keychain requests, parsing, re-processing) runs as a loop in the same binary. There is no separate queue: each raw log has a processing status (pending, done, failed) with attempts and the last error. The loop picks up pending logs, and re-processing means setting logs back to pending. CPU-heavy parsing has a concurrency limit.
+
+## Web and API
+
+- nginx routes `/api/*` and `/auth/*` to the backend and everything else to SvelteKit.
+- The backend owns login and the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`). SvelteKit holds no secrets and has no database access. During server-side rendering and in form actions it calls the backend over the internal network, forwarding the browser's cookie and client IP.
+- The backend trusts forwarded client IP headers only from the internal network.
+
 ## Clients
 
 - **Backend:** Rust with axum.
-- **Web:** SvelteKit.
+- **Web:** SvelteKit with server-side rendering (Node).
 - **Remote controller app:** Kotlin, for DJI Enterprise controllers running DJI Pilot 2. The controller is configured to launch FleetRanger on boot. After a pilot is selected (default: the last pilot), the app starts DJI Pilot 2. Finished logs sync only over Wi-Fi networks chosen in the app.
 
 ## Customer-specific needs

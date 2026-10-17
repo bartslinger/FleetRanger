@@ -61,6 +61,7 @@ Phase 1: backend skeleton.
 
 ## Open questions
 
+- Re-uploads with the same file name but different content (a log synced while still being written): keep them as versions, or name files by hash?
 - Session time-gap threshold. The proposal is 2 hours, configurable.
 - Do session "time on/off" values mean first takeoff and last landing?
 - Who sees flights with no pilot and no team?

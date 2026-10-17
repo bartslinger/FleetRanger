@@ -5,6 +5,8 @@ Self-hosted flight log analysis for DJI Enterprise fleets. Read `docs/architectu
 ## Working agreements
 
 - Ask before making architecture decisions. Don't assume.
+- Propose every database schema change (tables, columns, constraints) to the user before writing a migration.
+- Make small, focused commits: one chunk of work per commit.
 - Keep the roadmap current: update the status and "Now" when work starts or finishes, and record new decisions in `docs/architecture.md`.
 - Stay generic. Don't build customer-specific features ahead of need, and don't over-engineer.
 - No customer data in this repository: no real logs, locations, names or serial numbers. The repo will be public.
