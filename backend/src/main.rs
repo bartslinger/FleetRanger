@@ -1,6 +1,7 @@
 mod config;
 mod health;
 
+use std::io::IsTerminal;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -15,6 +16,7 @@ use crate::config::Config;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_ansi(std::io::stdout().is_terminal())
         .init();
 
     let config = Config::from_env()?;
