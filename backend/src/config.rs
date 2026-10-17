@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
@@ -8,6 +9,8 @@ pub struct Config {
     pub bind: SocketAddr,
     /// PostgreSQL connection string (`DATABASE_URL`).
     pub database_url: String,
+    /// Directory holding the raw flight logs (`FLEETRANGER_LOG_DIR`).
+    pub log_dir: PathBuf,
 }
 
 impl Config {
@@ -17,7 +20,14 @@ impl Config {
             .parse()
             .context("FLEETRANGER_BIND is not a valid socket address")?;
         let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL is not set")?;
+        let log_dir = std::env::var("FLEETRANGER_LOG_DIR")
+            .unwrap_or_else(|_| "/data/flightlogs".to_owned())
+            .into();
 
-        Ok(Self { bind, database_url })
+        Ok(Self {
+            bind,
+            database_url,
+            log_dir,
+        })
     }
 }

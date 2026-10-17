@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select path from raw_logs",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7ae462a9211223ec6f90a182305944c9cb947d6e81470d942710a4767976c5ee"
+}

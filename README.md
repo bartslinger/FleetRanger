@@ -37,3 +37,11 @@ DATABASE_URL=postgres://fleetranger:fleetranger@127.0.0.1/fleetranger \
 ```
 
 The backend listens on http://127.0.0.1:8080.
+
+Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default). To register logs that are already in that directory, run the backend with the `import` command:
+
+```
+FLEETRANGER_LOG_DIR=~/fleetranger-testlogs cargo run --locked -- import
+```
+
+After adding or changing a SQL query, run `cargo sqlx prepare` (with `DATABASE_URL` set) and commit the `.sqlx` directory. Image builds check queries against it, as they have no database.

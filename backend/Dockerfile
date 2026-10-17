@@ -43,6 +43,9 @@ COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY vendor vendor
 COPY src src
 COPY migrations migrations
+# Checks queries against .sqlx (written by `cargo sqlx prepare`) instead of a database.
+COPY .sqlx .sqlx
+ENV SQLX_OFFLINE=true
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \

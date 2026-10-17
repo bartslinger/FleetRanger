@@ -1,11 +1,13 @@
 mod config;
 mod health;
+mod ingest;
 
 use std::io::IsTerminal;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use axum::{Router, routing::get};
+use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
@@ -15,7 +17,11 @@ use crate::config::Config;
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        // Postgres notices ("relation already exists, skipping" on every start) are noise.
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,sqlx::postgres::notice=warn".into()),
+        )
         .with_ansi(std::io::stdout().is_terminal())
         .init();
 
@@ -32,6 +38,14 @@ async fn main() -> Result<()> {
         .await
         .context("failed to run database migrations")?;
 
+    match std::env::args().nth(1).as_deref() {
+        None | Some("serve") => serve(&config, db).await,
+        Some("import") => ingest::import::run(&db, &config.log_dir).await,
+        Some(other) => bail!("unknown command {other:?}; expected serve or import"),
+    }
+}
+
+async fn serve(config: &Config, db: PgPool) -> Result<()> {
     let app = Router::new()
         .route("/healthz", get(health::check))
         .with_state(db);
