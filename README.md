@@ -11,7 +11,7 @@ Licensed under the GNU Affero General Public License v3.0, see [LICENSE](LICENSE
 
 ## Development
 
-Requirements: Docker, [rustup](https://rustup.rs) (the toolchain version is pinned in `backend/rust-toolchain.toml`), and [watchexec](https://github.com/watchexec/watchexec) 2.8.0 (`cargo install --locked watchexec-cli --version 2.8.0`).
+Requirements: Docker, [rustup](https://rustup.rs) (the toolchain version is pinned in `backend/rust-toolchain.toml`), [watchexec](https://github.com/watchexec/watchexec) 2.8.0 (`cargo install --locked watchexec-cli --version 2.8.0`), and sqlx-cli 0.9.0 (`cargo install --locked sqlx-cli --version 0.9.0 --no-default-features --features postgres,rustls`).
 
 Start PostgreSQL and the web dev server (SvelteKit with hot reload, in a container):
 
