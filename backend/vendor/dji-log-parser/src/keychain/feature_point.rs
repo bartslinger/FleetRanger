@@ -221,6 +221,10 @@ impl FeaturePoint {
             62 => FeaturePoint::RCFeature,
             // FlightControllerCommonOSDField
             63 => FeaturePoint::BaseFeature,
+            // Not in upstream 0.5.7 (fleetranger patch, see backend/vendor/README.md). Encrypted in
+            // the DJIFlyCustom chain: filed as plaintext, they left that chain's IV one record
+            // behind, so the next Custom record (the frames' clock) decrypted to garbage.
+            253 | 254 => FeaturePoint::DJIFlyCustomFeature,
             // Default
             _ => FeaturePoint::PlaintextFeature,
         }
