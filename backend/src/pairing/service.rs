@@ -3,8 +3,8 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::Controller;
 use super::db::{self, Approved, Waiting};
+use super::{Controller, parse_sha256};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -142,16 +142,6 @@ fn random_code() -> String {
     [0, 1, 2, 3, 4, 5, 7, 9][..CODE_LENGTH]
         .iter()
         .map(|&i| CODE_ALPHABET[usize::from(bytes[i] % 32)] as char)
-        .collect()
-}
-
-fn parse_sha256(hex: &str) -> Option<Vec<u8>> {
-    if hex.len() != 64 {
-        return None;
-    }
-    (0..64)
-        .step_by(2)
-        .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
         .collect()
 }
 

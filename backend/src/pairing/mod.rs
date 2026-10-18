@@ -17,7 +17,6 @@ use uuid::Uuid;
 /// `Authorization: Bearer <token>`.
 pub struct Controller {
     pub id: Uuid,
-    #[expect(dead_code, reason = "read by uploads, which come next")]
     pub serial: String,
     /// The team its flights without a pilot go to; its pilots come first.
     pub team_id: Option<Uuid>,
@@ -45,6 +44,17 @@ where
             team_id: paired.team_id,
         })
     }
+}
+
+/// A SHA-256 as the controller sends it: 64 hex digits.
+pub fn parse_sha256(hex: &str) -> Option<Vec<u8>> {
+    if hex.len() != 64 {
+        return None;
+    }
+    (0..64)
+        .step_by(2)
+        .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
+        .collect()
 }
 
 /// The SHA-256 of the bearer token, which is what the database stores.

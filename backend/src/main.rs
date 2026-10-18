@@ -25,6 +25,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::auth::Auth;
 use crate::config::Config;
+use crate::ingest::LogDir;
 use crate::ingest::activity::Activity;
 use crate::sessions::SessionGap;
 
@@ -71,6 +72,13 @@ struct AppState {
     auth: Arc<Auth>,
     activity: Activity,
     session_gap: SessionGap,
+    log_dir: LogDir,
+}
+
+impl FromRef<AppState> for LogDir {
+    fn from_ref(state: &AppState) -> Self {
+        state.log_dir.clone()
+    }
 }
 
 impl FromRef<AppState> for SessionGap {
@@ -111,6 +119,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         config.log_dir.clone(),
         config.dji_app_key.clone(),
         activity.clone(),
+        session_gap,
     ));
 
     let provider = match &config.oidc {
@@ -128,6 +137,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         }),
         activity,
         session_gap,
+        log_dir: LogDir(config.log_dir.clone()),
     };
 
     let app = Router::new()
