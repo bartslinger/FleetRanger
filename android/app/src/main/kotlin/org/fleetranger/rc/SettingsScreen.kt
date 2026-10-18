@@ -2,21 +2,25 @@ package org.fleetranger.rc
 
 import android.app.DatePickerDialog
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.time.Instant
@@ -34,6 +39,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.ButtonKind
 import org.fleetranger.rc.ui.CarbonIcons
@@ -118,8 +124,19 @@ fun SettingsScreen(
                 .weight(1f)
                 .padding(start = Spacing.s05, end = Spacing.s05, bottom = Spacing.s05),
         ) {
-            // The panel keeps its height; long content scrolls inside it.
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            // The panel keeps its height; long content scrolls inside it, and
+            // fades out at the bottom while there's more, so it's clear it scrolls.
+            val scroll = remember(tab) { ScrollState(0) }
+            // Choosing approved networks scrolls their lists into view.
+            var revealLists by remember { mutableStateOf(false) }
+            LaunchedEffect(revealLists) {
+                if (!revealLists) return@LaunchedEffect
+                snapshotFlow { scroll.maxValue }.first { it > 0 && it < Int.MAX_VALUE }
+                scroll.animateScrollTo(scroll.maxValue)
+                revealLists = false
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.verticalScroll(scroll)) {
                 when (tab) {
                     SYNC -> SyncTab(
                         syncStatus,
@@ -139,6 +156,7 @@ fun SettingsScreen(
                             uploadOver = it
                             settings.uploadOver = it
                             onChanged()
+                            if (it == SyncSettings.UploadOver.ApprovedWifi) revealLists = true
                         },
                         networks,
                         currentNetwork,
@@ -157,6 +175,16 @@ fun SettingsScreen(
                     )
                     PAIRING -> PairingTab(serverUrl, onUnpair = { confirmingUnpair = true })
                 }
+            }
+            if (scroll.canScrollForward) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(Brush.verticalGradient(listOf(Colors.layer01.copy(alpha = 0f), Colors.layer01))),
+                )
+            }
             }
         }
     }
@@ -239,10 +267,10 @@ private fun ColumnScope.NetworksTab(
         onSelect = { onUploadOver(SyncSettings.UploadOver.ApprovedWifi) },
     )
     RadioButton(
-        "Any Wi-Fi network except hotspots",
+        "Unmetered Wi-Fi networks",
         selected = uploadOver == SyncSettings.UploadOver.AnyWifi,
         onSelect = { onUploadOver(SyncSettings.UploadOver.AnyWifi) },
-        detail = "Skips phone hotspots and other networks Android marks as metered",
+        detail = "Android doesn’t recognise every hotspot. To be sure, choose approved networks.",
     )
     RadioButton(
         "Any connection",

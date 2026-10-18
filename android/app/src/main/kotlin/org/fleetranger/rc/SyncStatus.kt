@@ -45,7 +45,7 @@ data class SyncStatus(
         State.NoAccess -> "Can’t read the flight logs: allow access to files"
         State.WaitingForNetwork -> "${plural(waiting, "log")} waiting for " + when (uploadOver) {
             SyncSettings.UploadOver.ApprovedWifi -> "an approved Wi-Fi network"
-            SyncSettings.UploadOver.AnyWifi -> "a Wi-Fi network that isn’t a hotspot"
+            SyncSettings.UploadOver.AnyWifi -> "an unmetered Wi-Fi network"
             SyncSettings.UploadOver.AnyConnection -> "a connection"
         }
         State.Uploading -> "Uploading ${current ?: "a log"} (${waiting} waiting)"

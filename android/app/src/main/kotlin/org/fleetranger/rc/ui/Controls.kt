@@ -53,8 +53,9 @@ fun RadioButton(
                 role = Role.RadioButton,
                 onClick = onSelect,
             )
-            // Centres a one-line label in the 64dp row.
-            .padding(vertical = 21.dp),
+            // Centres a one-line label in the 64dp row; with a detail, the
+            // two lines fill it.
+            .padding(vertical = if (detail == null) 21.dp else Spacing.s04),
         // With two lines, Carbon aligns the circle with the first one.
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(Spacing.s03),

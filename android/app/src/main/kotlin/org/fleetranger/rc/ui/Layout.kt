@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -172,7 +173,8 @@ fun IconButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
         Modifier
             .size(64.dp)
-            .background(if (pressed) Colors.layerActive01 else Colors.layer01)
+            // Transparent at rest, so a list row's line runs on underneath.
+            .background(if (pressed) Colors.layerActive01 else Color.Transparent)
             .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,

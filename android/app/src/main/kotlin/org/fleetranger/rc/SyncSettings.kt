@@ -22,7 +22,10 @@ class SyncSettings(private val context: Context) {
     enum class UploadOver {
         /** Wi-Fi networks approved here, if not metered. */
         ApprovedWifi,
-        /** The default: any Wi-Fi network that isn't metered, so not a phone hotspot. */
+        /**
+         * The default: any Wi-Fi network Android doesn't mark as metered. That
+         * catches Android phones' hotspots, but not every hotspot.
+         */
         AnyWifi,
         /** Any connection, mobile data too, which may cost money. */
         AnyConnection,
