@@ -8,7 +8,7 @@
 
 	type Props = {
 		kind?: 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger';
-		size?: 'sm' | 'md' | 'lg';
+		size?: 'sm' | 'md' | 'lg' | 'xl';
 		/** Fills its container, e.g. in a form or a panel. */
 		fill?: boolean;
 		children: Snippet;
@@ -60,6 +60,13 @@
 
 	.md {
 		min-height: var(--cds-size-medium);
+	}
+
+	/* Carbon's 2xl, as in dialog footers: 64px with the label at the top. */
+	.xl {
+		align-items: flex-start;
+		min-height: var(--cds-size-xlarge);
+		padding-block: 0.875rem var(--cds-spacing-07);
 	}
 
 	.sm {
