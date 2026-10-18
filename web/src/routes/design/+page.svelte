@@ -1,7 +1,9 @@
 <!-- Every component in its states, to review the design in both themes. -->
 <script lang="ts">
 	import Button from '#lib/ui/Button.svelte';
-	import DataTable, { type Column } from '#lib/ui/DataTable.svelte';
+	import Column from '#lib/ui/Column.svelte';
+	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
+	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
@@ -45,7 +47,7 @@
 		}
 	];
 
-	const columns: Column<ExampleFlight>[] = [
+	const columns: TableColumn<ExampleFlight>[] = [
 		{ key: 'takeoff', header: 'Takeoff' },
 		{ key: 'pilot', header: 'Pilot' },
 		{ key: 'drone', header: 'Drone' },
@@ -78,59 +80,94 @@
 </PageHeader>
 
 <div class="sections">
-	<section>
-		<h2>Button</h2>
-		<div class="row">
-			<Button>Primary</Button>
-			<Button kind="secondary">Secondary</Button>
-			<Button kind="tertiary">Tertiary</Button>
-			<Button kind="ghost">Ghost</Button>
-			<Button kind="danger">Danger</Button>
-		</div>
-		<div class="row">
-			<Button size="md">Medium</Button>
-			<Button size="sm">Small</Button>
-			<Button href="#top" kind="secondary" size="sm">Link</Button>
-			<Button disabled>Disabled</Button>
-			<Button kind="tertiary" disabled>Disabled</Button>
-			<Button kind="ghost" disabled>Disabled</Button>
-		</div>
-	</section>
+	<Grid>
+		<Column md={6} lg={8}>
+			<section>
+				<h2>Grid</h2>
+				<p>
+					Text, buttons and labelled fields sit on the columns (wide gutter mode). Tables, tiles and
+					notifications hang 16px into the gutter (narrow mode), so the text inside them lines up
+					with this text.
+				</p>
+			</section>
+		</Column>
+	</Grid>
 
-	<section>
-		<h2>Tag</h2>
-		<div class="row">
-			{#each tagTypes as type (type)}
-				<Tag {type}>{type}</Tag>
-			{/each}
-		</div>
-		<div class="row">
-			<Tag size="sm" type="green">Synced</Tag>
-			<Tag size="sm" type="red">Failed</Tag>
-		</div>
-	</section>
+	<Grid>
+		<Column>
+			<section>
+				<h2>Button</h2>
+				<div class="row">
+					<Button>Primary</Button>
+					<Button kind="secondary">Secondary</Button>
+					<Button kind="tertiary">Tertiary</Button>
+					<Button kind="ghost">Ghost</Button>
+					<Button kind="danger">Danger</Button>
+				</div>
+				<div class="row">
+					<Button size="md">Medium</Button>
+					<Button size="sm">Small</Button>
+					<Button href="#top" kind="secondary" size="sm">Link</Button>
+					<Button disabled>Disabled</Button>
+					<Button kind="tertiary" disabled>Disabled</Button>
+					<Button kind="ghost" disabled>Disabled</Button>
+				</div>
+			</section>
+		</Column>
+	</Grid>
 
-	<section>
-		<h2>Inline notification</h2>
-		<div class="stack">
-			<InlineNotification kind="error" title="Log could not be read.">
-				The file ends before the last record.
-			</InlineNotification>
-			<InlineNotification kind="warning" title="DJI is not responding.">
-				Logs will be processed when it is back.
-			</InlineNotification>
-			<InlineNotification kind="success" title="Flight moved to Team North." />
-			<InlineNotification title="12 flights have no pilot." />
-		</div>
-	</section>
+	<Grid>
+		<Column>
+			<section>
+				<h2>Tag</h2>
+				<div class="row">
+					{#each tagTypes as type (type)}
+						<Tag {type}>{type}</Tag>
+					{/each}
+				</div>
+				<div class="row">
+					<Tag size="sm" type="green">Synced</Tag>
+					<Tag size="sm" type="red">Failed</Tag>
+				</div>
+			</section>
+		</Column>
+	</Grid>
 
-	<section>
-		<h2>Text input and select</h2>
-		<div class="form">
+	<Grid>
+		<Column>
+			<h2>Inline notification</h2>
+		</Column>
+		<Column narrow lg={12}>
+			<div class="stack">
+				<InlineNotification kind="error" title="Log could not be read.">
+					The file ends before the last record.
+				</InlineNotification>
+				<InlineNotification kind="warning" title="DJI is not responding.">
+					Logs will be processed when it is back.
+				</InlineNotification>
+				<InlineNotification kind="success" title="Flight moved to Team North." />
+				<InlineNotification title="12 flights have no pilot." />
+			</div>
+		</Column>
+	</Grid>
+
+	<Grid rowGap>
+		<Column>
+			<h2>Text input and select</h2>
+		</Column>
+		<Column md={4}>
 			<TextInput label="Pilot name" placeholder="First and last name" bind:value={name} />
+		</Column>
+		<Column md={4}>
 			<TextInput label="Callsign" helper="Shown on the remote controller." />
+		</Column>
+		<Column md={4}>
 			<TextInput label="Email" value="pilot@" error="Enter a complete email address." />
+		</Column>
+		<Column md={4}>
 			<TextInput label="Disabled" value="Read only" disabled />
+		</Column>
+		<Column md={4}>
 			<Select
 				label="Team"
 				bind:value={team}
@@ -139,30 +176,35 @@
 					{ value: 'south', label: 'Team South' }
 				]}
 			/>
+		</Column>
+		<Column md={4}>
 			<Select
 				label="Drone"
 				error="Choose a drone."
 				options={[{ value: '', label: 'Choose a drone' }]}
 			/>
-		</div>
-	</section>
+		</Column>
+	</Grid>
 
-	<section>
-		<h2>Data table</h2>
-		<div class="stack">
-			<DataTable {columns} rows={flights} rowKey={(flight) => flight.id} />
-			<DataTable {columns} rows={flights} rowKey={(flight) => flight.id} size="sm">
-				{#snippet cell(flight, column)}
-					{#if column.key === 'pilot'}
-						<Tag size="sm" type="blue">{flight.pilot}</Tag>
-					{:else}
-						{flight[column.key]}
-					{/if}
-				{/snippet}
-			</DataTable>
-			<DataTable {columns} rows={[]} rowKey={(flight) => flight.id} empty="No flights yet." />
-		</div>
-	</section>
+	<Grid>
+		<Column>
+			<h2>Data table</h2>
+		</Column>
+		<Column narrow>
+			<div class="stack">
+				<DataTable {columns} rows={flights} rowKey={(flight) => flight.id} />
+				<DataTable {columns} rows={flights} rowKey={(flight) => flight.id} size="sm">
+					{#snippet cell(flight, column)}
+						{#if column.key === 'pilot'}
+							<Tag size="sm" type="blue">{flight.pilot}</Tag>
+						{:else}
+							{flight[column.key]}
+						{/if}
+					{/snippet}
+				</DataTable>
+			</div>
+		</Column>
+	</Grid>
 </div>
 
 <style>
@@ -181,9 +223,21 @@
 
 	/* This page's own section titles, not a pattern for other pages. */
 	h2 {
+		margin-bottom: var(--cds-spacing-05);
 		font-size: var(--cds-heading-03-font-size);
 		font-weight: var(--cds-heading-03-font-weight);
 		line-height: var(--cds-heading-03-line-height);
+	}
+
+	section h2 {
+		margin-bottom: 0;
+	}
+
+	p {
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-01-font-size);
+		line-height: var(--cds-body-01-line-height);
+		letter-spacing: var(--cds-body-01-letter-spacing);
 	}
 
 	.row {
@@ -191,12 +245,5 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--cds-spacing-05);
-	}
-
-	.form {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-		gap: var(--cds-spacing-06) var(--cds-spacing-05);
-		align-items: start;
 	}
 </style>

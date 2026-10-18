@@ -12,6 +12,12 @@ export interface FlightSummary {
 	rc_serial: string | null;
 }
 
+/** One page of `GET /api/flights`. */
+export interface FlightPage {
+	flights: FlightSummary[];
+	total: number;
+}
+
 /** Fetches JSON from the backend, failing the request if the backend does. */
 export async function get<T>(fetch: typeof globalThis.fetch, path: string): Promise<T> {
 	let response: Response;

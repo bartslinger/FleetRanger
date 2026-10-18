@@ -195,10 +195,10 @@
 		background: var(--cds-overlay);
 	}
 
-	/* Carbon pads the content by 2rem; phones get 1rem to keep room for content. */
+	/* No side padding: pages lay out their content on the Grid, which has the
+	   margins. */
 	main {
-		padding: calc(var(--cds-size-large) + var(--cds-spacing-07)) var(--cds-spacing-05)
-			var(--cds-spacing-07);
+		padding: var(--cds-size-large) 0 var(--cds-spacing-09);
 	}
 
 	/* Carbon's lg breakpoint (66rem): navigation always visible. Custom properties
@@ -221,7 +221,6 @@
 
 		main {
 			margin-left: 16rem;
-			padding-inline: var(--cds-spacing-07);
 		}
 	}
 </style>
