@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select m.team_id from pilots p join team_members m on m.pilot_id = p.id\n         where p.id = $1 and p.archived_at is null",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "team_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "team_members",
+            "name": "team_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5980e69ec31a7a3a5c3dfa4c1df1454b018b0f34b6cc5a56ec914503caf9ffaf"
+}

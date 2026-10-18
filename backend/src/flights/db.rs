@@ -15,6 +15,11 @@ pub struct FlightSummary {
     pub distance_m: f64,
     pub aircraft_serial: Option<String>,
     pub rc_serial: Option<String>,
+    pub pilot_id: Option<Uuid>,
+    pub pilot_name: Option<String>,
+    /// None: in the organisation's queue.
+    pub team_id: Option<Uuid>,
+    pub team_name: Option<String>,
 }
 
 /// Columns the logbook can be sorted by.
@@ -73,7 +78,9 @@ pub async fn list(
     // stable for equal values.
     sqlx::query_as!(
         FlightSummary,
-        "select id, takeoff_at, landed_at, air_time_s, distance_m, aircraft_serial, rc_serial
+        r#"select id, takeoff_at, landed_at, air_time_s, distance_m, aircraft_serial, rc_serial,
+                pilot_id, (select p.name from pilots p where p.id = flights.pilot_id) as "pilot_name?",
+                team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?"
          from flights
          where $5
             or pilot_id in (select id from pilots where account_id = $6)
@@ -91,7 +98,7 @@ pub async fn list(
              case when $1 = 'rc_serial' and not $2 then rc_serial end asc nulls last,
              case when $1 = 'rc_serial' and $2 then rc_serial end desc nulls last,
              id
-         limit $3 offset $4",
+         limit $3 offset $4"#,
         sort.key.as_str(),
         sort.descending,
         limit,
@@ -116,6 +123,121 @@ pub async fn count(db: &PgPool, scope: &FlightScope) -> sqlx::Result<i64> {
         scope.account_id,
     )
     .fetch_one(db)
+    .await
+}
+
+/// The team of each of these flights, or None if one of them doesn't exist.
+/// The visibility check is the policy's job, not this query's.
+pub async fn teams_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
+    let teams = sqlx::query_scalar!("select team_id from flights where id = any($1)", ids)
+        .fetch_all(db)
+        .await?;
+    Ok((teams.len() == ids.len()).then_some(teams))
+}
+
+/// The team of the actor's own pilot, if they have an active one.
+pub async fn own_team(db: &PgPool, account_id: Uuid) -> sqlx::Result<Option<Uuid>> {
+    sqlx::query_scalar!(
+        "select m.team_id from pilots p join team_members m on m.pilot_id = p.id
+         where p.account_id = $1 and p.archived_at is null",
+        account_id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// The team of an active pilot, or None if there is no such pilot.
+pub async fn pilot_team(db: &PgPool, pilot_id: Uuid) -> sqlx::Result<Option<Uuid>> {
+    sqlx::query_scalar!(
+        "select m.team_id from pilots p join team_members m on m.pilot_id = p.id
+         where p.id = $1 and p.archived_at is null",
+        pilot_id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn team_is_active(db: &PgPool, team_id: Uuid) -> sqlx::Result<bool> {
+    sqlx::query_scalar!(
+        r#"select exists(select 1 from teams where id = $1 and archived_at is null) as "exists!""#,
+        team_id,
+    )
+    .fetch_one(db)
+    .await
+}
+
+/// Sets the pilot of these flights, and their team if given.
+pub async fn set_pilot(
+    db: &PgPool,
+    ids: &[Uuid],
+    pilot_id: Option<Uuid>,
+    team_id: Option<Uuid>,
+) -> sqlx::Result<u64> {
+    let result = sqlx::query!(
+        "update flights set pilot_id = $2, team_id = coalesce($3, team_id) where id = any($1)",
+        ids,
+        pilot_id,
+        team_id,
+    )
+    .execute(db)
+    .await?;
+    Ok(result.rows_affected())
+}
+
+/// Moves these flights to a team, or to the queue; a pilot who isn't in the
+/// new team is cleared.
+pub async fn set_team(db: &PgPool, ids: &[Uuid], team_id: Option<Uuid>) -> sqlx::Result<u64> {
+    let result = sqlx::query!(
+        "update flights set team_id = $2,
+             pilot_id = case when pilot_id in (select pilot_id from team_members
+                                               where team_id = $2) then pilot_id end
+         where id = any($1)",
+        ids,
+        team_id,
+    )
+    .execute(db)
+    .await?;
+    Ok(result.rows_affected())
+}
+
+/// A pilot who can be chosen for flights.
+#[derive(Serialize)]
+pub struct PilotChoice {
+    pub id: Uuid,
+    pub name: String,
+    pub team_id: Uuid,
+    pub team_name: String,
+}
+
+/// Active pilots by name, of one team or of all.
+pub async fn pilot_choices(db: &PgPool, team_id: Option<Uuid>) -> sqlx::Result<Vec<PilotChoice>> {
+    sqlx::query_as!(
+        PilotChoice,
+        "select p.id, p.name, m.team_id, t.name as team_name
+         from pilots p
+         join team_members m on m.pilot_id = p.id
+         join teams t on t.id = m.team_id
+         where p.archived_at is null and ($1::uuid is null or m.team_id = $1)
+         order by lower(p.name), p.id",
+        team_id,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// A team flights can be moved to.
+#[derive(Serialize)]
+pub struct TeamChoice {
+    pub id: Uuid,
+    pub name: String,
+}
+
+pub async fn team_choices(db: &PgPool) -> sqlx::Result<Vec<TeamChoice>> {
+    sqlx::query_as!(
+        TeamChoice,
+        "select id, name from teams where archived_at is null order by lower(name), id",
+    )
+    .fetch_all(db)
     .await
 }
 
@@ -248,5 +370,46 @@ mod tests {
             account_id: account,
         };
         assert!(visible(&db, &member).await.is_empty());
+    }
+
+    /// Moving flights keeps a pilot who is in the new team and clears others,
+    /// also when moving to the queue.
+    #[sqlx::test]
+    async fn moving_clears_pilots_from_other_teams(db: PgPool) {
+        let north = insert_id(
+            &db,
+            "insert into teams (name) values ('North') returning id",
+        )
+        .await;
+        let south = insert_id(
+            &db,
+            "insert into teams (name) values ('South') returning id",
+        )
+        .await;
+        let pilot = insert_id(&db, "insert into pilots (name) values ('A') returning id").await;
+        sqlx::query("insert into team_members (pilot_id, team_id) values ($1, $2)")
+            .bind(pilot)
+            .bind(south)
+            .execute(&db)
+            .await
+            .unwrap();
+        let flight = flight(&db, Some(north), Some(pilot)).await;
+        let pilot_of = async || -> Option<Uuid> {
+            sqlx::query_scalar("select pilot_id from flights where id = $1")
+                .bind(flight)
+                .fetch_one(&db)
+                .await
+                .unwrap()
+        };
+
+        set_team(&db, &[flight], Some(south)).await.unwrap();
+        assert_eq!(pilot_of().await, Some(pilot));
+        set_team(&db, &[flight], Some(north)).await.unwrap();
+        assert_eq!(pilot_of().await, None);
+        set_pilot(&db, &[flight], Some(pilot), Some(south))
+            .await
+            .unwrap();
+        set_team(&db, &[flight], None).await.unwrap();
+        assert_eq!(pilot_of().await, None);
     }
 }

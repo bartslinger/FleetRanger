@@ -4,14 +4,15 @@ use axum::{
     Json, Router,
     extract::{FromRef, Query, State},
     http::StatusCode,
-    routing::get,
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use super::db::{FlightSummary, Sort, SortKey};
 use super::service;
-use crate::auth::Actor;
+use crate::{auth::Actor, error::ApiResult};
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAX_PAGE_SIZE: u32 = 100;
@@ -21,7 +22,52 @@ where
     S: Clone + Send + Sync + 'static,
     PgPool: FromRef<S>,
 {
-    Router::new().route("/api/flights", get(list))
+    Router::new()
+        .route("/api/flights", get(list))
+        .route("/api/flights/choices", get(choices))
+        .route("/api/flights/pilot", post(set_pilot))
+        .route("/api/flights/team", post(set_team))
+}
+
+#[derive(Deserialize)]
+struct PilotChange {
+    flight_ids: Vec<Uuid>,
+    /// None: nobody.
+    pilot_id: Option<Uuid>,
+}
+
+#[derive(Deserialize)]
+struct TeamChange {
+    flight_ids: Vec<Uuid>,
+    /// None: the organisation's queue.
+    team_id: Option<Uuid>,
+}
+
+#[derive(Serialize)]
+struct Changed {
+    changed: u64,
+}
+
+async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Choices>> {
+    Ok(Json(service::choices(&db, &actor).await?))
+}
+
+async fn set_pilot(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Json(change): Json<PilotChange>,
+) -> ApiResult<Json<Changed>> {
+    let changed = service::set_pilot(&db, &actor, &change.flight_ids, change.pilot_id).await?;
+    Ok(Json(Changed { changed }))
+}
+
+async fn set_team(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Json(change): Json<TeamChange>,
+) -> ApiResult<Json<Changed>> {
+    let changed = service::set_team(&db, &actor, &change.flight_ids, change.team_id).await?;
+    Ok(Json(Changed { changed }))
 }
 
 #[derive(Deserialize)]
