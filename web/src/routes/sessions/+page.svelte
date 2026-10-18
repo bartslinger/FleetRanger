@@ -5,11 +5,13 @@
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
+	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
+	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 
 	type Row = (typeof data.sessions)[number];
 
@@ -41,6 +43,17 @@
 		{ key: 'teams', header: 'Team', format: (session) => session.teams.join(', ') }
 	]);
 
+	// Merging: admins change any session, members those of their own team.
+	let selected: string[] = $state([]);
+	const canChange = $derived(data.choices.admin || data.choices.own_team_id !== null);
+	const changeable = (session: Row) =>
+		data.choices.admin || session.team_ids.every((team) => team === data.choices.own_team_id);
+
+	function merged(count: number) {
+		selected = [];
+		toast(`${count} sessions merged.`);
+	}
+
 	const href = (page: number, size: number) =>
 		`${resolve('/sessions')}${page > 1 || size !== 50 ? `?page=${page}&size=${size}` : ''}`;
 </script>
@@ -61,7 +74,28 @@
 				rows={data.sessions}
 				rowKey={(session) => session.id}
 				rowHref={(session) => resolve('/sessions/[id]', { id: session.id })}
-			/>
+				selectable={canChange ? changeable : undefined}
+				bind:selected
+				selectedLabel={(count) => `${count} ${count === 1 ? 'session' : 'sessions'} selected`}
+			>
+				{#snippet batchActions(ids)}
+					{#if ids.length > 1}
+						<Modal
+							title="Merge sessions"
+							submitLabel="Merge"
+							action="?/merge"
+							error={form?.mergeMessage}
+							onsuccess={() => merged(ids.length)}
+						>
+							{#each ids as id (id)}<input type="hidden" name="session_id" value={id} />{/each}
+							<p>
+								The flights of the {ids.length} sessions become one session. Split it on the session’s
+								page to undo this.
+							</p>
+						</Modal>
+					{/if}
+				{/snippet}
+			</DataTable>
 			<Pagination
 				page={data.page}
 				size={data.size}

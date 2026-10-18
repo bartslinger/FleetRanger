@@ -24,6 +24,8 @@ pub struct SessionSummary {
     /// Names, in alphabetical order; empty if none.
     pub pilots: Vec<String>,
     pub teams: Vec<String>,
+    /// So the web app offers merging only where the policy allows it.
+    pub team_ids: Vec<Uuid>,
 }
 
 /// One page of the sessions in the scope, newest first.
@@ -42,7 +44,8 @@ pub async fn list(
                 sum(f.air_time_s)::bigint as "air_time_s!",
                 sum(f.distance_m) as "distance_m!",
                 array_remove(array_agg(distinct u.name), null) as "pilots!",
-                array_remove(array_agg(distinct t.name), null) as "teams!"
+                array_remove(array_agg(distinct t.name), null) as "teams!",
+                array_remove(array_agg(distinct f.team_id), null) as "team_ids!"
          from flights f
          left join users u on u.id = f.pilot_id
          left join teams t on t.id = f.team_id

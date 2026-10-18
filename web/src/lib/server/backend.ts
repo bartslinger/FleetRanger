@@ -53,6 +53,7 @@ export interface SessionSummary {
 	/** Names in alphabetical order. */
 	pilots: string[];
 	teams: string[];
+	team_ids: string[];
 }
 
 /** One page of `GET /api/sessions`, newest first. */
