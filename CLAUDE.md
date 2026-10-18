@@ -12,7 +12,7 @@ Self-hosted flight log analysis for DJI Enterprise fleets. Read `docs/architectu
 - No customer data in this repository: no real logs, locations, names or serial numbers. The repo will be public.
 - Raw logs and full telemetry are never exposed to users.
 - When the DJI log parser shows bugs, ask the user; they have fixes from earlier work.
-- The web UI follows the Carbon Design System. Read `docs/design-system.md` before UI work and apply it without being asked; consult the `carbon-expert` agent for component details and page reviews. Check UI changes visually (laptop and phone width, both themes).
+- The web UI follows the Carbon Design System. Read `docs/design-system.md` before UI work and apply it without being asked; consult the `carbon-expert` agent before designing a page or component (what Carbon prescribes) and again to review it afterwards. Check UI changes visually (laptop and phone width, both themes).
 
 ## Environments
 
