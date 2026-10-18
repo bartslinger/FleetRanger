@@ -25,6 +25,9 @@ The decisions made so far, each with a short reason. Open questions are listed i
 ## Identity and access
 
 - **Login via OpenID Connect**, with Google first. Sessions are stored on the server, so they can be revoked immediately and audit records reference them.
+- **The backend runs the login**: authorization code flow with PKCE, the provider found through its issuer URL. One provider per install for now.
+- **No open sign-up.** An admin adds an account by email. The first login with that verified email ties the account to the provider's permanent subject ID, and later logins match on that ID only, so a reassigned or renamed address can't take over or lock out an account. The first account of an install is added with `fleetranger add-account <email>`.
+- **Login sessions** (named so to tell them apart from flight sessions) are a random token in the cookie; the database stores only its SHA-256 hash. They expire after 30 days without use. Disabling an account revokes its sessions; accounts are never deleted, so the audit log can refer to them.
 - **Pilots and accounts are separate.** A pilot can be created on a remote controller, offline too, with an ID generated on the controller. Admins can also create pilots ahead of time. Admins link a login account to a pilot; invite links come later. Admins can merge duplicate pilots.
 - **Teams.** Each pilot is in exactly one team. Membership is still a separate table, with a uniqueness constraint, so multiple teams remain possible later.
 - **Flights** have a team and an optional pilot. The team is the pilot's team at flight time. A flight with no pilot takes the remote controller's team, or else goes to an organisation-level queue. Changing a pilot's team does not move their past flights.

@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-The web UI foundation: Carbon design system, UI shell, grid and a logbook with paging and sorting, served by a development-only flight API until login exists (phase 4). Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login (phase 4): Google OIDC, accounts added by email, server-side login sessions, an `Actor` per request. It replaces the development-only flight API. Pilots and teams follow, then sessions (phase 3), which are grouped per pilot. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -34,7 +34,7 @@ Waits for pilots (phase 4): sessions are grouped per pilot.
 
 ## Phase 4: login and access
 
-- [ ] OIDC login (Google), server-side sessions
+- [~] OIDC login (Google), server-side sessions
 - [ ] Pilots, accounts, teams, devices
 - [ ] Policy module and access rules
 - [ ] Audit log
