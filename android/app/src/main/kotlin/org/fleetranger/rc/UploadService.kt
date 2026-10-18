@@ -149,18 +149,24 @@ class UploadService : Service() {
         private fun key(file: File) = "${file.name}|${file.length()}|${file.lastModified()}"
 
         /**
-         * DJI Pilot 2 keeps its logs in folders named FlightRecord in its own
-         * storage; looking for them keeps working if the depth changes.
+         * DJI Pilot 2 keeps its logs in a folder named FlightRecord: on the RC
+         * Pro Enterprise in DJI/com.dji.industry.pilot on the shared storage.
+         * Looking for the folder also finds it if a version moves it.
          */
-        private fun logFolders(): List<File> {
-            val root = File(Environment.getExternalStorageDirectory(), DJI_DATA)
-            return root.walkTopDown()
-                .maxDepth(5)
-                .filter { it.isDirectory && it.name == "FlightRecord" }
-                .toList()
-        }
+        private fun logFolders(): List<File> =
+            DJI_ROOTS.map { File(Environment.getExternalStorageDirectory(), it) }
+                .flatMap { root ->
+                    root.walkTopDown()
+                        .maxDepth(4)
+                        .filter { it.isDirectory && it.name == "FlightRecord" }
+                        .toList()
+                }
+                .distinct()
 
-        private const val DJI_DATA = "Android/data/com.dji.industry.pilot/files"
+        private val DJI_ROOTS = listOf(
+            "DJI/com.dji.industry.pilot",
+            "Android/data/com.dji.industry.pilot/files",
+        )
 
         private fun sha256(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")
