@@ -59,9 +59,9 @@
 		height: var(--cds-size-medium);
 		padding: 0 var(--cds-spacing-05);
 		border: 0;
-		border-bottom: 1px solid var(--cds-border-strong-01);
+		border-bottom: 1px solid var(--cds-border-strong);
 		border-radius: 0;
-		background: var(--cds-field-01);
+		background: var(--cds-field);
 		color: var(--cds-text-primary);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
@@ -82,7 +82,7 @@
 	}
 
 	input:hover {
-		background: var(--cds-field-hover-01);
+		background: var(--cds-field-hover);
 	}
 
 	input.invalid {
@@ -98,7 +98,7 @@
 
 	input:disabled {
 		border-bottom-color: transparent;
-		background: var(--cds-field-01);
+		background: var(--cds-field);
 		color: var(--cds-text-disabled);
 		cursor: not-allowed;
 	}

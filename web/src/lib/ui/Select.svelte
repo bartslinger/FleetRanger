@@ -66,9 +66,9 @@
 		height: var(--cds-size-medium);
 		padding: 0 var(--cds-spacing-09) 0 var(--cds-spacing-05);
 		border: 0;
-		border-bottom: 1px solid var(--cds-border-strong-01);
+		border-bottom: 1px solid var(--cds-border-strong);
 		border-radius: 0;
-		background: var(--cds-field-01);
+		background: var(--cds-field);
 		color: var(--cds-text-primary);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
@@ -86,7 +86,7 @@
 	}
 
 	select:hover {
-		background: var(--cds-field-hover-01);
+		background: var(--cds-field-hover);
 	}
 
 	select.invalid {
@@ -101,7 +101,7 @@
 
 	select:disabled {
 		border-bottom-color: transparent;
-		background: var(--cds-field-01);
+		background: var(--cds-field);
 		color: var(--cds-text-disabled);
 		cursor: not-allowed;
 	}

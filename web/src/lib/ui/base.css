@@ -5,6 +5,23 @@
 @import '@ibm/plex-mono/css/ibm-plex-mono-default.min.css';
 @import './tokens.css';
 
+/* Carbon's contextual layer tokens for fields: a field is one layer above what
+   it sits on. On the page it uses the -01 values; containers on layer-01 (a
+   dialog, a tile) add the layer-01 class to give their fields the -02 values.
+   Declared again in the dark zone so they resolve to its colours. */
+:root,
+.theme-dark {
+	--cds-field: var(--cds-field-01);
+	--cds-field-hover: var(--cds-field-hover-01);
+	--cds-border-strong: var(--cds-border-strong-01);
+}
+
+.layer-01 {
+	--cds-field: var(--cds-field-02);
+	--cds-field-hover: var(--cds-field-hover-02);
+	--cds-border-strong: var(--cds-border-strong-02);
+}
+
 *,
 *::before,
 *::after {
