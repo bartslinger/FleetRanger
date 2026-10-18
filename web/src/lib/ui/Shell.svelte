@@ -33,6 +33,7 @@
 	import Button from './Button.svelte';
 	import Icon from './Icon.svelte';
 	import RadioButtonGroup from './RadioButtonGroup.svelte';
+	import Toasts from './Toasts.svelte';
 
 	interface Props {
 		name: string;
@@ -230,6 +231,8 @@
 <main id="main-content" tabindex="-1" class:bare={!account}>
 	{@render children()}
 </main>
+
+<Toasts />
 
 <style>
 	/* Carbon's skip link: hidden until focused, then shown over the header. */

@@ -6,10 +6,10 @@
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
-	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
+	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -48,17 +48,13 @@
 		submitLabel="Create"
 		action="?/create"
 		error={form && 'message' in form ? form.message : undefined}
+		onsuccess={(created) => toast(`Team ${created?.created} created.`)}
 	>
 		<TextInput label="Name" name="name" required autocomplete="off" />
 	</Modal>
 {/snippet}
 
-<Grid rowGap>
-	{#if form && 'created' in form}
-		<Column narrow>
-			<InlineNotification kind="success" title="Team {form.created} created." />
-		</Column>
-	{/if}
+<Grid>
 	<Column narrow>
 		{#if data.teams.length === 0 && !data.archived}
 			<EmptyState
