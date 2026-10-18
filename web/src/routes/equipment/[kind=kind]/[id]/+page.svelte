@@ -7,11 +7,13 @@
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
+	import Link from '#lib/ui/Link.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
+	import { filtered } from '../../../logbook.js';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -25,7 +27,8 @@
 	);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
 
-	// Active teams and users, plus the current ones if archived since.
+	// Active teams and holders, plus the current ones if archived since. Members
+	// choose from their own team; admins from everyone.
 	const teamOptions = $derived([
 		{ value: '', label: 'None' },
 		...data.teams.map((team) => ({ value: team.id, label: team.name })),
@@ -35,16 +38,19 @@
 	]);
 	const holderOptions = $derived([
 		{ value: '', label: 'None' },
-		...data.users.map((user) => ({ value: user.id, label: user.name })),
-		...(item.holder_user_id && !data.users.some((user) => user.id === item.holder_user_id)
+		...data.holders.map((user) => ({ value: user.id, label: user.name })),
+		...(item.holder_user_id && !data.holders.some((user) => user.id === item.holder_user_id)
 			? [{ value: item.holder_user_id, label: `${item.holder_name} (archived)` }]
 			: [])
 	]);
+	const flights = $derived(
+		`${resolve('/')}${filtered(data.kind === 'drones' ? { drone: item.serial } : { controller: item.serial })}`
+	);
 </script>
 
 <PageHeader title={item.name ?? item.serial} breadcrumb={[{ href: list, label: 'Equipment' }]}>
 	{#snippet actions()}
-		{#if item.paired}
+		{#if item.paired && data.edit === 'all'}
 			<Modal
 				title="Remove pairing"
 				triggerKind="danger-tertiary"
@@ -109,56 +115,85 @@
 						: 'None'}
 				</dd>
 			</div>
+			<!-- Who can't change them sees them here; members change only the holder. -->
+			{#if data.edit !== 'all'}
+				<div>
+					<dt>Team</dt>
+					<dd>{item.team_name ?? 'None'}</dd>
+				</div>
+			{/if}
+			{#if data.edit === 'none'}
+				<div>
+					<dt>Holder</dt>
+					<dd>{item.holder_name ?? 'None'}</dd>
+				</div>
+			{/if}
 		</dl>
-		<form
-			class="form"
-			method="POST"
-			action="?/save"
-			use:enhance={() => {
-				busy = true;
-				return async ({ result, update }) => {
-					busy = false;
-					await update({ reset: false });
-					if (result.type === 'success') toast(`${kind.one} saved.`);
-				};
-			}}
-		>
-			<TextInput
-				label="Name (optional)"
-				name="name"
-				value={item.name ?? ''}
-				autocomplete="off"
-				helper="For example the number painted on it."
-			/>
-			<Select
-				label="Team"
-				name="team_id"
-				options={teamOptions}
-				value={item.team_id ?? ''}
-				helper={data.kind === 'controllers'
-					? 'New flights from this controller without a pilot go to this team.'
-					: undefined}
-			/>
-			<Select
-				label="Holder"
-				name="holder_user_id"
-				options={holderOptions}
-				value={item.holder_user_id ?? ''}
-				helper="Who has it now. For information only; it gives no access."
-			/>
-			<div class="buttons">
-				<Button type="submit" disabled={busy}>Save</Button>
-				<Button kind="secondary" href={list}>Cancel</Button>
-			</div>
-		</form>
+		<p class="flights">
+			<Link href={flights}>
+				{data.kind === 'drones' ? 'Flights with this drone' : 'Flights with this controller'}
+			</Link>
+		</p>
+		{#if data.edit !== 'none'}
+			<form
+				class="form"
+				method="POST"
+				action="?/save"
+				use:enhance={() => {
+					busy = true;
+					return async ({ result, update }) => {
+						busy = false;
+						await update({ reset: false });
+						if (result.type === 'success') toast(`${kind.one} saved.`);
+					};
+				}}
+			>
+				<TextInput
+					label="Name (optional)"
+					name="name"
+					value={item.name ?? ''}
+					autocomplete="off"
+					helper="For example the number painted on it."
+				/>
+				{#if data.edit === 'all'}
+					<Select
+						label="Team"
+						name="team_id"
+						options={teamOptions}
+						value={item.team_id ?? ''}
+						helper={data.kind === 'controllers'
+							? 'New flights from this controller without a pilot go to this team.'
+							: undefined}
+					/>
+				{:else}
+					<!-- Unchanged: only admins move equipment between teams. -->
+					<input type="hidden" name="team_id" value={item.team_id ?? ''} />
+				{/if}
+				<Select
+					label="Holder"
+					name="holder_user_id"
+					options={holderOptions}
+					value={item.holder_user_id ?? ''}
+					helper="Who has it now. For information only; it gives no access."
+				/>
+				<div class="buttons">
+					<Button type="submit" disabled={busy}>Save</Button>
+					<Button kind="secondary" href={list}>Cancel</Button>
+				</div>
+			</form>
+		{/if}
 	</Column>
 </Grid>
 
 <style>
-	/* 32px before the form, as between fields. */
+	/* The link 16px after the facts, as between them; 32px before the form. */
 	.facts {
 		display: grid;
 		gap: var(--cds-spacing-05);
+		margin: 0 0 var(--cds-spacing-05);
+	}
+
+	.flights {
 		margin: 0 0 var(--cds-spacing-07);
 	}
 

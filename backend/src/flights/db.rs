@@ -15,12 +15,21 @@ pub struct FlightSummary {
     pub air_time_s: i32,
     pub distance_m: f64,
     pub aircraft_serial: Option<String>,
+    pub aircraft_name: Option<String>,
     pub rc_serial: Option<String>,
+    pub rc_name: Option<String>,
     pub pilot_id: Option<Uuid>,
     pub pilot_name: Option<String>,
     /// None: in the organisation's queue.
     pub team_id: Option<Uuid>,
     pub team_name: Option<String>,
+}
+
+/// The logbook's filters: only the flights of this drone and/or controller.
+#[derive(Default)]
+pub struct Filter {
+    pub aircraft_serial: Option<String>,
+    pub rc_serial: Option<String>,
 }
 
 /// Columns the logbook can be sorted by.
@@ -29,7 +38,9 @@ pub enum SortKey {
     TakeoffAt,
     AirTime,
     Distance,
+    /// The drone as shown: its name, or else its serial.
     AircraftSerial,
+    /// The controller as shown: its name, or else its serial.
     RcSerial,
 }
 
@@ -66,10 +77,11 @@ pub struct Sort {
 // every flight ($all), or the user's own flights and those of the user's team.
 // Keep the copies in step; the tests check them against each other.
 
-/// One page of the flights in the scope, in the given order.
+/// One page of the flights in the scope that pass the filter, in the given order.
 pub async fn list(
     db: &PgPool,
     scope: &FlightScope,
+    filter: &Filter,
     sort: &Sort,
     limit: i64,
     offset: i64,
@@ -79,13 +91,19 @@ pub async fn list(
     // stable for equal values.
     sqlx::query_as!(
         FlightSummary,
-        r#"select id, takeoff_at, landed_at, air_time_s, distance_m, aircraft_serial, rc_serial,
+        r#"select id, takeoff_at, landed_at, air_time_s, distance_m,
+                aircraft_serial,
+                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_name?",
+                rc_serial,
+                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
                 team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?"
          from flights
-         where $5
-            or pilot_id = $6
-            or team_id in (select team_id from team_members where user_id = $6)
+         where ($5
+                or pilot_id = $6
+                or team_id in (select team_id from team_members where user_id = $6))
+           and ($7::text is null or aircraft_serial = $7)
+           and ($8::text is null or rc_serial = $8)
          order by
              case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
              case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -93,10 +111,18 @@ pub async fn list(
              case when $1 = 'air_time_s' and $2 then air_time_s end desc,
              case when $1 = 'distance_m' and not $2 then distance_m end asc,
              case when $1 = 'distance_m' and $2 then distance_m end desc,
-             case when $1 = 'aircraft_serial' and not $2 then aircraft_serial end asc nulls last,
-             case when $1 = 'aircraft_serial' and $2 then aircraft_serial end desc nulls last,
-             case when $1 = 'rc_serial' and not $2 then rc_serial end asc nulls last,
-             case when $1 = 'rc_serial' and $2 then rc_serial end desc nulls last,
+             case when $1 = 'aircraft_serial' and not $2 then lower(coalesce(
+                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),
+                 aircraft_serial)) end asc nulls last,
+             case when $1 = 'aircraft_serial' and $2 then lower(coalesce(
+                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),
+                 aircraft_serial)) end desc nulls last,
+             case when $1 = 'rc_serial' and not $2 then lower(coalesce(
+                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),
+                 rc_serial)) end asc nulls last,
+             case when $1 = 'rc_serial' and $2 then lower(coalesce(
+                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),
+                 rc_serial)) end desc nulls last,
              id
          limit $3 offset $4"#,
         sort.key.as_str(),
@@ -105,6 +131,8 @@ pub async fn list(
         offset,
         scope.all,
         scope.user_id,
+        filter.aircraft_serial,
+        filter.rc_serial,
     )
     .fetch_all(db)
     .await
@@ -130,6 +158,14 @@ pub struct FlightDetail {
     /// GeoJSON LineString: [longitude, latitude, height above takeoff].
     pub track: Value,
     pub metrics: Value,
+    /// The drone's and controller's pages, for linking; None where the
+    /// policy doesn't let the actor see them (see `flights::service`).
+    pub aircraft_id: Option<Uuid>,
+    #[serde(skip)]
+    pub aircraft_team_id: Option<Uuid>,
+    pub rc_id: Option<Uuid>,
+    #[serde(skip)]
+    pub rc_team_id: Option<Uuid>,
 }
 
 /// A flight in the scope, or None if it doesn't exist or isn't in the scope.
@@ -143,7 +179,11 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
                 team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?",
-                track, metrics
+                track, metrics,
+                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
+                (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
+                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
+                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?"
          from flights
          where id = $1
            and ($2
@@ -173,7 +213,11 @@ pub async fn of_session(
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
                 team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?",
-                track, metrics
+                track, metrics,
+                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
+                (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
+                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
+                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?"
          from flights
          where session_id = $1
            and ($2
@@ -188,18 +232,69 @@ pub async fn of_session(
     .await
 }
 
-/// The number of flights in the scope.
-pub async fn count(db: &PgPool, scope: &FlightScope) -> sqlx::Result<i64> {
+/// The number of flights in the scope that pass the filter.
+pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Result<i64> {
     sqlx::query_scalar!(
         r#"select count(*) as "count!"
            from flights
-           where $1
-              or pilot_id = $2
-              or team_id in (select team_id from team_members where user_id = $2)"#,
+           where ($1
+                  or pilot_id = $2
+                  or team_id in (select team_id from team_members where user_id = $2))
+             and ($3::text is null or aircraft_serial = $3)
+             and ($4::text is null or rc_serial = $4)"#,
+        scope.all,
+        scope.user_id,
+        filter.aircraft_serial,
+        filter.rc_serial,
+    )
+    .fetch_one(db)
+    .await
+}
+
+/// A drone or controller to filter the logbook by.
+#[derive(Serialize)]
+pub struct Device {
+    pub serial: String,
+    pub name: Option<String>,
+}
+
+/// The drones that flew flights in the scope, by name or else serial.
+pub async fn aircraft_of(db: &PgPool, scope: &FlightScope) -> sqlx::Result<Vec<Device>> {
+    sqlx::query_as!(
+        Device,
+        r#"select f.aircraft_serial as "serial!", a.name as "name?"
+           from flights f
+           left join aircraft a on a.serial = f.aircraft_serial
+           where f.aircraft_serial is not null
+             and ($1
+                  or f.pilot_id = $2
+                  or f.team_id in (select team_id from team_members where user_id = $2))
+           group by f.aircraft_serial, a.name
+           order by lower(coalesce(a.name, f.aircraft_serial))"#,
         scope.all,
         scope.user_id,
     )
-    .fetch_one(db)
+    .fetch_all(db)
+    .await
+}
+
+/// The controllers that flew flights in the scope, by name or else serial.
+pub async fn controllers_of(db: &PgPool, scope: &FlightScope) -> sqlx::Result<Vec<Device>> {
+    sqlx::query_as!(
+        Device,
+        r#"select f.rc_serial as "serial!", r.name as "name?"
+           from flights f
+           left join remote_controllers r on r.serial = f.rc_serial
+           where f.rc_serial is not null
+             and ($1
+                  or f.pilot_id = $2
+                  or f.team_id in (select team_id from team_members where user_id = $2))
+           group by f.rc_serial, r.name
+           order by lower(coalesce(r.name, f.rc_serial))"#,
+        scope.all,
+        scope.user_id,
+    )
+    .fetch_all(db)
     .await
 }
 
@@ -360,13 +455,14 @@ mod tests {
             key: SortKey::TakeoffAt,
             descending: false,
         };
-        let mut ids: Vec<Uuid> = list(db, scope, &sort, 100, 0)
+        let filter = Filter::default();
+        let mut ids: Vec<Uuid> = list(db, scope, &filter, &sort, 100, 0)
             .await
             .unwrap()
             .into_iter()
             .map(|flight| flight.id)
             .collect();
-        assert_eq!(count(db, scope).await.unwrap(), ids.len() as i64);
+        assert_eq!(count(db, scope, &filter).await.unwrap(), ids.len() as i64);
         ids.sort();
         // A single flight is found exactly when it is listed.
         let all: Vec<Uuid> = sqlx::query_scalar("select id from flights")

@@ -10,12 +10,26 @@ export interface FlightSummary {
 	air_time_s: number;
 	distance_m: number;
 	aircraft_serial: string | null;
+	aircraft_name: string | null;
 	rc_serial: string | null;
+	rc_name: string | null;
 	pilot_id: string | null;
 	pilot_name: string | null;
 	/** Null: in the organisation's queue. */
 	team_id: string | null;
 	team_name: string | null;
+}
+
+/** A drone or controller to filter the logbook by. */
+export interface Device {
+	serial: string;
+	name: string | null;
+}
+
+/** `GET /api/flights/devices`: the equipment of the flights the user sees. */
+export interface Devices {
+	aircraft: Device[];
+	controllers: Device[];
 }
 
 /** One flight with its track, from `GET /api/flights/{id}`. */
@@ -40,6 +54,9 @@ export interface FlightDetail {
 		camera_serial?: string | null;
 		battery_serial?: string | null;
 	};
+	/** The drone's and controller's pages; null where the user can't see them. */
+	aircraft_id: string | null;
+	rc_id: string | null;
 }
 
 /** A session as listed by `GET /api/sessions`: what its visible flights add up to. */

@@ -53,7 +53,9 @@
 				{#if rows.length === 0}
 					<EmptyState
 						title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
-						body="Drones and remote controllers appear here when flight logs that use them are imported."
+						body={data.account?.role === 'member'
+							? 'Your team’s drones and remote controllers appear here once an admin assigns them to the team.'
+							: 'Drones and remote controllers appear here when flight logs that use them are imported.'}
 					/>
 				{:else}
 					<DataTable

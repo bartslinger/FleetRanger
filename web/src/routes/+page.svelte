@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
@@ -40,9 +42,47 @@
 		},
 		{ key: 'pilot_name', header: 'Pilot' },
 		{ key: 'team_name', header: 'Team' },
-		{ key: 'aircraft_serial', header: 'Drone serial', identifier: true, sortable: true },
-		{ key: 'rc_serial', header: 'Controller serial', identifier: true, sortable: true }
+		{
+			key: 'aircraft_serial',
+			header: 'Drone',
+			identifier: true,
+			sortable: true,
+			format: (flight) => flight.aircraft_name ?? flight.aircraft_serial ?? ''
+		},
+		{
+			key: 'rc_serial',
+			header: 'Controller',
+			identifier: true,
+			sortable: true,
+			format: (flight) => flight.rc_name ?? flight.rc_serial ?? ''
+		}
 	]);
+
+	// Filters: a drone and/or controller, by name with the serial.
+	type Device = (typeof data.devices.aircraft)[number];
+	function deviceOptions(devices: Device[], all: string, current: string | null) {
+		const known = devices.map((device) => ({
+			value: device.serial,
+			label: device.name ? `${device.name} (${device.serial})` : device.serial
+		}));
+		// From a link, e.g. a drone none of whose flights this user sees.
+		if (current && !devices.some((device) => device.serial === current)) {
+			known.push({ value: current, label: current });
+		}
+		return [{ value: '', label: all }, ...known];
+	}
+	const droneOptions = $derived(
+		deviceOptions(data.devices.aircraft, 'All drones', data.state.drone)
+	);
+	const controllerOptions = $derived(
+		deviceOptions(data.devices.controllers, 'All controllers', data.state.controller)
+	);
+	const filtering = $derived(data.state.drone !== null || data.state.controller !== null);
+
+	function filter(change: Partial<Pick<LogbookState, 'drone' | 'controller'>>) {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves.
+		goto(href({ ...data.state, ...change, page: 1 }), { reset: false });
+	}
 
 	// Batch actions: admins change any flight, members those of their own team.
 	let selected: string[] = $state([]);
@@ -83,7 +123,33 @@
 
 <Grid>
 	<Column narrow>
-		{#if data.total === 0}
+		{#if data.total > 0 || filtering}
+			<div class="filters">
+				<Select
+					label="Drone"
+					options={droneOptions}
+					value={data.state.drone ?? ''}
+					onchange={(event) => filter({ drone: event.currentTarget.value || null })}
+				/>
+				<Select
+					label="Controller"
+					options={controllerOptions}
+					value={data.state.controller ?? ''}
+					onchange={(event) => filter({ controller: event.currentTarget.value || null })}
+				/>
+				{#if filtering}
+					<Button kind="ghost" size="md" onclick={() => filter({ drone: null, controller: null })}>
+						Clear filters
+					</Button>
+				{/if}
+			</div>
+		{/if}
+		{#if data.total === 0 && filtering}
+			<EmptyState
+				title="No flights match"
+				body="No flights you can see were flown with this drone and controller."
+			/>
+		{:else if data.total === 0}
 			<EmptyState
 				title="No flights yet"
 				body="Flights appear here when flight logs from your remote controllers are imported."
@@ -146,6 +212,25 @@
 </Grid>
 
 <style>
+	/* Filters above the table: side by side from md, 16px apart, with 16px
+	   before the table; Clear filters in line with the fields. */
+	.filters {
+		display: grid;
+		gap: var(--cds-spacing-05);
+		align-items: end;
+		margin-bottom: var(--cds-spacing-05);
+		/* The column is edge to edge on phones; the fields keep the gutter. */
+		padding-inline: var(--cds-spacing-05);
+	}
+
+	@media (min-width: 42rem) {
+		.filters {
+			padding-inline: 0;
+			grid-template-columns: repeat(2, minmax(0, 20rem)) auto;
+			justify-content: start;
+		}
+	}
+
 	.help {
 		margin-top: calc(-1 * var(--cds-spacing-03));
 		color: var(--cds-text-secondary);

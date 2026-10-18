@@ -1,4 +1,5 @@
-//! Drone and remote controller API, for admins.
+//! Drone and remote controller API. Who sees and changes what is the policy's
+//! decision (`see_equipment`, `change_equipment`).
 
 use axum::{
     Json, Router,

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{FlightDetail, FlightSummary, Sort, SortKey};
+use super::db::{Filter, FlightDetail, FlightSummary, Sort, SortKey};
 use super::service;
 use crate::{auth::Actor, error::ApiResult, sessions::SessionGap};
 
@@ -26,6 +26,7 @@ where
     Router::new()
         .route("/api/flights", get(list))
         .route("/api/flights/choices", get(choices))
+        .route("/api/flights/devices", get(devices))
         .route("/api/flights/{id}", get(show))
         .route("/api/flights/pilot", post(set_pilot))
         .route("/api/flights/team", post(set_team))
@@ -62,6 +63,10 @@ async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<servi
     Ok(Json(service::choices(&db, &actor).await?))
 }
 
+async fn devices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Devices>> {
+    Ok(Json(service::devices(&db, &actor).await?))
+}
+
 async fn set_pilot(
     actor: Actor,
     State(db): State<PgPool>,
@@ -89,6 +94,10 @@ struct ListQuery {
     size: Option<u32>,
     /// A column name, prefixed with `-` for descending order.
     sort: Option<String>,
+    /// Only the flights of this drone serial.
+    aircraft: Option<String>,
+    /// Only the flights of this controller serial.
+    controller: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -112,8 +121,12 @@ async fn list(
     let sort = parse_sort(query.sort.as_deref().unwrap_or("-takeoff_at"))
         .ok_or_else(|| bad_request("unknown sort column".to_owned()))?;
 
+    let filter = Filter {
+        aircraft_serial: query.aircraft,
+        rc_serial: query.controller,
+    };
     let offset = i64::from(page - 1) * i64::from(size);
-    match service::list(&db, &actor, &sort, i64::from(size), offset).await {
+    match service::list(&db, &actor, &filter, &sort, i64::from(size), offset).await {
         Ok((flights, total)) => Ok(Json(FlightPage { flights, total })),
         Err(error) => {
             tracing::error!(%error, "listing flights");

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                team_id, (select t.name from teams t where t.id = flights.team_id) as \"team_name?\",\n                track, metrics\n         from flights\n         where id = $1\n           and ($2\n                or pilot_id = $3\n                or team_id in (select team_id from team_members where user_id = $3))",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                team_id, (select t.name from teams t where t.id = flights.team_id) as \"team_name?\"\n         from flights\n         where ($5\n                or pilot_id = $6\n                or team_id in (select team_id from team_members where user_id = $6))\n           and ($7::text is null or aircraft_serial = $7)\n           and ($8::text is null or rc_serial = $8)\n         order by\n             case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,\n             case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,\n             case when $1 = 'air_time_s' and not $2 then air_time_s end asc,\n             case when $1 = 'air_time_s' and $2 then air_time_s end desc,\n             case when $1 = 'distance_m' and not $2 then distance_m end asc,\n             case when $1 = 'distance_m' and $2 then distance_m end desc,\n             case when $1 = 'aircraft_serial' and not $2 then lower(coalesce(\n                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),\n                 aircraft_serial)) end asc nulls last,\n             case when $1 = 'aircraft_serial' and $2 then lower(coalesce(\n                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),\n                 aircraft_serial)) end desc nulls last,\n             case when $1 = 'rc_serial' and not $2 then lower(coalesce(\n                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),\n                 rc_serial)) end asc nulls last,\n             case when $1 = 'rc_serial' and $2 then lower(coalesce(\n                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),\n                 rc_serial)) end desc nulls last,\n             id\n         limit $3 offset $4",
   "describe": {
     "columns": [
       {
@@ -125,35 +125,18 @@
         "name": "team_name?",
         "type_info": "Text",
         "origin": "Expression"
-      },
-      {
-        "ordinal": 13,
-        "name": "track",
-        "type_info": "Jsonb",
-        "origin": {
-          "Table": {
-            "table": "flights",
-            "name": "track"
-          }
-        }
-      },
-      {
-        "ordinal": 14,
-        "name": "metrics",
-        "type_info": "Jsonb",
-        "origin": {
-          "Table": {
-            "table": "flights",
-            "name": "metrics"
-          }
-        }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
+        "Text",
         "Bool",
-        "Uuid"
+        "Int8",
+        "Int8",
+        "Bool",
+        "Uuid",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -169,10 +152,8 @@
       true,
       null,
       true,
-      null,
-      false,
-      false
+      null
     ]
   },
-  "hash": "f6d099283ef88039023f0578b7dcd56c278a188d8b3abfcba9914ea361bd8f68"
+  "hash": "8e75e9b5666021d8b8b4abade3e55fc539d425c0bbcb578f48457a5de9051f5e"
 }

@@ -51,6 +51,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
   - When an admin moves a flight to another team without choosing a pilot, the pilot is cleared unless they are in the new team. A flight never has a pilot from another team.
   - The all-flights role only views.
   - These changes work on many flights at once (batch actions in the logbook). A batch is applied whole or not at all.
+- **Equipment pages:** admins and the all-flights role see every drone and controller; members see their own team's. Members change the name and holder (someone of their team) of those; the team and pairing stay with admins, and the all-flights role only views. A flight's page links its drone and controller to their pages for whoever may see them, and each page links to its flights in the logbook, which filters by drone and controller.
 - **All access decisions go through one policy module** in the backend, never through ad-hoc checks in handlers. Service functions take an `Actor` (who is acting), so a handler can't skip the check.
 - **Simplicity first.** The visibility condition is written directly in the flight queries, with a test that list and single-flight access agree. It gets extracted (for example into a SQL function) only when duplication becomes a problem.
 - **Audit log:** append-only, recording every view, change, reassignment, move and merge, with the user, session, time and IP. There is no hash chain.

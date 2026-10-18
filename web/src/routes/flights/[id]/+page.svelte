@@ -3,6 +3,7 @@
 	import { dateTime, distance, duration } from '#lib/format.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
+	import Link from '#lib/ui/Link.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import type { PageProps } from './$types';
@@ -42,9 +43,19 @@
 			{
 				label: 'Drone',
 				value: device(flight.aircraft_name, flight.aircraft_serial),
-				numeric: true
+				numeric: true,
+				href: flight.aircraft_id
+					? resolve('/equipment/[kind=kind]/[id]', { kind: 'drones', id: flight.aircraft_id })
+					: undefined
 			},
-			{ label: 'Controller', value: device(flight.rc_name, flight.rc_serial), numeric: true },
+			{
+				label: 'Controller',
+				value: device(flight.rc_name, flight.rc_serial),
+				numeric: true,
+				href: flight.rc_id
+					? resolve('/equipment/[kind=kind]/[id]', { kind: 'controllers', id: flight.rc_id })
+					: undefined
+			},
 			{ label: 'Battery', value: device(null, flight.metrics.battery_serial), numeric: true },
 			{ label: 'Camera', value: device(null, flight.metrics.camera_serial), numeric: true }
 		]
@@ -66,7 +77,14 @@
 				{#each facts as fact (fact.label)}
 					<div>
 						<dt>{fact.label}</dt>
-						<dd class:numeric={fact.numeric}>{fact.value}</dd>
+						<dd class:numeric={fact.numeric}>
+							<!-- The drone's and controller's pages, for who may see them. -->
+							{#if 'href' in fact && fact.href}
+								<Link href={fact.href}>{fact.value}</Link>
+							{:else}
+								{fact.value}
+							{/if}
+						</dd>
 					</div>
 				{/each}
 			</dl>

@@ -8,25 +8,37 @@ use crate::{
     policy,
 };
 
-/// What an admin enters for a drone or controller; all optional.
+/// What is entered for a drone or controller; all optional.
 pub struct EquipmentInput {
     pub name: Option<String>,
     pub team_id: Option<Uuid>,
     pub holder_user_id: Option<Uuid>,
 }
 
+/// The equipment the actor may see; the lists are short, so the policy
+/// filters them here rather than in the query.
 pub async fn list(db: &PgPool, actor: &Actor, kind: Kind) -> ApiResult<Vec<Equipment>> {
-    policy::require_admin(actor)?;
-    Ok(db::list(db, kind).await?)
+    let own_team = own_team(db, actor).await?;
+    let mut items = db::list(db, kind).await?;
+    items.retain(|item| policy::see_equipment(actor.role, own_team, item.team_id));
+    Ok(items)
 }
 
+/// One the actor may not see is not found, so its existence isn't revealed.
 pub async fn get(db: &PgPool, actor: &Actor, kind: Kind, id: Uuid) -> ApiResult<Equipment> {
-    policy::require_admin(actor)?;
-    db::get(db, kind, id).await?.ok_or(ApiError::NotFound)
+    let own_team = own_team(db, actor).await?;
+    db::get(db, kind, id)
+        .await?
+        .filter(|item| policy::see_equipment(actor.role, own_team, item.team_id))
+        .ok_or(ApiError::NotFound)
+}
+
+async fn own_team(db: &PgPool, actor: &Actor) -> sqlx::Result<Option<Uuid>> {
+    crate::flights::db::own_team(db, actor.user_id).await
 }
 
 /// The team decides the team of new flights without a pilot, so it must be
-/// active; so must the holder.
+/// active; so must the holder. Members change only the name and holder.
 pub async fn update(
     db: &PgPool,
     actor: &Actor,
@@ -34,7 +46,19 @@ pub async fn update(
     id: Uuid,
     input: &EquipmentInput,
 ) -> ApiResult<Equipment> {
-    policy::require_admin(actor)?;
+    let item = get(db, actor, kind, id).await?;
+    let holder_team = match input.holder_user_id {
+        Some(user) => Some(crate::flights::db::pilot_team(db, user).await?),
+        None => None,
+    };
+    let own_team = own_team(db, actor).await?;
+    policy::change_equipment(
+        actor.role,
+        own_team,
+        item.team_id,
+        input.team_id,
+        holder_team,
+    )?;
     if let Some(team_id) = input.team_id
         && !db::team_is_active(db, team_id).await?
     {

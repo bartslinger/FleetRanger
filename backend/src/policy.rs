@@ -84,6 +84,47 @@ pub fn change_sessions(
     }
 }
 
+/// Whether the actor sees a drone or controller of this team: admins and the
+/// all-flights role every one, members those of their own team.
+pub fn see_equipment(role: Role, own_team: Option<Uuid>, item_team: Option<Uuid>) -> bool {
+    match role {
+        Role::Admin | Role::AllFlights => true,
+        Role::Member => own_team.is_some() && item_team == own_team,
+    }
+}
+
+/// Whether the actor may make this change to a drone or controller they see.
+/// Admins change everything. Members change the name and holder of their
+/// team's equipment, with a holder from their own team; not its team. The
+/// all-flights role only views.
+///
+/// - `item_team`, `new_team`: the item's team now and as entered.
+/// - `holder_team`: for a holder, their team if they're an active user in
+///   one; `None` for no holder.
+pub fn change_equipment(
+    role: Role,
+    own_team: Option<Uuid>,
+    item_team: Option<Uuid>,
+    new_team: Option<Uuid>,
+    holder_team: Option<Option<Uuid>>,
+) -> ApiResult<()> {
+    match role {
+        Role::Admin => Ok(()),
+        Role::AllFlights => Err(ApiError::Forbidden),
+        Role::Member => {
+            if !see_equipment(role, own_team, item_team) || new_team != item_team {
+                return Err(ApiError::Forbidden);
+            }
+            if holder_team.is_some_and(|team| team != own_team) {
+                return Err(ApiError::Invalid(
+                    "Choose someone of your own team.".to_owned(),
+                ));
+            }
+            Ok(())
+        }
+    }
+}
+
 /// What happens to the flights' team when their pilot is set.
 #[derive(Debug, PartialEq, Eq)]
 pub enum TeamChange {
@@ -144,6 +185,24 @@ mod tests {
         assert_eq!(change.ok(), Some(TeamChange::Follow(b)));
         let cleared = set_pilot(Role::Admin, None, &[Some(a)], None);
         assert_eq!(cleared.ok(), Some(TeamChange::Keep));
+    }
+
+    #[test]
+    fn member_changes_name_and_holder_of_own_team_equipment_only() {
+        let (own, other) = (A, B);
+        let member =
+            |item, new, holder| change_equipment(Role::Member, Some(own), item, new, holder);
+        assert!(member(Some(own), Some(own), None).is_ok());
+        assert!(member(Some(own), Some(own), Some(Some(own))).is_ok());
+        // Not its team, not a holder from elsewhere, not other equipment.
+        assert!(member(Some(own), None, None).is_err());
+        assert!(member(Some(own), Some(own), Some(Some(other))).is_err());
+        assert!(member(Some(own), Some(own), Some(None)).is_err());
+        assert!(member(Some(other), Some(other), None).is_err());
+        // No team and team-less equipment: both None, still not theirs.
+        assert!(!see_equipment(Role::Member, None, None));
+        assert!(see_equipment(Role::AllFlights, None, Some(other)));
+        assert!(change_equipment(Role::AllFlights, None, None, None, None).is_err());
     }
 
     #[test]

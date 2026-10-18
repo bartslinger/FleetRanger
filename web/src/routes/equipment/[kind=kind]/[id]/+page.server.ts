@@ -1,14 +1,31 @@
 import { fail } from '@sveltejs/kit';
-import { get, remove, send, type Equipment, type Team, type User } from '#lib/server/backend.js';
+import {
+	get,
+	remove,
+	send,
+	type Equipment,
+	type FlightChoices,
+	type Team,
+	type User
+} from '#lib/server/backend.js';
 import { KINDS } from '#lib/equipment.js';
 
-export async function load({ fetch, params }) {
-	const [item, teams, users] = await Promise.all([
-		get<Equipment>(fetch, `${KINDS[params.kind].api}/${params.id}`),
-		get<Team[]>(fetch, '/api/teams'),
-		get<User[]>(fetch, '/api/users')
-	]);
-	return { kind: params.kind, item, teams, users };
+export async function load({ fetch, locals, params }) {
+	const item = await get<Equipment>(fetch, `${KINDS[params.kind].api}/${params.id}`);
+	const role = locals.account?.role;
+	if (role === 'admin') {
+		const [teams, users] = await Promise.all([
+			get<Team[]>(fetch, '/api/teams'),
+			get<User[]>(fetch, '/api/users')
+		]);
+		return { kind: params.kind, item, edit: 'all' as const, teams, holders: users };
+	}
+	if (role === 'member') {
+		// Members choose a holder from their own team: the logbook's pilots.
+		const choices = await get<FlightChoices>(fetch, '/api/flights/choices');
+		return { kind: params.kind, item, edit: 'name' as const, teams: [], holders: choices.pilots };
+	}
+	return { kind: params.kind, item, edit: 'none' as const, teams: [], holders: [] };
 }
 
 export const actions = {

@@ -1,3 +1,3 @@
 pub mod db;
 pub mod routes;
-mod service;
+pub mod service;

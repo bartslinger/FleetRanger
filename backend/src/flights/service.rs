@@ -2,7 +2,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, FlightDetail, FlightSummary, PilotChoice, Sort, TeamChoice};
+use super::db::{self, Device, Filter, FlightDetail, FlightSummary, PilotChoice, Sort, TeamChoice};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -10,25 +10,64 @@ use crate::{
     sessions::{self, SessionGap},
 };
 
-/// One page of the flights the actor may see, and how many there are in all.
+/// One page of the flights the actor may see that pass the filter, and how
+/// many there are in all.
 pub async fn list(
     db: &PgPool,
     actor: &Actor,
+    filter: &Filter,
     sort: &Sort,
     limit: i64,
     offset: i64,
 ) -> sqlx::Result<(Vec<FlightSummary>, i64)> {
     let scope = policy::flight_scope(actor);
-    let flights = db::list(db, &scope, sort, limit, offset).await?;
-    let total = db::count(db, &scope).await?;
+    let flights = db::list(db, &scope, filter, sort, limit, offset).await?;
+    let total = db::count(db, &scope, filter).await?;
     Ok((flights, total))
+}
+
+/// The drones and controllers of the flights the actor may see, for the
+/// logbook's filters.
+#[derive(Serialize)]
+pub struct Devices {
+    pub aircraft: Vec<Device>,
+    pub controllers: Vec<Device>,
+}
+
+pub async fn devices(db: &PgPool, actor: &Actor) -> ApiResult<Devices> {
+    let scope = policy::flight_scope(actor);
+    Ok(Devices {
+        aircraft: db::aircraft_of(db, &scope).await?,
+        controllers: db::controllers_of(db, &scope).await?,
+    })
 }
 
 /// A flight the actor may see. One they may not see is not found, so its
 /// existence isn't revealed.
 pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<FlightDetail> {
     let scope = policy::flight_scope(actor);
-    db::get(db, &scope, id).await?.ok_or(ApiError::NotFound)
+    let mut flight = db::get(db, &scope, id).await?.ok_or(ApiError::NotFound)?;
+    link_equipment(db, actor, std::slice::from_mut(&mut flight)).await?;
+    Ok(flight)
+}
+
+/// Keeps the links to the drone's and controller's pages only where the
+/// actor may see them.
+pub async fn link_equipment(
+    db: &PgPool,
+    actor: &Actor,
+    flights: &mut [FlightDetail],
+) -> sqlx::Result<()> {
+    let own_team = db::own_team(db, actor.user_id).await?;
+    for flight in flights {
+        if !policy::see_equipment(actor.role, own_team, flight.aircraft_team_id) {
+            flight.aircraft_id = None;
+        }
+        if !policy::see_equipment(actor.role, own_team, flight.rc_team_id) {
+            flight.rc_id = None;
+        }
+    }
+    Ok(())
 }
 
 /// What the actor can change in the logbook, so it offers only that.

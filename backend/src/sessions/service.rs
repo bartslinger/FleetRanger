@@ -35,10 +35,11 @@ pub struct Session {
 /// so its existence isn't revealed.
 pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<Session> {
     let scope = policy::flight_scope(actor);
-    let flights = flights::db::of_session(db, &scope, id).await?;
+    let mut flights = flights::db::of_session(db, &scope, id).await?;
     if flights.is_empty() {
         return Err(ApiError::NotFound);
     }
+    flights::service::link_equipment(db, actor, &mut flights).await?;
     Ok(Session { id, flights })
 }
 
