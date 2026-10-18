@@ -183,7 +183,8 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
   - the UI shell, with a skip link and keyboard focus handling; dark, with the side nav rail
   - the 2x Grid (`Grid`, `Column`; narrow mode for containers)
   - components: button, tag, inline notification, toast notification, text input, select, checkbox, radio button group, data table (sortable, with toolbar and row links), pagination, empty state, page header (with breadcrumb and status), modal, tabs
-  - the admin pattern (Pilots, Teams, Equipment, Users): a list with a toolbar ("Show archived", "New …" in a modal), and a page per item with read-only facts, an in-page form, and archiving after confirmation. Confirmations of completed actions are toasts; errors stay inline.
+  - the admin pattern (Users, Teams, Equipment): a list with a toolbar ("Show archived", "New …" in a modal), and a page per item with read-only facts, an in-page form, archiving after confirmation, and deleting after a danger confirmation where allowed. Confirmations of completed actions are toasts; errors stay inline.
+  - batch actions in the logbook: select rows, then act on them from the blue bar over the toolbar
   - not yet reviewed by the Carbon expert: everything since the dark shell; one review is planned for the end
   - the logbook, reviewed against Carbon
   - a theme setting (system, light or dark)

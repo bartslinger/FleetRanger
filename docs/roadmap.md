@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Login works locally (phase 4), and admins manage pilots, teams, equipment and users in the web app. Each account sees only the flights the policy allows. Next is setting a flight's pilot and moving flights between teams, then sessions (phase 3), which are grouped per pilot. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Next are sessions (phase 3), which are grouped per pilot. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -35,18 +35,18 @@ Waits for pilots (phase 4): sessions are grouped per pilot.
 ## Phase 4: login and access
 
 - [x] OIDC login (Google), server-side sessions (not yet deployed)
-- [x] Pilots, accounts, teams, devices (managed by admins; drones and controllers registered from logs)
-- [~] Policy module and access rules (flight visibility done; setting a flight's pilot and moving flights next)
+- [x] Users (with optional team and login), teams, devices (managed by admins; drones and controllers registered from logs)
+- [x] Policy module and access rules (flight visibility, setting a flight's pilot, moving flights)
 - [ ] Audit log
 
 ## Phase 5: web
 
 - [x] Design system foundation: tokens, fonts, UI shell, 2x Grid, first components, theme setting
 - [x] Page layout: Gray 10 for light mode, a dark shell with the side nav rail, page header without the band
-- [~] Logbook (paging and sorting done; no pilots or access rules yet)
+- [x] Logbook (paging, sorting, pilot and team, batch actions to set them)
 - [ ] Flight detail with map
 - [ ] Session overview
-- [x] Admin pages: pilots, teams, equipment, users
+- [x] Admin pages: users, teams, equipment
 
 ## Phase 6: remote controller app
 
