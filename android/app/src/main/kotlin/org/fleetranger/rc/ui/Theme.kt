@@ -31,6 +31,11 @@ object Colors {
     val buttonSecondary = Color(0xFF393939)
     val buttonSecondaryActive = Color(0xFF6F6F6F)
     val buttonTertiaryActive = Color(0xFF002D9C)
+    val buttonDanger = Color(0xFFDA1E28)
+    val buttonDangerActive = Color(0xFF750E13)
+    val borderStrong01 = Color(0xFF8D8D8D)
+    val iconPrimary = Color(0xFF161616)
+    val overlay = Color(0x80161616)
     val supportWarning = Color(0xFFF1C21B)
     val notificationBackgroundWarning = Color(0xFFFCF4D6)
 }
@@ -42,6 +47,7 @@ val Plex = FontFamily(
 
 /** Carbon's type tokens (productive set). */
 object Type {
+    val heading03 = TextStyle(fontFamily = Plex, fontSize = 20.sp, lineHeight = 28.sp)
     val heading04 = TextStyle(fontFamily = Plex, fontSize = 28.sp, lineHeight = 36.sp)
     val headingCompact01 = TextStyle(
         fontFamily = Plex,

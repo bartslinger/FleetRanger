@@ -1,5 +1,6 @@
 package org.fleetranger.rc
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -7,6 +8,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -29,6 +31,14 @@ class MainActivity : ComponentActivity() {
     private var opensAtStartup by mutableStateOf(true)
     private var pilotList by mutableStateOf(PilotList.EMPTY)
     private var last by mutableStateOf<Pilot?>(null)
+    private lateinit var sync: SyncSettings
+    private var showSettings by mutableStateOf(false)
+    private var currentNetwork by mutableStateOf<String?>(null)
+    private var canSeeNetworkNames by mutableStateOf(false)
+
+    /** Android only names the Wi-Fi network for apps with the location permission. */
+    private val askForNetworkNames =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { refreshNetwork() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,24 +46,61 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         pilots = Pilots(this)
         server = Server(this)
+        sync = SyncSettings(this)
         setUp(intent)
         serverUrl = server.url
         paired = server.paired
         setContent {
-            if (!paired) {
-                Pairing(server, serverUrl, onPaired = {
+            when {
+                !paired -> Pairing(server, serverUrl, onPaired = {
                     paired = true
                     refreshPilots()
                 })
-            } else {
-                PilotScreen(
+                showSettings -> SettingsScreen(
+                    settings = sync,
+                    serverUrl = serverUrl,
+                    currentNetwork = currentNetwork,
+                    canSeeNetworkNames = canSeeNetworkNames,
+                    onAllowNetworkNames = {
+                        askForNetworkNames.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    },
+                    onUnpair = ::unpair,
+                    onBack = { showSettings = false },
+                )
+                else -> PilotScreen(
                     list = pilotList,
                     last = last,
                     opensAtStartup = opensAtStartup,
                     onChoose = ::fly,
-                    onOpenSettings = { DjiPilot.openSettings(this) },
+                    onOpenStartupSettings = { DjiPilot.openSettings(this) },
+                    onSettings = {
+                        refreshNetwork()
+                        showSettings = true
+                    },
                 )
             }
+        }
+    }
+
+    private fun refreshNetwork() {
+        canSeeNetworkNames = sync.canSeeNetworkNames()
+        currentNetwork = sync.currentNetwork()
+    }
+
+    /**
+     * Unpairs on the server, and forgets the token here whatever happens, so
+     * the controller shows a new pairing code. If the server can't be reached,
+     * an admin can still remove the pairing there.
+     */
+    private fun unpair() {
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { server.unpair() }
+            } catch (_: IOException) {
+                // Forgotten here anyway; see above.
+            }
+            showSettings = false
+            paired = false
         }
     }
 
@@ -66,6 +113,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         opensAtStartup = DjiPilot.opensAtStartup(this)
+        refreshNetwork()
         pilotList = pilots.current
         last = pilots.last()
         if (paired) refreshPilots()

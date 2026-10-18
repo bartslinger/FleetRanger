@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 // Carbon's components, as far as the app needs them. Touch targets are at
 // least 64dp, Carbon's extra large size: pilots may wear gloves.
 
-enum class ButtonKind { Primary, Secondary, Tertiary, Ghost }
+enum class ButtonKind { Primary, Secondary, Tertiary, Ghost, Danger }
 
 /** Carbon's button, extra large (64dp), with its text at the top left. */
 @Composable
@@ -48,6 +48,7 @@ fun Button(
         ButtonKind.Secondary -> if (pressed) Colors.buttonSecondaryActive else Colors.buttonSecondary
         ButtonKind.Tertiary -> if (pressed) Colors.buttonTertiaryActive else Color.Transparent
         ButtonKind.Ghost -> if (pressed) Colors.layerActive01 else Color.Transparent
+        ButtonKind.Danger -> if (pressed) Colors.buttonDangerActive else Colors.buttonDanger
     }
     val foreground = when {
         kind == ButtonKind.Ghost -> Colors.interactive

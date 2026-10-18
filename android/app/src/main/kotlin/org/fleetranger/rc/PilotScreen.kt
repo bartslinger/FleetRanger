@@ -51,9 +51,13 @@ fun PilotScreen(
     last: Pilot?,
     opensAtStartup: Boolean,
     onChoose: (Pilot?) -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenStartupSettings: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     var choosing by rememberSaveable { mutableStateOf(false) }
+    val settingsButton: @Composable () -> Unit = {
+        Button("Settings", onSettings, kind = ButtonKind.Ghost)
+    }
     BackHandler(enabled = choosing && last != null) { choosing = false }
 
     Column(
@@ -68,18 +72,19 @@ fun PilotScreen(
                 title = "FleetRanger doesn’t open at startup",
                 text = "Choose it under Apps & notifications › Auto start application selection.",
                 action = "Open settings",
-                onAction = onOpenSettings,
+                onAction = onOpenStartupSettings,
             )
         }
         if (last != null && !choosing) {
+            Heading("Who’s flying?", settingsButton)
             LastPilot(last, onFly = { onChoose(last) }, onOther = { choosing = true })
+        } else if (last != null) {
+            Heading("Other pilot") { Button("Back", { choosing = false }, kind = ButtonKind.Ghost) }
+            // The last pilot is on the first screen already.
+            PilotList(list.copy(pilots = list.pilots.filter { it != last }), onChoose)
         } else {
-            PilotList(
-                // The last pilot is on the first screen already.
-                list.copy(pilots = list.pilots.filter { it != last }),
-                onChoose,
-                onBack = if (last != null) ({ choosing = false }) else null,
-            )
+            Heading("Who’s flying?", settingsButton)
+            PilotList(list, onChoose)
         }
     }
 }
@@ -87,7 +92,6 @@ fun PilotScreen(
 /** The usual case: the same pilot again, in one tap. */
 @Composable
 private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
-    Heading("Who’s flying?")
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s01)) {
         ClickableTile(
             title = last.name,
@@ -112,16 +116,8 @@ private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
 
 /** Everyone: the controller's team, then other teams, and "Not in the list". */
 @Composable
-private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, onBack: (() -> Unit)?) {
+private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit) {
     val (team, others) = list.pilots.partition { list.teamId == null || it.teamId == list.teamId }
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Heading(if (onBack != null) "Other pilot" else "Who’s flying?")
-        if (onBack != null) Button("Back", onBack, kind = ButtonKind.Ghost)
-    }
     // Tiles 2dp apart, as in Carbon's tile groups.
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 200.dp),
@@ -160,13 +156,24 @@ private fun LazyGridScope.sectionHeading(text: String) {
     }
 }
 
+/**
+ * The screen's heading, with an optional action at the right. Always as tall
+ * as a button, so the heading stays put when the action comes and goes.
+ */
 @Composable
-private fun Heading(text: String) {
-    BasicText(
-        text,
-        style = Type.heading04.copy(color = Colors.textPrimary),
-        modifier = Modifier.semantics { heading() },
-    )
+private fun Heading(text: String, action: @Composable () -> Unit = {}) {
+    Row(
+        Modifier.fillMaxWidth().height(64.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(
+            text,
+            style = Type.heading04.copy(color = Colors.textPrimary),
+            modifier = Modifier.semantics { heading() },
+        )
+        action()
+    }
 }
 
 @Composable
@@ -188,11 +195,11 @@ private val previewPilots = listOf(
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun LastPilotPreview() {
-    PilotScreen(PilotList("north", previewPilots), previewPilots[1], true, {}, {})
+    PilotScreen(PilotList("north", previewPilots), previewPilots[1], true, {}, {}, {})
 }
 
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun PilotListPreview() {
-    PilotScreen(PilotList("north", previewPilots), last = null, true, {}, {})
+    PilotScreen(PilotList("north", previewPilots), last = null, true, {}, {}, {})
 }
