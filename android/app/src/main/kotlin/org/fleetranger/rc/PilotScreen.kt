@@ -112,7 +112,8 @@ private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
 /** The usual case: the same pilot again, in one tap. */
 @Composable
 private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s01)) {
+    // Carbon's wide gutter: a gloved tap mustn't hit the wrong one.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s07)) {
         ClickableTile(
             title = last.name,
             detail = "Flew last. Tap to fly.",
@@ -138,11 +139,11 @@ private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
 @Composable
 private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit) {
     val (team, others) = list.pilots.partition { list.teamId == null || it.teamId == list.teamId }
-    // Tiles 2dp apart, as in Carbon's tile groups.
+    // Carbon's narrow gutter between tiles, for gloves.
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 200.dp),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.s01),
-        verticalArrangement = Arrangement.spacedBy(Spacing.s01),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s05),
+        verticalArrangement = Arrangement.spacedBy(Spacing.s05),
     ) {
         items(team, key = { it.id }) { pilot ->
             PilotTile(pilot, detail = null, onChoose)
