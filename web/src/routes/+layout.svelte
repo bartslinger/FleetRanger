@@ -13,7 +13,6 @@
 	import type { ProcessingStatus } from '#lib/server/backend.js';
 	import Loading from '#lib/ui/Loading.svelte';
 	import Shell, { type HeaderAction, type NavItem } from '#lib/ui/Shell.svelte';
-	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -43,10 +42,7 @@
 		}
 		processing = next;
 		// A batch finished: reload the page's data, so new flights show.
-		if (before && before.pending > 0 && next.pending === 0) {
-			toast('Flight logs processed.');
-			await invalidateAll();
-		}
+		if (before && before.pending > 0 && next.pending === 0) await invalidateAll();
 	}
 
 	const actions: HeaderAction[] = $derived(
