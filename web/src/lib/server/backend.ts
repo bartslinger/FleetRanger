@@ -10,6 +10,21 @@ export interface FlightSummary {
 	distance_m: number;
 	aircraft_serial: string | null;
 	rc_serial: string | null;
+	pilot_id: string | null;
+	pilot_name: string | null;
+	/** Null: in the organisation's queue. */
+	team_id: string | null;
+	team_name: string | null;
+}
+
+/** What the logged-in account can change in the logbook, from `GET /api/flights/choices`. */
+export interface FlightChoices {
+	/** The team whose flights a member can change. */
+	own_team_id: string | null;
+	/** Admins change any flight and move flights between teams. */
+	admin: boolean;
+	pilots: { id: string; name: string; team_id: string; team_name: string }[];
+	teams: { id: string; name: string }[];
 }
 
 /** One page of `GET /api/flights`. */
