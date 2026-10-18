@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Login works locally (phase 4): Google OIDC, accounts added by email, server-side login sessions, an `Actor` per request; the flight API requires login. Next are pilots, teams and devices, then sessions (phase 3), which are grouped per pilot. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login works locally (phase 4), and admins manage pilots, teams, equipment and users in the web app. Each account sees only the flights the policy allows. Next is setting a flight's pilot and moving flights between teams, then sessions (phase 3), which are grouped per pilot. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -35,8 +35,8 @@ Waits for pilots (phase 4): sessions are grouped per pilot.
 ## Phase 4: login and access
 
 - [x] OIDC login (Google), server-side sessions (not yet deployed)
-- [~] Pilots, accounts, teams, devices (schema and registration from logs done; admin pages next)
-- [~] Policy module and access rules (flight visibility done; pilot and team changes next)
+- [x] Pilots, accounts, teams, devices (managed by admins; drones and controllers registered from logs)
+- [~] Policy module and access rules (flight visibility done; setting a flight's pilot and moving flights next)
 - [ ] Audit log
 
 ## Phase 5: web
@@ -46,7 +46,7 @@ Waits for pilots (phase 4): sessions are grouped per pilot.
 - [~] Logbook (paging and sorting done; no pilots or access rules yet)
 - [ ] Flight detail with map
 - [ ] Session overview
-- [ ] Admin pages: pilots, teams, devices
+- [x] Admin pages: pilots, teams, equipment, users
 
 ## Phase 6: remote controller app
 

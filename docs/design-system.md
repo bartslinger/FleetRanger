@@ -182,7 +182,9 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
   - tokens, fonts and base styles
   - the UI shell, with a skip link and keyboard focus handling; dark, with the side nav rail
   - the 2x Grid (`Grid`, `Column`; narrow mode for containers)
-  - components: button, tag, inline notification, text input, select, data table (sortable), pagination, empty state, page header
+  - components: button, tag, inline notification, toast notification, text input, select, checkbox, radio button group, data table (sortable, with toolbar and row links), pagination, empty state, page header (with breadcrumb and status), modal, tabs
+  - the admin pattern (Pilots, Teams, Equipment, Users): a list with a toolbar ("Show archived", "New …" in a modal), and a page per item with read-only facts, an in-page form, and archiving after confirmation. Confirmations of completed actions are toasts; errors stay inline.
+  - not yet reviewed by the Carbon expert: everything since the dark shell; one review is planned for the end
   - the logbook, reviewed against Carbon
   - a theme setting (system, light or dark)
   - the login page (Carbon's login pattern for a single sign-on provider: the header shows only the product name) and the profile panel
