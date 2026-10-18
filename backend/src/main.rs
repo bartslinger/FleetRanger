@@ -5,6 +5,7 @@ mod error;
 mod flights;
 mod health;
 mod ingest;
+mod pilots;
 mod policy;
 mod teams;
 
@@ -105,6 +106,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .merge(auth::routes::router())
         .merge(flights::routes::router())
         .merge(teams::routes::router())
+        .merge(pilots::routes::router())
         .layer(middleware::from_fn_with_state(
             state.auth.clone(),
             auth::same_origin,
