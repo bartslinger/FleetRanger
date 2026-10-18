@@ -178,11 +178,9 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 
 - Done:
   - tokens, fonts and base styles
-  - the UI shell
-  - the first components: button, tag, inline notification, text input, select, data table, page header
+  - the UI shell, with a skip link and keyboard focus handling
+  - the 2x Grid (`Grid`, `Column`; narrow mode for containers)
+  - components: button, tag, inline notification, text input, select, data table (sortable), pagination, empty state, page header
+  - the logbook, reviewed against Carbon
 - Known gaps against the rules above:
-  - no 2x Grid yet: no columns, no maximum width, no gutter modes
-  - the page header isn't Carbon's band
-  - the data table uses 48 px rows and has no container title, pagination, sorting or Carbon empty state
-  - no "Skip to main content" link
   - no user setting for light or dark mode
