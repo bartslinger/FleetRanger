@@ -27,6 +27,14 @@ impl Role {
             _ => return None,
         })
     }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Member => "member",
+            Self::AllFlights => "all_flights",
+            Self::Admin => "admin",
+        }
+    }
 }
 
 /// Managing accounts, pilots, teams and equipment is for admins only.

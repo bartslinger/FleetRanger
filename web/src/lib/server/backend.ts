@@ -22,6 +22,7 @@ export interface FlightPage {
 export interface Account {
 	email: string;
 	name: string | null;
+	role: 'member' | 'all_flights' | 'admin';
 }
 
 /** The account of the browser's login session, or null if it isn't logged in. */
@@ -37,6 +38,39 @@ export async function me(fetch: typeof globalThis.fetch): Promise<Account | null
 	return response.json();
 }
 
+/** The result of a change sent to the backend. */
+export type SendResult<T> =
+	{ ok: true; data: T } | { ok: false; status: 400 | 409; message: string };
+
+/**
+ * Sends a change (POST or PUT) with a JSON body. A rejected change (400 or 409)
+ * comes back with the backend's message, written for the user, so a form can
+ * show it; any other failure fails the request.
+ */
+export async function send<T>(
+	fetch: typeof globalThis.fetch,
+	method: 'POST' | 'PUT',
+	path: string,
+	body?: unknown
+): Promise<SendResult<T>> {
+	let response: Response;
+	try {
+		response = await fetch(`${BACKEND_URL}${path}`, {
+			method,
+			headers: body === undefined ? {} : { 'content-type': 'application/json' },
+			body: body === undefined ? undefined : JSON.stringify(body)
+		});
+	} catch {
+		error(503, 'The backend is not reachable.');
+	}
+	if (response.status === 400 || response.status === 409) {
+		return { ok: false, status: response.status, message: await response.text() };
+	}
+	if (response.status === 403 || response.status === 404) error(response.status);
+	if (!response.ok) error(502, `The backend answered ${response.status}.`);
+	return { ok: true, data: await response.json() };
+}
+
 /** Fetches JSON from the backend, failing the request if the backend does. */
 export async function get<T>(fetch: typeof globalThis.fetch, path: string): Promise<T> {
 	let response: Response;
@@ -45,6 +79,7 @@ export async function get<T>(fetch: typeof globalThis.fetch, path: string): Prom
 	} catch {
 		error(503, 'The backend is not reachable.');
 	}
+	if (response.status === 403 || response.status === 404) error(response.status);
 	if (!response.ok) error(502, `The backend answered ${response.status}.`);
 	return response.json();
 }

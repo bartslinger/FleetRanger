@@ -202,6 +202,9 @@ async fn logout(State(db): State<PgPool>, jar: CookieJar) -> Response {
 struct Me {
     email: String,
     name: Option<String>,
+    /// So the web app shows only what the account can use; the backend still
+    /// checks every request.
+    role: &'static str,
 }
 
 /// The logged-in account, or 401.
@@ -209,6 +212,7 @@ async fn me(actor: Actor) -> Json<Me> {
     Json(Me {
         email: actor.email,
         name: actor.name,
+        role: actor.role.as_str(),
     })
 }
 
