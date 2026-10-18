@@ -2,4 +2,5 @@ build/
 .gradle/
 .kotlin/
 app/build/
+release/
 local.properties
