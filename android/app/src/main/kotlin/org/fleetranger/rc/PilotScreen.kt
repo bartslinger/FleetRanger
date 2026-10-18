@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +16,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -94,7 +97,10 @@ fun PilotScreen(
                 PilotList(list, onChoose)
             }
         }
-        if (syncStatus != null) SyncLine(syncStatus, onSettings)
+        // Not on "Other pilot", which needs the room for the list; the first
+        // screen shows it.
+        val choosingOther = last != null && choosing
+        if (syncStatus != null && !choosingOther) SyncLine(syncStatus, onSettings)
     }
 }
 
@@ -153,9 +159,12 @@ private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
 @Composable
 private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit) {
     val (team, others) = list.pilots.partition { list.teamId == null || it.teamId == list.teamId }
+    val state = rememberLazyGridState()
+    Box {
     // Carbon's narrow gutter between tiles, for gloves.
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 200.dp),
+        state = state,
         horizontalArrangement = Arrangement.spacedBy(Spacing.s05),
         verticalArrangement = Arrangement.spacedBy(Spacing.s05),
     ) {
@@ -176,6 +185,18 @@ private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit) {
                 PilotTile(pilot, detail = pilot.teamName, onChoose)
             }
         }
+    }
+    // While more pilots are below, the list fades out at the bottom, so it's
+    // clear it scrolls.
+    if (state.canScrollForward) {
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(48.dp)
+                .background(Brush.verticalGradient(listOf(Colors.background.copy(alpha = 0f), Colors.background))),
+        )
+    }
     }
 }
 
