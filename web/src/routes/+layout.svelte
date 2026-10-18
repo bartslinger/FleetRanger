@@ -19,6 +19,6 @@
 	<title>FleetRanger</title>
 </svelte:head>
 
-<Shell name="FleetRanger" {nav} theme={data.theme}>
+<Shell name="FleetRanger" {nav} account={data.account} theme={data.theme}>
 	{@render children()}
 </Shell>

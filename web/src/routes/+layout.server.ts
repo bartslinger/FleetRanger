@@ -4,6 +4,7 @@ import { timeZoneName } from '#lib/format.js';
 export function load({ locals }) {
 	return {
 		theme: locals.theme,
+		account: locals.account,
 		timeZone: TIME_ZONE,
 		// The abbreviation is computed here only: browsers and Node name zones
 		// differently, and the page must render the same on both.

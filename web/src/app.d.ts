@@ -5,6 +5,8 @@ declare global {
 		// interface Error {}
 		interface Locals {
 			theme: import('#lib/theme.js').Theme;
+			/** Null only on pages shown without logging in. */
+			account: import('#lib/server/backend.js').Account | null;
 		}
 		// interface PageData {}
 		// interface PageState {}

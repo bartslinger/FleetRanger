@@ -1,7 +1,8 @@
 <!--
 	@component
 	Carbon's UI shell: a header, side navigation and the page content. Below the
-	lg breakpoint the navigation is hidden behind a menu button.
+	lg breakpoint the navigation is hidden behind a menu button. Without an
+	account (the login page) the header holds only the product name.
 -->
 <script lang="ts" module>
 	export interface NavItem {
@@ -9,34 +10,42 @@
 		href: string;
 		label: string;
 	}
+
+	export interface ShellAccount {
+		email: string;
+		name: string | null;
+	}
 </script>
 
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
-	import BrightnessContrast from '@carbon/icons/es/brightness-contrast/20.js';
+	import UserAvatar from '@carbon/icons/es/user--avatar/20.js';
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { setTheme, type Theme } from '#lib/theme.js';
+	import Button from './Button.svelte';
 	import Icon from './Icon.svelte';
 	import RadioButtonGroup from './RadioButtonGroup.svelte';
 
 	interface Props {
 		name: string;
 		nav: NavItem[];
+		/** Who is logged in; null before logging in. */
+		account: ShellAccount | null;
 		/** The user's theme choice as rendered by the server. */
 		theme: Theme;
 		children: Snippet;
 	}
 
-	let { name, nav, theme: initialTheme, children }: Props = $props();
+	let { name, nav, account, theme: initialTheme, children }: Props = $props();
 
 	let open = $state(false);
 	let menuButton: HTMLButtonElement | undefined = $state();
 	let navElement: HTMLElement | undefined = $state();
 
-	// The theme panel: a header panel, which later becomes the profile panel.
-	// Starts from the server's value, then follows the user's choices.
+	// The profile panel: who is logged in, the theme and logging out. The theme
+	// starts from the server's value, then follows the user's choices.
 	// svelte-ignore state_referenced_locally
 	let theme = $state(initialTheme);
 	let panelOpen = $state(false);
@@ -111,90 +120,104 @@
 <a class="skip" href="#main-content">Skip to main content</a>
 
 <header>
-	<button
-		bind:this={menuButton}
-		class="menu"
-		type="button"
-		aria-label={open ? 'Close menu' : 'Open menu'}
-		aria-expanded={open}
-		aria-controls="side-nav"
-		onclick={toggle}
-	>
-		<!-- Carbon icons "menu" and "close" (Apache-2.0). -->
-		<svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true" fill="currentColor">
-			{#if open}
-				<path
-					d="M17.4141 16L24 9.4141 22.5859 8 16 14.5859 9.4143 8 8 9.4141 14.5859 16 8 22.5859 9.4143 24 16 17.4141 22.5859 24 24 22.5859 17.4141 16z"
-				/>
-			{:else}
-				<path d="M4 6H28V8H4zM4 24H28V26H4zM4 12H28V14H4zM4 18H28V20H4z" />
-			{/if}
-		</svg>
-	</button>
-	<a class="name" href={home}>{name}</a>
-	<div class="utilities">
+	{#if account}
 		<button
-			bind:this={panelButton}
-			class="action"
-			class:active={panelOpen}
+			bind:this={menuButton}
+			class="menu"
 			type="button"
-			aria-label="Theme"
-			aria-expanded={panelOpen}
-			aria-controls="theme-panel"
-			onclick={togglePanel}
-			{onfocusout}
+			aria-label={open ? 'Close menu' : 'Open menu'}
+			aria-expanded={open}
+			aria-controls="side-nav"
+			onclick={toggle}
 		>
-			<Icon icon={BrightnessContrast} />
-			<span class="tooltip" aria-hidden="true">Theme</span>
+			<!-- Carbon icons "menu" and "close" (Apache-2.0). -->
+			<svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true" fill="currentColor">
+				{#if open}
+					<path
+						d="M17.4141 16L24 9.4141 22.5859 8 16 14.5859 9.4143 8 8 9.4141 14.5859 16 8 22.5859 9.4143 24 16 17.4141 22.5859 24 24 22.5859 17.4141 16z"
+					/>
+				{:else}
+					<path d="M4 6H28V8H4zM4 24H28V26H4zM4 12H28V14H4zM4 18H28V20H4z" />
+				{/if}
+			</svg>
 		</button>
-		{#if panelOpen}
-			<section
-				bind:this={panelElement}
-				id="theme-panel"
-				class="panel"
-				aria-label="Theme"
+	{/if}
+	<a class="name" href={home}>{name}</a>
+	{#if account}
+		<div class="utilities">
+			<button
+				bind:this={panelButton}
+				class="action"
+				class:active={panelOpen}
+				type="button"
+				aria-label="Profile"
+				aria-expanded={panelOpen}
+				aria-controls="profile-panel"
+				onclick={togglePanel}
 				{onfocusout}
 			>
-				<RadioButtonGroup
-					legend="Theme"
-					name="theme"
-					options={[
-						{ value: 'system', label: 'System' },
-						{ value: 'light', label: 'Light' },
-						{ value: 'dark', label: 'Dark' }
-					]}
-					bind:value={theme}
-					onchange={setTheme}
-				/>
-			</section>
-		{/if}
-	</div>
+				<Icon icon={UserAvatar} />
+				<span class="tooltip" aria-hidden="true">Profile</span>
+			</button>
+			{#if panelOpen}
+				<section
+					bind:this={panelElement}
+					id="profile-panel"
+					class="panel"
+					aria-label="Profile"
+					{onfocusout}
+				>
+					<div class="identity">
+						{#if account.name}<p class="account-name">{account.name}</p>{/if}
+						<p class="email">{account.email}</p>
+					</div>
+					<RadioButtonGroup
+						legend="Theme"
+						name="theme"
+						options={[
+							{ value: 'system', label: 'System' },
+							{ value: 'light', label: 'Light' },
+							{ value: 'dark', label: 'Dark' }
+						]}
+						bind:value={theme}
+						onchange={setTheme}
+					/>
+					<!-- Posted straight to the backend, which ends the login session. -->
+					<form class="logout" method="post" action="/auth/logout">
+						<Button kind="ghost" type="submit" fill>Log out</Button>
+					</form>
+				</section>
+			{/if}
+		</div>
+	{/if}
 </header>
 
-<nav bind:this={navElement} id="side-nav" class:open aria-label="Main">
-	<ul>
-		{#each nav as item (item.href)}
-			<li>
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
-				<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
-					{item.label}
-				</a>
-			</li>
-		{/each}
-	</ul>
-</nav>
+{#if account}
+	<nav bind:this={navElement} id="side-nav" class:open aria-label="Main">
+		<ul>
+			{#each nav as item (item.href)}
+				<li>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
+					<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+						{item.label}
+					</a>
+				</li>
+			{/each}
+		</ul>
+	</nav>
 
-{#if open}
-	<button
-		class="scrim"
-		type="button"
-		tabindex="-1"
-		aria-hidden="true"
-		onclick={() => (open = false)}
-	></button>
+	{#if open}
+		<button
+			class="scrim"
+			type="button"
+			tabindex="-1"
+			aria-hidden="true"
+			onclick={() => (open = false)}
+		></button>
+	{/if}
 {/if}
 
-<main id="main-content" tabindex="-1">
+<main id="main-content" tabindex="-1" class:bare={!account}>
 	{@render children()}
 </main>
 
@@ -346,12 +369,41 @@
 		top: var(--cds-size-large);
 		right: 0;
 		bottom: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--cds-spacing-06);
 		width: 16rem;
 		padding: var(--cds-spacing-05);
 		overflow-y: auto;
 		background: var(--cds-layer-01);
 		border-inline: 1px solid var(--cds-border-subtle-01);
 		animation: panel-in 110ms cubic-bezier(0, 0, 0.38, 0.9);
+	}
+
+	.identity p {
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.account-name {
+		color: var(--cds-text-primary);
+		font-size: var(--cds-heading-compact-01-font-size);
+		font-weight: var(--cds-heading-compact-01-font-weight);
+		line-height: var(--cds-heading-compact-01-line-height);
+		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
+	}
+
+	.email {
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+	}
+
+	/* Full width, below a divider, as the last item of the panel. */
+	.logout {
+		margin-inline: calc(-1 * var(--cds-spacing-05));
+		border-top: 1px solid var(--cds-border-subtle-01);
 	}
 
 	@keyframes panel-in {
@@ -453,7 +505,7 @@
 			padding-left: var(--cds-spacing-05);
 		}
 
-		main {
+		main:not(.bare) {
 			margin-left: 16rem;
 		}
 	}

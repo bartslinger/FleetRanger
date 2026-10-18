@@ -9,16 +9,20 @@
 	type Props = {
 		kind?: 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger';
 		size?: 'sm' | 'md' | 'lg';
+		/** Fills its container, e.g. in a form or a panel. */
+		fill?: boolean;
 		children: Snippet;
 	} & (({ href: string } & HTMLAnchorAttributes) | ({ href?: never } & HTMLButtonAttributes));
 
-	let { kind = 'primary', size = 'lg', children, ...rest }: Props = $props();
+	let { kind = 'primary', size = 'lg', fill = false, children, ...rest }: Props = $props();
 </script>
 
 {#if rest.href !== undefined}
-	<a class="button {kind} {size}" {...rest as HTMLAnchorAttributes}>{@render children()}</a>
+	<a class="button {kind} {size}" class:fill {...rest as HTMLAnchorAttributes}
+		>{@render children()}</a
+	>
 {:else}
-	<button class="button {kind} {size}" type="button" {...rest as HTMLButtonAttributes}>
+	<button class="button {kind} {size}" class:fill type="button" {...rest as HTMLButtonAttributes}>
 		{@render children()}
 	</button>
 {/if}
@@ -47,6 +51,11 @@
 			background 70ms cubic-bezier(0, 0, 0.38, 0.9),
 			border-color 70ms cubic-bezier(0, 0, 0.38, 0.9),
 			color 70ms cubic-bezier(0, 0, 0.38, 0.9);
+	}
+
+	.fill {
+		width: 100%;
+		max-width: none;
 	}
 
 	.md {

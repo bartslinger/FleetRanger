@@ -195,7 +195,7 @@ async fn logout(State(db): State<PgPool>, jar: CookieJar) -> Response {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
     let jar = jar.remove(Cookie::build(SESSION_COOKIE).path("/"));
-    (jar, Redirect::to("/login")).into_response()
+    (jar, Redirect::to("/login?logged-out")).into_response()
 }
 
 #[derive(Serialize)]
