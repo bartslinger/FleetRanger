@@ -4,6 +4,8 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
+In progress: a new page layout (phase 5): the Gray 10 theme for light mode, a dark shell with an icon rail, and a page header without the band.
+
 Login works locally (phase 4): Google OIDC, accounts added by email, server-side login sessions, an `Actor` per request; the flight API requires login. Next is the audit log (schema proposed, not yet agreed), then pilots and teams, then sessions (phase 3), which are grouped per pilot. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton

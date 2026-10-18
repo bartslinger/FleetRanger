@@ -17,8 +17,9 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 
 - **Tokens:** colour, layering, spacing, type scale and motion values come from Carbon's official packages (`@carbon/themes`, `@carbon/layout`, `@carbon/type`, Apache-2.0). `pnpm tokens` (`web/scripts/tokens.js`) exports them to CSS custom properties in `web/src/lib/ui/tokens.css`, which is committed so upgrades show as a diff. Names follow Carbon's (`--cds-layer-01`, `--cds-spacing-05`, `--cds-heading-01-font-size`). Components use only these variables, never literal values.
 - **No install telemetry.** The Carbon and Plex packages run IBM's telemetry on install; `web/pnpm-workspace.yaml` denies those scripts.
-- **Themes:** Carbon's White (`white`) for light and Gray 100 (`g100`) for dark. The app follows the system setting unless the user chooses light or dark in the profile panel (the header's Profile action: who is logged in, the theme as a radio group, and Log out). The choice is kept in a cookie, so the server renders it directly.
-- **Shell:** the left panel has the page background and no border, as Carbon specifies; we chose not to use a dark (Gray 100) shell.
+- **Themes:** Carbon's Gray 10 (`g10`) for light and Gray 100 (`g100`) for dark. Gray 10 puts white containers (tables, tiles) on a light gray page. The app follows the system setting unless the user chooses light or dark in the profile panel (the header's Profile action: who is logged in, the theme as a radio group, and Log out). The choice is kept in a cookie, so the server renders it directly.
+- **Shell:** a dark (Gray 100) header and side navigation in both themes, through Carbon's inline theming. The side navigation is Carbon's rail: icons only, expanding to show labels.
+- **Page header:** the title (and later a breadcrumb) sits on the page background, without Carbon's page header band.
 - **Typography:** IBM Plex Sans and IBM Plex Mono (SIL Open Font License), self-hosted from the `@ibm/plex-*` packages and bundled by Vite. Numbers in tables and statistics use tabular figures.
 - **Styling:** plain CSS with custom properties, scoped per Svelte component. No utility framework.
 
