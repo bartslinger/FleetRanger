@@ -46,6 +46,10 @@
 		defaultSort?: Sort;
 		/** Link for a header click; `undefined` returns to the default order. */
 		sortHref?: (next: Sort | undefined) => string;
+		/** Opens a row's page: the first cell becomes a link that covers the row. */
+		rowHref?: (row: T) => string;
+		/** Carbon's table toolbar: filters, then the primary action at the right. */
+		toolbar?: Snippet;
 	}
 
 	let {
@@ -57,7 +61,9 @@
 		size = 'md',
 		sort,
 		defaultSort,
-		sortHref
+		sortHref,
+		rowHref,
+		toolbar
 	}: Props = $props();
 
 	/**
@@ -82,6 +88,23 @@
 		return value === null || value === undefined || value === '' ? undefined : String(value);
 	}
 </script>
+
+{#if toolbar}
+	<div class="toolbar">{@render toolbar()}</div>
+{/if}
+
+{#snippet content(row: T, column: Column<T>)}
+	{#if cell}
+		{@render cell(row, column)}
+	{:else}
+		{@const text = value(row, column)}
+		{#if text === undefined}
+			<span aria-hidden="true">—</span><span class="visually-hidden">None</span>
+		{:else}
+			{text}
+		{/if}
+	{/if}
+{/snippet}
 
 <!-- A scrollable region must be reachable by keyboard (WCAG 2.1.1). -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -112,18 +135,14 @@
 		</thead>
 		<tbody>
 			{#each rows as row (rowKey(row))}
-				<tr>
-					{#each columns as column (column.key)}
+				<tr class:linked={rowHref}>
+					{#each columns as column, index (column.key)}
 						<td class:numeric={column.numeric} class:identifier={column.identifier}>
-							{#if cell}
-								{@render cell(row, column)}
+							{#if index === 0 && rowHref}
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built by the caller -->
+								<a class="row-link" href={rowHref(row)}>{@render content(row, column)}</a>
 							{:else}
-								{@const text = value(row, column)}
-								{#if text === undefined}
-									<span aria-hidden="true">—</span><span class="visually-hidden">None</span>
-								{:else}
-									{text}
-								{/if}
+								{@render content(row, column)}
 							{/if}
 						</td>
 					{/each}
@@ -235,5 +254,48 @@
 
 	.identifier {
 		font-variant-numeric: tabular-nums slashed-zero;
+	}
+
+	/* A row that opens a page: the link in its first cell covers the whole row,
+	   so a click anywhere opens it and the focus outline frames the row. One
+	   tab stop per row, with real link semantics. */
+	tr.linked {
+		position: relative;
+		cursor: pointer;
+	}
+
+	.row-link {
+		color: var(--cds-link-primary);
+		text-decoration: none;
+	}
+
+	.row-link::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+
+	tr.linked:hover .row-link {
+		color: var(--cds-link-primary-hover);
+		text-decoration: underline;
+	}
+
+	.row-link:focus-visible {
+		outline: none;
+	}
+
+	.row-link:focus-visible::after {
+		outline: 2px solid var(--cds-focus);
+		outline-offset: -2px;
+	}
+
+	/* Carbon's table toolbar: 48px on the table's layer, its items at the right,
+	   the primary button last and flush with the edge. */
+	.toolbar {
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+		min-height: var(--cds-size-large);
+		background: var(--cds-layer-01);
 	}
 </style>
