@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from team_members where pilot_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "acd77a1d6052fd896b17bdc6cc1528e99c86e75faa7ed5eaf55c42f9565542a3"
+}

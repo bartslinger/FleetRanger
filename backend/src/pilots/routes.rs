@@ -3,6 +3,7 @@
 use axum::{
     Json, Router,
     extract::{FromRef, Path, Query, State},
+    http::StatusCode,
     routing::{get, post},
 };
 use serde::Deserialize;
@@ -22,7 +23,7 @@ where
 {
     Router::new()
         .route("/api/pilots", get(list).post(create))
-        .route("/api/pilots/{id}", get(show).put(update))
+        .route("/api/pilots/{id}", get(show).put(update).delete(remove))
         .route("/api/pilots/{id}/archive", post(archive))
         .route("/api/pilots/{id}/restore", post(restore))
 }
@@ -82,6 +83,15 @@ async fn update(
     Json(body): Json<Body>,
 ) -> ApiResult<Json<Pilot>> {
     Ok(Json(service::update(&db, &actor, id, &body.into()).await?))
+}
+
+async fn remove(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    service::delete(&db, &actor, id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn archive(

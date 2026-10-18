@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update aircraft set holder_pilot_id = null where holder_pilot_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "86aa5447494f55e1a67bd620bb709f6975284657f0c4d5d7012ca1dbd0a88529"
+}

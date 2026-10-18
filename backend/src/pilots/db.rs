@@ -13,6 +13,8 @@ pub struct Pilot {
     pub account_id: Option<Uuid>,
     pub account_email: Option<String>,
     pub archived_at: Option<DateTime<Utc>>,
+    /// Flights with this pilot; only a pilot without flights can be deleted.
+    pub flights: i64,
 }
 
 /// What an admin sets on a pilot.
@@ -27,7 +29,8 @@ pub async fn list(db: &PgPool, archived: bool) -> sqlx::Result<Vec<Pilot>> {
     sqlx::query_as!(
         Pilot,
         r#"select p.id, p.name, m.team_id as "team_id?", t.name as "team_name?",
-                  p.account_id, a.email as "account_email?", p.archived_at
+                  p.account_id, a.email as "account_email?", p.archived_at,
+                  (select count(*) from flights f where f.pilot_id = p.id) as "flights!"
            from pilots p
            left join team_members m on m.pilot_id = p.id
            left join teams t on t.id = m.team_id
@@ -44,7 +47,8 @@ pub async fn get(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Pilot>> {
     sqlx::query_as!(
         Pilot,
         r#"select p.id, p.name, m.team_id as "team_id?", t.name as "team_name?",
-                  p.account_id, a.email as "account_email?", p.archived_at
+                  p.account_id, a.email as "account_email?", p.archived_at,
+                  (select count(*) from flights f where f.pilot_id = p.id) as "flights!"
            from pilots p
            left join team_members m on m.pilot_id = p.id
            left join teams t on t.id = m.team_id
@@ -134,4 +138,42 @@ pub async fn account_exists(db: &PgPool, account_id: Uuid) -> sqlx::Result<bool>
     )
     .fetch_one(db)
     .await
+}
+
+/// Deletes a pilot without flights, with their team membership, and clears
+/// them as holder of equipment. False if there is no such pilot or it has
+/// flights. The pilot's row is locked first, so a flight can't get this pilot
+/// in between: its foreign key check waits for the lock.
+pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    let mut tx = db.begin().await?;
+    let deletable = sqlx::query_scalar!(
+        r#"select not exists(select 1 from flights where pilot_id = $1) as "deletable!"
+           from pilots where id = $1 for update"#,
+        id,
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    if deletable != Some(true) {
+        return Ok(false);
+    }
+    sqlx::query!("delete from team_members where pilot_id = $1", id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query!(
+        "update aircraft set holder_pilot_id = null where holder_pilot_id = $1",
+        id
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "update remote_controllers set holder_pilot_id = null where holder_pilot_id = $1",
+        id
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!("delete from pilots where id = $1", id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(true)
 }

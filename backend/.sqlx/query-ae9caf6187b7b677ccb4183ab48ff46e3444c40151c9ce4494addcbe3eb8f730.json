@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update remote_controllers set holder_pilot_id = null where holder_pilot_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ae9caf6187b7b677ccb4183ab48ff46e3444c40151c9ce4494addcbe3eb8f730"
+}

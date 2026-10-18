@@ -56,6 +56,17 @@ pub async fn set_archived(
     get(db, actor, id).await
 }
 
+/// Only a pilot without flights can be deleted; others are archived.
+pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
+    let pilot = get(db, actor, id).await?;
+    if pilot.flights > 0 || !db::delete(db, id).await? {
+        return Err(ApiError::Conflict(
+            "This pilot has flights, so it can't be deleted. Archive it instead.".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// Each pilot is in exactly one team, which must be active, and the linked user
 /// must exist.
 async fn checked<'a>(db: &PgPool, name: &'a str, input: &PilotInput) -> ApiResult<PilotFields<'a>> {
