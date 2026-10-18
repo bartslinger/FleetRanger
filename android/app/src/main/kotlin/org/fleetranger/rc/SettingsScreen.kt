@@ -80,6 +80,7 @@ fun SettingsScreen(
     onAllowNetworkNames: () -> Unit,
     onUnpair: () -> Unit,
     onChanged: () -> Unit,
+    onShowLogs: () -> Unit,
     onBack: () -> Unit,
     syncStatus: SyncStatus? = null,
 ) {
@@ -129,6 +130,7 @@ fun SettingsScreen(
                         },
                         onPickDate = ::pickDate,
                         onAddNetwork = { tab = WIFI },
+                        onShowLogs = onShowLogs,
                     )
                     WIFI -> WifiTab(
                         networks,
@@ -174,6 +176,7 @@ private fun ColumnScope.SyncTab(
     onAllLogs: () -> Unit,
     onPickDate: () -> Unit,
     onAddNetwork: () -> Unit,
+    onShowLogs: () -> Unit,
 ) {
     if (status != null) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s03)) {
@@ -190,10 +193,13 @@ private fun ColumnScope.SyncTab(
             },
             small = true,
         )
-        if (status.state == SyncStatus.State.WaitingForNetwork) {
-            // Carbon lets a ghost button's text line up with the text above it.
-            Button("Add a network", onAddNetwork, Modifier.offset(x = -Spacing.s05), kind = ButtonKind.Ghost)
+    }
+    // Carbon lets a ghost button's text line up with the text above it.
+    Row(Modifier.offset(x = -Spacing.s05)) {
+        if (status?.state == SyncStatus.State.WaitingForNetwork) {
+            Button("Add a network", onAddNetwork, kind = ButtonKind.Ghost)
         }
+        Button("Show logs", onShowLogs, kind = ButtonKind.Ghost)
     }
     Label("Sync logs from", Modifier.padding(top = Spacing.s06))
     // The radio buttons and, once chosen, the date beside "From a date".

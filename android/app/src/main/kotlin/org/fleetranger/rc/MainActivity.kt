@@ -36,6 +36,8 @@ class MainActivity : ComponentActivity() {
     private var last by mutableStateOf<Pilot?>(null)
     private lateinit var sync: SyncSettings
     private var showSettings by mutableStateOf(false)
+    /** Opened from the settings, and back to them. */
+    private var showLogs by mutableStateOf(false)
     private var currentNetwork by mutableStateOf<String?>(null)
     private var canSeeNetworkNames by mutableStateOf(false)
     private var syncStatus by mutableStateOf<SyncStatus?>(null)
@@ -88,6 +90,7 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                 )
+                showLogs -> LogsScreen(syncStatus, onBack = { showLogs = false })
                 showSettings -> SettingsScreen(
                     settings = sync,
                     serverUrl = serverUrl,
@@ -98,6 +101,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onUnpair = ::unpair,
                     onChanged = ::startUploads,
+                    onShowLogs = { showLogs = true },
                     onBack = { showSettings = false },
                     syncStatus = syncStatus,
                 )

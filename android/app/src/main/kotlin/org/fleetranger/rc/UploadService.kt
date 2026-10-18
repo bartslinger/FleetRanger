@@ -9,7 +9,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
@@ -31,8 +30,7 @@ class UploadService : Service() {
     private lateinit var server: Server
     private lateinit var pilots: Pilots
     private lateinit var sync: SyncSettings
-    /** Logs already uploaded, by name, size and modification time. */
-    private val uploaded by lazy { getSharedPreferences("uploaded", MODE_PRIVATE) }
+    private lateinit var logs: FlightLogs
 
     private val scan = Runnable { scan() }
 
@@ -41,6 +39,7 @@ class UploadService : Service() {
         server = Server(this)
         pilots = Pilots(this)
         sync = SyncSettings(this)
+        logs = FlightLogs(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Uploads", NotificationManager.IMPORTANCE_LOW),
         )
@@ -76,20 +75,19 @@ class UploadService : Service() {
         ) {
             return report(SyncStatus.State.NoAccess, waiting = 0)
         }
-        val now = System.currentTimeMillis()
-        val waiting = logFolders()
-            .flatMap { it.listFiles { file -> file.isFile && file.name.endsWith(".txt") }.orEmpty().toList() }
-            .filter { sync.includes(it.lastModified()) && !uploaded.contains(key(it)) }
-            .sortedBy { it.lastModified() }
+        val waiting = logs.all()
+            .filter { it.state == FlightLogs.State.Waiting || it.state == FlightLogs.State.BeingWritten }
+            .reversed()
             .toMutableList()
         if (waiting.isEmpty()) return report(SyncStatus.State.Done, waiting = 0)
         if (!sync.mayUploadNow()) {
             return report(SyncStatus.State.WaitingForNetwork, waiting = waiting.size)
         }
-        for (log in waiting.toList()) {
-            if (now - log.lastModified() < SETTLE_MS) continue
+        for (entry in waiting.toList()) {
+            if (entry.state == FlightLogs.State.BeingWritten) continue
+            val log = entry.file
             // Taken before reading, so a write during the upload counts as a change.
-            val key = key(log)
+            val key = FlightLogs.key(log)
             report(SyncStatus.State.Uploading, waiting = waiting.size, current = log.name)
             val result = try {
                 server.upload(log, sha256(log), pilots.at(log.lastModified()))
@@ -99,8 +97,8 @@ class UploadService : Service() {
             }
             when (result) {
                 Server.Upload.Stored -> {
-                    uploaded.edit().putBoolean(key, true).apply()
-                    waiting.remove(log)
+                    logs.markUploaded(key)
+                    waiting.remove(entry)
                     val before = SyncStatus.read(this)
                     SyncStatus.write(
                         this,
@@ -153,35 +151,11 @@ class UploadService : Service() {
         private const val TAG = "FleetRanger"
         private const val CHANNEL = "uploads"
         private const val NOTIFICATION = 1
-        /** A log must be unchanged this long: DJI Pilot 2 may still be writing it. */
-        private const val SETTLE_MS = 3 * 60_000L
         private const val RESCAN_MS = 60_000L
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, UploadService::class.java))
         }
-
-        private fun key(file: File) = "${file.name}|${file.length()}|${file.lastModified()}"
-
-        /**
-         * DJI Pilot 2 keeps its logs in a folder named FlightRecord: on the RC
-         * Pro Enterprise in DJI/com.dji.industry.pilot on the shared storage.
-         * Looking for the folder also finds it if a version moves it.
-         */
-        private fun logFolders(): List<File> =
-            DJI_ROOTS.map { File(Environment.getExternalStorageDirectory(), it) }
-                .flatMap { root ->
-                    root.walkTopDown()
-                        .maxDepth(4)
-                        .filter { it.isDirectory && it.name == "FlightRecord" }
-                        .toList()
-                }
-                .distinct()
-
-        private val DJI_ROOTS = listOf(
-            "DJI/com.dji.industry.pilot",
-            "Android/data/com.dji.industry.pilot/files",
-        )
 
         private fun sha256(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")
