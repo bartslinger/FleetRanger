@@ -27,6 +27,30 @@ export interface Team {
 	pilots: number;
 }
 
+/** A pilot, from `/api/pilots`. */
+export interface Pilot {
+	id: string;
+	name: string;
+	team_id: string | null;
+	team_name: string | null;
+	/** The linked user. */
+	account_id: string | null;
+	account_email: string | null;
+	archived_at: string | null;
+}
+
+/** An account as admins manage it, from `/api/accounts`; "user" in the UI. */
+export interface User {
+	id: string;
+	email: string;
+	name: string | null;
+	role: 'member' | 'all_flights' | 'admin';
+	disabled_at: string | null;
+	pilot_id: string | null;
+	pilot_name: string | null;
+	last_login_at: string | null;
+}
+
 /** The logged-in account, from `GET /api/me`. */
 export interface Account {
 	email: string;
