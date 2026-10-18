@@ -40,7 +40,7 @@ import org.fleetranger.rc.ui.WarningIcon
 import org.fleetranger.rc.ui.WarningNotification
 
 /** Every tile in the list the same height, whether or not it has a second line. */
-private val TILE_HEIGHT = 88.dp
+private val TILE_HEIGHT = 104.dp
 
 /**
  * "Who's flying?": the last pilot is one tap; anyone else is two, through

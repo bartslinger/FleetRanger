@@ -39,6 +39,7 @@ import org.fleetranger.rc.ui.CarbonIcons
 import org.fleetranger.rc.ui.Colors
 import org.fleetranger.rc.ui.DangerDialog
 import org.fleetranger.rc.ui.Icon
+import org.fleetranger.rc.ui.LabelledCode
 import org.fleetranger.rc.ui.RadioButton
 import org.fleetranger.rc.ui.Spacing
 import org.fleetranger.rc.ui.Type
@@ -183,11 +184,7 @@ fun SettingsScreen(
             Section("Pairing")
             Paragraph("Paired with")
             BasicText(serverUrl ?: "no server", style = Type.code02.copy(color = Colors.textPrimary))
-            BasicText(
-                "Serial number ${Serial.read()}",
-                style = Type.code02.copy(color = Colors.textSecondary),
-                modifier = Modifier.padding(top = Spacing.s03),
-            )
+            LabelledCode("Serial number", Serial.read(), Modifier.padding(top = Spacing.s03))
             // Rare, and never the point of this screen: not a primary danger button.
             Button(
                 "Unpair controller",

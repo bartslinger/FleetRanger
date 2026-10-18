@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.Colors
 import org.fleetranger.rc.ui.InlineLoading
+import org.fleetranger.rc.ui.LabelledCode
 import org.fleetranger.rc.ui.PlexMono
 import org.fleetranger.rc.ui.QrCode
 import org.fleetranger.rc.ui.Spacing
@@ -140,7 +141,7 @@ fun PairingScreen(state: PairingState, serial: String, onRestart: () -> Unit = {
                     InlineLoading("Waiting for approval…")
                 }
             }
-            BasicText("Serial number $serial", style = Type.code02.copy(color = Colors.textSecondary))
+            LabelledCode("Serial number", serial)
         }
         if (state is PairingState.Waiting) {
             QrCode(

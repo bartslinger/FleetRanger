@@ -24,7 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
 // Carbon's components, as far as the app needs them. Touch targets are at
@@ -129,6 +132,21 @@ fun ClickableTile(
             Modifier.align(Alignment.BottomEnd).padding(Spacing.s04),
         )
     }
+}
+
+/** "Serial number 5Y…": the label in Plex Sans, the code itself in Plex Mono. */
+@Composable
+fun LabelledCode(label: String, code: String, modifier: Modifier = Modifier) {
+    BasicText(
+        buildAnnotatedString {
+            append("$label ")
+            withStyle(SpanStyle(fontFamily = PlexMono, letterSpacing = Type.code02.letterSpacing)) {
+                append(code)
+            }
+        },
+        style = Type.label02.copy(color = Colors.textSecondary),
+        modifier = modifier,
+    )
 }
 
 /**
