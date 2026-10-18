@@ -3,7 +3,9 @@
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
+	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
+	import Pagination from '#lib/ui/Pagination.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
@@ -48,7 +50,7 @@
 	];
 
 	const columns: TableColumn<ExampleFlight>[] = [
-		{ key: 'takeoff', header: 'Takeoff' },
+		{ key: 'takeoff', header: 'Takeoff', sortable: true },
 		{ key: 'pilot', header: 'Pilot' },
 		{ key: 'drone', header: 'Drone' },
 		{ key: 'airTime', header: 'Air time', numeric: true },
@@ -192,8 +194,31 @@
 		</Column>
 		<Column narrow>
 			<div class="stack">
-				<DataTable {columns} rows={flights} rowKey={(flight) => flight.id} />
-				<DataTable {columns} rows={flights} rowKey={(flight) => flight.id} size="sm">
+				<div>
+					<DataTable
+						label="Example flights"
+						{columns}
+						rows={flights}
+						rowKey={(flight) => flight.id}
+						sort={{ key: 'takeoff', descending: true }}
+						sortHref={() => '#'}
+					/>
+					<Pagination
+						page={1}
+						size={25}
+						total={3}
+						sizes={[25, 50, 100]}
+						noun="flights"
+						href={() => '#'}
+					/>
+				</div>
+				<DataTable
+					label="Example flights, small"
+					{columns}
+					rows={flights}
+					rowKey={(flight) => flight.id}
+					size="sm"
+				>
 					{#snippet cell(flight, column)}
 						{#if column.key === 'pilot'}
 							<Tag size="sm" type="blue">{flight.pilot}</Tag>
@@ -202,6 +227,10 @@
 						{/if}
 					{/snippet}
 				</DataTable>
+				<EmptyState
+					title="No flights yet"
+					body="Flights appear here when flight logs from your remote controllers are imported."
+				/>
 			</div>
 		</Column>
 	</Grid>
