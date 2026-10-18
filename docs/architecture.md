@@ -44,6 +44,12 @@ The decisions made so far, each with a short reason. Open questions are listed i
   - later, people it has been shared with
 - **Within a team**, any member can change a flight's pilot to another member, or to nobody. No acceptance is needed. "This wasn't me" means setting the pilot to nobody, and the flight stays in the team.
 - **Admins** manage users, pilots, teams and devices, and can move flights between teams.
+- **Setting a flight's pilot:**
+  - Members can change flights of their pilot's current team, choosing a pilot of that team or nobody.
+  - Admins can choose any active pilot, and the flight's team follows the pilot, also when changing from one pilot to another. That keeps "the team is the pilot's team" true and empties the organisation's queue in one step.
+  - When an admin moves a flight to another team without choosing a pilot, the pilot is cleared unless they are in the new team. A flight never has a pilot from another team.
+  - The all-flights role only views.
+  - These changes work on many flights at once (batch actions in the logbook). A batch is applied whole or not at all.
 - **All access decisions go through one policy module** in the backend, never through ad-hoc checks in handlers. Service functions take an `Actor` (who is acting), so a handler can't skip the check.
 - **Simplicity first.** The visibility condition is written directly in the flight queries, with a test that list and single-flight access agree. It gets extracted (for example into a SQL function) only when duplication becomes a problem.
 - **Audit log:** append-only, recording every view, change, reassignment, move and merge, with the user, session, time and IP. There is no hash chain.
