@@ -87,6 +87,7 @@
 				{columns}
 				rows={data.flights}
 				rowKey={(flight) => flight.id}
+				rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
 				sort={data.state.sort}
 				defaultSort={DEFAULT_SORT}
 				sortHref={(sort) => href({ ...data.state, page: 1, sort: sort ?? DEFAULT_SORT })}

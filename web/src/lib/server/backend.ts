@@ -1,5 +1,6 @@
 import { BACKEND_URL } from '$app/env/private';
 import { error } from '@sveltejs/kit';
+import type { Track } from '#lib/ui/TrackMap.svelte';
 
 /** A flight as listed by `GET /api/flights`. */
 export interface FlightSummary {
@@ -15,6 +16,30 @@ export interface FlightSummary {
 	/** Null: in the organisation's queue. */
 	team_id: string | null;
 	team_name: string | null;
+}
+
+/** One flight with its track, from `GET /api/flights/{id}`. */
+export interface FlightDetail {
+	id: string;
+	takeoff_at: string;
+	landed_at: string;
+	air_time_s: number;
+	distance_m: number;
+	aircraft_serial: string | null;
+	aircraft_name: string | null;
+	rc_serial: string | null;
+	rc_name: string | null;
+	pilot_id: string | null;
+	pilot_name: string | null;
+	/** Null: in the organisation's queue. */
+	team_id: string | null;
+	team_name: string | null;
+	track: Track;
+	metrics: {
+		max_altitude_m?: number;
+		camera_serial?: string | null;
+		battery_serial?: string | null;
+	};
 }
 
 /** What the logged-in account can change in the logbook, from `GET /api/flights/choices`. */
