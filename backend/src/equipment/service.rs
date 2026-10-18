@@ -12,7 +12,7 @@ use crate::{
 pub struct EquipmentInput {
     pub name: Option<String>,
     pub team_id: Option<Uuid>,
-    pub holder_pilot_id: Option<Uuid>,
+    pub holder_user_id: Option<Uuid>,
 }
 
 pub async fn list(db: &PgPool, actor: &Actor, kind: Kind) -> ApiResult<Vec<Equipment>> {
@@ -40,10 +40,10 @@ pub async fn update(
     {
         return Err(ApiError::Invalid("Choose an active team.".to_owned()));
     }
-    if let Some(pilot_id) = input.holder_pilot_id
-        && !db::pilot_is_active(db, pilot_id).await?
+    if let Some(user_id) = input.holder_user_id
+        && !db::user_is_active(db, user_id).await?
     {
-        return Err(ApiError::Invalid("Choose an active pilot.".to_owned()));
+        return Err(ApiError::Invalid("Choose an active user.".to_owned()));
     }
     let name = input
         .name
@@ -53,7 +53,7 @@ pub async fn update(
     let fields = EquipmentFields {
         name,
         team_id: input.team_id,
-        holder_pilot_id: input.holder_pilot_id,
+        holder_user_id: input.holder_user_id,
     };
     if !db::update(db, kind, id, &fields).await? {
         return Err(ApiError::NotFound);

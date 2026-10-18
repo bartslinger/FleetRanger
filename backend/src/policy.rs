@@ -8,13 +8,13 @@ use crate::{
     error::{ApiError, ApiResult},
 };
 
-/// An account's role, stored in `accounts.role`.
+/// A user's role, stored in `users.role`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
     Member,
     /// Sees every flight, without managing anything.
     AllFlights,
-    /// Sees every flight and manages accounts, pilots, teams and devices.
+    /// Sees every flight and manages users, teams and equipment.
     Admin,
 }
 
@@ -37,7 +37,7 @@ impl Role {
     }
 }
 
-/// Managing accounts, pilots, teams and equipment is for admins only.
+/// Managing users, teams and equipment is for admins only.
 pub fn require_admin(actor: &Actor) -> ApiResult<()> {
     match actor.role {
         Role::Admin => Ok(()),
@@ -46,17 +46,17 @@ pub fn require_admin(actor: &Actor) -> ApiResult<()> {
 }
 
 /// Which flights an actor sees, as the parameters of the visibility condition
-/// in the flight queries: every flight, or the flights of the actor's own pilot
-/// and of that pilot's team.
+/// in the flight queries: every flight, or the actor's own flights and those of
+/// the actor's team.
 pub struct FlightScope {
     pub all: bool,
-    pub account_id: Uuid,
+    pub user_id: Uuid,
 }
 
 pub fn flight_scope(actor: &Actor) -> FlightScope {
     FlightScope {
         all: matches!(actor.role, Role::AllFlights | Role::Admin),
-        account_id: actor.account_id,
+        user_id: actor.user_id,
     }
 }
 
@@ -72,7 +72,7 @@ pub enum TeamChange {
 /// Whether the actor may set the pilot of these flights, and what happens to
 /// their team; see "Setting a flight's pilot" in docs/architecture.md.
 ///
-/// - `own_team`: the team of the actor's own pilot, if any.
+/// - `own_team`: the actor's own team, if any.
 /// - `flight_teams`: the current team of each flight.
 /// - `new_pilot_team`: the team of the chosen pilot, or `None` for nobody.
 pub fn set_pilot(
@@ -98,7 +98,7 @@ pub fn set_pilot(
             }
             if new_pilot_team.is_some_and(|team| team != own_team) {
                 return Err(ApiError::Invalid(
-                    "Choose a pilot of your own team.".to_owned(),
+                    "Choose someone of your own team.".to_owned(),
                 ));
             }
             Ok(TeamChange::Keep)
@@ -137,7 +137,7 @@ mod tests {
     }
 
     #[test]
-    fn viewers_and_members_without_a_pilot_change_nothing() {
+    fn viewers_and_members_without_a_team_change_nothing() {
         let own = A;
         assert!(set_pilot(Role::AllFlights, Some(own), &[Some(own)], None).is_err());
         assert!(set_pilot(Role::Member, None, &[None], None).is_err());

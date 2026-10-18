@@ -62,7 +62,7 @@ pub struct Sort {
 }
 
 // The visibility condition is the same in every flight query: the scope sees
-// every flight ($all), or those of its account's pilot and of that pilot's team.
+// every flight ($all), or the user's own flights and those of the user's team.
 // Keep the copies in step; the tests check them against each other.
 
 /// One page of the flights in the scope, in the given order.
@@ -79,13 +79,12 @@ pub async fn list(
     sqlx::query_as!(
         FlightSummary,
         r#"select id, takeoff_at, landed_at, air_time_s, distance_m, aircraft_serial, rc_serial,
-                pilot_id, (select p.name from pilots p where p.id = flights.pilot_id) as "pilot_name?",
+                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
                 team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?"
          from flights
          where $5
-            or pilot_id in (select id from pilots where account_id = $6)
-            or team_id in (select m.team_id from team_members m
-                           join pilots p on p.id = m.pilot_id where p.account_id = $6)
+            or pilot_id = $6
+            or team_id in (select team_id from team_members where user_id = $6)
          order by
              case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
              case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -104,7 +103,7 @@ pub async fn list(
         limit,
         offset,
         scope.all,
-        scope.account_id,
+        scope.user_id,
     )
     .fetch_all(db)
     .await
@@ -116,11 +115,10 @@ pub async fn count(db: &PgPool, scope: &FlightScope) -> sqlx::Result<i64> {
         r#"select count(*) as "count!"
            from flights
            where $1
-              or pilot_id in (select id from pilots where account_id = $2)
-              or team_id in (select m.team_id from team_members m
-                             join pilots p on p.id = m.pilot_id where p.account_id = $2)"#,
+              or pilot_id = $2
+              or team_id in (select team_id from team_members where user_id = $2)"#,
         scope.all,
-        scope.account_id,
+        scope.user_id,
     )
     .fetch_one(db)
     .await
@@ -135,23 +133,23 @@ pub async fn teams_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Opti
     Ok((teams.len() == ids.len()).then_some(teams))
 }
 
-/// The team of the actor's own pilot, if they have an active one.
-pub async fn own_team(db: &PgPool, account_id: Uuid) -> sqlx::Result<Option<Uuid>> {
+/// The team the user flies for, if any.
+pub async fn own_team(db: &PgPool, user_id: Uuid) -> sqlx::Result<Option<Uuid>> {
     sqlx::query_scalar!(
-        "select m.team_id from pilots p join team_members m on m.pilot_id = p.id
-         where p.account_id = $1 and p.archived_at is null",
-        account_id,
+        "select team_id from team_members where user_id = $1",
+        user_id
     )
     .fetch_optional(db)
     .await
 }
 
-/// The team of an active pilot, or None if there is no such pilot.
-pub async fn pilot_team(db: &PgPool, pilot_id: Uuid) -> sqlx::Result<Option<Uuid>> {
+/// The team of an active user who can be chosen as pilot, or None if there is
+/// no such user or they aren't in a team.
+pub async fn pilot_team(db: &PgPool, user_id: Uuid) -> sqlx::Result<Option<Uuid>> {
     sqlx::query_scalar!(
-        "select m.team_id from pilots p join team_members m on m.pilot_id = p.id
-         where p.id = $1 and p.archived_at is null",
-        pilot_id,
+        "select m.team_id from users u join team_members m on m.user_id = u.id
+         where u.id = $1 and u.archived_at is null",
+        user_id,
     )
     .fetch_optional(db)
     .await
@@ -189,7 +187,7 @@ pub async fn set_pilot(
 pub async fn set_team(db: &PgPool, ids: &[Uuid], team_id: Option<Uuid>) -> sqlx::Result<u64> {
     let result = sqlx::query!(
         "update flights set team_id = $2,
-             pilot_id = case when pilot_id in (select pilot_id from team_members
+             pilot_id = case when pilot_id in (select user_id from team_members
                                                where team_id = $2) then pilot_id end
          where id = any($1)",
         ids,
@@ -200,7 +198,7 @@ pub async fn set_team(db: &PgPool, ids: &[Uuid], team_id: Option<Uuid>) -> sqlx:
     Ok(result.rows_affected())
 }
 
-/// A pilot who can be chosen for flights.
+/// A user who can be chosen as the pilot of flights: active and in a team.
 #[derive(Serialize)]
 pub struct PilotChoice {
     pub id: Uuid,
@@ -209,16 +207,16 @@ pub struct PilotChoice {
     pub team_name: String,
 }
 
-/// Active pilots by name, of one team or of all.
+/// Active users in a team by name, of one team or of all.
 pub async fn pilot_choices(db: &PgPool, team_id: Option<Uuid>) -> sqlx::Result<Vec<PilotChoice>> {
     sqlx::query_as!(
         PilotChoice,
-        "select p.id, p.name, m.team_id, t.name as team_name
-         from pilots p
-         join team_members m on m.pilot_id = p.id
+        "select u.id, u.name, m.team_id, t.name as team_name
+         from users u
+         join team_members m on m.user_id = u.id
          join teams t on t.id = m.team_id
-         where p.archived_at is null and ($1::uuid is null or m.team_id = $1)
-         order by lower(p.name), p.id",
+         where u.archived_at is null and ($1::uuid is null or m.team_id = $1)
+         order by lower(u.name), u.id",
         team_id,
     )
     .fetch_all(db)
@@ -289,15 +287,10 @@ mod tests {
         ids
     }
 
-    /// A member sees their own pilot's flights, also from an earlier team, and
-    /// all flights of their pilot's current team; not other teams or the queue.
+    /// A member sees their own flights, also from an earlier team, and all
+    /// flights of their current team; not other teams or the queue.
     #[sqlx::test]
     async fn member_sees_own_and_team_flights(db: PgPool) {
-        let account = insert_id(
-            &db,
-            "insert into accounts (email) values ('a@example.org') returning id",
-        )
-        .await;
         let north = insert_id(
             &db,
             "insert into teams (name) values ('North') returning id",
@@ -308,17 +301,11 @@ mod tests {
             "insert into teams (name) values ('South') returning id",
         )
         .await;
-        let me: Uuid = sqlx::query_scalar(
-            "insert into pilots (name, account_id) values ('A', $1) returning id",
-        )
-        .bind(account)
-        .fetch_one(&db)
-        .await
-        .unwrap();
-        let teammate = insert_id(&db, "insert into pilots (name) values ('B') returning id").await;
-        let other = insert_id(&db, "insert into pilots (name) values ('C') returning id").await;
+        let me = insert_id(&db, "insert into users (name) values ('A') returning id").await;
+        let teammate = insert_id(&db, "insert into users (name) values ('B') returning id").await;
+        let other = insert_id(&db, "insert into users (name) values ('C') returning id").await;
         for (pilot, team) in [(me, north), (teammate, north), (other, south)] {
-            sqlx::query("insert into team_members (pilot_id, team_id) values ($1, $2)")
+            sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
                 .bind(pilot)
                 .bind(team)
                 .execute(&db)
@@ -340,24 +327,20 @@ mod tests {
 
         let member = FlightScope {
             all: false,
-            account_id: account,
+            user_id: me,
         };
         assert_eq!(visible(&db, &member).await, expected);
         let everything = FlightScope {
             all: true,
-            account_id: account,
+            user_id: me,
         };
         assert_eq!(visible(&db, &everything).await.len(), 7);
     }
 
-    /// An account without a pilot sees no flights unless it sees all.
+    /// A user without a team or flights sees nothing unless they see all.
     #[sqlx::test]
-    async fn account_without_pilot_sees_nothing(db: PgPool) {
-        let account = insert_id(
-            &db,
-            "insert into accounts (email) values ('a@example.org') returning id",
-        )
-        .await;
+    async fn user_without_team_sees_nothing(db: PgPool) {
+        let user = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         let team = insert_id(
             &db,
             "insert into teams (name) values ('North') returning id",
@@ -367,7 +350,7 @@ mod tests {
         flight(&db, None, None).await;
         let member = FlightScope {
             all: false,
-            account_id: account,
+            user_id: user,
         };
         assert!(visible(&db, &member).await.is_empty());
     }
@@ -386,8 +369,8 @@ mod tests {
             "insert into teams (name) values ('South') returning id",
         )
         .await;
-        let pilot = insert_id(&db, "insert into pilots (name) values ('A') returning id").await;
-        sqlx::query("insert into team_members (pilot_id, team_id) values ($1, $2)")
+        let pilot = insert_id(&db, "insert into users (name) values ('A') returning id").await;
+        sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
             .bind(pilot)
             .bind(south)
             .execute(&db)

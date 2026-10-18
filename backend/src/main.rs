@@ -1,4 +1,3 @@
-mod accounts;
 mod auth;
 mod config;
 mod equipment;
@@ -6,9 +5,9 @@ mod error;
 mod flights;
 mod health;
 mod ingest;
-mod pilots;
 mod policy;
 mod teams;
+mod users;
 
 use std::io::IsTerminal;
 use std::net::SocketAddr;
@@ -53,10 +52,10 @@ async fn main() -> Result<()> {
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [] | ["serve"] => serve(&config, db).await,
         ["import"] => ingest::import::run(&db, &config.log_dir).await,
-        ["add-account", email] => accounts::add(&db, email, false).await,
-        ["add-account", "--admin", email] => accounts::add(&db, email, true).await,
+        ["add-user", email, name] => users::add(&db, email, name, false).await,
+        ["add-user", "--admin", email, name] => users::add(&db, email, name, true).await,
         _ => bail!(
-            "unknown command {args:?}; expected serve, import or add-account [--admin] <email>"
+            "unknown command {args:?}; expected serve, import or add-user [--admin] <email> <name>"
         ),
     }
 }
@@ -107,9 +106,8 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .merge(auth::routes::router())
         .merge(flights::routes::router())
         .merge(teams::routes::router())
-        .merge(pilots::routes::router())
         .merge(equipment::routes::router())
-        .merge(accounts::routes::router())
+        .merge(users::routes::router())
         .layer(middleware::from_fn_with_state(
             state.auth.clone(),
             auth::same_origin,

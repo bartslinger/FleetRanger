@@ -1,0 +1,114 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select u.id, u.name, u.role, m.team_id as \"team_id?\", t.name as \"team_name?\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id) as \"flights!\"\n           from users u\n           left join team_members m on m.user_id = u.id\n           left join teams t on t.id = m.team_id\n           left join logins l on l.user_id = u.id\n           where u.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "role",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "team_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "team_members",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "team_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "teams",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "email?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_login_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "archived_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "archived_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "flights!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "0f8920997302745ecae13bae919a8090575c250e5587a5e7b099e35392210b2c"
+}

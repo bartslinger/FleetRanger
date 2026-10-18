@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update logins l set oidc_subject = $1\n               from users u\n               where u.id = l.user_id and l.email = lower($2) and l.oidc_subject is null\n               returning l.user_id, u.archived_at is not null as \"archived!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "archived!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "ded12dacf9deecfbc7c20a7e437710d6dad59801186042aef53266466057407f"
+}

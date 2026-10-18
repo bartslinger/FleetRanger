@@ -37,7 +37,7 @@ where
 struct Body {
     name: Option<String>,
     team_id: Option<Uuid>,
-    holder_pilot_id: Option<Uuid>,
+    holder_user_id: Option<Uuid>,
 }
 
 impl From<Body> for EquipmentInput {
@@ -45,7 +45,7 @@ impl From<Body> for EquipmentInput {
         Self {
             name: body.name,
             team_id: body.team_id,
-            holder_pilot_id: body.holder_pilot_id,
+            holder_user_id: body.holder_user_id,
         }
     }
 }

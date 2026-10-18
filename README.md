@@ -42,7 +42,7 @@ The backend listens on http://127.0.0.1:8080.
 Logging in needs a Google OAuth client (type "Web application") with the redirect URI `http://localhost:5173/auth/callback`. Put `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` in `backend/.env` (see below). Another OpenID Connect provider can be set with `OIDC_ISSUER`, and `FLEETRANGER_PUBLIC_URL` is where browsers reach the app (`http://localhost:5173` by default). Nobody can log in without an account, so add yours first, as an admin so you can manage the rest:
 
 ```
-cargo run --locked -- add-account --admin you@example.org
+cargo run --locked -- add-user --admin you@example.org "Your Name"
 ```
 
 Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default). The backend processes pending logs in the background. Encrypted logs need a DJI app key in `DJI_APP_KEY`; keep it and the OIDC settings in `backend/.env` (ignored by git) and load it with `set -a; . ./.env; set +a` before starting the backend. To register logs that are already in that directory, run the backend with the `import` command:

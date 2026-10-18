@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select email from logins where user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3741d8c6b4c669e8700465e1d14a6d3c02f88c2610d10bf97897dfbc3a63d875"
+}

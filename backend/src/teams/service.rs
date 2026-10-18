@@ -34,13 +34,13 @@ pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResu
     get(db, actor, id).await
 }
 
-/// A team with active pilots can't be archived, or their new flights would go
+/// A team with active members can't be archived, or their new flights would go
 /// to an archived team.
 pub async fn set_archived(db: &PgPool, actor: &Actor, id: Uuid, archived: bool) -> ApiResult<Team> {
     let team = get(db, actor, id).await?;
-    if archived && team.pilots > 0 {
+    if archived && team.members > 0 {
         return Err(ApiError::Conflict(
-            "This team still has pilots. Move them to another team or archive them first."
+            "This team still has members. Move them to another team or archive them first."
                 .to_owned(),
         ));
     }

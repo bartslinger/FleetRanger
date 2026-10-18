@@ -43,7 +43,7 @@ pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
             pilots: db::pilot_choices(db, None).await?,
             teams: db::team_choices(db).await?,
         },
-        Role::Member => match db::own_team(db, actor.account_id).await? {
+        Role::Member => match db::own_team(db, actor.user_id).await? {
             Some(team) => Choices {
                 own_team_id: Some(team),
                 admin: false,
@@ -84,7 +84,7 @@ pub async fn set_pilot(
         ),
         None => None,
     };
-    let own_team = db::own_team(db, actor.account_id).await?;
+    let own_team = db::own_team(db, actor.user_id).await?;
     let team = match policy::set_pilot(actor.role, own_team, &flight_teams, new_pilot_team)? {
         TeamChange::Keep => None,
         TeamChange::Follow(team) => Some(team),

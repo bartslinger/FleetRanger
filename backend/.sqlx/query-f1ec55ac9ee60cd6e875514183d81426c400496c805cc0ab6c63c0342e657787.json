@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update remote_controllers set name = $2, team_id = $3, holder_user_id = $4\n                 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f1ec55ac9ee60cd6e875514183d81426c400496c805cc0ab6c63c0342e657787"
+}

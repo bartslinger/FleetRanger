@@ -44,17 +44,17 @@ impl Auth {
     }
 }
 
-/// Who is making a request: a logged-in account. Handlers get one only through
-/// a valid login session, and pass it to the service functions they call.
+/// Who is making a request: a logged-in user. Handlers get one only through a
+/// valid login session, and pass it to the service functions they call.
 pub struct Actor {
-    pub account_id: Uuid,
+    pub user_id: Uuid,
     pub role: Role,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
     pub login_session_id: Uuid,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
     pub ip: IpAddr,
     pub email: String,
-    pub name: Option<String>,
+    pub name: String,
 }
 
 impl<S> FromRequestParts<S> for Actor
@@ -88,11 +88,11 @@ where
         })?
         .ok_or(StatusCode::UNAUTHORIZED)?;
         let role = Role::parse(&session.role).ok_or_else(|| {
-            tracing::error!(role = session.role, "unknown account role");
+            tracing::error!(role = session.role, "unknown user role");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
         Ok(Actor {
-            account_id: session.account_id,
+            user_id: session.user_id,
             role,
             login_session_id: session.id,
             ip,

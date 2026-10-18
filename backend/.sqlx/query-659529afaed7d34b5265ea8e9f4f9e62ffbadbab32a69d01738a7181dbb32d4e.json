@@ -1,0 +1,143 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m, aircraft_serial, rc_serial,\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                team_id, (select t.name from teams t where t.id = flights.team_id) as \"team_name?\"\n         from flights\n         where $5\n            or pilot_id = $6\n            or team_id in (select team_id from team_members where user_id = $6)\n         order by\n             case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,\n             case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,\n             case when $1 = 'air_time_s' and not $2 then air_time_s end asc,\n             case when $1 = 'air_time_s' and $2 then air_time_s end desc,\n             case when $1 = 'distance_m' and not $2 then distance_m end asc,\n             case when $1 = 'distance_m' and $2 then distance_m end desc,\n             case when $1 = 'aircraft_serial' and not $2 then aircraft_serial end asc nulls last,\n             case when $1 = 'aircraft_serial' and $2 then aircraft_serial end desc nulls last,\n             case when $1 = 'rc_serial' and not $2 then rc_serial end asc nulls last,\n             case when $1 = 'rc_serial' and $2 then rc_serial end desc nulls last,\n             id\n         limit $3 offset $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "takeoff_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "takeoff_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "landed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "landed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "air_time_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "air_time_s"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "distance_m",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "distance_m"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "aircraft_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "aircraft_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "rc_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "rc_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "pilot_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "pilot_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "pilot_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "team_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "team_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bool",
+        "Int8",
+        "Int8",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "659529afaed7d34b5265ea8e9f4f9e62ffbadbab32a69d01738a7181dbb32d4e"
+}

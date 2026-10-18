@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into team_members (user_id, team_id) values ($1, $2)\n                 on conflict (user_id) do update set team_id = excluded.team_id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f2232409b70cb12420d35d00d7a614d136c1bad24a00b6802699017c89ba9ac6"
+}

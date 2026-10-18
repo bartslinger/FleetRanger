@@ -17,8 +17,9 @@ use cookie::time::Duration;
 use openidconnect::CsrfToken;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use uuid::Uuid;
 
-use super::db::{self, LoginAccount};
+use super::db::{self, LoginUser};
 use super::oidc::PendingLogin;
 use super::{Actor, Auth, SESSION_COOKIE, SESSION_IDLE_DAYS, client_ip, token_hash};
 
@@ -140,21 +141,15 @@ async fn callback(
         }
     };
 
-    let account = db::login_account(
-        &db,
-        &identity.subject,
-        identity.verified_email.as_deref(),
-        identity.name.as_deref(),
-    )
-    .await;
-    let account_id = match account {
-        Ok(LoginAccount::Allowed(id)) => id,
-        Ok(LoginAccount::Refused) => {
-            tracing::info!(email = identity.verified_email, "login refused: no account");
+    let user = db::login_user(&db, &identity.subject, identity.verified_email.as_deref()).await;
+    let user_id = match user {
+        Ok(LoginUser::Allowed(id)) => id,
+        Ok(LoginUser::Refused) => {
+            tracing::info!(email = identity.verified_email, "login refused: no login");
             return (jar, Redirect::to("/login?error=no-access")).into_response();
         }
         Err(error) => {
-            tracing::error!(%error, "looking up the account for a login");
+            tracing::error!(%error, "looking up the user for a login");
             return (jar, Redirect::to("/login?error=failed")).into_response();
         }
     };
@@ -165,7 +160,7 @@ async fn callback(
         .and_then(|value| value.to_str().ok());
     let created = db::create_session(
         &db,
-        account_id,
+        user_id,
         &token_hash(&token),
         SESSION_IDLE_DAYS,
         client_ip(&headers, peer),
@@ -200,16 +195,18 @@ async fn logout(State(db): State<PgPool>, jar: CookieJar) -> Response {
 
 #[derive(Serialize)]
 struct Me {
+    id: Uuid,
     email: String,
-    name: Option<String>,
-    /// So the web app shows only what the account can use; the backend still
+    name: String,
+    /// So the web app shows only what the user can use; the backend still
     /// checks every request.
     role: &'static str,
 }
 
-/// The logged-in account, or 401.
+/// The logged-in user, or 401.
 async fn me(actor: Actor) -> Json<Me> {
     Json(Me {
+        id: actor.user_id,
         email: actor.email,
         name: actor.name,
         role: actor.role.as_str(),

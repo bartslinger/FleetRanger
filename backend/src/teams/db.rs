@@ -8,8 +8,8 @@ pub struct Team {
     pub id: Uuid,
     pub name: String,
     pub archived_at: Option<DateTime<Utc>>,
-    /// Pilots in the team that aren't archived.
-    pub pilots: i64,
+    /// Users in the team that aren't archived.
+    pub members: i64,
 }
 
 /// Teams by name, the archived ones only if asked for.
@@ -17,8 +17,8 @@ pub async fn list(db: &PgPool, archived: bool) -> sqlx::Result<Vec<Team>> {
     sqlx::query_as!(
         Team,
         r#"select t.id, t.name, t.archived_at,
-                  (select count(*) from team_members m join pilots p on p.id = m.pilot_id
-                   where m.team_id = t.id and p.archived_at is null) as "pilots!"
+                  (select count(*) from team_members m join users u on u.id = m.user_id
+                   where m.team_id = t.id and u.archived_at is null) as "members!"
            from teams t
            where $1 or t.archived_at is null
            order by lower(t.name), t.id"#,
@@ -32,8 +32,8 @@ pub async fn get(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Team>> {
     sqlx::query_as!(
         Team,
         r#"select t.id, t.name, t.archived_at,
-                  (select count(*) from team_members m join pilots p on p.id = m.pilot_id
-                   where m.team_id = t.id and p.archived_at is null) as "pilots!"
+                  (select count(*) from team_members m join users u on u.id = m.user_id
+                   where m.team_id = t.id and u.archived_at is null) as "members!"
            from teams t
            where t.id = $1"#,
         id,
