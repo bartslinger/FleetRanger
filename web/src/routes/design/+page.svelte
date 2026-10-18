@@ -1,6 +1,7 @@
 <!-- Every component in its states, to review the design in both themes. -->
 <script lang="ts">
 	import Button from '#lib/ui/Button.svelte';
+	import Checkbox from '#lib/ui/Checkbox.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
@@ -185,6 +186,13 @@
 				error="Choose a drone."
 				options={[{ value: '', label: 'Choose a drone' }]}
 			/>
+		</Column>
+		<Column md={4}>
+			<div class="row">
+				<Checkbox label="Show archived" />
+				<Checkbox label="Checked" checked />
+				<Checkbox label="Disabled" disabled />
+			</div>
 		</Column>
 	</Grid>
 
