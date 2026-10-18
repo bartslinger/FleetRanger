@@ -39,6 +39,41 @@ pub async fn add_request(
     Ok(added)
 }
 
+/// Keeps a waiting request with this token alive for another `seconds`, as
+/// long as it hasn't expired. Returns false if there is no such request.
+pub async fn keep_waiting(db: &PgPool, token_sha256: &[u8], seconds: f64) -> sqlx::Result<bool> {
+    let result = sqlx::query!(
+        "update pairing_requests set expires_at = now() + make_interval(secs => $2)
+         where token_sha256 = $1 and expires_at > now()",
+        token_sha256,
+        seconds,
+    )
+    .execute(db)
+    .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+/// A controller waiting to be paired, without its code: approving still needs
+/// the code shown on the controller.
+#[derive(Serialize)]
+pub struct Waiting {
+    pub serial: String,
+    pub model: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// The controllers waiting to be paired, most recent first.
+pub async fn waiting(db: &PgPool) -> sqlx::Result<Vec<Waiting>> {
+    sqlx::query_as!(
+        Waiting,
+        "select serial, model, expires_at from pairing_requests
+         where expires_at > now()
+         order by expires_at desc",
+    )
+    .fetch_all(db)
+    .await
+}
+
 /// A pairing request as the approving user sees it.
 #[derive(Serialize)]
 pub struct Request {
@@ -178,6 +213,18 @@ mod tests {
             .await
             .unwrap();
         assert!(approve(&db, "BBBB3333", None).await.unwrap().is_none());
+        // Checking can't revive an expired request, only keep a live one alive.
+        assert!(!keep_waiting(&db, b"late", 60.0).await.unwrap());
+        add_request(&db, "CCCC4444", b"live", "RC4", "Test RC", soon)
+            .await
+            .unwrap();
+        assert!(keep_waiting(&db, b"live", 3600.0).await.unwrap());
+        let expires: DateTime<Utc> =
+            sqlx::query_scalar("select expires_at from pairing_requests where code = 'CCCC4444'")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert!(expires > soon);
 
         assert!(unpair(&db, paired.id).await.unwrap());
         assert!(by_token(&db, b"token-hash").await.unwrap().is_none());

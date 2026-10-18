@@ -1,9 +1,9 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, Request};
+use super::db::{self, Request, Waiting};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -14,14 +14,24 @@ use crate::{
 /// random byte maps onto them evenly.
 const CODE_ALPHABET: &[u8; 32] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const CODE_LENGTH: usize = 8;
-/// How long a controller's code can be approved.
-const REQUEST_LIFETIME: Duration = Duration::minutes(10);
+/// How long a request stays valid after the controller last checked on it.
+/// While its pairing screen is open, the controller checks every few seconds,
+/// so its code stays the same; once it's off, the request soon expires.
+const REQUEST_LIFETIME: Duration = Duration::minutes(1);
 
 /// What a controller shows while it waits for a user to approve it.
 #[derive(Serialize)]
 pub struct Started {
     pub code: String,
-    pub expires_at: DateTime<Utc>,
+}
+
+/// Where a controller's token stands.
+pub enum Check {
+    Paired,
+    /// Still waiting for approval; checking kept the request alive.
+    Waiting,
+    /// Neither: unpaired, or the request expired. The controller starts over.
+    Unknown,
 }
 
 /// A controller asks to pair. It sends the SHA-256 of a token it generated,
@@ -46,10 +56,30 @@ pub async fn start(
     for _ in 0..5 {
         let code = random_code();
         if db::add_request(db, &code, &token_sha256, serial, model, expires_at).await? {
-            return Ok(Started { code, expires_at });
+            return Ok(Started { code });
         }
     }
     Err(ApiError::Internal(anyhow::anyhow!("no free pairing code")))
+}
+
+/// What a controller learns when it checks its token, which it does every few
+/// seconds while it waits for approval.
+pub async fn check(db: &PgPool, token_sha256: &[u8]) -> ApiResult<Check> {
+    if db::by_token(db, token_sha256).await?.is_some() {
+        return Ok(Check::Paired);
+    }
+    let seconds = REQUEST_LIFETIME.as_seconds_f64();
+    Ok(if db::keep_waiting(db, token_sha256, seconds).await? {
+        Check::Waiting
+    } else {
+        Check::Unknown
+    })
+}
+
+/// The controllers waiting to be paired, so the web app can tell users. Any
+/// user may pair a controller, so any user sees them; approving needs the code.
+pub async fn waiting(db: &PgPool, _actor: &Actor) -> ApiResult<Vec<Waiting>> {
+    Ok(db::waiting(db).await?)
 }
 
 /// A pairing request, for the user about to approve it. Any user may pair a
@@ -68,8 +98,8 @@ pub async fn approve(db: &PgPool, actor: &Actor, code: &str) -> ApiResult<String
         .await?
         .ok_or_else(|| {
             ApiError::Invalid(
-                "No controller is waiting with this code any more. Codes expire after 10 minutes: \
-             start pairing on the controller again."
+                "No controller is waiting with this code any more. A code works while the \
+                 controller shows it: open pairing on the controller again."
                     .to_owned(),
             )
         })

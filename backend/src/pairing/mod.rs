@@ -7,7 +7,7 @@ mod service;
 
 use axum::{
     extract::{FromRef, FromRequestParts},
-    http::{StatusCode, header, request::Parts},
+    http::{HeaderMap, StatusCode, header, request::Parts},
 };
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -29,13 +29,7 @@ where
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let token = parts
-            .headers
-            .get(header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.strip_prefix("Bearer "))
-            .ok_or(StatusCode::UNAUTHORIZED)?;
-        let hash = Sha256::digest(token.as_bytes());
+        let hash = token_hash(&parts.headers).ok_or(StatusCode::UNAUTHORIZED)?;
         let paired = db::by_token(&PgPool::from_ref(state), &hash)
             .await
             .map_err(|error| {
@@ -48,4 +42,14 @@ where
             serial: paired.serial,
         })
     }
+}
+
+/// The SHA-256 of the bearer token, which is what the database stores.
+fn token_hash(headers: &HeaderMap) -> Option<Vec<u8>> {
+    let token = headers
+        .get(header::AUTHORIZATION)?
+        .to_str()
+        .ok()?
+        .strip_prefix("Bearer ")?;
+    Some(Sha256::digest(token.as_bytes()).to_vec())
 }

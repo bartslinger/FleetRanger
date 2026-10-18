@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select serial, model, expires_at from pairing_requests\n         where expires_at > now()\n         order by expires_at desc",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "serial"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "model"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "58f37849f41061f7288a09962a25288d91a391079b548ec98947d7696f564853"
+}

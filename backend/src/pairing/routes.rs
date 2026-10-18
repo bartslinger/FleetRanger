@@ -4,7 +4,7 @@
 use axum::{
     Json, Router,
     extract::{FromRef, Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     routing::{delete, get, post},
 };
 use serde::{Deserialize, Serialize};
@@ -13,8 +13,8 @@ use uuid::Uuid;
 
 use super::{
     Controller,
-    db::{self, Request},
-    service::{self, Started},
+    db::{self, Request, Waiting},
+    service::{self, Check, Started},
 };
 use crate::{
     auth::Actor,
@@ -27,7 +27,7 @@ where
     PgPool: FromRef<S>,
 {
     Router::new()
-        .route("/api/pairing", post(start))
+        .route("/api/pairing", get(waiting).post(start))
         .route("/api/pairing/{code}", get(show))
         .route("/api/pairing/{code}/approve", post(approve))
         .route("/api/controller", get(me).delete(unpair_self))
@@ -46,6 +46,10 @@ async fn start(State(db): State<PgPool>, Json(body): Json<Start>) -> ApiResult<J
     Ok(Json(
         service::start(&db, &body.serial, &body.model, &body.token_sha256).await?,
     ))
+}
+
+async fn waiting(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<Waiting>>> {
+    Ok(Json(service::waiting(&db, &actor).await?))
 }
 
 async fn show(
@@ -76,10 +80,15 @@ struct Me {
     paired: bool,
 }
 
-/// For the controller to check that it is paired: until a user approves it,
-/// its token is refused.
-async fn me(_controller: Controller) -> Json<Me> {
-    Json(Me { paired: true })
+/// For the controller to check its token: paired, still waiting for approval
+/// (which keeps its request alive), or unknown (401): it starts over.
+async fn me(State(db): State<PgPool>, headers: HeaderMap) -> ApiResult<Json<Me>> {
+    let hash = super::token_hash(&headers).ok_or(ApiError::Unauthorized)?;
+    match service::check(&db, &hash).await? {
+        Check::Paired => Ok(Json(Me { paired: true })),
+        Check::Waiting => Ok(Json(Me { paired: false })),
+        Check::Unknown => Err(ApiError::Unauthorized),
+    }
 }
 
 async fn unpair_self(controller: Controller, State(db): State<PgPool>) -> ApiResult<StatusCode> {
