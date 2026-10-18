@@ -6,7 +6,7 @@
 	import Shell, { type NavItem } from '#lib/ui/Shell.svelte';
 	import type { LayoutProps } from './$types';
 
-	let { children }: LayoutProps = $props();
+	let { data, children }: LayoutProps = $props();
 
 	const nav: NavItem[] = [
 		{ href: resolve('/'), label: 'Logbook' },
@@ -19,6 +19,6 @@
 	<title>FleetRanger</title>
 </svelte:head>
 
-<Shell name="FleetRanger" {nav}>
+<Shell name="FleetRanger" {nav} theme={data.theme}>
 	{@render children()}
 </Shell>

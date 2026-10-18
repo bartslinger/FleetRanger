@@ -17,7 +17,8 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 
 - **Tokens:** colour, layering, spacing, type scale and motion values come from Carbon's official packages (`@carbon/themes`, `@carbon/layout`, `@carbon/type`, Apache-2.0). `pnpm tokens` (`web/scripts/tokens.js`) exports them to CSS custom properties in `web/src/lib/ui/tokens.css`, which is committed so upgrades show as a diff. Names follow Carbon's (`--cds-layer-01`, `--cds-spacing-05`, `--cds-heading-01-font-size`). Components use only these variables, never literal values.
 - **No install telemetry.** The Carbon and Plex packages run IBM's telemetry on install; `web/pnpm-workspace.yaml` denies those scripts.
-- **Themes:** Carbon's White (`white`) for light and Gray 100 (`g100`) for dark. The app follows the system setting.
+- **Themes:** Carbon's White (`white`) for light and Gray 100 (`g100`) for dark. The app follows the system setting unless the user chooses light or dark under the Theme action in the header (a header panel with a radio group; it becomes the profile panel once there are accounts). The choice is kept in a cookie, so the server renders it directly.
+- **Shell:** the left panel has the page background and no border, as Carbon specifies; we chose not to use a dark (Gray 100) shell.
 - **Typography:** IBM Plex Sans and IBM Plex Mono (SIL Open Font License), self-hosted from the `@ibm/plex-*` packages and bundled by Vite. Numbers in tables and statistics use tabular figures.
 - **Styling:** plain CSS with custom properties, scoped per Svelte component. No utility framework.
 
@@ -182,5 +183,6 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
   - the 2x Grid (`Grid`, `Column`; narrow mode for containers)
   - components: button, tag, inline notification, text input, select, data table (sortable), pagination, empty state, page header
   - the logbook, reviewed against Carbon
+  - a theme setting (system, light or dark)
 - Known gaps against the rules above:
-  - no user setting for light or dark mode
+  - motion values (durations, easing) aren't exported as tokens yet; components write Carbon's values directly

@@ -79,11 +79,18 @@ ${layoutTokens().join('\n')}
 ${typeTokens().join('\n')}
 }
 
+/* Dark follows the system unless the user chose light; data-theme on <html>
+   holds the user's choice. */
 @media (prefers-color-scheme: dark) {
-\t:root {
+\t:root:not([data-theme='light']) {
 \t\tcolor-scheme: dark;
 ${declarations(dark, '\t\t')}
 \t}
+}
+
+:root[data-theme='dark'] {
+\tcolor-scheme: dark;
+${declarations(dark, '\t')}
 }
 `;
 

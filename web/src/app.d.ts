@@ -3,7 +3,9 @@
 declare global {
 	namespace App {
 		// interface Error {}
-		// interface Locals {}
+		interface Locals {
+			theme: import('#lib/theme.js').Theme;
+		}
 		// interface PageData {}
 		// interface PageState {}
 		// interface Platform {}

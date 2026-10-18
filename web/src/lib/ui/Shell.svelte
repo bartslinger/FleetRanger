@@ -13,37 +13,86 @@
 
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
+	import BrightnessContrast from '@carbon/icons/es/brightness-contrast/20.js';
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { setTheme, type Theme } from '#lib/theme.js';
+	import Icon from './Icon.svelte';
+	import RadioButtonGroup from './RadioButtonGroup.svelte';
 
 	interface Props {
 		name: string;
 		nav: NavItem[];
+		/** The user's theme choice as rendered by the server. */
+		theme: Theme;
 		children: Snippet;
 	}
 
-	let { name, nav, children }: Props = $props();
+	let { name, nav, theme: initialTheme, children }: Props = $props();
 
 	let open = $state(false);
 	let menuButton: HTMLButtonElement | undefined = $state();
 	let navElement: HTMLElement | undefined = $state();
 
-	afterNavigate(() => (open = false));
+	// The theme panel: a header panel, which later becomes the profile panel.
+	// Starts from the server's value, then follows the user's choices.
+	// svelte-ignore state_referenced_locally
+	let theme = $state(initialTheme);
+	let panelOpen = $state(false);
+	let panelButton: HTMLButtonElement | undefined = $state();
+	let panelElement: HTMLElement | undefined = $state();
+
+	afterNavigate(() => {
+		open = false;
+		panelOpen = false;
+	});
 
 	async function toggle() {
 		open = !open;
 		if (open) {
+			// One panel at a time.
+			panelOpen = false;
 			// Move focus into the navigation, as Carbon's left panel does.
 			await tick();
 			navElement?.querySelector('a')?.focus();
 		}
 	}
 
+	async function togglePanel() {
+		panelOpen = !panelOpen;
+		if (panelOpen) {
+			open = false;
+			// Focus the checked option, as in Carbon's settings menus.
+			await tick();
+			panelElement?.querySelector<HTMLInputElement>('input:checked')?.focus();
+		}
+	}
+
 	function onkeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && open) {
+		if (event.key !== 'Escape') return;
+		if (panelOpen) {
+			panelOpen = false;
+			panelButton?.focus();
+		} else if (open) {
 			open = false;
 			menuButton?.focus();
+		}
+	}
+
+	/** Closes the panel on a click outside it or its button. */
+	function onclick(event: MouseEvent) {
+		const target = event.target as Node;
+		if (panelOpen && !panelElement?.contains(target) && !panelButton?.contains(target)) {
+			panelOpen = false;
+		}
+	}
+
+	/** Closes the panel when focus leaves it, e.g. by tabbing past the end. */
+	function onfocusout(event: FocusEvent) {
+		const next = event.relatedTarget as Node | null;
+		if (next && !panelElement?.contains(next) && !panelButton?.contains(next)) {
+			panelOpen = false;
 		}
 	}
 
@@ -57,7 +106,7 @@
 	}
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} {onclick} />
 
 <a class="skip" href="#main-content">Skip to main content</a>
 
@@ -83,6 +132,43 @@
 		</svg>
 	</button>
 	<a class="name" href={home}>{name}</a>
+	<div class="utilities">
+		<button
+			bind:this={panelButton}
+			class="action"
+			class:active={panelOpen}
+			type="button"
+			aria-label="Theme"
+			aria-expanded={panelOpen}
+			aria-controls="theme-panel"
+			onclick={togglePanel}
+			{onfocusout}
+		>
+			<Icon icon={BrightnessContrast} />
+			<span class="tooltip" aria-hidden="true">Theme</span>
+		</button>
+		{#if panelOpen}
+			<section
+				bind:this={panelElement}
+				id="theme-panel"
+				class="panel"
+				aria-label="Theme"
+				{onfocusout}
+			>
+				<RadioButtonGroup
+					legend="Theme"
+					name="theme"
+					options={[
+						{ value: 'system', label: 'System' },
+						{ value: 'light', label: 'Light' },
+						{ value: 'dark', label: 'Dark' }
+					]}
+					bind:value={theme}
+					onchange={setTheme}
+				/>
+			</section>
+		{/if}
+	</div>
 </header>
 
 <nav bind:this={navElement} id="side-nav" class:open aria-label="Main">
@@ -189,6 +275,89 @@
 		line-height: 1.25rem;
 		letter-spacing: 0.1px;
 		text-decoration: none;
+	}
+
+	/* Header utilities: Carbon's header global actions, at the right edge. */
+	.utilities {
+		display: flex;
+		height: 100%;
+		margin-left: auto;
+	}
+
+	.action {
+		position: relative;
+		display: grid;
+		place-items: center;
+		width: var(--cds-size-large);
+		height: 100%;
+		padding: 0;
+		border: 1px solid transparent;
+		background: none;
+		color: var(--cds-icon-secondary);
+		cursor: pointer;
+		transition:
+			background-color 110ms,
+			border-color 110ms;
+	}
+
+	.action:hover {
+		background: var(--cds-background-hover);
+		color: var(--cds-icon-primary);
+	}
+
+	.action:active {
+		background: var(--cds-background-active);
+	}
+
+	.action:focus-visible {
+		outline: none;
+		border-color: var(--cds-focus);
+	}
+
+	/* Open: outlined, with the bottom edge flowing into the panel. */
+	.action.active {
+		border-color: var(--cds-border-subtle-01);
+		border-bottom-color: transparent;
+		background: var(--cds-layer-01);
+		color: var(--cds-icon-primary);
+	}
+
+	.tooltip {
+		position: absolute;
+		top: calc(100% + var(--cds-spacing-02));
+		right: 0;
+		padding: var(--cds-spacing-01) var(--cds-spacing-05);
+		background: var(--cds-background-inverse);
+		color: var(--cds-text-inverse);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		white-space: nowrap;
+		visibility: hidden;
+		pointer-events: none;
+	}
+
+	.action:not(.active):hover .tooltip,
+	.action:not(.active):focus-visible .tooltip {
+		visibility: visible;
+	}
+
+	.panel {
+		position: fixed;
+		top: var(--cds-size-large);
+		right: 0;
+		bottom: 0;
+		width: 16rem;
+		padding: var(--cds-spacing-05);
+		overflow-y: auto;
+		background: var(--cds-layer-01);
+		border-inline: 1px solid var(--cds-border-subtle-01);
+		animation: panel-in 110ms cubic-bezier(0, 0, 0.38, 0.9);
+	}
+
+	@keyframes panel-in {
+		from {
+			transform: translateX(100%);
+		}
 	}
 
 	nav {
