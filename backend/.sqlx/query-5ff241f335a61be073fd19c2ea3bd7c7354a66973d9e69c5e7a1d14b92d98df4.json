@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into aircraft (serial) values ($1) on conflict (serial) do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5ff241f335a61be073fd19c2ea3bd7c7354a66973d9e69c5e7a1d14b92d98df4"
+}

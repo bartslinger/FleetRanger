@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,\n                                      aircraft_serial, rc_serial, track, metrics, team_id)\n                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9,\n                         (select team_id from remote_controllers where serial = $7))\n                 on conflict (raw_log_id) do update set\n                     takeoff_at = excluded.takeoff_at,\n                     landed_at = excluded.landed_at,\n                     air_time_s = excluded.air_time_s,\n                     distance_m = excluded.distance_m,\n                     aircraft_serial = excluded.aircraft_serial,\n                     rc_serial = excluded.rc_serial,\n                     track = excluded.track,\n                     metrics = excluded.metrics",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz",
+        "Int4",
+        "Float8",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0ebde854cd2a24f766c6a87ae4b4c50017244b847283ef3cbe4222b9a86d557f"
+}

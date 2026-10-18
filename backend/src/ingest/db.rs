@@ -57,16 +57,35 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
 }
 
 /// Saves the flight found in a raw log, or removes an earlier one if the log turned
-/// out to have none, and marks the log done. Re-processing updates the flight in
-/// place, so its id stays the same.
+/// out to have none, and marks the log done. Unknown drone and controller serials
+/// are registered. A new flight gets its controller's team; re-processing updates
+/// the flight in place, so its id, team and pilot stay the same.
 pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<()> {
     let mut tx = db.begin().await?;
     match flight {
         Some(flight) => {
+            if let Some(serial) = &flight.aircraft_serial {
+                sqlx::query!(
+                    "insert into aircraft (serial) values ($1) on conflict (serial) do nothing",
+                    serial,
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
+            if let Some(serial) = &flight.rc_serial {
+                sqlx::query!(
+                    "insert into remote_controllers (serial) values ($1)
+                     on conflict (serial) do nothing",
+                    serial,
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
             sqlx::query!(
                 "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
-                                      aircraft_serial, rc_serial, track, metrics)
-                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                                      aircraft_serial, rc_serial, track, metrics, team_id)
+                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                         (select team_id from remote_controllers where serial = $7))
                  on conflict (raw_log_id) do update set
                      takeoff_at = excluded.takeoff_at,
                      landed_at = excluded.landed_at,

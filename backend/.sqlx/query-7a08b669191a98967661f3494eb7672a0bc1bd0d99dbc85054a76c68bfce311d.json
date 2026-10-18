@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into remote_controllers (serial) values ($1)\n                     on conflict (serial) do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7a08b669191a98967661f3494eb7672a0bc1bd0d99dbc85054a76c68bfce311d"
+}
