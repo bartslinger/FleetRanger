@@ -121,6 +121,13 @@ export interface Equipment {
 	last_flight_at: string | null;
 }
 
+/** A controller waiting to be paired, from `GET /api/pairing`: without its code. */
+export interface WaitingController {
+	serial: string;
+	model: string;
+	expires_at: string;
+}
+
 /** A controller waiting to be paired, from `GET /api/pairing/{code}`. */
 export interface PairingRequest {
 	serial: string;

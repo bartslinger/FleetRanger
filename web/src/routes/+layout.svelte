@@ -4,6 +4,7 @@
 	import Events from '@carbon/icons/es/events/16.js';
 	import FlightRoster from '@carbon/icons/es/flight--roster/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
+	import NotificationNew from '@carbon/icons/es/notification--new/20.js';
 	import Template from '@carbon/icons/es/template/16.js';
 	import UserMultiple from '@carbon/icons/es/user--multiple/16.js';
 	import { dev } from '$app/env';
@@ -12,6 +13,7 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import ProcessingPanel from '#lib/ProcessingPanel.svelte';
 	import type { ProcessingStatus } from '#lib/server/backend.js';
+	import Icon from '#lib/ui/Icon.svelte';
 	import Loading from '#lib/ui/Loading.svelte';
 	import Shell, { type HeaderAction, type NavItem } from '#lib/ui/Shell.svelte';
 	import type { LayoutProps } from './$types';
@@ -46,8 +48,39 @@
 		if (before && before.pending > 0 && next.pending === 0) await invalidateAll();
 	}
 
-	const actions: HeaderAction[] = $derived(
-		processing && processing.pending > 0
+	// Controllers waiting to be paired, for everyone: from the server, then
+	// polled, so someone at a controller sees it come up.
+	let pairing = $derived(data.pairing);
+	const PAIRING_POLL_MS = 15_000;
+
+	$effect(() => {
+		if (!data.account) return;
+		const timer = setInterval(async () => {
+			try {
+				const response = await fetch('/api/pairing');
+				if (response.ok) pairing = await response.json();
+			} catch {
+				// Offline for a moment: try again next time.
+			}
+		}, PAIRING_POLL_MS);
+		return () => clearInterval(timer);
+	});
+
+	const actions: HeaderAction[] = $derived([
+		...(pairing.length > 0
+			? [
+					{
+						id: 'pairing',
+						label:
+							pairing.length === 1
+								? 'A controller is waiting to be paired'
+								: `${pairing.length} controllers are waiting to be paired`,
+						icon: pairingIcon,
+						href: resolve('/pair')
+					}
+				]
+			: []),
+		...(processing && processing.pending > 0
 			? [
 					{
 						id: 'processing',
@@ -56,8 +89,8 @@
 						panel: processingPanel
 					}
 				]
-			: []
-	);
+			: [])
+	]);
 
 	// Admin pages only for admins; the backend refuses everyone else anyway.
 	const nav: NavItem[] = $derived([
@@ -80,6 +113,8 @@
 </svelte:head>
 
 {#snippet loadingIcon()}<Loading />{/snippet}
+
+{#snippet pairingIcon()}<Icon icon={NotificationNew} />{/snippet}
 
 {#snippet processingPanel()}
 	{#if processing}<ProcessingPanel status={processing} timeZone={data.timeZone} />{/if}

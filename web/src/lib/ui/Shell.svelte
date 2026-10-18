@@ -23,14 +23,14 @@
 	}
 
 	/** A header global action left of Profile: an icon button opening a panel. */
-	export interface HeaderAction {
+	/** A header action opens a panel, or goes to a page. */
+	export type HeaderAction = {
 		id: string;
 		/** The button's name, shown as its tooltip. */
 		label: string;
 		/** The 20px icon. */
 		icon: Snippet;
-		panel: Snippet;
-	}
+	} & ({ panel: Snippet; href?: never } | { href: string; panel?: never });
 </script>
 
 <script lang="ts">
@@ -180,31 +180,39 @@
 	{#if account}
 		<div class="utilities">
 			{#each actions as action (action.id)}
-				<button
-					bind:this={panelButtons[action.id]}
-					class="action"
-					class:active={panelOpen === action.id}
-					type="button"
-					aria-label={action.label}
-					aria-expanded={panelOpen === action.id}
-					aria-controls="{action.id}-panel"
-					onclick={() => togglePanel(action.id)}
-					{onfocusout}
-				>
-					{@render action.icon()}
-					<span class="tooltip" aria-hidden="true">{action.label}</span>
-				</button>
-				{#if panelOpen === action.id}
-					<section
-						bind:this={panelElements[action.id]}
-						id="{action.id}-panel"
-						class="panel"
+				{#if action.href !== undefined}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
+					<a class="action" href={action.href} aria-label={action.label}>
+						{@render action.icon()}
+						<span class="tooltip" aria-hidden="true">{action.label}</span>
+					</a>
+				{:else}
+					<button
+						bind:this={panelButtons[action.id]}
+						class="action"
+						class:active={panelOpen === action.id}
+						type="button"
 						aria-label={action.label}
-						tabindex="-1"
+						aria-expanded={panelOpen === action.id}
+						aria-controls="{action.id}-panel"
+						onclick={() => togglePanel(action.id)}
 						{onfocusout}
 					>
-						{@render action.panel()}
-					</section>
+						{@render action.icon()}
+						<span class="tooltip" aria-hidden="true">{action.label}</span>
+					</button>
+					{#if panelOpen === action.id}
+						<section
+							bind:this={panelElements[action.id]}
+							id="{action.id}-panel"
+							class="panel"
+							aria-label={action.label}
+							tabindex="-1"
+							{onfocusout}
+						>
+							{@render action.panel()}
+						</section>
+					{/if}
 				{/if}
 			{/each}
 			<button
