@@ -121,6 +121,10 @@ export interface Equipment {
 	last_flight_at: string | null;
 	/** Whether a controller is paired with the install; null for drones. */
 	paired: boolean | null;
+	/** When a controller last synced, also without logs; null for drones and never. */
+	synced_at: string | null;
+	/** The app version a controller reported when it last synced. */
+	app_version: string | null;
 }
 
 /** A controller waiting to be paired, from `GET /api/pairing`: without its code. */

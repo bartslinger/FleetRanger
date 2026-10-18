@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update remote_controllers set synced_at = now(), app_version = $2 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8545e845aabd283890904f14d7eb36792a1ed98ef7e54ff4a23744b80e804d4c"
+}

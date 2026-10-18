@@ -135,6 +135,18 @@ pub async fn by_token(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<P
     .await
 }
 
+/// A sync: the controller looked for logs on an allowed connection, now.
+pub async fn synced(db: &PgPool, id: Uuid, app_version: &str) -> sqlx::Result<()> {
+    sqlx::query!(
+        "update remote_controllers set synced_at = now(), app_version = $2 where id = $1",
+        id,
+        app_version,
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Unpairs a controller: its token stops working. Returns false if there is no
 /// such controller.
 pub async fn unpair(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {

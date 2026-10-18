@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.aircraft_serial = e.serial) as last_flight_at,\n                          null::bool as \"paired?\"\n                   from aircraft e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   order by lower(coalesce(e.name, e.serial)), e.id",
+  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.aircraft_serial = e.serial) as last_flight_at,\n                          null::bool as \"paired?\",\n                          null::timestamptz as \"synced_at?\",\n                          null::text as \"app_version?\"\n                   from aircraft e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   order by lower(coalesce(e.name, e.serial)), e.id",
   "describe": {
     "columns": [
       {
@@ -91,6 +91,18 @@
         "name": "paired?",
         "type_info": "Bool",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "synced_at?",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "app_version?",
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -105,8 +117,10 @@
       true,
       false,
       null,
+      null,
+      null,
       null
     ]
   },
-  "hash": "cccef108b8848997b9d2109b21d6602e9539a2caa9fd63d5ff9a635fcf3cc033"
+  "hash": "fafd229c610620c16c57af5c49d3f6affb0c96425aaae45dede7611a79173cb8"
 }

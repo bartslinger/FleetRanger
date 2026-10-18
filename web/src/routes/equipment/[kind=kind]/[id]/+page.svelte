@@ -85,6 +85,21 @@
 					<dt>Pairing</dt>
 					<dd>{item.paired ? 'Paired' : 'Not paired'}</dd>
 				</div>
+				<!-- The app syncs on connections its settings allow, also without new logs. -->
+				<div>
+					<dt>Last sync</dt>
+					<dd>
+						{item.synced_at
+							? `${dateTime(item.synced_at, data.timeZone)} (${data.timeZoneName})`
+							: 'Never'}
+					</dd>
+				</div>
+				{#if item.app_version}
+					<div>
+						<dt>App version</dt>
+						<dd>{item.app_version}</dd>
+					</div>
+				{/if}
 			{/if}
 			<div>
 				<dt>Last flight</dt>

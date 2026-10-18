@@ -31,6 +31,7 @@ where
         .route("/api/pairing/{code}/approve", post(approve))
         .route("/api/controller", get(me).delete(unpair_self))
         .route("/api/controller/pilots", get(pilots))
+        .route("/api/controller/sync", post(synced))
         .route("/api/remote-controllers/{id}/pairing", delete(unpair))
 }
 
@@ -78,6 +79,29 @@ async fn me(State(db): State<PgPool>, headers: HeaderMap) -> ApiResult<Json<Me>>
 
 async fn pilots(controller: Controller, State(db): State<PgPool>) -> ApiResult<Json<PilotList>> {
     Ok(Json(service::pilots(&db, &controller).await?))
+}
+
+#[derive(Deserialize)]
+struct Synced {
+    /// The app's version name, e.g. "0.1.0" or "dev".
+    app_version: String,
+}
+
+/// The controller synced: on a connection its settings allow, it looked for
+/// logs and uploaded any. Also without logs, so the server sees it's alive.
+async fn synced(
+    controller: Controller,
+    State(db): State<PgPool>,
+    Json(body): Json<Synced>,
+) -> ApiResult<StatusCode> {
+    let version = body.app_version.trim();
+    if version.is_empty() || version.len() > 64 {
+        return Err(ApiError::Invalid(
+            "app_version must be 1 to 64 characters".to_owned(),
+        ));
+    }
+    db::synced(&db, controller.id, version).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn unpair_self(controller: Controller, State(db): State<PgPool>) -> ApiResult<StatusCode> {

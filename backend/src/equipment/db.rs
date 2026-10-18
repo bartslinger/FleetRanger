@@ -24,6 +24,11 @@ pub struct Equipment {
     pub last_flight_at: Option<DateTime<Utc>>,
     /// Whether a controller is paired with the install; None for drones.
     pub paired: Option<bool>,
+    /// When a controller last synced (also without logs); None for drones
+    /// and controllers that never did.
+    pub synced_at: Option<DateTime<Utc>>,
+    /// The app version a controller reported at its last sync.
+    pub app_version: Option<String>,
 }
 
 /// What an admin sets on a drone or controller.
@@ -43,7 +48,9 @@ pub async fn list(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Equipment>> {
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
                            where f.aircraft_serial = e.serial) as last_flight_at,
-                          null::bool as "paired?"
+                          null::bool as "paired?",
+                          null::timestamptz as "synced_at?",
+                          null::text as "app_version?"
                    from aircraft e
                    left join teams t on t.id = e.team_id
                    left join users p on p.id = e.holder_user_id
@@ -59,7 +66,8 @@ pub async fn list(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Equipment>> {
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
                            where f.rc_serial = e.serial) as last_flight_at,
-                          e.token_sha256 is not null as "paired?"
+                          e.token_sha256 is not null as "paired?",
+                          e.synced_at, e.app_version
                    from remote_controllers e
                    left join teams t on t.id = e.team_id
                    left join users p on p.id = e.holder_user_id
@@ -80,7 +88,9 @@ pub async fn get(db: &PgPool, kind: Kind, id: Uuid) -> sqlx::Result<Option<Equip
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
                            where f.aircraft_serial = e.serial) as last_flight_at,
-                          null::bool as "paired?"
+                          null::bool as "paired?",
+                          null::timestamptz as "synced_at?",
+                          null::text as "app_version?"
                    from aircraft e
                    left join teams t on t.id = e.team_id
                    left join users p on p.id = e.holder_user_id
@@ -97,7 +107,8 @@ pub async fn get(db: &PgPool, kind: Kind, id: Uuid) -> sqlx::Result<Option<Equip
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
                            where f.rc_serial = e.serial) as last_flight_at,
-                          e.token_sha256 is not null as "paired?"
+                          e.token_sha256 is not null as "paired?",
+                          e.synced_at, e.app_version
                    from remote_controllers e
                    left join teams t on t.id = e.team_id
                    left join users p on p.id = e.holder_user_id
