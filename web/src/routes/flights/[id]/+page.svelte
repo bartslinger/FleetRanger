@@ -20,7 +20,7 @@
 
 	const groups = $derived([
 		[
-			{ label: 'Pilot', value: flight.pilot_name ?? 'Nobody' },
+			{ label: 'Pilot', value: flight.pilot_name ?? 'Unknown' },
 			{ label: 'Team', value: flight.team_name ?? 'None (organisation queue)' }
 		],
 		[

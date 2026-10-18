@@ -43,10 +43,10 @@ The decisions made so far, each with a short reason. Open questions are listed i
   - the all-flights role
   - admins
   - later, people it has been shared with
-- **Within a team**, any member can change a flight's pilot to another member, or to nobody. No acceptance is needed. "This wasn't me" means setting the pilot to nobody, and the flight stays in the team.
+- **Within a team**, any member can change a flight's pilot to another member, or to unknown. No acceptance is needed. "This wasn't me" means setting the pilot to unknown, and the flight stays in the team.
 - **Admins** manage users, teams and devices, and can move flights between teams.
 - **Setting a flight's pilot:**
-  - Members can change flights of their own current team, choosing a user of that team or nobody.
+  - Members can change flights of their own current team, choosing a user of that team or unknown.
   - Admins can choose any active user in a team, and the flight's team follows the pilot, also when changing from one pilot to another. That keeps "the team is the pilot's team" true and empties the organisation's queue in one step.
   - When an admin moves a flight to another team without choosing a pilot, the pilot is cleared unless they are in the new team. A flight never has a pilot from another team.
   - The all-flights role only views.

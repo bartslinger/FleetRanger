@@ -51,7 +51,7 @@
 		data.choices.admin || flight.team_id === data.choices.own_team_id;
 
 	const pilotOptions = $derived([
-		{ value: '', label: 'Nobody' },
+		{ value: '', label: 'Unknown' },
 		...data.choices.pilots.map((pilot) => ({
 			value: pilot.id,
 			label: data.choices.admin ? `${pilot.name} (${pilot.team_name})` : pilot.name
@@ -107,8 +107,8 @@
 						<Select label="Pilot" name="pilot_id" options={pilotOptions} />
 						<p class="help">
 							{data.choices.admin
-								? 'The flights move to the pilot’s team. Nobody keeps their team.'
-								: 'Choose Nobody for a flight that wasn’t flown by someone in your team. It stays in your team.'}
+								? 'The flights move to the pilot’s team. With Unknown, they keep their team.'
+								: 'Choose Unknown for a flight that wasn’t flown by someone in your team. It stays in your team.'}
 						</p>
 					</Modal>
 					{#if data.choices.admin}

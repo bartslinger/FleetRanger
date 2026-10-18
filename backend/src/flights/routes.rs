@@ -33,7 +33,7 @@ where
 #[derive(Deserialize)]
 struct PilotChange {
     flight_ids: Vec<Uuid>,
-    /// None: nobody.
+    /// None: unknown.
     pilot_id: Option<Uuid>,
 }
 

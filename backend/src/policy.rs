@@ -74,7 +74,7 @@ pub enum TeamChange {
 ///
 /// - `own_team`: the actor's own team, if any.
 /// - `flight_teams`: the current team of each flight.
-/// - `new_pilot_team`: the team of the chosen pilot, or `None` for nobody.
+/// - `new_pilot_team`: the team of the chosen pilot, or `None` for unknown.
 pub fn set_pilot(
     role: Role,
     own_team: Option<Uuid>,
@@ -127,9 +127,9 @@ mod tests {
         let (own, other) = (A, B);
         let ok = set_pilot(Role::Member, Some(own), &[Some(own)], Some(own));
         assert_eq!(ok.ok(), Some(TeamChange::Keep));
-        // "This wasn't me": nobody, and the flight stays in the team.
-        let nobody = set_pilot(Role::Member, Some(own), &[Some(own)], None);
-        assert_eq!(nobody.ok(), Some(TeamChange::Keep));
+        // "This wasn't me": unknown pilot, and the flight stays in the team.
+        let unknown = set_pilot(Role::Member, Some(own), &[Some(own)], None);
+        assert_eq!(unknown.ok(), Some(TeamChange::Keep));
         // Their own flight from an earlier team, a queue flight, another team's pilot.
         assert!(set_pilot(Role::Member, Some(own), &[Some(own), Some(other)], None).is_err());
         assert!(set_pilot(Role::Member, Some(own), &[None], None).is_err());
