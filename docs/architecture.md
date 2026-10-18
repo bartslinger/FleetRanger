@@ -60,6 +60,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - nginx routes `/api/*` and `/auth/*` to the backend and everything else to SvelteKit.
 - The backend owns login and the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`). SvelteKit holds no secrets and has no database access. During server-side rendering and in form actions it calls the backend over the internal network, forwarding the browser's cookie and client IP.
 - The backend trusts forwarded client IP headers only from the internal network.
+- **Times are shown in the organisation's time zone**, one setting per install (`TIME_ZONE` on the web app for now). Everyone sees the same times, as in reports, and server and browser render the same text.
 
 ## Clients
 
