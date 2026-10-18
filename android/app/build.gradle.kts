@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.activity.compose)
+    implementation(libs.core)
     implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
 }

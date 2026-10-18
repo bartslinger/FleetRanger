@@ -104,7 +104,6 @@ fun SettingsScreen(
     server: Server,
     updates: Updates,
     update: Server.AppVersion?,
-    updateFailed: Boolean,
 ) {
     BackHandler(onBack = onBack)
     var tab by rememberSaveable { mutableStateOf(initialTab) }
@@ -190,7 +189,7 @@ fun SettingsScreen(
                         },
                     )
                     SettingsTab.Pairing -> PairingTab(serverUrl, onUnpair = { confirmingUnpair = true })
-                    SettingsTab.App -> AppTab(server, updates, update, updateFailed)
+                    SettingsTab.App -> AppTab(server, updates, update)
                 }
             }
             if (scroll.canScrollForward) {
@@ -361,19 +360,19 @@ private enum class UpdateStep { Idle, Checking, UpToDate, Unreachable, Downloadi
 
 /**
  * The app's version and its updates: checked daily by the upload service, or
- * here on request. Updating downloads the release and hands it to Android's
+ * here on request. Updating downloads the release and opens it in Android's
  * installer, which asks to confirm (the first time also to allow FleetRanger
- * to install apps).
+ * to install apps) and then offers to open the new version.
  */
 @Composable
 private fun ColumnScope.AppTab(
     server: Server,
     updates: Updates,
     update: Server.AppVersion?,
-    updateFailed: Boolean,
 ) {
     var step by remember { mutableStateOf(UpdateStep.Idle) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     fun check() {
         step = UpdateStep.Checking
@@ -391,11 +390,12 @@ private fun ColumnScope.AppTab(
         step = UpdateStep.Downloading
         scope.launch {
             step = try {
-                withContext(Dispatchers.IO) { updates.install(server) }
-                // Android's installer takes over from here.
+                val installer = withContext(Dispatchers.IO) { updates.download(server) }
+                // Android's installer takes over from here; cancelled, the update is offered again.
+                context.startActivity(installer)
                 UpdateStep.Idle
             } catch (_: Exception) {
-                // Mostly the connection; also an installer that refuses the session.
+                // Mostly the connection; also storage that's full.
                 UpdateStep.DownloadFailed
             }
         }
@@ -409,11 +409,10 @@ private fun ColumnScope.AppTab(
             step == UpdateStep.Downloading -> InlineLoading("Downloading the update…")
             update != null -> {
                 Text(
-                    when {
-                        step == UpdateStep.DownloadFailed ->
-                            "The update couldn’t be downloaded. Check the connection and try again."
-                        updateFailed -> "Version ${update.name} wasn’t installed. Try again."
-                        else -> "Version ${update.name} is available."
+                    if (step == UpdateStep.DownloadFailed) {
+                        "The update couldn’t be downloaded. Check the connection and try again."
+                    } else {
+                        "Version ${update.name} is available."
                     },
                 )
                 Button("Update", ::install, Modifier.padding(top = Spacing.s03))

@@ -43,7 +43,6 @@ class MainActivity : ComponentActivity() {
     private var settingsTab by mutableStateOf(SettingsTab.Sync)
     private lateinit var updates: Updates
     private var update by mutableStateOf<Server.AppVersion?>(null)
-    private var updateFailed by mutableStateOf(false)
     private var updatesListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     /** Opened from the settings, and back to them. */
     private var showLogs by mutableStateOf(false)
@@ -79,11 +78,7 @@ class MainActivity : ComponentActivity() {
         syncListener = SyncStatus.listen(this) { syncStatus = it }
         updates = Updates(this)
         update = updates.available
-        updateFailed = updates.failed
-        updatesListener = Updates.listen(this) {
-            update = updates.available
-            updateFailed = updates.failed
-        }
+        updatesListener = Updates.listen(this) { update = updates.available }
         // Downloaded from the install's download page: the APK knows the address.
         if (server.url == null) Setup.server(this)?.let { server.url = it }
         serverUrl = server.url
@@ -129,7 +124,6 @@ class MainActivity : ComponentActivity() {
                     server = server,
                     updates = updates,
                     update = update,
-                    updateFailed = updateFailed,
                 )
                 else -> PilotScreen(
                     list = pilotList,
