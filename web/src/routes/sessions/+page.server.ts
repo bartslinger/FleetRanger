@@ -1,3 +1,4 @@
+import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
 import { get, send, type FlightChoices, type SessionPage } from '#lib/server/backend.js';
 
@@ -8,6 +9,7 @@ export async function load({ fetch, url }) {
 	const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '', 10) || 1);
 	const asked = Number.parseInt(url.searchParams.get('size') ?? '', 10);
 	const size = PAGE_SIZES.includes(asked) ? asked : DEFAULT_SIZE;
+	const view: 'table' | 'cards' = url.searchParams.get('view') === 'cards' ? 'cards' : 'table';
 	const api = new URLSearchParams({ page: String(page), size: String(size) });
 	const [{ sessions, total }, choices] = await Promise.all([
 		get<SessionPage>(fetch, `/api/sessions?${api}`),
@@ -16,9 +18,19 @@ export async function load({ fetch, url }) {
 
 	// Past the last page, e.g. after sessions were merged: go to the last one.
 	const pages = Math.max(1, Math.ceil(total / size));
-	if (page > pages) redirect(307, `${url.pathname}?page=${pages}&size=${size}`);
+	if (page > pages) redirect(307, `${url.pathname}?page=${pages}&size=${size}&view=${view}`);
 
-	return { sessions, total, page, size, sizes: PAGE_SIZES, choices };
+	return {
+		sessions,
+		total,
+		page,
+		size,
+		sizes: PAGE_SIZES,
+		defaultSize: DEFAULT_SIZE,
+		view,
+		choices,
+		mapboxToken: MAPBOX_ACCESS_TOKEN
+	};
 }
 
 export const actions = {
