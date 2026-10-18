@@ -42,16 +42,34 @@
 		size?: 'sm' | 'md' | 'lg';
 		/** The current sort, if the table is sortable. */
 		sort?: Sort;
+		/** The order when the user hasn't chosen one. */
+		defaultSort?: Sort;
 		/** Link for a header click; `undefined` returns to the default order. */
 		sortHref?: (next: Sort | undefined) => string;
 	}
 
-	let { label, columns, rows, rowKey, cell, size = 'md', sort, sortHref }: Props = $props();
+	let {
+		label,
+		columns,
+		rows,
+		rowKey,
+		cell,
+		size = 'md',
+		sort,
+		defaultSort,
+		sortHref
+	}: Props = $props();
 
-	/** Carbon's cycle: unsorted, ascending, descending, unsorted. */
+	/**
+	 * Carbon's cycle: unsorted, ascending, descending, back to the default order.
+	 * When that default is this column's descending order, the last step would
+	 * change nothing, so it goes to ascending instead.
+	 */
 	function nextSort(key: string): Sort | undefined {
 		if (sort?.key !== key) return { key, descending: false };
-		return sort.descending ? undefined : { key, descending: true };
+		if (!sort.descending) return { key, descending: true };
+		const isDefault = defaultSort?.key === key && defaultSort.descending;
+		return isDefault ? { key, descending: false } : undefined;
 	}
 
 	function ariaSort(key: string) {

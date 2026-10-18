@@ -60,6 +60,7 @@
 				rows={data.flights}
 				rowKey={(flight) => flight.id}
 				sort={data.state.sort}
+				defaultSort={DEFAULT_SORT}
 				sortHref={(sort) => href({ ...data.state, page: 1, sort: sort ?? DEFAULT_SORT })}
 			/>
 			<Pagination
