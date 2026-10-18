@@ -410,10 +410,18 @@
 		padding-inline: var(--cds-spacing-05) 0;
 	}
 
-	/* Above the row link, which covers the row. */
-	td.select :global(label) {
+	/* Above the row link, which covers the row, and the whole cell is the
+	   checkbox's click target: a click just beside the box selects the row
+	   instead of opening its page. */
+	td.select {
 		position: relative;
 		z-index: 1;
+	}
+
+	td.select :global(label::after) {
+		content: '';
+		position: absolute;
+		inset: 0;
 	}
 
 	tbody tr.selected td {

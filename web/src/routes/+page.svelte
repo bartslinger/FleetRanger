@@ -11,7 +11,7 @@
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import { dateTime, distance, duration } from '#lib/format.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
-	import type { PageProps } from './$types';
+	import type { PageProps, Snapshot } from './$types';
 
 	let { data, form }: PageProps = $props();
 
@@ -46,6 +46,13 @@
 
 	// Batch actions: admins change any flight, members those of their own team.
 	let selected: string[] = $state([]);
+
+	// Kept in the browser's history, so going back from a flight's page
+	// restores the selection.
+	export const snapshot: Snapshot<string[]> = {
+		capture: () => selected,
+		restore: (value) => (selected = value)
+	};
 	const canChange = $derived(data.choices.admin || data.choices.own_team_id !== null);
 	const changeable = (flight: Row) =>
 		data.choices.admin || flight.team_id === data.choices.own_team_id;
