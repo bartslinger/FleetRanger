@@ -67,6 +67,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **sqlx** with plain SQL migrations and compile-time checked queries.
 - **dji-log-parser is vendored** in `backend/vendor/` with our patches, each explained in `backend/vendor/README.md`. Patches only fix bugs; code we don't use stays as it is. FleetRanger uses the parser to build the DJI key request, but sends it itself so it can store exactly what was sent.
 - **Background work** (DJI keychain requests, parsing, re-processing) runs as a loop in the same binary. There is no separate queue: each raw log has a processing status (pending, done, failed) with attempts and the last error. The loop picks up pending logs, and re-processing means setting logs back to pending. CPU-heavy parsing has a concurrency limit.
+- **Processing progress is shown to admins** in the web app's header. What the loop is doing right now (the log, its step, a pause and why) is kept in memory, since the loop and the API share a process; counts come from the database. A batch is what the loop has processed since it last found nothing pending. The browser polls for it (every few seconds while logs are pending, rarely otherwise) rather than having it pushed.
 
 ## Web and API
 

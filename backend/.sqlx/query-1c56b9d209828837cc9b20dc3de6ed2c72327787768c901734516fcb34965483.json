@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select r.path, r.status, r.last_error as error, f.id as \"flight_id?\"\n           from raw_logs r\n           left join flights f on f.raw_log_id = r.id\n           where r.status <> 'pending' and r.processed_at >= $1\n           order by r.processed_at desc, r.id\n           limit $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "last_error"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "flight_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "1c56b9d209828837cc9b20dc3de6ed2c72327787768c901734516fcb34965483"
+}

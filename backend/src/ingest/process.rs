@@ -12,6 +12,7 @@ use dji_log_parser::record::Record;
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
+use super::activity::{Activity, Stage};
 use super::flight::{self, Flight, Serials};
 use super::{db, dji};
 
@@ -41,13 +42,18 @@ struct Decoded {
     dji_total_distance_m: f32,
 }
 
-pub async fn run(db: PgPool, log_dir: PathBuf, dji_app_key: Option<String>) {
+pub async fn run(db: PgPool, log_dir: PathBuf, dji_app_key: Option<String>, activity: Activity) {
     loop {
-        let pause = match process_next(&db, &log_dir, dji_app_key.as_deref()).await {
+        let result = process_next(&db, &log_dir, dji_app_key.as_deref(), &activity).await;
+        let pause = match result {
             Ok(true) => continue,
-            Ok(false) => IDLE_PAUSE,
+            Ok(false) => {
+                activity.idle();
+                IDLE_PAUSE
+            }
             Err(error) => {
                 tracing::warn!("log processing paused: {error:#}");
+                activity.pause(format!("{error:#}"), ERROR_PAUSE);
                 ERROR_PAUSE
             }
         };
@@ -56,14 +62,21 @@ pub async fn run(db: PgPool, log_dir: PathBuf, dji_app_key: Option<String>) {
 }
 
 /// Processes the oldest pending log. Returns false if there was none.
-async fn process_next(db: &PgPool, log_dir: &Path, dji_app_key: Option<&str>) -> Result<bool> {
+async fn process_next(
+    db: &PgPool,
+    log_dir: &Path,
+    dji_app_key: Option<&str>,
+    activity: &Activity,
+) -> Result<bool> {
     let Some(log) = db::next_pending(db).await? else {
         return Ok(false);
     };
+    activity.start(&log.path);
 
-    let processed = process(db, log.id, &log_dir.join(&log.path), dji_app_key)
+    let processed = process(db, log.id, &log_dir.join(&log.path), dji_app_key, activity)
         .await
         .with_context(|| format!("while processing {}", log.path))?;
+    activity.stage(Stage::Saving);
     match processed {
         Ok(decoded) => {
             db::save_result(db, log.id, decoded.flight.as_ref()).await?;
@@ -92,6 +105,7 @@ async fn process(
     raw_log_id: Uuid,
     path: &Path,
     dji_app_key: Option<&str>,
+    activity: &Activity,
 ) -> Result<Processed> {
     let bytes = match tokio::fs::read(path).await {
         Ok(bytes) => bytes,
@@ -104,7 +118,7 @@ async fn process(
 
     // Logs from format version 13 on are encrypted.
     let keychains = if log.version >= 13 {
-        match keychains(db, raw_log_id, &log, dji_app_key).await? {
+        match keychains(db, raw_log_id, &log, dji_app_key, activity).await? {
             Ok(keychains) => Some(keychains),
             Err(reason) => return Ok(Err(reason)),
         }
@@ -112,6 +126,7 @@ async fn process(
         None
     };
 
+    activity.stage(Stage::Decoding);
     blocking(move || decode(&log, keychains)).await
 }
 
@@ -121,6 +136,7 @@ async fn keychains(
     raw_log_id: Uuid,
     log: &DJILog,
     dji_app_key: Option<&str>,
+    activity: &Activity,
 ) -> Result<std::result::Result<Vec<Vec<KeychainFeaturePoint>>, String>> {
     if let Some(body) = db::stored_key_response(db, raw_log_id).await?
         && let Ok(keychains) = dji::keychains(&body)
@@ -141,6 +157,7 @@ async fn keychains(
     };
     let request_body = serde_json::to_string(&request)?;
 
+    activity.stage(Stage::RequestingKeys);
     let exchange = {
         let api_key = api_key.to_owned();
         let request_body = request_body.clone();

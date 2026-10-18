@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
@@ -175,4 +176,57 @@ pub async fn insert_key_request(
     .execute(db)
     .await?;
     Ok(())
+}
+
+/// Progress through a batch: the logs still pending, and those processed since
+/// the batch started.
+pub struct BatchCounts {
+    pub pending: i64,
+    pub processed: i64,
+    pub failed: i64,
+}
+
+pub async fn batch_counts(db: &PgPool, since: DateTime<Utc>) -> sqlx::Result<BatchCounts> {
+    sqlx::query_as!(
+        BatchCounts,
+        r#"select count(*) filter (where status = 'pending') as "pending!",
+                  count(*) filter (where status <> 'pending' and processed_at >= $1) as "processed!",
+                  count(*) filter (where status = 'failed' and processed_at >= $1) as "failed!"
+           from raw_logs"#,
+        since,
+    )
+    .fetch_one(db)
+    .await
+}
+
+/// A log of a batch that has been processed.
+#[derive(serde::Serialize)]
+pub struct Processed {
+    pub path: String,
+    /// done or failed.
+    pub status: String,
+    pub error: Option<String>,
+    /// The flight found in it; none if the aircraft never took off.
+    pub flight_id: Option<Uuid>,
+}
+
+/// The latest logs processed since a batch started, newest first.
+pub async fn latest_processed(
+    db: &PgPool,
+    since: DateTime<Utc>,
+    limit: i64,
+) -> sqlx::Result<Vec<Processed>> {
+    sqlx::query_as!(
+        Processed,
+        r#"select r.path, r.status, r.last_error as error, f.id as "flight_id?"
+           from raw_logs r
+           left join flights f on f.raw_log_id = r.id
+           where r.status <> 'pending' and r.processed_at >= $1
+           order by r.processed_at desc, r.id
+           limit $2"#,
+        since,
+        limit,
+    )
+    .fetch_all(db)
+    .await
 }

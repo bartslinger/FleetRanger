@@ -23,6 +23,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::auth::Auth;
 use crate::config::Config;
+use crate::ingest::activity::Activity;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -65,6 +66,13 @@ async fn main() -> Result<()> {
 struct AppState {
     db: PgPool,
     auth: Arc<Auth>,
+    activity: Activity,
+}
+
+impl FromRef<AppState> for Activity {
+    fn from_ref(state: &AppState) -> Self {
+        state.activity.clone()
+    }
 }
 
 impl FromRef<AppState> for PgPool {
@@ -80,10 +88,12 @@ impl FromRef<AppState> for Arc<Auth> {
 }
 
 async fn serve(config: &Config, db: PgPool) -> Result<()> {
+    let activity = Activity::default();
     tokio::spawn(ingest::process::run(
         db.clone(),
         config.log_dir.clone(),
         config.dji_app_key.clone(),
+        activity.clone(),
     ));
 
     let provider = match &config.oidc {
@@ -99,12 +109,14 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
             public_url: config.public_url.clone(),
             provider,
         }),
+        activity,
     };
 
     let app = Router::new()
         .route("/healthz", get(health::check))
         .merge(auth::routes::router())
         .merge(flights::routes::router())
+        .merge(ingest::routes::router())
         .merge(teams::routes::router())
         .merge(equipment::routes::router())
         .merge(users::routes::router())
