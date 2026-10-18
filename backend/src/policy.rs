@@ -3,7 +3,10 @@
 
 use uuid::Uuid;
 
-use crate::auth::Actor;
+use crate::{
+    auth::Actor,
+    error::{ApiError, ApiResult},
+};
 
 /// An account's role, stored in `accounts.role`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +26,14 @@ impl Role {
             "admin" => Self::Admin,
             _ => return None,
         })
+    }
+}
+
+/// Managing accounts, pilots, teams and equipment is for admins only.
+pub fn require_admin(actor: &Actor) -> ApiResult<()> {
+    match actor.role {
+        Role::Admin => Ok(()),
+        Role::Member | Role::AllFlights => Err(ApiError::Forbidden),
     }
 }
 

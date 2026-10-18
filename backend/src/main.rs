@@ -1,10 +1,12 @@
 mod accounts;
 mod auth;
 mod config;
+mod error;
 mod flights;
 mod health;
 mod ingest;
 mod policy;
+mod teams;
 
 use std::io::IsTerminal;
 use std::net::SocketAddr;
@@ -102,6 +104,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .route("/healthz", get(health::check))
         .merge(auth::routes::router())
         .merge(flights::routes::router())
+        .merge(teams::routes::router())
         .layer(middleware::from_fn_with_state(
             state.auth.clone(),
             auth::same_origin,

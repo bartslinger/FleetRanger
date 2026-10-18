@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select t.id, t.name, t.archived_at,\n                  (select count(*) from team_members m join pilots p on p.id = m.pilot_id\n                   where m.team_id = t.id and p.archived_at is null) as \"pilots!\"\n           from teams t\n           where t.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "teams",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "teams",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "archived_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "teams",
+            "name": "archived_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "pilots!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "56055a641f76257b3ecb08a363dbaa859039a31fcd198e6fbb4a8be0753e7adf"
+}
