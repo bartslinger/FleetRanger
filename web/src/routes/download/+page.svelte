@@ -1,6 +1,6 @@
 <!--
 	The controller app's download page, public: opened on a DJI controller to
-	install the app and hand it this install's address. Login links here.
+	install the app, with the address to type in it. Login links here.
 -->
 <script lang="ts">
 	import { resolve } from '$app/paths';
@@ -13,8 +13,6 @@
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
-
-	const setupLink = $derived(`fleetranger://setup?${new URLSearchParams({ server: data.server })}`);
 </script>
 
 <PageHeader
@@ -25,43 +23,20 @@
 <Grid>
 	<Column lg={8}>
 		{#if data.download.android}
-			<ol class="steps">
-				<li>
-					<h2>Download the app</h2>
-					<p>Open this page on the controller and download the app there.</p>
-					<div class="action">
-						<!-- eslint-disable svelte/no-navigation-without-resolve -- a backend file, not a page -->
-						<Button href="/api/download/FleetRanger.apk" download>Download app</Button>
-						<!-- eslint-enable svelte/no-navigation-without-resolve -->
-						<span class="detail">FleetRanger.apk, {fileSize(data.download.android.size_bytes)}</span
-						>
-					</div>
-				</li>
-				<li>
-					<h2>Install it</h2>
-					<p>
-						Open the downloaded file. Android first asks to allow installing apps from the browser:
-						allow it, then install.
-					</p>
-				</li>
-				<li>
-					<h2>Connect it to this FleetRanger</h2>
-					<p>Open the app from here, so it knows where to connect.</p>
-					<div class="action">
-						<!-- eslint-disable svelte/no-navigation-without-resolve -- opens the app -->
-						<Button href={setupLink} kind="tertiary">Open FleetRanger</Button>
-						<!-- eslint-enable svelte/no-navigation-without-resolve -->
-					</div>
-					<p>Or type this address in the app: <code>{data.server}</code></p>
-				</li>
-				<li>
-					<h2>Pair it</h2>
-					<p>
-						The app shows a code. Anyone with a FleetRanger account approves it at
-						<a href={resolve('/pair')}>{data.server}/pair</a>.
-					</p>
-				</li>
-			</ol>
+			<div class="content">
+				<div class="action">
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- a backend file, not a page -->
+					<Button href="/api/download/FleetRanger.apk" download>Download app</Button>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+					<span class="detail">FleetRanger.apk, {fileSize(data.download.android.size_bytes)}</span>
+				</div>
+				<p>On the controller, install the app, open it and enter this address:</p>
+				<p class="address"><code>{data.address}</code></p>
+				<p>
+					The app then shows a code. Anyone with a FleetRanger account approves it at
+					<a href={resolve('/pair')}>{data.server}/pair</a>.
+				</p>
+			</div>
 		{:else}
 			<InlineNotification kind="info" title="The app isn't available yet">
 				This FleetRanger has no controller app to download. Ask your FleetRanger admin.
@@ -71,31 +46,10 @@
 </Grid>
 
 <style>
-	/* Numbered steps, 32px apart; the number belongs to the step's heading. */
-	.steps {
+	.content {
 		display: flex;
 		flex-direction: column;
-		gap: var(--cds-spacing-07);
-		counter-reset: step;
-	}
-
-	.steps > li {
-		display: flex;
-		flex-direction: column;
-		gap: var(--cds-spacing-03);
-		counter-increment: step;
-	}
-
-	h2 {
-		color: var(--cds-text-primary);
-		font-size: var(--cds-heading-compact-02-font-size);
-		font-weight: var(--cds-heading-compact-02-font-weight);
-		line-height: var(--cds-heading-compact-02-line-height);
-		letter-spacing: var(--cds-heading-compact-02-letter-spacing);
-	}
-
-	h2::before {
-		content: counter(step) '. ';
+		gap: var(--cds-spacing-05);
 	}
 
 	p {
@@ -111,7 +65,13 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--cds-spacing-05);
-		margin-block: var(--cds-spacing-03);
+		margin-bottom: var(--cds-spacing-05);
+	}
+
+	/* What gets typed on the controller: large enough to read from the page beside it. */
+	.address {
+		font-size: var(--cds-heading-03-font-size);
+		line-height: var(--cds-heading-03-line-height);
 	}
 
 	.detail {
