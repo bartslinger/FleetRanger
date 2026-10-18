@@ -21,6 +21,8 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG: only debug builds accept a server over plain HTTP.
+        buildConfig = true
     }
 }
 
@@ -34,5 +36,6 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.activity.compose)
+    implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
 }
