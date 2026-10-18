@@ -1,43 +1,61 @@
 package org.fleetranger.rc
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import org.fleetranger.rc.ui.Button
+import org.fleetranger.rc.ui.ButtonKind
 import org.fleetranger.rc.ui.ClickableTile
 import org.fleetranger.rc.ui.Colors
 import org.fleetranger.rc.ui.Spacing
 import org.fleetranger.rc.ui.Type
 import org.fleetranger.rc.ui.WarningNotification
 
-/** Every tile the same height, whether or not it has a second line. */
+/** Every tile in the list the same height, whether or not it has a second line. */
 private val TILE_HEIGHT = 88.dp
 
 /**
- * "Who's flying?": one tile per pilot, the last pilot first, and "Not in the
- * list". Choosing one hands over to DJI Pilot 2.
+ * "Who's flying?": the last pilot is one tap; anyone else is two, through
+ * "Other pilot" and the list. Choosing hands over to DJI Pilot 2. Without a
+ * last pilot (a new controller, or that pilot was removed) the list shows
+ * straight away.
  */
 @Composable
 fun PilotScreen(
-    pilots: List<Pilot>,
+    list: PilotList,
     last: Pilot?,
     opensAtStartup: Boolean,
     onChoose: (Pilot?) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    val ordered = listOfNotNull(last) + pilots.filter { it != last }
+    var choosing by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = choosing && last != null) { choosing = false }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -53,40 +71,128 @@ fun PilotScreen(
                 onAction = onOpenSettings,
             )
         }
-        BasicText(
-            "Who’s flying?",
-            style = Type.heading04.copy(color = Colors.textPrimary),
-            modifier = Modifier.semantics { heading() },
+        if (last != null && !choosing) {
+            LastPilot(last, onFly = { onChoose(last) }, onOther = { choosing = true })
+        } else {
+            PilotList(
+                // The last pilot is on the first screen already.
+                list.copy(pilots = list.pilots.filter { it != last }),
+                onChoose,
+                onBack = if (last != null) ({ choosing = false }) else null,
+            )
+        }
+    }
+}
+
+/** The usual case: the same pilot again, in one tap. */
+@Composable
+private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
+    Heading("Who’s flying?")
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s01)) {
+        ClickableTile(
+            title = last.name,
+            detail = "Flew last. Tap to fly.",
+            onClick = onFly,
+            titleStyle = Type.heading04.copy(
+                color = Colors.textPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 32.sp,
+                lineHeight = 40.sp,
+            ),
+            modifier = Modifier.weight(2f).height(144.dp),
         )
-        // Tiles 2dp apart, as in Carbon's tile groups.
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 200.dp),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.s01),
-            verticalArrangement = Arrangement.spacedBy(Spacing.s01),
-        ) {
-            items(ordered, key = { it.id }) { pilot ->
-                ClickableTile(
-                    title = pilot.name,
-                    detail = if (pilot == last) "Flew last" else null,
-                    onClick = { onChoose(pilot) },
-                    modifier = Modifier.height(TILE_HEIGHT),
-                )
-            }
-            item(key = "not-in-the-list") {
-                ClickableTile(
-                    title = "Not in the list",
-                    detail = "Set the pilot later in the logbook",
-                    onClick = { onChoose(null) },
-                    modifier = Modifier.height(TILE_HEIGHT),
-                )
+        ClickableTile(
+            title = "Other pilot",
+            detail = "Choose from the list",
+            onClick = onOther,
+            modifier = Modifier.weight(1f).height(144.dp),
+        )
+    }
+}
+
+/** Everyone: the controller's team, then other teams, and "Not in the list". */
+@Composable
+private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, onBack: (() -> Unit)?) {
+    val (team, others) = list.pilots.partition { list.teamId == null || it.teamId == list.teamId }
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Heading(if (onBack != null) "Other pilot" else "Who’s flying?")
+        if (onBack != null) Button("Back", onBack, kind = ButtonKind.Ghost)
+    }
+    // Tiles 2dp apart, as in Carbon's tile groups.
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 200.dp),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s01),
+        verticalArrangement = Arrangement.spacedBy(Spacing.s01),
+    ) {
+        items(team, key = { it.id }) { pilot ->
+            PilotTile(pilot, detail = null, onChoose)
+        }
+        item(key = "not-in-the-list") {
+            ClickableTile(
+                title = "Not in the list",
+                detail = "Set the pilot later in the logbook",
+                onClick = { onChoose(null) },
+                modifier = Modifier.height(TILE_HEIGHT),
+            )
+        }
+        if (others.isNotEmpty()) {
+            sectionHeading("Other teams")
+            items(others, key = { it.id }) { pilot ->
+                PilotTile(pilot, detail = pilot.teamName, onChoose)
             }
         }
     }
 }
 
+private fun LazyGridScope.sectionHeading(text: String) {
+    item(key = "heading-$text", span = { GridItemSpan(maxLineSpan) }) {
+        BasicText(
+            text,
+            style = Type.headingCompact02.copy(color = Colors.textPrimary),
+            modifier = Modifier
+                .padding(top = Spacing.s06, bottom = Spacing.s03)
+                .semantics { heading() },
+        )
+    }
+}
+
+@Composable
+private fun Heading(text: String) {
+    BasicText(
+        text,
+        style = Type.heading04.copy(color = Colors.textPrimary),
+        modifier = Modifier.semantics { heading() },
+    )
+}
+
+@Composable
+private fun PilotTile(pilot: Pilot, detail: String?, onChoose: (Pilot?) -> Unit) {
+    ClickableTile(
+        title = pilot.name,
+        detail = detail,
+        onClick = { onChoose(pilot) },
+        modifier = Modifier.height(TILE_HEIGHT),
+    )
+}
+
+private val previewPilots = listOf(
+    Pilot("a", "Test pilot A", "north", "Test team North"),
+    Pilot("b", "Test pilot B", "north", "Test team North"),
+    Pilot("c", "Test pilot C", "south", "Test team South"),
+)
+
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
-private fun PilotScreenPreview() {
-    val pilots = listOf(Pilot("a", "Test pilot A"), Pilot("b", "Test pilot B"))
-    PilotScreen(pilots, last = pilots[1], opensAtStartup = false, onChoose = {}, onOpenSettings = {})
+private fun LastPilotPreview() {
+    PilotScreen(PilotList("north", previewPilots), previewPilots[1], true, {}, {})
+}
+
+@Preview(widthDp = 768, heightDp = 432)
+@Composable
+private fun PilotListPreview() {
+    PilotScreen(PilotList("north", previewPilots), last = null, true, {}, {})
 }

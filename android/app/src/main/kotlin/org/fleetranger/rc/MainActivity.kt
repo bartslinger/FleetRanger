@@ -10,6 +10,11 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The app's screen: pairing until a user approved this controller, then who's
@@ -22,6 +27,7 @@ class MainActivity : ComponentActivity() {
     private var serverUrl by mutableStateOf<String?>(null)
     private var paired by mutableStateOf(false)
     private var opensAtStartup by mutableStateOf(true)
+    private var pilotList by mutableStateOf(PilotList.EMPTY)
     private var last by mutableStateOf<Pilot?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,10 +41,13 @@ class MainActivity : ComponentActivity() {
         paired = server.paired
         setContent {
             if (!paired) {
-                Pairing(server, serverUrl, onPaired = { paired = true })
+                Pairing(server, serverUrl, onPaired = {
+                    paired = true
+                    refreshPilots()
+                })
             } else {
                 PilotScreen(
-                    pilots = pilots.all,
+                    list = pilotList,
                     last = last,
                     opensAtStartup = opensAtStartup,
                     onChoose = ::fly,
@@ -57,7 +66,30 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         opensAtStartup = DjiPilot.opensAtStartup(this)
+        pilotList = pilots.current
         last = pilots.last()
+        if (paired) refreshPilots()
+    }
+
+    /**
+     * Downloads the pilot list; offline, the stored one stays. A refused token
+     * means the controller was unpaired: back to pairing.
+     */
+    private fun refreshPilots() {
+        lifecycleScope.launch {
+            val downloaded = try {
+                withContext(Dispatchers.IO) { server.pilots() }
+            } catch (_: IOException) {
+                return@launch
+            }
+            if (downloaded == null) {
+                paired = false
+                return@launch
+            }
+            pilots.current = downloaded
+            pilotList = downloaded
+            last = pilots.last()
+        }
     }
 
     /**

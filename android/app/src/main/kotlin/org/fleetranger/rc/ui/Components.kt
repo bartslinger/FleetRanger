@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 
 // Carbon's components, as far as the app needs them. Touch targets are at
@@ -85,6 +86,7 @@ fun ClickableTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     detail: String? = null,
+    titleStyle: TextStyle = Type.headingCompact02.copy(color = Colors.textPrimary),
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -97,7 +99,7 @@ fun ClickableTile(
             .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
             .padding(Spacing.s05),
     ) {
-        BasicText(title, style = Type.headingCompact02.copy(color = Colors.textPrimary))
+        BasicText(title, style = titleStyle)
         if (detail != null) {
             BasicText(
                 detail,

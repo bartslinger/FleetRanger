@@ -72,6 +72,16 @@ class Server(context: Context) {
         return result
     }
 
+    /**
+     * Downloads the pilots this controller offers. Null if the server refused
+     * the token: the controller was unpaired, and has to pair again.
+     */
+    fun pilots(): PilotList? {
+        val answer = call("GET", "/api/controller/pilots")
+        if (answer == null) paired = false
+        return answer?.let(PilotList::fromJson)
+    }
+
     /** Unpairs this controller: its token stops working. */
     fun unpair() {
         try {
