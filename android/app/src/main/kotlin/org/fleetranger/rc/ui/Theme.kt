@@ -21,6 +21,7 @@ object Colors {
     val layerHover01 = Color(0xFFE8E8E8)
     val layerActive01 = Color(0xFFC6C6C6)
     val borderSubtle01 = Color(0xFFE0E0E0)
+    val borderTile01 = Color(0xFFA8A8A8)
     val textPrimary = Color(0xFF161616)
     val textSecondary = Color(0xFF525252)
     val textOnColor = Color(0xFFFFFFFF)

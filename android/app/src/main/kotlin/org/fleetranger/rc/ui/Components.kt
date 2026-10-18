@@ -80,7 +80,11 @@ fun Button(
     }
 }
 
-/** Carbon's clickable tile: one large target, a title and an optional line under it. */
+/**
+ * Carbon's clickable tile: one large target, a title and an optional line
+ * under it. A border and an arrow at the bottom right show that it can be
+ * tapped, which a white tile on light grey alone doesn't outdoors.
+ */
 @Composable
 fun ClickableTile(
     title: String,
@@ -92,22 +96,31 @@ fun ClickableTile(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val focused by interaction.collectIsFocusedAsState()
-    Column(
+    Box(
         modifier
             .heightIn(min = 64.dp)
             .background(if (pressed) Colors.layerActive01 else Colors.layer01)
-            .border(2.dp, if (focused) Colors.focus else Color.Transparent)
-            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
-            .padding(Spacing.s05),
-    ) {
-        BasicText(title, style = titleStyle)
-        if (detail != null) {
-            BasicText(
-                detail,
-                style = Type.label01.copy(color = Colors.textSecondary),
-                modifier = Modifier.padding(top = Spacing.s02),
+            .border(
+                if (focused) 2.dp else 1.dp,
+                if (focused) Colors.focus else Colors.borderTile01,
             )
+            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick),
+    ) {
+        Column(Modifier.padding(Spacing.s05)) {
+            BasicText(title, style = titleStyle)
+            if (detail != null) {
+                BasicText(
+                    detail,
+                    style = Type.label01.copy(color = Colors.textSecondary),
+                    modifier = Modifier.padding(top = Spacing.s02),
+                )
+            }
         }
+        Icon(
+            CarbonIcons.ArrowRight,
+            Colors.interactive,
+            Modifier.align(Alignment.BottomEnd).padding(Spacing.s04),
+        )
     }
 }
 

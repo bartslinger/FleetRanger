@@ -116,7 +116,7 @@ private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s07)) {
         ClickableTile(
             title = last.name,
-            detail = "Flew last. Tap to fly.",
+            detail = "Flew last",
             onClick = onFly,
             titleStyle = Type.heading04.copy(
                 color = Colors.textPrimary,
