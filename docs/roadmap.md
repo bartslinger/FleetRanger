@@ -35,8 +35,8 @@ Waits for pilots (phase 4): sessions are grouped per pilot.
 ## Phase 4: login and access
 
 - [x] OIDC login (Google), server-side sessions (not yet deployed)
-- [ ] Pilots, accounts, teams, devices
-- [ ] Policy module and access rules
+- [~] Pilots, accounts, teams, devices (schema and registration from logs done; admin pages next)
+- [~] Policy module and access rules (flight visibility done; pilot and team changes next)
 - [ ] Audit log
 
 ## Phase 5: web
