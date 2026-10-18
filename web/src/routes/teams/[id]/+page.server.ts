@@ -14,7 +14,8 @@ export const actions = {
 	},
 	archive: async ({ fetch, params }) => {
 		const result = await send<Team>(fetch, 'POST', `/api/teams/${params.id}/archive`);
-		if (!result.ok) return fail(result.status, { message: result.message });
+		// Shown in the confirmation dialog, not on the page.
+		if (!result.ok) return fail(result.status, { archiveMessage: result.message });
 		return { archived: true };
 	},
 	restore: async ({ fetch, params }) => {

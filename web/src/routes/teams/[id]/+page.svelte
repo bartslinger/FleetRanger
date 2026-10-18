@@ -5,8 +5,10 @@
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
+	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
+	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -23,25 +25,41 @@
 	status={archived ? 'Archived' : undefined}
 >
 	{#snippet actions()}
-		<!-- Applies at once, apart from the form below. -->
-		<form method="POST" action={archived ? '?/restore' : '?/archive'} use:enhance>
-			<Button type="submit" kind="tertiary">{archived ? 'Restore team' : 'Archive team'}</Button>
-		</form>
+		<!-- Apart from the form below: these apply at once. -->
+		{#if archived}
+			<form
+				method="POST"
+				action="?/restore"
+				use:enhance={() =>
+					async ({ result, update }) => {
+						await update();
+						if (result.type === 'success') toast('Team restored.');
+					}}
+			>
+				<Button type="submit" kind="tertiary">Restore team</Button>
+			</form>
+		{:else}
+			<Modal
+				title="Archive team"
+				triggerKind="tertiary"
+				submitLabel="Archive team"
+				action="?/archive"
+				error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
+				onsuccess={() => toast('Team archived.')}
+			>
+				<p>
+					{data.team.name} is hidden from lists and can't get new pilots. Its flights stay as they are.
+					You can restore it later.
+				</p>
+			</Modal>
+		{/if}
 	{/snippet}
 </PageHeader>
 
 <Grid rowGap>
-	{#if message || form}
+	{#if message}
 		<Column narrow lg={8}>
-			{#if message}
-				<InlineNotification kind="error" title={message} />
-			{:else if form && 'saved' in form}
-				<InlineNotification kind="success" title="Team saved." />
-			{:else if form && 'archived' in form}
-				<InlineNotification kind="success" title="Team archived." />
-			{:else if form && 'restored' in form}
-				<InlineNotification kind="success" title="Team restored." />
-			{/if}
+			<InlineNotification kind="error" title={message} />
 		</Column>
 	{/if}
 	<Column lg={8}>
@@ -51,9 +69,10 @@
 			action="?/save"
 			use:enhance={() => {
 				busy = true;
-				return async ({ update }) => {
+				return async ({ result, update }) => {
 					busy = false;
 					await update({ reset: false });
+					if (result.type === 'success') toast('Team saved.');
 				};
 			}}
 		>

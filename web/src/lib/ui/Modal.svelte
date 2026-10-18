@@ -1,7 +1,8 @@
 <!--
 	@component
 	Carbon's small transactional modal around a form, opened by its own trigger
-	button: "New pilot" opens "New pilot" with Cancel and Create. The form posts
+	button: "New pilot" opens "New pilot" with Cancel and Create, and "Archive
+	team" opens a confirmation with Cancel and Archive team. The form posts
 	to a SvelteKit form action. On success the modal closes and the page data
 	reloads; on a rejected change it stays open and shows `error`.
 
@@ -20,26 +21,40 @@
 	interface Props {
 		/** The trigger's label, which is also the title. */
 		title: string;
+		/** The trigger's style: primary for "New …", tertiary as a page action. */
+		triggerKind?: 'primary' | 'tertiary';
 		/** The primary button, e.g. "Create". */
 		submitLabel: string;
 		/** The form action, e.g. "?/create". */
 		action: string;
 		/** The backend's message for a rejected change. */
 		error?: string;
+		/** After a successful submit, e.g. to show a toast. */
+		onsuccess?: (data: Record<string, unknown> | undefined) => void;
 		children: Snippet;
 	}
 
-	let { title, submitLabel, action, error, children }: Props = $props();
+	let {
+		title,
+		triggerKind = 'primary',
+		submitLabel,
+		action,
+		error,
+		onsuccess,
+		children
+	}: Props = $props();
 
 	let open = $state(false);
 	let busy = $state(false);
 	let body: HTMLElement | undefined = $state();
+	let footer: HTMLElement | undefined = $state();
+	const submit = $derived(footer?.querySelector<HTMLElement>('[type=submit]'));
 </script>
 
 <Dialog.Root bind:open>
 	<Dialog.Trigger>
 		{#snippet child({ props })}
-			<Button {...props}>{title}</Button>
+			<Button {...props} kind={triggerKind}>{title}</Button>
 		{/snippet}
 	</Dialog.Trigger>
 	<Dialog.Portal>
@@ -47,8 +62,10 @@
 		<Dialog.Content
 			class="modal layer-01"
 			onOpenAutoFocus={(event) => {
+				// The first field, or for a confirmation the primary button.
 				event.preventDefault();
-				body?.querySelector<HTMLElement>('input, select, textarea')?.focus();
+				const field = body?.querySelector<HTMLElement>('input, select, textarea');
+				(field ?? submit)?.focus();
 			}}
 		>
 			<form
@@ -58,8 +75,11 @@
 					busy = true;
 					return async ({ result, update }) => {
 						busy = false;
-						if (result.type === 'success') open = false;
 						await update();
+						if (result.type === 'success') {
+							open = false;
+							onsuccess?.(result.data);
+						}
 					};
 				}}
 			>
@@ -73,7 +93,7 @@
 					{#if error}<InlineNotification kind="error" title={error} />{/if}
 					{@render children()}
 				</div>
-				<div class="footer">
+				<div class="footer" bind:this={footer}>
 					<Dialog.Close>
 						{#snippet child({ props })}
 							<Button {...props} kind="secondary" size="xl" fill>Cancel</Button>
