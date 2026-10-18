@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into accounts (email) values ($1)\n         on conflict (email) do nothing\n         returning id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7e1324cf24f2e43a1520e2fb1e132291f2776373511ce5ba6d7e82488fd68b57"
+}

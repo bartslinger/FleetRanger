@@ -1,3 +1,4 @@
+mod accounts;
 mod config;
 mod flights;
 mod health;
@@ -39,10 +40,12 @@ async fn main() -> Result<()> {
         .await
         .context("failed to run database migrations")?;
 
-    match std::env::args().nth(1).as_deref() {
-        None | Some("serve") => serve(&config, db).await,
-        Some("import") => ingest::import::run(&db, &config.log_dir).await,
-        Some(other) => bail!("unknown command {other:?}; expected serve or import"),
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+        [] | ["serve"] => serve(&config, db).await,
+        ["import"] => ingest::import::run(&db, &config.log_dir).await,
+        ["add-account", email] => accounts::add(&db, email).await,
+        _ => bail!("unknown command {args:?}; expected serve, import or add-account <email>"),
     }
 }
 
