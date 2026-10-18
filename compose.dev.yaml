@@ -26,6 +26,8 @@ services:
       VITE_POLL: ${VITE_POLL:-}
       # The organisation's time zone, e.g. Europe/Amsterdam.
       TIME_ZONE: ${TIME_ZONE:-UTC}
+      # The install's public Mapbox token (pk.…), for maps.
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
     command: sh -c "pnpm install --frozen-lockfile && pnpm dev --host 127.0.0.1"
     volumes:
       - ./web:/repo/web
