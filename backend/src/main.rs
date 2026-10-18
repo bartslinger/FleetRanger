@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod download;
 mod equipment;
 mod error;
 mod flights;
@@ -25,6 +26,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::auth::Auth;
 use crate::config::Config;
+use crate::download::AndroidApk;
 use crate::ingest::LogDir;
 use crate::ingest::activity::Activity;
 use crate::sessions::SessionGap;
@@ -73,6 +75,13 @@ struct AppState {
     activity: Activity,
     session_gap: SessionGap,
     log_dir: LogDir,
+    android_apk: AndroidApk,
+}
+
+impl FromRef<AppState> for AndroidApk {
+    fn from_ref(state: &AppState) -> Self {
+        state.android_apk.clone()
+    }
 }
 
 impl FromRef<AppState> for LogDir {
@@ -138,11 +147,13 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         activity,
         session_gap,
         log_dir: LogDir(config.log_dir.clone()),
+        android_apk: AndroidApk(config.android_apk.clone()),
     };
 
     let app = Router::new()
         .route("/healthz", get(health::check))
         .merge(auth::routes::router())
+        .merge(download::router())
         .merge(flights::routes::router())
         .merge(ingest::routes::router())
         .merge(pairing::routes::router())

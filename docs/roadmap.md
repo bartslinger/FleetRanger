@@ -52,7 +52,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [~] Pilot picker that works offline, last pilot as the default, with "Not in the list" (with test names until pairing)
 - [x] Launching DJI Pilot 2
 - [ ] Syncing finished logs over approved Wi-Fi networks, any Wi-Fi or any connection
-- [~] Pairing: linking a (new) controller to the organisation, which any user can do (works; unpairing and the download page to come)
+- [x] Pairing: linking a (new) controller to the organisation, which any user can do, with unpairing and the download page
 
 ## Before production use
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -46,5 +47,19 @@
 			</Button>
 			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 		</LoginForm>
+		<p class="controller">
+			Setting up a DJI controller? <a href={resolve('/download')}>Download the app</a>
+		</p>
 	</Column>
 </Grid>
+
+<style>
+	/* Apart from the login: it's for the controller, not for logging in. */
+	.controller {
+		margin-top: var(--cds-spacing-09);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+	}
+</style>

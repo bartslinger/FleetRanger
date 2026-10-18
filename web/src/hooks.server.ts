@@ -5,15 +5,15 @@ import { me } from '#lib/server/backend.js';
 import { parseTheme, THEME_COOKIE } from '#lib/theme.js';
 
 /** Pages shown without logging in. */
-const PUBLIC_PATHS = new Set(['/login']);
+const PUBLIC_PATHS = new Set(['/login', '/download']);
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const theme = parseTheme(event.cookies.get(THEME_COOKIE));
 	event.locals.theme = theme;
 
 	// Everything else needs a login: send the browser to the login page, which
-	// brings it back here afterwards.
-	event.locals.account = PUBLIC_PATHS.has(event.url.pathname) ? null : await me(event.fetch);
+	// brings it back here afterwards. Public pages still know who is logged in.
+	event.locals.account = await me(event.fetch);
 	if (!event.locals.account && !PUBLIC_PATHS.has(event.url.pathname)) {
 		const returnTo = event.url.pathname + event.url.search;
 		redirect(303, `/login?${new URLSearchParams({ return_to: returnTo })}`);

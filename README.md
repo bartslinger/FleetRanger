@@ -51,4 +51,6 @@ Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default). Th
 FLEETRANGER_LOG_DIR=~/fleetranger-testlogs cargo run --locked -- import
 ```
 
+The download page offers the controller app from `FLEETRANGER_ANDROID_APK` (`/data/android/FleetRanger.apk` by default); for development, point it at a copy of `android/app/build/outputs/apk/debug/app-debug.apk`.
+
 After adding or changing a SQL query, run `cargo sqlx prepare` (with `DATABASE_URL` set) and commit the `.sqlx` directory. Image builds check queries against it, as they have no database.

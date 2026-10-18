@@ -21,6 +21,9 @@ pub struct Config {
     pub public_url: Url,
     /// The login provider. Without it nobody can log in.
     pub oidc: Option<OidcConfig>,
+    /// The controller app the download page offers (`FLEETRANGER_ANDROID_APK`,
+    /// `/data/android/FleetRanger.apk` by default); without it the page says so.
+    pub android_apk: PathBuf,
     /// The longest break within a session, in minutes
     /// (`FLEETRANGER_SESSION_GAP_MINUTES`, 120 by default).
     pub session_gap_minutes: i32,
@@ -46,6 +49,9 @@ impl Config {
             .unwrap_or_else(|_| "/data/flightlogs".to_owned())
             .into();
         let dji_app_key = non_empty_var("DJI_APP_KEY");
+        let android_apk = non_empty_var("FLEETRANGER_ANDROID_APK")
+            .unwrap_or_else(|| "/data/android/FleetRanger.apk".to_owned())
+            .into();
         let public_url = std::env::var("FLEETRANGER_PUBLIC_URL")
             .unwrap_or_else(|_| "http://localhost:5173".to_owned())
             .parse()
@@ -75,6 +81,7 @@ impl Config {
             dji_app_key,
             public_url,
             oidc,
+            android_apk,
             session_gap_minutes,
         })
     }

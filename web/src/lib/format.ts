@@ -60,6 +60,12 @@ export function duration(seconds: number): string {
 	return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
+/** A download's size, as people read it: "640 kB", "12.4 MB". */
+export function fileSize(bytes: number): string {
+	if (bytes < 1_000_000) return `${Math.ceil(bytes / 1000)} kB`;
+	return `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
 /** Kilometres with one decimal; "<0.1 km" rather than a misleading "0.0 km". */
 export function distance(metres: number): string {
 	if (metres < 50) return '<0.1 km';
