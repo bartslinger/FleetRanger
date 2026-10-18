@@ -1,6 +1,79 @@
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use super::SessionGap;
+use crate::policy::FlightScope;
+
+// A session is visible when one of its flights is, and only the visible
+// flights count. The visibility condition is the one in the flight queries
+// (see flights/db.rs, which also lists a session's flights); keep them in step.
+
+/// A session as listed: what its visible flights add up to.
+#[derive(Serialize)]
+pub struct SessionSummary {
+    pub id: Uuid,
+    pub first_takeoff_at: DateTime<Utc>,
+    pub last_landed_at: DateTime<Utc>,
+    pub flights: i64,
+    pub air_time_s: i64,
+    pub distance_m: f64,
+    /// Names, in alphabetical order; empty if none.
+    pub pilots: Vec<String>,
+    pub teams: Vec<String>,
+}
+
+/// One page of the sessions in the scope, newest first.
+pub async fn list(
+    db: &PgPool,
+    scope: &FlightScope,
+    limit: i64,
+    offset: i64,
+) -> sqlx::Result<Vec<SessionSummary>> {
+    sqlx::query_as!(
+        SessionSummary,
+        r#"select f.session_id as "id!",
+                min(f.takeoff_at) as "first_takeoff_at!",
+                max(f.landed_at) as "last_landed_at!",
+                count(*) as "flights!",
+                sum(f.air_time_s)::bigint as "air_time_s!",
+                sum(f.distance_m) as "distance_m!",
+                array_remove(array_agg(distinct u.name), null) as "pilots!",
+                array_remove(array_agg(distinct t.name), null) as "teams!"
+         from flights f
+         left join users u on u.id = f.pilot_id
+         left join teams t on t.id = f.team_id
+         where f.session_id is not null
+           and ($1
+                or f.pilot_id = $2
+                or f.team_id in (select team_id from team_members where user_id = $2))
+         group by f.session_id
+         order by min(f.takeoff_at) desc, f.session_id
+         limit $3 offset $4"#,
+        scope.all,
+        scope.user_id,
+        limit,
+        offset,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// The number of sessions in the scope.
+pub async fn count(db: &PgPool, scope: &FlightScope) -> sqlx::Result<i64> {
+    sqlx::query_scalar!(
+        r#"select count(distinct session_id) as "count!"
+           from flights
+           where $1
+              or pilot_id = $2
+              or team_id in (select team_id from team_members where user_id = $2)"#,
+        scope.all,
+        scope.user_id,
+    )
+    .fetch_one(db)
+    .await
+}
 
 /// Any constant, so that only one grouping runs at a time.
 const GROUPING_LOCK: i64 = 0x5e55_1015;
@@ -69,9 +142,6 @@ pub async fn group(db: &PgPool, gap: SessionGap) -> sqlx::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, Utc};
-    use uuid::Uuid;
-
     use super::*;
 
     async fn insert_id(db: &PgPool, sql: &'static str) -> Uuid {
@@ -171,5 +241,76 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(left, 0);
+    }
+
+    /// A session merged across teams shows each team only its own flights,
+    /// in the list and the session's flights alike; outsiders see nothing.
+    #[sqlx::test]
+    async fn sessions_show_only_visible_flights(db: PgPool) {
+        let north = insert_id(
+            &db,
+            "insert into teams (name) values ('North') returning id",
+        )
+        .await;
+        let south = insert_id(
+            &db,
+            "insert into teams (name) values ('South') returning id",
+        )
+        .await;
+        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
+        let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
+        let outsider = insert_id(&db, "insert into users (name) values ('C') returning id").await;
+        let session = insert_id(&db, "insert into sessions default values returning id").await;
+        for (pilot, team, takeoff, landed) in
+            [(a, north, "08:00", "08:20"), (b, south, "08:30", "08:50")]
+        {
+            sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
+                .bind(pilot)
+                .bind(team)
+                .execute(&db)
+                .await
+                .unwrap();
+            let flight = flight(&db, pilot, takeoff, landed).await;
+            sqlx::query("update flights set team_id = $2, session_id = $3 where id = $1")
+                .bind(flight)
+                .bind(team)
+                .bind(session)
+                .execute(&db)
+                .await
+                .unwrap();
+        }
+
+        let member = FlightScope {
+            all: false,
+            user_id: a,
+        };
+        let listed = list(&db, &member, 10, 0).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(
+            (listed[0].flights, listed[0].pilots.clone()),
+            (1, vec!["A".to_owned()])
+        );
+        assert_eq!(count(&db, &member).await.unwrap(), 1);
+        let flights = crate::flights::db::of_session(&db, &member, session)
+            .await
+            .unwrap();
+        assert_eq!(flights.len(), 1);
+
+        let stranger = FlightScope {
+            all: false,
+            user_id: outsider,
+        };
+        assert!(list(&db, &stranger, 10, 0).await.unwrap().is_empty());
+        assert_eq!(count(&db, &stranger).await.unwrap(), 0);
+        let flights = crate::flights::db::of_session(&db, &stranger, session)
+            .await
+            .unwrap();
+        assert!(flights.is_empty());
+
+        let everything = FlightScope {
+            all: true,
+            user_id: outsider,
+        };
+        assert_eq!(list(&db, &everything, 10, 0).await.unwrap()[0].flights, 2);
     }
 }

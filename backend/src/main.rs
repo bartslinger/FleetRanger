@@ -134,6 +134,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .merge(auth::routes::router())
         .merge(flights::routes::router())
         .merge(ingest::routes::router())
+        .merge(sessions::routes::router())
         .merge(teams::routes::router())
         .merge(equipment::routes::router())
         .merge(users::routes::router())

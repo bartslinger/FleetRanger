@@ -157,6 +157,37 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
     .await
 }
 
+/// The flights of a session that are in the scope, in takeoff order; empty if
+/// the session doesn't exist or none of its flights is in the scope.
+pub async fn of_session(
+    db: &PgPool,
+    scope: &FlightScope,
+    session_id: Uuid,
+) -> sqlx::Result<Vec<FlightDetail>> {
+    sqlx::query_as!(
+        FlightDetail,
+        r#"select id, takeoff_at, landed_at, air_time_s, distance_m,
+                aircraft_serial,
+                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_name?",
+                rc_serial,
+                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
+                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
+                team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?",
+                track, metrics
+         from flights
+         where session_id = $1
+           and ($2
+                or pilot_id = $3
+                or team_id in (select team_id from team_members where user_id = $3))
+         order by takeoff_at, id"#,
+        session_id,
+        scope.all,
+        scope.user_id,
+    )
+    .fetch_all(db)
+    .await
+}
+
 /// The number of flights in the scope.
 pub async fn count(db: &PgPool, scope: &FlightScope) -> sqlx::Result<i64> {
     sqlx::query_scalar!(

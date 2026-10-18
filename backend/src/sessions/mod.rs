@@ -2,6 +2,8 @@
 //! "Sessions and operations" in docs/architecture.md.
 
 pub mod db;
+pub mod routes;
+mod service;
 
 /// The longest break within a session, in minutes.
 #[derive(Clone, Copy)]
