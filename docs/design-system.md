@@ -11,7 +11,7 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 - **Laptop first.** The main use is reviewing flights, sessions and reports at a desk, so the layout and density follow Carbon's defaults for that.
 - **A useful subset on mobile.** Pilots check their own sessions and fill in reports on a phone. Those screens must work at phone width, with touch-sized controls, and keep native controls (pickers, selects) on phones.
 - **The same look on the remote controller.** The Android app uses the same tokens (colours, type, spacing), translated to a Jetpack Compose theme.
-- **No third-party requests.** Fonts and assets are bundled with the app. The browser never contacts an outside host.
+- **No third-party requests,** except for maps. Fonts and assets are bundled with the app. Maps are the one exception: Mapbox serves the map tiles, styles and map labels (see "Web and API" in [architecture.md](architecture.md)).
 
 ### Foundations
 
