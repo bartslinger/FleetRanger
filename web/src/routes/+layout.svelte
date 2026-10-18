@@ -6,12 +6,61 @@
 	import Template from '@carbon/icons/es/template/16.js';
 	import UserMultiple from '@carbon/icons/es/user--multiple/16.js';
 	import { dev } from '$app/env';
+	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import favicon from '#lib/assets/favicon.svg';
-	import Shell, { type NavItem } from '#lib/ui/Shell.svelte';
+	import ProcessingPanel from '#lib/ProcessingPanel.svelte';
+	import type { ProcessingStatus } from '#lib/server/backend.js';
+	import Loading from '#lib/ui/Loading.svelte';
+	import Shell, { type HeaderAction, type NavItem } from '#lib/ui/Shell.svelte';
+	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
+
+	// Log processing, for admins: from the server, then polled; often while
+	// logs are being processed, rarely otherwise (to notice new ones).
+	let processing = $derived(data.processing);
+	const BUSY_POLL_MS = 3_000;
+	const IDLE_POLL_MS = 30_000;
+
+	$effect(() => {
+		if (!processing) return;
+		const busy = processing.pending > 0;
+		const timer = setTimeout(poll, busy ? BUSY_POLL_MS : IDLE_POLL_MS);
+		return () => clearTimeout(timer);
+	});
+
+	async function poll() {
+		const before = processing;
+		let next: ProcessingStatus;
+		try {
+			const response = await fetch('/api/logs/processing');
+			if (!response.ok) return;
+			next = await response.json();
+		} catch {
+			return;
+		}
+		processing = next;
+		// A batch finished: reload the page's data, so new flights show.
+		if (before && before.pending > 0 && next.pending === 0) {
+			toast('Flight logs processed.');
+			await invalidateAll();
+		}
+	}
+
+	const actions: HeaderAction[] = $derived(
+		processing && processing.pending > 0
+			? [
+					{
+						id: 'processing',
+						label: `Processing logs: ${processing.processed} of ${processing.processed + processing.pending}`,
+						icon: loadingIcon,
+						panel: processingPanel
+					}
+				]
+			: []
+	);
 
 	// Admin pages only for admins; the backend refuses everyone else anyway.
 	const nav: NavItem[] = $derived([
@@ -32,6 +81,12 @@
 	<title>FleetRanger</title>
 </svelte:head>
 
-<Shell name="FleetRanger" {nav} account={data.account} theme={data.theme}>
+{#snippet loadingIcon()}<Loading />{/snippet}
+
+{#snippet processingPanel()}
+	{#if processing}<ProcessingPanel status={processing} timeZone={data.timeZone} />{/if}
+{/snippet}
+
+<Shell name="FleetRanger" {nav} account={data.account} theme={data.theme} {actions}>
 	{@render children()}
 </Shell>

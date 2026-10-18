@@ -21,6 +21,16 @@
 		email: string;
 		name: string | null;
 	}
+
+	/** A header global action left of Profile: an icon button opening a panel. */
+	export interface HeaderAction {
+		id: string;
+		/** The button's name, shown as its tooltip. */
+		label: string;
+		/** The 20px icon. */
+		icon: Snippet;
+		panel: Snippet;
+	}
 </script>
 
 <script lang="ts">
@@ -42,10 +52,12 @@
 		account: ShellAccount | null;
 		/** The user's theme choice as rendered by the server. */
 		theme: Theme;
+		/** Further header actions, e.g. processing progress. */
+		actions?: HeaderAction[];
 		children: Snippet;
 	}
 
-	let { name, nav, account, theme: initialTheme, children }: Props = $props();
+	let { name, nav, account, theme: initialTheme, actions = [], children }: Props = $props();
 
 	let open = $state(false);
 	let menuButton: HTMLButtonElement | undefined = $state();
@@ -55,41 +67,56 @@
 	// starts from the server's value, then follows the user's choices.
 	// svelte-ignore state_referenced_locally
 	let theme = $state(initialTheme);
-	let panelOpen = $state(false);
-	let panelButton: HTMLButtonElement | undefined = $state();
-	let panelElement: HTMLElement | undefined = $state();
+
+	// The open header panel, by action id ('profile' or one of `actions`).
+	// One panel at a time.
+	let panelOpen: string | null = $state(null);
+	const panelButtons: Record<string, HTMLButtonElement> = $state({});
+	const panelElements: Record<string, HTMLElement> = $state({});
+
+	// An action that disappears (e.g. processing finished) closes its panel.
+	$effect(() => {
+		if (panelOpen && panelOpen !== 'profile' && !actions.some((a) => a.id === panelOpen)) {
+			panelOpen = null;
+		}
+	});
 
 	afterNavigate(() => {
 		open = false;
-		panelOpen = false;
+		panelOpen = null;
 	});
 
 	async function toggle() {
 		open = !open;
 		if (open) {
-			// One panel at a time.
-			panelOpen = false;
+			panelOpen = null;
 			// Move focus into the navigation, as Carbon's left panel does.
 			await tick();
 			navElement?.querySelector('a')?.focus();
 		}
 	}
 
-	async function togglePanel() {
-		panelOpen = !panelOpen;
+	async function togglePanel(id: string) {
+		panelOpen = panelOpen === id ? null : id;
 		if (panelOpen) {
 			open = false;
-			// Focus the checked option, as in Carbon's settings menus.
 			await tick();
-			panelElement?.querySelector<HTMLInputElement>('input:checked')?.focus();
+			const panel = panelElements[id];
+			// Focus the checked option, as in Carbon's settings menus, or else the panel.
+			(panel?.querySelector<HTMLInputElement>('input:checked') ?? panel)?.focus();
 		}
+	}
+
+	function inPanel(node: Node | null) {
+		if (!node || !panelOpen) return false;
+		return !!(panelElements[panelOpen]?.contains(node) || panelButtons[panelOpen]?.contains(node));
 	}
 
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key !== 'Escape') return;
 		if (panelOpen) {
-			panelOpen = false;
-			panelButton?.focus();
+			panelButtons[panelOpen]?.focus();
+			panelOpen = null;
 		} else if (open) {
 			open = false;
 			menuButton?.focus();
@@ -101,18 +128,15 @@
 
 	/** Closes the panel on a click outside it or its button. */
 	function onclick(event: MouseEvent) {
+		// A target removed by the click itself (e.g. a re-rendered list) counts as inside.
 		const target = event.target as Node;
-		if (panelOpen && !panelElement?.contains(target) && !panelButton?.contains(target)) {
-			panelOpen = false;
-		}
+		if (panelOpen && target.isConnected && !inPanel(target)) panelOpen = null;
 	}
 
 	/** Closes the panel when focus leaves it, e.g. by tabbing past the end. */
 	function onfocusout(event: FocusEvent) {
 		const next = event.relatedTarget as Node | null;
-		if (next && !panelElement?.contains(next) && !panelButton?.contains(next)) {
-			panelOpen = false;
-		}
+		if (panelOpen && next && !inPanel(next)) panelOpen = null;
 	}
 
 	const home = resolve('/');
@@ -155,23 +179,51 @@
 	<a class="name" href={home}>{name}</a>
 	{#if account}
 		<div class="utilities">
+			{#each actions as action (action.id)}
+				<button
+					bind:this={panelButtons[action.id]}
+					class="action"
+					class:active={panelOpen === action.id}
+					type="button"
+					aria-label={action.label}
+					aria-expanded={panelOpen === action.id}
+					aria-controls="{action.id}-panel"
+					onclick={() => togglePanel(action.id)}
+					{onfocusout}
+				>
+					{@render action.icon()}
+					<span class="tooltip" aria-hidden="true">{action.label}</span>
+				</button>
+				{#if panelOpen === action.id}
+					<section
+						bind:this={panelElements[action.id]}
+						id="{action.id}-panel"
+						class="panel"
+						aria-label={action.label}
+						tabindex="-1"
+						{onfocusout}
+					>
+						{@render action.panel()}
+					</section>
+				{/if}
+			{/each}
 			<button
-				bind:this={panelButton}
+				bind:this={panelButtons.profile}
 				class="action"
-				class:active={panelOpen}
+				class:active={panelOpen === 'profile'}
 				type="button"
 				aria-label="Profile"
-				aria-expanded={panelOpen}
+				aria-expanded={panelOpen === 'profile'}
 				aria-controls="profile-panel"
-				onclick={togglePanel}
+				onclick={() => togglePanel('profile')}
 				{onfocusout}
 			>
 				<Icon icon={UserAvatar} />
 				<span class="tooltip" aria-hidden="true">Profile</span>
 			</button>
-			{#if panelOpen}
+			{#if panelOpen === 'profile'}
 				<section
-					bind:this={panelElement}
+					bind:this={panelElements.profile}
 					id="profile-panel"
 					class="panel"
 					aria-label="Profile"
@@ -391,6 +443,11 @@
 		background: var(--cds-layer-01);
 		border-inline: 1px solid var(--cds-border-subtle-00);
 		animation: panel-in 110ms cubic-bezier(0, 0, 0.38, 0.9);
+	}
+
+	/* Focused on opening, so keyboard users start inside it; not itself a control. */
+	.panel:focus {
+		outline: none;
 	}
 
 	.identity p {

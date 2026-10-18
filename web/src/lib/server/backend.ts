@@ -95,6 +95,30 @@ export interface Equipment {
 	last_flight_at: string | null;
 }
 
+/** Progress through the current batch of logs, from `GET /api/logs/processing` (admins). */
+export interface ProcessingStatus {
+	/** Zero, with everything else empty, when nothing is waiting. */
+	pending: number;
+	/** Processed so far in this batch, failed ones included. */
+	processed: number;
+	failed: number;
+	current: {
+		/** Relative to the flight log directory. */
+		path: string;
+		stage: 'reading' | 'requesting_keys' | 'decoding' | 'saving';
+		started_at: string;
+	} | null;
+	paused: { reason: string; until: string } | null;
+	/** The latest processed logs, newest first. */
+	latest: {
+		path: string;
+		status: 'done' | 'failed';
+		error: string | null;
+		/** Null if the aircraft never took off. */
+		flight_id: string | null;
+	}[];
+}
+
 /** The logged-in user, from `GET /api/me`. */
 export interface Account {
 	id: string;
