@@ -48,8 +48,11 @@ async fn main() -> Result<()> {
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [] | ["serve"] => serve(&config, db).await,
         ["import"] => ingest::import::run(&db, &config.log_dir).await,
-        ["add-account", email] => accounts::add(&db, email).await,
-        _ => bail!("unknown command {args:?}; expected serve, import or add-account <email>"),
+        ["add-account", email] => accounts::add(&db, email, false).await,
+        ["add-account", "--admin", email] => accounts::add(&db, email, true).await,
+        _ => bail!(
+            "unknown command {args:?}; expected serve, import or add-account [--admin] <email>"
+        ),
     }
 }
 
