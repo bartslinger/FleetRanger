@@ -124,9 +124,12 @@
 		});
 	}
 
-	function fit(map: MapboxMap, tracks: Track[], animate: boolean) {
+	const FIT = { padding: 48, maxZoom: 17 };
+
+	/** The tracks' extent as [[west, south], [east, north]]; null without positions. */
+	function bounds(tracks: Track[]): [[number, number], [number, number]] | null {
 		const positions = tracks.flatMap((track) => track.coordinates);
-		if (positions.length === 0) return;
+		if (positions.length === 0) return null;
 		let [west, south, east, north] = [180, 90, -180, -90];
 		for (const [lon, lat] of positions) {
 			west = Math.min(west, lon);
@@ -134,14 +137,22 @@
 			south = Math.min(south, lat);
 			north = Math.max(north, lat);
 		}
-		map.fitBounds(
-			[
-				[west, south],
-				[east, north]
-			],
-			{ padding: 48, maxZoom: 17, animate }
-		);
+		return [
+			[west, south],
+			[east, north]
+		];
 	}
+
+	function fit(map: MapboxMap, tracks: Track[], animate: boolean) {
+		const extent = bounds(tracks);
+		if (!extent) return;
+		map.fitBounds(extent, { ...FIT, animate });
+		placed = true;
+	}
+
+	// Hidden until the map shows the tracks, so it never shows Mapbox's
+	// default view (somewhere far away) first.
+	let placed = $state(false);
 
 	// Creates the map in the browser; mapbox-gl can't run on the server.
 	$effect(() => {
@@ -151,13 +162,17 @@
 		let created: MapboxMap | undefined;
 		import('mapbox-gl').then(({ default: mapboxgl }) => {
 			if (cancelled) return;
+			// With tracks known, the very first frame already shows them.
+			const initial = bounds(tracks);
 			created = new mapboxgl.Map({
 				container: element,
 				accessToken: token,
 				style: styleUrl(view),
 				attributionControl: false,
-				cooperativeGestures: matchMedia('(pointer: coarse)').matches
+				cooperativeGestures: matchMedia('(pointer: coarse)').matches,
+				...(initial ? { bounds: initial, fitBoundsOptions: FIT } : {})
 			});
+			if (initial) placed = true;
 			created.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
 			created.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 			created.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
@@ -171,7 +186,6 @@
 				const status = (event.error as { status?: number } | undefined)?.status;
 				if (status === 401 || status === 403 || !instance.isStyleLoaded()) failed = true;
 			});
-			fit(instance, tracks, false);
 			// Tracks that arrived while the style was loading weren't fitted yet.
 			instance.once('load', () => fit(instance, tracks, false));
 			map = instance;
@@ -211,6 +225,7 @@
 	<figure class="track-map">
 		<div
 			class="map"
+			class:placed
 			class:square={squareOnPhones}
 			bind:this={container}
 			role="region"
@@ -246,6 +261,11 @@
 	.map {
 		height: clamp(20rem, 60vh, 40rem);
 		background: var(--cds-layer-01);
+	}
+
+	/* Mapbox draws into the canvas; until the tracks are fitted, don't show it. */
+	.map:not(.placed) :global(canvas) {
+		visibility: hidden;
 	}
 
 	@media (max-width: 41.99rem) {
