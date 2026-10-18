@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -71,8 +73,11 @@ fun PilotScreen(
         Modifier
             .fillMaxSize()
             .background(Colors.background)
-            .padding(horizontal = Spacing.s07, vertical = Spacing.s06),
-        verticalArrangement = Arrangement.spacedBy(Spacing.s06),
+            // The screen is only ~390dp high: 16dp at the top and bottom and
+            // between blocks, so the startup warning and the sync line leave
+            // room for the pilot tiles.
+            .padding(horizontal = Spacing.s07, vertical = Spacing.s05),
+        verticalArrangement = Arrangement.spacedBy(Spacing.s05),
     ) {
         if (!opensAtStartup) {
             WarningNotification(
@@ -82,7 +87,7 @@ fun PilotScreen(
                 onAction = onOpenStartupSettings,
             )
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s06)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s05)) {
             if (last != null && !choosing) {
                 Heading("Who’s flying?", settingsButton)
                 LastPilot(last, onFly = { onChoose(last) }, onOther = { choosing = true })
@@ -116,9 +121,10 @@ private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
         SyncStatus.State.WaitingForNetwork,
         SyncStatus.State.Unreachable,
     )
+    // 48dp, Carbon's large size: still a good target, and 16dp less height.
     Row(
         Modifier
-            .height(64.dp)
+            .height(48.dp)
             .clickable(onClickLabel = "Open settings", onClick = onSettings)
             .padding(horizontal = Spacing.s05),
         verticalAlignment = Alignment.CenterVertically,
@@ -137,20 +143,24 @@ private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
 @Composable
 private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
     // Carbon's wide gutter: a gloved tap mustn't hit the wrong one.
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s07)) {
+    // 144dp when there's room, at least 96dp with the startup warning above.
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 144.dp),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s07),
+    ) {
         ClickableTile(
             title = last.name,
             detail = "Flew last",
             onClick = onFly,
             // Carbon's heading-05 is regular; semibold on purpose, to read outdoors.
             titleStyle = Type.heading05.copy(color = Colors.textPrimary, fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.weight(2f).height(144.dp),
+            modifier = Modifier.weight(2f).fillMaxHeight(),
         )
         ClickableTile(
             title = "Other pilot",
             detail = "Choose from the list",
             onClick = onOther,
-            modifier = Modifier.weight(1f).height(144.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
         )
     }
 }
