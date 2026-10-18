@@ -37,6 +37,9 @@ object Colors {
     val borderStrong01 = Color(0xFF8D8D8D)
     val iconPrimary = Color(0xFF161616)
     val overlay = Color(0x80161616)
+    val supportInfo = Color(0xFF0043CE)
+    val notificationBackgroundInfo = Color(0xFFEDF5FF)
+    val borderInteractive = Color(0xFF0F62FE)
     val supportWarning = Color(0xFFF1C21B)
     val notificationBackgroundWarning = Color(0xFFFCF4D6)
 }

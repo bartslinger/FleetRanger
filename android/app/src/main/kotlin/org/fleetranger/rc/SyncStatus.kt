@@ -32,6 +32,10 @@ data class SyncStatus(
         Done,
     }
 
+    /** Logs aren't uploading: shown with a warning icon, so it isn't missed. */
+    val problem: Boolean
+        get() = state in setOf(State.NotPaired, State.NoAccess, State.WaitingForNetwork, State.Unreachable)
+
     /** One line for the pilot screen and the settings. */
     fun summary(): String = when (state) {
         State.Starting -> "Starting"

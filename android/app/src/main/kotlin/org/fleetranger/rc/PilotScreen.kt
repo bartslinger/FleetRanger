@@ -115,12 +115,6 @@ fun PilotScreen(
  */
 @Composable
 private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
-    val problem = status.state in setOf(
-        SyncStatus.State.NotPaired,
-        SyncStatus.State.NoAccess,
-        SyncStatus.State.WaitingForNetwork,
-        SyncStatus.State.Unreachable,
-    )
     // 48dp, Carbon's large size: still a good target, and 16dp less height.
     Row(
         Modifier
@@ -130,7 +124,7 @@ private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.s03),
     ) {
-        if (problem) WarningIcon()
+        if (status.problem) WarningIcon()
         BasicText(
             "Sync: ${status.summary()}",
             style = Type.bodyCompact02.copy(color = Colors.interactive),

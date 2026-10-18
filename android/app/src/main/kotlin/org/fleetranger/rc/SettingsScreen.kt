@@ -6,10 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -17,16 +18,16 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDate
@@ -37,20 +38,32 @@ import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.ButtonKind
 import org.fleetranger.rc.ui.CarbonIcons
 import org.fleetranger.rc.ui.Colors
+import org.fleetranger.rc.ui.ContainedList
 import org.fleetranger.rc.ui.DangerDialog
 import org.fleetranger.rc.ui.Icon
-import org.fleetranger.rc.ui.LabelledCode
+import org.fleetranger.rc.ui.IconButton
+import org.fleetranger.rc.ui.InfoCallout
+import org.fleetranger.rc.ui.ListRow
+import org.fleetranger.rc.ui.PlexMono
 import org.fleetranger.rc.ui.RadioButton
 import org.fleetranger.rc.ui.Spacing
+import org.fleetranger.rc.ui.TopBar
 import org.fleetranger.rc.ui.Type
+import org.fleetranger.rc.ui.VerticalTabs
+import org.fleetranger.rc.ui.WarningIcon
 
 /** As in the web app, e.g. "12 Oct 2026". */
 private val DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 private val TIME = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", Locale.ENGLISH)
 
+private const val SYNC = 0
+private const val WIFI = 1
+private const val PAIRING = 2
+
 /**
  * The controller's settings: when logs sync, and its pairing. Anyone holding
- * the controller may change them.
+ * the controller may change them. Three groups that nobody compares, so
+ * Carbon's vertical tabs, each fitting the screen without scrolling.
  *
  * - `currentNetwork`: the Wi-Fi network the controller is on, if Android
  *   reveals its name.
@@ -68,6 +81,7 @@ fun SettingsScreen(
     syncStatus: SyncStatus? = null,
 ) {
     BackHandler(onBack = onBack)
+    var tab by rememberSaveable { mutableIntStateOf(SYNC) }
     var networks by remember { mutableStateOf(settings.networks) }
     var syncFrom by remember { mutableStateOf(settings.syncFrom) }
     var confirmingUnpair by remember { mutableStateOf(false) }
@@ -88,116 +102,46 @@ fun SettingsScreen(
         ).show()
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Colors.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = Spacing.s07, vertical = Spacing.s06),
-    ) {
-        Row(
-            Modifier.fillMaxWidth().height(64.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+    Column(Modifier.fillMaxSize().background(Colors.background)) {
+        TopBar("Settings", onBack)
+        VerticalTabs(
+            tabs = listOf("Sync", "Wi-Fi networks", "Pairing"),
+            selected = tab,
+            onSelect = { tab = it },
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = Spacing.s05, end = Spacing.s05, bottom = Spacing.s05),
         ) {
-            BasicText(
-                "Settings",
-                style = Type.heading04.copy(color = Colors.textPrimary),
-                modifier = Modifier.semantics { heading() },
-            )
-            Button("Back", onBack, kind = ButtonKind.Ghost)
-        }
-
-        // Two columns: the landscape screen is wide, and scrolling with gloves
-        // is clumsy. Syncing on the left; when to sync and pairing on the right.
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s07)) {
-        Column(Modifier.weight(1f)) {
-            if (syncStatus != null) {
-                Section("Sync")
-                Paragraph(syncStatus.summary())
-                Paragraph(
-                    when {
-                        syncStatus.uploaded == 0 -> "No logs uploaded yet"
-                        else -> "${syncStatus.uploaded} ${if (syncStatus.uploaded == 1) "log" else "logs"} " +
-                            "uploaded, the last at " +
-                            TIME.format(Instant.ofEpochMilli(syncStatus.lastUploadAt).atZone(ZoneId.systemDefault()))
-                    },
-                    secondary = true,
-                )
-            }
-            Section("Wi-Fi networks for syncing")
-            Paragraph(
-                "Flight logs upload only over these networks, and never over one Android " +
-                    "reports as metered, such as most phone hotspots.",
-            )
-            if (networks.isEmpty()) {
-                Paragraph("None yet.", secondary = true)
-            }
-            networks.forEach { network ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BasicText(network, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
-                    Button("Remove", {
-                        networks = networks - network
-                        settings.networks = networks
-                    }, kind = ButtonKind.Ghost)
-                }
-            }
-            Column(Modifier.padding(top = Spacing.s05)) {
-                when {
-                    !canSeeNetworkNames -> {
-                        Paragraph(
-                            "To see which network the controller is on, FleetRanger needs the " +
-                                "location permission. It doesn’t use the location.",
-                            secondary = true,
-                        )
-                        Button("Allow", onAllowNetworkNames, kind = ButtonKind.Tertiary)
-                    }
-                    currentNetwork == null -> Paragraph("Not connected to Wi-Fi.", secondary = true)
-                    currentNetwork in networks ->
-                        Paragraph("Connected to $currentNetwork.", secondary = true)
-                    else -> {
-                        Paragraph("Connected to $currentNetwork.", secondary = true)
-                        Button("Add this network", {
-                            networks = networks + currentNetwork
+            // The panel keeps its height; long content scrolls inside it.
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                when (tab) {
+                    SYNC -> SyncTab(
+                        syncStatus,
+                        syncFrom,
+                        onAllLogs = {
+                            settings.syncFrom = null
+                            syncFrom = null
+                        },
+                        onPickDate = ::pickDate,
+                        onAddNetwork = { tab = WIFI },
+                    )
+                    WIFI -> WifiTab(
+                        networks,
+                        currentNetwork,
+                        canSeeNetworkNames,
+                        onAllowNetworkNames,
+                        onAdd = { network ->
+                            networks = networks + network
                             settings.networks = networks
-                        }, kind = ButtonKind.Tertiary)
-                    }
+                        },
+                        onRemove = { network ->
+                            networks = networks - network
+                            settings.networks = networks
+                        },
+                    )
+                    PAIRING -> PairingTab(serverUrl, onUnpair = { confirmingUnpair = true })
                 }
             }
-        }
-
-        Column(Modifier.weight(1f)) {
-            Section("Sync logs from")
-            RadioButton(
-                "All logs",
-                selected = syncFrom == null,
-                onSelect = {
-                    settings.syncFrom = null
-                    syncFrom = null
-                },
-            )
-            RadioButton("From a date", selected = syncFrom != null, onSelect = ::pickDate)
-            syncFrom?.let { date ->
-                // The chosen date as a field of its own, indented to the labels.
-                DateField("Start date", DATE.format(date), ::pickDate, Modifier.padding(start = 28.dp))
-            }
-
-            Section("Pairing")
-            Paragraph("Paired with")
-            BasicText(serverUrl ?: "no server", style = Type.code02.copy(color = Colors.textPrimary))
-            LabelledCode("Serial number", Serial.read(), Modifier.padding(top = Spacing.s03))
-            // Rare, and never the point of this screen: not a primary danger button.
-            Button(
-                "Unpair controller",
-                { confirmingUnpair = true },
-                kind = ButtonKind.DangerTertiary,
-                modifier = Modifier.padding(top = Spacing.s06),
-            )
-        }
         }
     }
 
@@ -216,58 +160,155 @@ fun SettingsScreen(
     }
 }
 
-/** A section of the settings, 32dp below the previous one. */
 @Composable
-private fun Section(text: String) {
+private fun ColumnScope.SyncTab(
+    status: SyncStatus?,
+    syncFrom: LocalDate?,
+    onAllLogs: () -> Unit,
+    onPickDate: () -> Unit,
+    onAddNetwork: () -> Unit,
+) {
+    if (status != null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s03)) {
+            // The icon's 20dp centred on the text's first 22dp line.
+            if (status.problem) WarningIcon(Modifier.padding(top = 1.dp))
+            Text(status.summary())
+        }
+        Text(
+            when {
+                status.uploaded == 0 -> "No logs uploaded yet"
+                else -> "${status.uploaded} ${if (status.uploaded == 1) "log" else "logs"} uploaded, " +
+                    "the last at " +
+                    TIME.format(Instant.ofEpochMilli(status.lastUploadAt).atZone(ZoneId.systemDefault()))
+            },
+            small = true,
+        )
+        if (status.state == SyncStatus.State.WaitingForNetwork) {
+            // Carbon lets a ghost button's text line up with the text above it.
+            Button("Add a network", onAddNetwork, Modifier.offset(x = -Spacing.s05), kind = ButtonKind.Ghost)
+        }
+    }
+    Label("Sync logs from", Modifier.padding(top = Spacing.s06))
+    // The radio buttons and, once chosen, the date beside "From a date".
+    RadioButton("All logs", selected = syncFrom == null, onSelect = onAllLogs)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton("From a date", selected = syncFrom != null, onSelect = onPickDate)
+        if (syncFrom != null) {
+            DateField(DATE.format(syncFrom), onPickDate, Modifier.padding(start = Spacing.s06))
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.WifiTab(
+    networks: Set<String>,
+    currentNetwork: String?,
+    canSeeNetworkNames: Boolean,
+    onAllowNetworkNames: () -> Unit,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    Text("Logs upload only over these networks, never over metered ones such as phone hotspots")
+    ContainedList("Approved networks") {
+        if (networks.isEmpty()) ListRow("No approved networks yet", secondary = true)
+        networks.forEach { network ->
+            ListRow(network) {
+                IconButton(CarbonIcons.TrashCan, "Remove $network") { onRemove(network) }
+            }
+        }
+    }
+    Column(Modifier.padding(top = Spacing.s05)) {
+        if (!canSeeNetworkNames) {
+            InfoCallout(
+                title = "Network name needed",
+                text = "Android shows the network name only with location access. " +
+                    "FleetRanger doesn’t use the location.",
+                action = "Allow",
+                onAction = onAllowNetworkNames,
+            )
+        } else {
+            ContainedList("Current network") {
+                when {
+                    currentNetwork == null -> ListRow("Not connected to Wi-Fi", secondary = true)
+                    currentNetwork in networks -> ListRow(currentNetwork) {
+                        BasicText(
+                            "Approved",
+                            style = Type.bodyCompact02.copy(color = Colors.textSecondary),
+                            modifier = Modifier.padding(end = Spacing.s05),
+                        )
+                    }
+                    else -> ListRow(currentNetwork) {
+                        Button("Add", { onAdd(currentNetwork) }, kind = ButtonKind.Tertiary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.PairingTab(serverUrl: String?, onUnpair: () -> Unit) {
+    Label("Server")
+    BasicText(serverUrl ?: "None", style = Type.bodyCompact02.copy(color = Colors.textPrimary))
+    Label("Serial number", Modifier.padding(top = Spacing.s05))
+    BasicText(Serial.read(), style = Type.bodyCompact02.copy(color = Colors.textPrimary, fontFamily = PlexMono))
+    // Rare, and never the point of this screen: not a primary danger button.
+    Button(
+        "Unpair controller",
+        onUnpair,
+        kind = ButtonKind.DangerTertiary,
+        modifier = Modifier.padding(top = Spacing.s07),
+    )
+}
+
+/** A label above a value or group, 14sp secondary. */
+@Composable
+private fun Label(text: String, modifier: Modifier = Modifier) {
     BasicText(
         text,
-        style = Type.headingCompact02.copy(color = Colors.textPrimary),
-        modifier = Modifier
-            .padding(top = Spacing.s07, bottom = Spacing.s03)
-            .semantics { heading() },
+        style = Type.label02.copy(color = Colors.textSecondary),
+        modifier = modifier.padding(bottom = Spacing.s02),
     )
 }
 
 @Composable
-private fun Paragraph(text: String, secondary: Boolean = false) {
+private fun Text(text: String, small: Boolean = false) {
     BasicText(
         text,
-        style = Type.bodyCompact02.copy(
-            color = if (secondary) Colors.textSecondary else Colors.textPrimary,
-        ),
+        style = if (small) {
+            Type.label02.copy(color = Colors.textSecondary)
+        } else {
+            Type.bodyCompact02.copy(color = Colors.textPrimary)
+        },
         modifier = Modifier.padding(bottom = Spacing.s03),
     )
 }
 
 /**
- * A field showing a date, which opens Android's own date picker: Carbon's
- * date input (label, value, calendar icon), 64dp high for gloves.
+ * The chosen date as a field that opens Android's own date picker: Carbon's
+ * date input (value and calendar icon) on the white panel, so in field-02.
  */
 @Composable
-private fun DateField(label: String, value: String, onPick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.padding(top = Spacing.s03)) {
-        BasicText(label, style = Type.label02.copy(color = Colors.textSecondary))
-        Row(
-            Modifier
-                .padding(top = Spacing.s03)
-                .widthIn(min = 288.dp)
-                .height(64.dp)
-                .background(Colors.layer01)
-                .drawBehind {
-                    drawLine(
-                        Colors.borderStrong01,
-                        Offset(0f, size.height - 0.5f),
-                        Offset(size.width, size.height - 0.5f),
-                        strokeWidth = 1.dp.toPx(),
-                    )
-                }
-                .clickable(onClickLabel = "Change $label", onClick = onPick)
-                .padding(horizontal = Spacing.s05),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BasicText(value, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
-            Icon(CarbonIcons.Calendar, Colors.iconPrimary)
-        }
+private fun DateField(value: String, onPick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .widthIn(min = 200.dp)
+            .height(64.dp)
+            .background(Colors.background)
+            .drawBehind {
+                drawLine(
+                    Colors.borderStrong01,
+                    Offset(0f, size.height - 0.5f),
+                    Offset(size.width, size.height - 0.5f),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+            .clickable(onClickLabel = "Change the start date", onClick = onPick)
+            .padding(horizontal = Spacing.s05),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s05),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(value, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
+        Icon(CarbonIcons.Calendar, Colors.iconPrimary)
     }
 }
