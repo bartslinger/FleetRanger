@@ -11,12 +11,27 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * When logs sync: only over approved Wi-Fi networks, never over a metered one,
- * and only logs from a chosen date on (all logs by default). See "Clients" in
- * docs/architecture.md.
+ * When logs sync: over any Wi-Fi network (the default), approved ones only,
+ * or any connection; Wi-Fi never when metered. And only logs from a chosen date
+ * on (all logs by default). See "Clients" in docs/architecture.md.
  */
 class SyncSettings(private val context: Context) {
     private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
+
+    /** Which connections logs upload over. */
+    enum class UploadOver {
+        /** Wi-Fi networks approved here, if not metered. */
+        ApprovedWifi,
+        /** The default: any Wi-Fi network that isn't metered, so not a phone hotspot. */
+        AnyWifi,
+        /** Any connection, mobile data too, which may cost money. */
+        AnyConnection,
+    }
+
+    var uploadOver: UploadOver
+        get() = prefs.getString("upload_over", null)
+            ?.let { runCatching { UploadOver.valueOf(it) }.getOrNull() } ?: UploadOver.AnyWifi
+        set(value) = prefs.edit().putString("upload_over", value.name).apply()
 
     /** The names (SSIDs) of the approved Wi-Fi networks. */
     var networks: Set<String>
@@ -42,13 +57,19 @@ class SyncSettings(private val context: Context) {
         return ssid?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() && it != UNKNOWN_SSID }
     }
 
-    /** Whether logs may upload now: over an approved Wi-Fi network that isn't metered. */
+    /** Whether logs may upload now, over the connection there is. */
     fun mayUploadNow(): Boolean {
         val connectivity = context.getSystemService(ConnectivityManager::class.java)
         val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
             ?: return false
-        if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) return false
-        return currentNetwork()?.let { it in networks } == true
+        if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return false
+        val unmeteredWifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        return when (uploadOver) {
+            UploadOver.ApprovedWifi -> unmeteredWifi && currentNetwork()?.let { it in networks } == true
+            UploadOver.AnyWifi -> unmeteredWifi
+            UploadOver.AnyConnection -> true
+        }
     }
 
     /** Whether a log last written at `time` (epoch milliseconds) is to sync. */

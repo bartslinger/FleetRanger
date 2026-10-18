@@ -17,6 +17,8 @@ data class SyncStatus(
     val lastUploadAt: Long,
     /** The log being uploaded. */
     val current: String?,
+    /** The setting at the time, for what logs wait for. */
+    val uploadOver: SyncSettings.UploadOver = SyncSettings.UploadOver.AnyWifi,
 ) {
     enum class State {
         /** No scan yet. */
@@ -24,7 +26,7 @@ data class SyncStatus(
         NotPaired,
         /** The flight logs can't be read: the storage permission is missing. */
         NoAccess,
-        /** Not on an approved Wi-Fi network, or the network is metered. */
+        /** No connection that the settings allow uploading over. */
         WaitingForNetwork,
         Uploading,
         /** The server can't be reached; trying again soon. */
@@ -41,8 +43,11 @@ data class SyncStatus(
         State.Starting -> "Starting"
         State.NotPaired -> "Not paired"
         State.NoAccess -> "Can’t read the flight logs: allow access to files"
-        State.WaitingForNetwork ->
-            "${plural(waiting, "log")} waiting for an approved Wi-Fi network"
+        State.WaitingForNetwork -> "${plural(waiting, "log")} waiting for " + when (uploadOver) {
+            SyncSettings.UploadOver.ApprovedWifi -> "an approved Wi-Fi network"
+            SyncSettings.UploadOver.AnyWifi -> "a Wi-Fi network that isn’t a hotspot"
+            SyncSettings.UploadOver.AnyConnection -> "a connection"
+        }
         State.Uploading -> "Uploading ${current ?: "a log"} (${waiting} waiting)"
         State.Unreachable -> "Can’t reach FleetRanger; ${plural(waiting, "log")} waiting"
         // Nothing uploaded yet, e.g. every log is from before the chosen date.
@@ -61,6 +66,9 @@ data class SyncStatus(
                 uploaded = prefs.getInt("uploaded", 0),
                 lastUploadAt = prefs.getLong("last_upload_at", 0),
                 current = prefs.getString("current", null),
+                uploadOver = prefs.getString("upload_over", null)
+                    ?.let { runCatching { SyncSettings.UploadOver.valueOf(it) }.getOrNull() }
+                    ?: SyncSettings.UploadOver.AnyWifi,
             )
         }
 
@@ -71,6 +79,7 @@ data class SyncStatus(
                 .putInt("uploaded", status.uploaded)
                 .putLong("last_upload_at", status.lastUploadAt)
                 .putString("current", status.current)
+                .putString("upload_over", status.uploadOver.name)
                 .apply()
         }
 

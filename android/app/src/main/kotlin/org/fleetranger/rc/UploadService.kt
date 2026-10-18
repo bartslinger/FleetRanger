@@ -116,7 +116,8 @@ class UploadService : Service() {
 
     /** Tells the screens and the notification what the service is doing. */
     private fun report(state: SyncStatus.State, waiting: Int, current: String? = null) {
-        val status = SyncStatus.read(this).copy(state = state, waiting = waiting, current = current)
+        val status = SyncStatus.read(this)
+            .copy(state = state, waiting = waiting, current = current, uploadOver = sync.uploadOver)
         SyncStatus.write(this, status)
         val busy = state == SyncStatus.State.Uploading && current != null
         getSystemService(NotificationManager::class.java)

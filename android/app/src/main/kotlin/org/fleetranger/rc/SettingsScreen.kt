@@ -86,6 +86,7 @@ fun SettingsScreen(
 ) {
     BackHandler(onBack = onBack)
     var tab by rememberSaveable { mutableIntStateOf(SYNC) }
+    var uploadOver by remember { mutableStateOf(settings.uploadOver) }
     var networks by remember { mutableStateOf(settings.networks) }
     var syncFrom by remember { mutableStateOf(settings.syncFrom) }
     var confirmingUnpair by remember { mutableStateOf(false) }
@@ -110,7 +111,7 @@ fun SettingsScreen(
     Column(Modifier.fillMaxSize().background(Colors.background)) {
         TopBar("Settings", onBack)
         VerticalTabs(
-            tabs = listOf("Sync", "Wi-Fi networks", "Pairing"),
+            tabs = listOf("Sync", "Networks", "Pairing"),
             selected = tab,
             onSelect = { tab = it },
             modifier = Modifier
@@ -132,7 +133,13 @@ fun SettingsScreen(
                         onAddNetwork = { tab = WIFI },
                         onShowLogs = onShowLogs,
                     )
-                    WIFI -> WifiTab(
+                    WIFI -> NetworksTab(
+                        uploadOver,
+                        onUploadOver = {
+                            uploadOver = it
+                            settings.uploadOver = it
+                            onChanged()
+                        },
                         networks,
                         currentNetwork,
                         canSeeNetworkNames,
@@ -196,7 +203,9 @@ private fun ColumnScope.SyncTab(
     }
     // Carbon lets a ghost button's text line up with the text above it.
     Row(Modifier.offset(x = -Spacing.s05)) {
-        if (status?.state == SyncStatus.State.WaitingForNetwork) {
+        if (status?.state == SyncStatus.State.WaitingForNetwork &&
+            status.uploadOver == SyncSettings.UploadOver.ApprovedWifi
+        ) {
             Button("Add a network", onAddNetwork, kind = ButtonKind.Ghost)
         }
         Button("Show logs", onShowLogs, kind = ButtonKind.Ghost)
@@ -213,7 +222,9 @@ private fun ColumnScope.SyncTab(
 }
 
 @Composable
-private fun ColumnScope.WifiTab(
+private fun ColumnScope.NetworksTab(
+    uploadOver: SyncSettings.UploadOver,
+    onUploadOver: (SyncSettings.UploadOver) -> Unit,
     networks: Set<String>,
     currentNetwork: String?,
     canSeeNetworkNames: Boolean,
@@ -221,8 +232,26 @@ private fun ColumnScope.WifiTab(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
 ) {
-    Text("Logs upload only over these networks, never over metered ones such as phone hotspots")
-    ContainedList("Approved networks") {
+    Label("Upload logs over")
+    RadioButton(
+        "Approved Wi-Fi networks",
+        selected = uploadOver == SyncSettings.UploadOver.ApprovedWifi,
+        onSelect = { onUploadOver(SyncSettings.UploadOver.ApprovedWifi) },
+    )
+    RadioButton(
+        "Any Wi-Fi network except hotspots",
+        selected = uploadOver == SyncSettings.UploadOver.AnyWifi,
+        onSelect = { onUploadOver(SyncSettings.UploadOver.AnyWifi) },
+        detail = "Skips phone hotspots and other networks Android marks as metered",
+    )
+    RadioButton(
+        "Any connection",
+        selected = uploadOver == SyncSettings.UploadOver.AnyConnection,
+        onSelect = { onUploadOver(SyncSettings.UploadOver.AnyConnection) },
+        detail = "Mobile data too, which may cost money",
+    )
+    if (uploadOver != SyncSettings.UploadOver.ApprovedWifi) return
+    ContainedList("Approved networks", Modifier.padding(top = Spacing.s05)) {
         if (networks.isEmpty()) ListRow("No approved networks yet", secondary = true)
         networks.forEach { network ->
             ListRow(network) {

@@ -51,7 +51,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] App skeleton: Kotlin, Compose with our own Carbon components (light only), built in a pinned Docker image
 - [~] Pilot picker that works offline, last pilot as the default, with "Not in the list" (with test names until pairing)
 - [x] Launching DJI Pilot 2
-- [ ] Syncing finished logs over selected Wi-Fi networks
+- [ ] Syncing finished logs over approved Wi-Fi networks, any Wi-Fi or any connection
 - [~] Pairing: linking a (new) controller to the organisation, which any user can do (works; unpairing and the download page to come)
 
 ## Before production use
