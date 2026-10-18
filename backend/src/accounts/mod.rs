@@ -15,7 +15,11 @@ pub async fn add(db: &PgPool, email: &str, admin: bool) -> Result<()> {
     }
     let role = if admin { "admin" } else { "member" };
     if db::insert(db, &email, role).await? {
-        tracing::info!(email, role, "account added; it is tied to a login on first use");
+        tracing::info!(
+            email,
+            role,
+            "account added; it is tied to a login on first use"
+        );
     } else if admin {
         db::set_role(db, &email, role).await?;
         tracing::info!(email, "the existing account is now an admin");

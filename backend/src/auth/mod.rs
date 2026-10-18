@@ -20,6 +20,8 @@ use uuid::Uuid;
 
 pub use oidc::Provider;
 
+use crate::policy::Role;
+
 /// Holds the login session token.
 const SESSION_COOKIE: &str = "fleetranger_session";
 
@@ -45,11 +47,8 @@ impl Auth {
 /// Who is making a request: a logged-in account. Handlers get one only through
 /// a valid login session, and pass it to the service functions they call.
 pub struct Actor {
-    #[expect(
-        dead_code,
-        reason = "read by access rules and the audit log, which come next"
-    )]
     pub account_id: Uuid,
+    pub role: Role,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
     pub login_session_id: Uuid,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
@@ -88,8 +87,13 @@ where
             StatusCode::INTERNAL_SERVER_ERROR
         })?
         .ok_or(StatusCode::UNAUTHORIZED)?;
+        let role = Role::parse(&session.role).ok_or_else(|| {
+            tracing::error!(role = session.role, "unknown account role");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
         Ok(Actor {
             account_id: session.account_id,
+            role,
             login_session_id: session.id,
             ip,
             email: session.email,

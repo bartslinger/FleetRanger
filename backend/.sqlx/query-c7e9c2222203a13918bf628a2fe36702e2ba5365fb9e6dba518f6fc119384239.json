@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update login_sessions s\n         set last_seen_at = now(), expires_at = now() + make_interval(days => $2)\n         from accounts a\n         where s.token_sha256 = $1 and a.id = s.account_id\n           and s.revoked_at is null and s.expires_at > now() and a.disabled_at is null\n         returning s.id, s.account_id, a.email, a.name",
+  "query": "update login_sessions s\n         set last_seen_at = now(), expires_at = now() + make_interval(days => $2)\n         from accounts a\n         where s.token_sha256 = $1 and a.id = s.account_id\n           and s.revoked_at is null and s.expires_at > now() and a.disabled_at is null\n         returning s.id, s.account_id, a.email, a.name, a.role",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "name"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "role",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "role"
+          }
+        }
       }
     ],
     "parameters": {
@@ -58,8 +69,9 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "ca41d5027ab2f23c309a980dbfd3acc6e2b5eade49afb5815a096104560dbf5d"
+  "hash": "c7e9c2222203a13918bf628a2fe36702e2ba5365fb9e6dba518f6fc119384239"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m, aircraft_serial, rc_serial\n         from flights\n         order by\n             case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,\n             case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,\n             case when $1 = 'air_time_s' and not $2 then air_time_s end asc,\n             case when $1 = 'air_time_s' and $2 then air_time_s end desc,\n             case when $1 = 'distance_m' and not $2 then distance_m end asc,\n             case when $1 = 'distance_m' and $2 then distance_m end desc,\n             case when $1 = 'aircraft_serial' and not $2 then aircraft_serial end asc nulls last,\n             case when $1 = 'aircraft_serial' and $2 then aircraft_serial end desc nulls last,\n             case when $1 = 'rc_serial' and not $2 then rc_serial end asc nulls last,\n             case when $1 = 'rc_serial' and $2 then rc_serial end desc nulls last,\n             id\n         limit $3 offset $4",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m, aircraft_serial, rc_serial\n         from flights\n         where $5\n            or pilot_id in (select id from pilots where account_id = $6)\n            or team_id in (select m.team_id from team_members m\n                           join pilots p on p.id = m.pilot_id where p.account_id = $6)\n         order by\n             case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,\n             case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,\n             case when $1 = 'air_time_s' and not $2 then air_time_s end asc,\n             case when $1 = 'air_time_s' and $2 then air_time_s end desc,\n             case when $1 = 'distance_m' and not $2 then distance_m end asc,\n             case when $1 = 'distance_m' and $2 then distance_m end desc,\n             case when $1 = 'aircraft_serial' and not $2 then aircraft_serial end asc nulls last,\n             case when $1 = 'aircraft_serial' and $2 then aircraft_serial end desc nulls last,\n             case when $1 = 'rc_serial' and not $2 then rc_serial end asc nulls last,\n             case when $1 = 'rc_serial' and $2 then rc_serial end desc nulls last,\n             id\n         limit $3 offset $4",
   "describe": {
     "columns": [
       {
@@ -86,7 +86,9 @@
         "Text",
         "Bool",
         "Int8",
-        "Int8"
+        "Int8",
+        "Bool",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -99,5 +101,5 @@
       true
     ]
   },
-  "hash": "b458347b9aa236ac16a9a99b81bfdd8ea014d1ba0fc9af9e522547486fbac847"
+  "hash": "e1b25637c87364ded9706493651015c98477378082daa7431596dda2a3a610b6"
 }

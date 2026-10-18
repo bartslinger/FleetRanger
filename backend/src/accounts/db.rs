@@ -15,8 +15,12 @@ pub async fn insert(db: &PgPool, email: &str, role: &str) -> sqlx::Result<bool> 
 }
 
 pub async fn set_role(db: &PgPool, email: &str, role: &str) -> sqlx::Result<()> {
-    sqlx::query!("update accounts set role = $2 where email = $1", email, role)
-        .execute(db)
-        .await?;
+    sqlx::query!(
+        "update accounts set role = $2 where email = $1",
+        email,
+        role
+    )
+    .execute(db)
+    .await?;
     Ok(())
 }

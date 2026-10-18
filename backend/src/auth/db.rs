@@ -78,6 +78,7 @@ pub struct Session {
     pub account_id: Uuid,
     pub email: String,
     pub name: Option<String>,
+    pub role: String,
 }
 
 /// The valid session with this token hash, extending its expiry because it is
@@ -94,7 +95,7 @@ pub async fn use_session(
          from accounts a
          where s.token_sha256 = $1 and a.id = s.account_id
            and s.revoked_at is null and s.expires_at > now() and a.disabled_at is null
-         returning s.id, s.account_id, a.email, a.name",
+         returning s.id, s.account_id, a.email, a.name, a.role",
         token_sha256,
         idle_days,
     )

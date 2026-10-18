@@ -4,6 +4,7 @@ mod config;
 mod flights;
 mod health;
 mod ingest;
+mod policy;
 
 use std::io::IsTerminal;
 use std::net::SocketAddr;

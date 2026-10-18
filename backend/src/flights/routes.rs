@@ -1,4 +1,4 @@
-//! Flight API. Until teams exist, every logged-in account sees all flights.
+//! Flight API. Each account sees only the flights the policy allows.
 
 use axum::{
     Json, Router,
@@ -9,7 +9,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
-use super::db::{self, FlightSummary, Sort, SortKey};
+use super::db::{FlightSummary, Sort, SortKey};
+use super::service;
 use crate::auth::Actor;
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -39,7 +40,7 @@ struct FlightPage {
 }
 
 async fn list(
-    _actor: Actor,
+    actor: Actor,
     State(db): State<PgPool>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<FlightPage>, (StatusCode, String)> {
@@ -54,11 +55,9 @@ async fn list(
         .ok_or_else(|| bad_request("unknown sort column".to_owned()))?;
 
     let offset = i64::from(page - 1) * i64::from(size);
-    let flights = db::list(&db, &sort, i64::from(size), offset).await;
-    let total = db::count(&db).await;
-    match (flights, total) {
-        (Ok(flights), Ok(total)) => Ok(Json(FlightPage { flights, total })),
-        (Err(error), _) | (_, Err(error)) => {
+    match service::list(&db, &actor, &sort, i64::from(size), offset).await {
+        Ok((flights, total)) => Ok(Json(FlightPage { flights, total })),
+        Err(error) => {
             tracing::error!(%error, "listing flights");
             Err((StatusCode::INTERNAL_SERVER_ERROR, String::new()))
         }
