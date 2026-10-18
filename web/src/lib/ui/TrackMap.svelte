@@ -147,11 +147,13 @@
 		const extent = bounds(tracks);
 		if (!extent) return;
 		map.fitBounds(extent, { ...FIT, animate });
-		placed = true;
+		// Shown once the new view is drawn: until its tiles are in, Mapbox
+		// draws the ones it has, from the starting view (the whole world).
+		if (!placed) map.once('idle', () => (placed = true));
 	}
 
-	// Hidden until the map shows the tracks, so it never shows Mapbox's
-	// default view (somewhere far away) first.
+	// Hidden until the map shows the tracks, so it never shows another view
+	// (the starting view, or the style's) first.
 	let placed = $state(false);
 
 	// Creates the map in the browser; mapbox-gl can't run on the server.
@@ -170,9 +172,14 @@
 				style: styleUrl(view),
 				attributionControl: false,
 				cooperativeGestures: matchMedia('(pointer: coarse)').matches,
+				// An explicit camera: without one, Mapbox jumps to the style's own
+				// view (Dubai) when the style loads, also after the tracks were
+				// fitted. The bounds then set the actual view.
+				center: [0, 0],
+				zoom: 1,
 				...(initial ? { bounds: initial, fitBoundsOptions: FIT } : {})
 			});
-			if (initial) placed = true;
+			// Shown once `load` below has fitted the tracks.
 			created.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
 			created.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 			created.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
