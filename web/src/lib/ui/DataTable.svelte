@@ -134,7 +134,10 @@
 </div>
 
 <style>
+	/* Positioned so it also clips visually hidden text in the cells, which is
+	   absolutely positioned; otherwise that text widens the page on phones. */
 	.container {
+		position: relative;
 		max-width: 100%;
 		overflow-x: auto;
 	}
