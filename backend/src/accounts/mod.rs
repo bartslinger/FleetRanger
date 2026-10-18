@@ -1,6 +1,8 @@
-//! Accounts: the people who can log in.
+//! Accounts: the people who can log in, shown as "users" in the web app.
 
 pub mod db;
+pub mod routes;
+mod service;
 
 use anyhow::{Result, bail};
 use sqlx::PgPool;
@@ -9,19 +11,18 @@ use sqlx::PgPool;
 /// This is how the first account of an install is added, with `admin` so it can
 /// manage the rest. For an existing account, `admin` makes it an admin.
 pub async fn add(db: &PgPool, email: &str, admin: bool) -> Result<()> {
-    let email = email.trim().to_lowercase();
-    if !email.contains('@') {
+    let Some(email) = service::email(email) else {
         bail!("{email:?} is not an email address");
-    }
+    };
     let role = if admin { "admin" } else { "member" };
-    if db::insert(db, &email, role).await? {
+    if db::insert(db, &email, role).await?.is_some() {
         tracing::info!(
             email,
             role,
             "account added; it is tied to a login on first use"
         );
     } else if admin {
-        db::set_role(db, &email, role).await?;
+        db::set_role_by_email(db, &email, role).await?;
         tracing::info!(email, "the existing account is now an admin");
     } else {
         tracing::info!(email, "an account with this email already exists");

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update accounts set role = $2 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b730fddaed1de468786ac377d92b505be60110c9bc33f55937c6cc433dc1075e"
+}

@@ -1,0 +1,107 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select a.id, a.email, a.name, a.role, a.disabled_at,\n                  p.id as \"pilot_id?\", p.name as \"pilot_name?\",\n                  (select max(created_at) from login_sessions s\n                   where s.account_id = a.id) as last_login_at\n           from accounts a\n           left join pilots p on p.account_id = a.id\n           where a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "role",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "disabled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "disabled_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "pilot_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "pilots",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "pilot_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pilots",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_login_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "1181166dd7bc24d7107f794d98b38a488c8899ba0ea65477ab39805420cf2300"
+}

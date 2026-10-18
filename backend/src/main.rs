@@ -109,6 +109,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .merge(teams::routes::router())
         .merge(pilots::routes::router())
         .merge(equipment::routes::router())
+        .merge(accounts::routes::router())
         .layer(middleware::from_fn_with_state(
             state.auth.clone(),
             auth::same_origin,
