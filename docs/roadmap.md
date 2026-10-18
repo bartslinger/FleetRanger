@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Login works locally (phase 4): Google OIDC, accounts added by email, server-side login sessions, an `Actor` per request; the flight API requires login. Next is the audit log (schema proposed, not yet agreed), then pilots and teams, then sessions (phase 3), which are grouped per pilot. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login works locally (phase 4): Google OIDC, accounts added by email, server-side login sessions, an `Actor` per request; the flight API requires login. Next are pilots, teams and devices, then sessions (phase 3), which are grouped per pilot. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
