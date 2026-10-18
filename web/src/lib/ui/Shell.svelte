@@ -50,25 +50,6 @@
 	let menuButton: HTMLButtonElement | undefined = $state();
 	let navElement: HTMLElement | undefined = $state();
 
-	// The rail (lg and up) expands after Carbon's 100ms delay, so passing over
-	// it with the mouse doesn't flash the labels, and collapses at once.
-	let expanded = $state(false);
-	let expandTimer: ReturnType<typeof setTimeout> | undefined;
-
-	function expandSoon() {
-		clearTimeout(expandTimer);
-		expandTimer = setTimeout(() => (expanded = true), 100);
-	}
-
-	function collapse() {
-		clearTimeout(expandTimer);
-		expanded = false;
-	}
-
-	function onNavFocusout(event: FocusEvent) {
-		if (!navElement?.contains(event.relatedTarget as Node | null)) collapse();
-	}
-
 	// The profile panel: who is logged in, the theme and logging out. The theme
 	// starts from the server's value, then follows the user's choices.
 	// svelte-ignore state_referenced_locally
@@ -111,9 +92,8 @@
 		} else if (open) {
 			open = false;
 			menuButton?.focus();
-		} else if (expanded) {
-			// As Carbon's rail: collapse and continue in the content.
-			collapse();
+		} else if (navElement?.contains(document.activeElement)) {
+			// As Carbon's rail: leave it (which collapses it) for the content.
 			document.getElementById('main-content')?.focus();
 		}
 	}
@@ -222,21 +202,7 @@
 </header>
 
 {#if account}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-	<!-- A click expands the rail at once; keyboard users expand it by focus. -->
-	<nav
-		bind:this={navElement}
-		id="side-nav"
-		class="theme-dark"
-		class:open
-		class:expanded
-		aria-label="Main"
-		onmouseenter={expandSoon}
-		onmouseleave={collapse}
-		onfocusin={expandSoon}
-		onfocusout={onNavFocusout}
-		onclick={() => (expanded = true)}
-	>
+	<nav bind:this={navElement} id="side-nav" class="theme-dark" class:open aria-label="Main">
 		<ul>
 			{#each nav as item (item.href)}
 				<li>
@@ -540,9 +506,11 @@
 		padding: var(--cds-size-large) 0 var(--cds-spacing-09);
 	}
 
-	/* Carbon's lg breakpoint (66rem): the rail, always visible, 48px wide and
-	   256px when expanded over the content. Custom properties can't be used in
-	   media queries. */
+	/* Carbon's lg breakpoint (66rem): the rail, always visible, 48px wide. It
+	   expands to 256px over the content on hover, after Carbon's 100ms delay so
+	   passing over it doesn't flash the labels, or on keyboard focus (not
+	   focus-within, so a clicked link doesn't keep it open), and collapses at
+	   once. Custom properties can't be used in media queries. */
 	@media (min-width: 66rem) {
 		.menu,
 		.scrim {
@@ -556,8 +524,10 @@
 			transition: width 110ms cubic-bezier(0.2, 0, 0.38, 0.9);
 		}
 
-		nav.expanded {
+		nav:hover,
+		nav:has(:focus-visible) {
 			width: 16rem;
+			transition-delay: 100ms;
 		}
 
 		.name {
