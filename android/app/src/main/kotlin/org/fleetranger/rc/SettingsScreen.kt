@@ -25,7 +25,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.fleetranger.rc.ui.Button
@@ -38,6 +40,7 @@ import org.fleetranger.rc.ui.Type
 
 /** As in the web app, e.g. "12 Oct 2026". */
 private val DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+private val TIME = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", Locale.ENGLISH)
 
 /**
  * The controller's settings: when logs sync, and its pairing. Anyone holding
@@ -56,6 +59,7 @@ fun SettingsScreen(
     onAllowNetworkNames: () -> Unit,
     onUnpair: () -> Unit,
     onBack: () -> Unit,
+    syncStatus: SyncStatus? = null,
 ) {
     BackHandler(onBack = onBack)
     var networks by remember { mutableStateOf(settings.networks) }
@@ -99,6 +103,19 @@ fun SettingsScreen(
         }
 
         Column(Modifier.widthIn(max = 560.dp)) {
+            if (syncStatus != null) {
+                Section("Sync")
+                Paragraph(syncStatus.summary())
+                Paragraph(
+                    "${syncStatus.uploaded} ${if (syncStatus.uploaded == 1) "log" else "logs"} uploaded" +
+                        if (syncStatus.lastUploadAt > 0) {
+                            ", the last at ${TIME.format(Instant.ofEpochMilli(syncStatus.lastUploadAt).atZone(ZoneId.systemDefault()))}"
+                        } else {
+                            ""
+                        },
+                    secondary = true,
+                )
+            }
             Section("Wi-Fi networks for syncing")
             Paragraph(
                 "Flight logs upload only over these networks, and never over one Android " +

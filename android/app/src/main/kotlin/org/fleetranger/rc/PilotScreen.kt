@@ -2,6 +2,7 @@ package org.fleetranger.rc
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -53,6 +54,7 @@ fun PilotScreen(
     onChoose: (Pilot?) -> Unit,
     onOpenStartupSettings: () -> Unit,
     onSettings: () -> Unit,
+    syncStatus: SyncStatus? = null,
 ) {
     var choosing by rememberSaveable { mutableStateOf(false) }
     val settingsButton: @Composable () -> Unit = {
@@ -71,22 +73,40 @@ fun PilotScreen(
             WarningNotification(
                 title = "FleetRanger doesn’t open at startup",
                 text = "Choose it under Apps & notifications › Auto start application selection.",
-                action = "Open settings",
+                action = "Open Android settings",
                 onAction = onOpenStartupSettings,
             )
         }
-        if (last != null && !choosing) {
-            Heading("Who’s flying?", settingsButton)
-            LastPilot(last, onFly = { onChoose(last) }, onOther = { choosing = true })
-        } else if (last != null) {
-            Heading("Other pilot") { Button("Back", { choosing = false }, kind = ButtonKind.Ghost) }
-            // The last pilot is on the first screen already.
-            PilotList(list.copy(pilots = list.pilots.filter { it != last }), onChoose)
-        } else {
-            Heading("Who’s flying?", settingsButton)
-            PilotList(list, onChoose)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s06)) {
+            if (last != null && !choosing) {
+                Heading("Who’s flying?", settingsButton)
+                LastPilot(last, onFly = { onChoose(last) }, onOther = { choosing = true })
+            } else if (last != null) {
+                Heading("Other pilot") {
+                    Button("Back", { choosing = false }, kind = ButtonKind.Ghost)
+                }
+                // The last pilot is on the first screen already.
+                PilotList(list.copy(pilots = list.pilots.filter { it != last }), onChoose)
+            } else {
+                Heading("Who’s flying?", settingsButton)
+                PilotList(list, onChoose)
+            }
         }
+        if (syncStatus != null) SyncLine(syncStatus, onSettings)
     }
+}
+
+/** The upload status in one line; tapping it opens the settings. */
+@Composable
+private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
+    BasicText(
+        "Sync: ${status.summary()}",
+        style = Type.label01.copy(color = Colors.textSecondary),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = "Open settings", onClick = onSettings)
+            .padding(vertical = Spacing.s03),
+    )
 }
 
 /** The usual case: the same pilot again, in one tap. */

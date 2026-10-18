@@ -7,6 +7,15 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- DJI Pilot 2's flight logs, in its folder under Android/data. Android 10
+         allows reading them with the legacy storage model (see application). -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Uploading in the background, also after a reboot. The service is of
+         type location only so it may see the Wi-Fi network's name. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- DJI Pilot 2 is opened by package name, so it must be visible to the app. -->
     <queries>
@@ -15,6 +24,7 @@
 
     <application
         android:label="FleetRanger"
+        android:requestLegacyExternalStorage="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name=".MainActivity"
@@ -32,5 +42,16 @@
                 <data android:scheme="fleetranger" android:host="setup" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".UploadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|location" />
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

@@ -2,8 +2,11 @@ package org.fleetranger.rc
 
 import android.Manifest
 import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -35,10 +38,24 @@ class MainActivity : ComponentActivity() {
     private var showSettings by mutableStateOf(false)
     private var currentNetwork by mutableStateOf<String?>(null)
     private var canSeeNetworkNames by mutableStateOf(false)
+    private var syncStatus by mutableStateOf<SyncStatus?>(null)
+    /** Kept, or Android forgets the listener. */
+    private var syncListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     /** Android only names the Wi-Fi network for apps with the location permission. */
     private val askForNetworkNames =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refreshNetwork() }
+
+    /** Reading DJI Pilot 2's flight logs needs the storage permission. */
+    private var hasLogAccess by mutableStateOf(false)
+    /** Asked before and not allowed: Android won't ask again. */
+    private var logAccessRefused by mutableStateOf(false)
+    private val askForLogs =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            getSharedPreferences("onboarding", MODE_PRIVATE).edit()
+                .putBoolean("asked_for_logs", true).apply()
+            startUploads()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +64,8 @@ class MainActivity : ComponentActivity() {
         pilots = Pilots(this)
         server = Server(this)
         sync = SyncSettings(this)
+        syncStatus = SyncStatus.read(this)
+        syncListener = SyncStatus.listen(this) { syncStatus = it }
         setUp(intent)
         serverUrl = server.url
         paired = server.paired
@@ -55,7 +74,20 @@ class MainActivity : ComponentActivity() {
                 !paired -> Pairing(server, serverUrl, onPaired = {
                     paired = true
                     refreshPilots()
+                    startUploads()
                 })
+                !hasLogAccess -> LogAccessScreen(
+                    refused = logAccessRefused,
+                    onContinue = { askForLogs.launch(Manifest.permission.READ_EXTERNAL_STORAGE) },
+                    onOpenAppSettings = {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", packageName, null),
+                            ),
+                        )
+                    },
+                )
                 showSettings -> SettingsScreen(
                     settings = sync,
                     serverUrl = serverUrl,
@@ -66,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onUnpair = ::unpair,
                     onBack = { showSettings = false },
+                    syncStatus = syncStatus,
                 )
                 else -> PilotScreen(
                     list = pilotList,
@@ -77,9 +110,22 @@ class MainActivity : ComponentActivity() {
                         refreshNetwork()
                         showSettings = true
                     },
+                    syncStatus = syncStatus,
                 )
             }
         }
+    }
+
+    /**
+     * Uploads run once the controller is paired and may read the logs. Without
+     * access, the onboarding screen explains Android's question before asking.
+     */
+    private fun startUploads() {
+        hasLogAccess = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
+        logAccessRefused = !hasLogAccess &&
+            getSharedPreferences("onboarding", MODE_PRIVATE).getBoolean("asked_for_logs", false)
+        if (paired && hasLogAccess) UploadService.start(this)
     }
 
     private fun refreshNetwork() {
@@ -104,6 +150,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        syncListener?.let { SyncStatus.stopListening(this, it) }
+        super.onDestroy()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setUp(intent)
@@ -114,6 +165,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         opensAtStartup = DjiPilot.opensAtStartup(this)
         refreshNetwork()
+        startUploads()
         pilotList = pilots.current
         last = pilots.last()
         if (paired) refreshPilots()

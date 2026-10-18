@@ -67,6 +67,19 @@ class Pilots(context: Context) {
         choices.edit().putString(now.toString(), pilot?.id ?: NOT_IN_THE_LIST).apply()
     }
 
+    /**
+     * The id of the pilot for a log last written at `time`: the one chosen
+     * most recently before it, unless that choice is older than [EXPIRES_MS]
+     * (yesterday's pilot isn't today's), or was "Not in the list". Null then.
+     */
+    fun at(time: Long): String? {
+        val (chosenAt, id) = choices.all
+            .map { (at, id) -> at.toLong() to id as String }
+            .filter { (at, _) -> at <= time }
+            .maxByOrNull { (at, _) -> at } ?: return null
+        return id.takeIf { it != NOT_IN_THE_LIST && time - chosenAt < EXPIRES_MS }
+    }
+
     /** The pilot chosen last, if they can still be chosen. */
     fun last(): Pilot? {
         val id = choices.all.maxByOrNull { (time, _) -> time.toLong() }?.value
@@ -75,5 +88,7 @@ class Pilots(context: Context) {
 
     private companion object {
         const val NOT_IN_THE_LIST = ""
+        /** A choice counts for logs written within this time after it. */
+        const val EXPIRES_MS = 6 * 3_600_000L
     }
 }

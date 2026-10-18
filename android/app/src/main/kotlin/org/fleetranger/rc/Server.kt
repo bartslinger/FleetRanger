@@ -3,6 +3,7 @@ package org.fleetranger.rc
 import android.content.Context
 import android.os.Build
 import android.util.Base64
+import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -80,6 +81,44 @@ class Server(context: Context) {
         val answer = call("GET", "/api/controller/pilots")
         if (answer == null) paired = false
         return answer?.let(PilotList::fromJson)
+    }
+
+    /** What became of an upload. */
+    enum class Upload { Stored, Refused, Unpaired }
+
+    /**
+     * Uploads a flight log with its hash and the chosen pilot (null: none).
+     * Refused means the server didn't take it (e.g. it changed while being
+     * sent); try again later. No connection is an IOException.
+     */
+    fun upload(file: File, sha256: String, pilotId: String?): Upload {
+        val base = url ?: throw IOException("no server set up")
+        val connection = URL("$base/api/controller/logs").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 60_000
+            connection.doOutput = true
+            connection.setFixedLengthStreamingMode(file.length())
+            connection.setRequestProperty("Content-Type", "application/octet-stream")
+            token?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
+            connection.setRequestProperty("X-File-Name", file.name)
+            connection.setRequestProperty("X-SHA256", sha256)
+            pilotId?.let { connection.setRequestProperty("X-Pilot-Id", it) }
+            file.inputStream().use { input ->
+                connection.outputStream.use { output -> input.copyTo(output) }
+            }
+            return when (connection.responseCode) {
+                in 200..299 -> Upload.Stored
+                401 -> {
+                    paired = false
+                    Upload.Unpaired
+                }
+                else -> Upload.Refused
+            }
+        } finally {
+            connection.disconnect()
+        }
     }
 
     /** Unpairs this controller: its token stops working. */

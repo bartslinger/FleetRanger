@@ -1,0 +1,178 @@
+package org.fleetranger.rc
+
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Environment
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.IBinder
+import android.util.Log
+import java.io.File
+import java.io.IOException
+import java.security.MessageDigest
+
+/**
+ * Uploads DJI Pilot 2's flight logs, as the prototype did: it looks through
+ * the log folders every minute, and uploads a log once it hasn't changed for
+ * a few minutes, over an approved Wi-Fi network that isn't metered. Each log
+ * goes with the pilot chosen before it was written. A log that changes after
+ * its upload (it was still being written) is uploaded again, and replaces the
+ * earlier version on the server.
+ */
+class UploadService : Service() {
+    private lateinit var worker: Handler
+    private lateinit var server: Server
+    private lateinit var pilots: Pilots
+    private lateinit var sync: SyncSettings
+    /** Logs already uploaded, by name, size and modification time. */
+    private val uploaded by lazy { getSharedPreferences("uploaded", MODE_PRIVATE) }
+
+    private val scan = Runnable { scan() }
+
+    override fun onCreate() {
+        super.onCreate()
+        server = Server(this)
+        pilots = Pilots(this)
+        sync = SyncSettings(this)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(CHANNEL, "Uploads", NotificationManager.IMPORTANCE_LOW),
+        )
+        startForeground(NOTIFICATION, notification("Starting…", busy = false))
+        val thread = HandlerThread("uploads").apply { start() }
+        worker = Handler(thread.looper)
+        worker.post(scan)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Opening the app looks again straight away, e.g. after approving a network.
+        worker.removeCallbacks(scan)
+        worker.post(scan)
+        return START_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun scan() {
+        worker.removeCallbacks(scan)
+        try {
+            uploadWaiting()
+        } catch (error: Exception) {
+            Log.w(TAG, "upload scan failed", error)
+        }
+        worker.postDelayed(scan, RESCAN_MS)
+    }
+
+    private fun uploadWaiting() {
+        if (!server.paired) return report(SyncStatus.State.NotPaired, waiting = 0)
+        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return report(SyncStatus.State.NoAccess, waiting = 0)
+        }
+        val now = System.currentTimeMillis()
+        val waiting = logFolders()
+            .flatMap { it.listFiles { file -> file.isFile && file.name.endsWith(".txt") }.orEmpty().toList() }
+            .filter { sync.includes(it.lastModified()) && !uploaded.contains(key(it)) }
+            .sortedBy { it.lastModified() }
+            .toMutableList()
+        if (waiting.isEmpty()) return report(SyncStatus.State.Done, waiting = 0)
+        if (!sync.mayUploadNow()) {
+            return report(SyncStatus.State.WaitingForNetwork, waiting = waiting.size)
+        }
+        for (log in waiting.toList()) {
+            if (now - log.lastModified() < SETTLE_MS) continue
+            // Taken before reading, so a write during the upload counts as a change.
+            val key = key(log)
+            report(SyncStatus.State.Uploading, waiting = waiting.size, current = log.name)
+            val result = try {
+                server.upload(log, sha256(log), pilots.at(log.lastModified()))
+            } catch (error: IOException) {
+                Log.w(TAG, "upload of ${log.name} failed: $error")
+                return report(SyncStatus.State.Unreachable, waiting = waiting.size)
+            }
+            when (result) {
+                Server.Upload.Stored -> {
+                    uploaded.edit().putBoolean(key, true).apply()
+                    waiting.remove(log)
+                    val before = SyncStatus.read(this)
+                    SyncStatus.write(
+                        this,
+                        before.copy(uploaded = before.uploaded + 1, lastUploadAt = System.currentTimeMillis()),
+                    )
+                }
+                Server.Upload.Refused -> Log.w(TAG, "the server refused ${log.name}")
+                Server.Upload.Unpaired -> return report(SyncStatus.State.NotPaired, waiting = 0)
+            }
+        }
+        // Logs still being written, or refused: they're tried again next time.
+        report(if (waiting.isEmpty()) SyncStatus.State.Done else SyncStatus.State.Uploading, waiting.size)
+    }
+
+    /** Tells the screens and the notification what the service is doing. */
+    private fun report(state: SyncStatus.State, waiting: Int, current: String? = null) {
+        val status = SyncStatus.read(this).copy(state = state, waiting = waiting, current = current)
+        SyncStatus.write(this, status)
+        val busy = state == SyncStatus.State.Uploading && current != null
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION, notification(status.summary(), busy))
+    }
+
+    /** The system's upload icon is animated, so it's only shown while uploading. */
+    private fun notification(text: String, busy: Boolean): Notification =
+        Notification.Builder(this, CHANNEL)
+            .setSmallIcon(
+                if (busy) android.R.drawable.stat_sys_upload else android.R.drawable.stat_sys_upload_done,
+            )
+            .setContentTitle("FleetRanger")
+            .setContentText(text)
+            .setOngoing(true)
+            .build()
+
+    companion object {
+        private const val TAG = "FleetRanger"
+        private const val CHANNEL = "uploads"
+        private const val NOTIFICATION = 1
+        /** A log must be unchanged this long: DJI Pilot 2 may still be writing it. */
+        private const val SETTLE_MS = 3 * 60_000L
+        private const val RESCAN_MS = 60_000L
+
+        fun start(context: Context) {
+            context.startForegroundService(Intent(context, UploadService::class.java))
+        }
+
+        private fun key(file: File) = "${file.name}|${file.length()}|${file.lastModified()}"
+
+        /**
+         * DJI Pilot 2 keeps its logs in folders named FlightRecord in its own
+         * storage; looking for them keeps working if the depth changes.
+         */
+        private fun logFolders(): List<File> {
+            val root = File(Environment.getExternalStorageDirectory(), DJI_DATA)
+            return root.walkTopDown()
+                .maxDepth(5)
+                .filter { it.isDirectory && it.name == "FlightRecord" }
+                .toList()
+        }
+
+        private const val DJI_DATA = "Android/data/com.dji.industry.pilot/files"
+
+        private fun sha256(file: File): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
+        }
+    }
+}
