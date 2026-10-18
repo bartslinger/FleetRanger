@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Phase 2: ingest. Importing, DJI key requests and flights work on 44 test logs locally. Next: deploying to the server and importing all logs there.
+The web UI foundation: Carbon design system, UI shell, grid and a logbook with paging and sorting, served by a development-only flight API until login exists (phase 4). Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -39,7 +39,8 @@ Phase 2: ingest. Importing, DJI key requests and flights work on 44 test logs lo
 
 ## Phase 5: web
 
-- [ ] Logbook
+- [x] Design system foundation: tokens, fonts, UI shell, 2x Grid, first components, theme setting
+- [~] Logbook (paging and sorting done; no pilots or access rules yet)
 - [ ] Flight detail with map
 - [ ] Session overview
 - [ ] Admin pages: pilots, teams, devices
