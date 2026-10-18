@@ -26,6 +26,8 @@ The web UI foundation: Carbon design system, UI shell, grid and a logbook with p
 
 ## Phase 3: sessions
 
+Waits for pilots (phase 4): sessions are grouped per pilot.
+
 - [ ] Automatic grouping by time gap
 - [ ] Assigning a pilot per session
 - [ ] Moving flights between sessions, splitting and merging sessions
@@ -71,6 +73,5 @@ The web UI foundation: Carbon design system, UI shell, grid and a logbook with p
 ## Open questions
 
 - Re-uploads with the same file name but different content (a log synced while still being written): how should they replace the earlier version? Decide in phase 6; until then files are only deduplicated by hash.
-- Session time-gap threshold. The proposal is 2 hours, configurable.
 - Do session "time on/off" values mean first takeoff and last landing?
 - Who sees flights with no pilot and no team?

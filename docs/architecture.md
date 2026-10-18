@@ -44,7 +44,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 
 ## Sessions and operations
 
-- **A session is one pilot's consecutive flights**, for example a morning shift. A remote controller often powers off during a session while the pilot relocates, so power cycles are not boundaries. Sessions are grouped automatically by a time-gap rule. Users can move flights between sessions, and split or merge sessions.
+- **A session is one pilot's consecutive flights**, for example a morning shift. A remote controller often powers off during a session while the pilot relocates, so power cycles are not boundaries. Sessions are grouped automatically by a time-gap rule: a flight joins its pilot's session when it starts within the gap (2 hours, configurable per install), and otherwise starts a new one. Grouping waits for pilots: a flight without a pilot is in no session, because the remote controller is not a reliable stand-in. Users can move flights between sessions, and split or merge sessions. Automatic grouping only places flights that have no session yet, so it never undoes a user's changes.
 - **Selecting a pilot on the remote controller** sets who is flying from that moment on.
 - **An operation groups flights across teams**, for example a joint operation. Anyone can create one. Anyone with a flight in an operation sees all of its flights. Flights can only be added by people who can already see them, and must overlap the operation's time window. One operation per flight for now, through a link table, so this can be relaxed later.
 
