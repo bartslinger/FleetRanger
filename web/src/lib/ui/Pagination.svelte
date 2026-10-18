@@ -104,7 +104,7 @@
 		justify-content: space-between;
 		min-height: var(--cds-size-medium);
 		background: var(--cds-layer-01);
-		border-top: 1px solid var(--cds-border-subtle-01);
+		border-top: 1px solid var(--cds-border-subtle-00);
 		color: var(--cds-text-secondary);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
@@ -128,7 +128,7 @@
 		display: none;
 		height: 100%;
 		padding-left: var(--cds-spacing-05);
-		border-right: 1px solid var(--cds-border-subtle-01);
+		border-right: 1px solid var(--cds-border-subtle-00);
 	}
 
 	.range {
@@ -140,7 +140,7 @@
 		display: none;
 		height: 100%;
 		padding-right: var(--cds-spacing-05);
-		border-left: 1px solid var(--cds-border-subtle-01);
+		border-left: 1px solid var(--cds-border-subtle-00);
 	}
 
 	.page .label {
@@ -185,7 +185,7 @@
 		display: grid;
 		place-items: center;
 		width: var(--cds-size-medium);
-		border-left: 1px solid var(--cds-border-subtle-01);
+		border-left: 1px solid var(--cds-border-subtle-00);
 		color: var(--cds-icon-primary);
 	}
 

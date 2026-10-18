@@ -9,7 +9,7 @@ import * as type from '@carbon/type';
 const OUTPUT = new URL('../src/lib/ui/tokens.css', import.meta.url);
 
 // Carbon's light and dark themes; see docs/design-system.md.
-const LIGHT = { theme: themes.white, key: 'whiteTheme' };
+const LIGHT = { theme: themes.g10, key: 'g10' };
 const DARK = { theme: themes.g100, key: 'g100' };
 
 // Token groups for Carbon features we don't build.
@@ -91,6 +91,15 @@ ${declarations(dark, '\t\t')}
 :root[data-theme='dark'] {
 \tcolor-scheme: dark;
 ${declarations(dark, '\t')}
+}
+
+/* Carbon's inline theming: the dark theme for one part of the page (the
+   shell), whichever theme the page has. */
+.theme-dark {
+\tcolor-scheme: dark;
+${declarations(dark, '\t')}
+\tbackground-color: var(--cds-background);
+\tcolor: var(--cds-text-primary);
 }
 `;
 
