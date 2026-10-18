@@ -7,15 +7,24 @@
 
 	interface Props extends Omit<HTMLInputAttributes, 'type' | 'checked'> {
 		label: string;
+		/** For screen readers only, e.g. in a table row. */
+		hideLabel?: boolean;
 		checked?: boolean;
+		indeterminate?: boolean;
 	}
 
-	let { label, checked = $bindable(false), ...rest }: Props = $props();
+	let {
+		label,
+		hideLabel = false,
+		checked = $bindable(false),
+		indeterminate = false,
+		...rest
+	}: Props = $props();
 </script>
 
 <label class:disabled={rest.disabled}>
-	<input type="checkbox" bind:checked {...rest} />
-	{label}
+	<input type="checkbox" bind:checked {indeterminate} {...rest} />
+	<span class:visually-hidden={hideLabel}>{label}</span>
 </label>
 
 <style>
@@ -68,6 +77,21 @@
 		border: solid var(--cds-icon-inverse);
 		border-width: 0 1.5px 1.5px 0;
 		transform: rotate(45deg);
+	}
+
+	/* Some selected: a dash instead of the check mark. */
+	input:indeterminate {
+		background: var(--cds-icon-primary);
+	}
+
+	input:indeterminate::before {
+		content: '';
+		position: absolute;
+		top: 6.5px;
+		left: 3px;
+		width: 8px;
+		height: 1.5px;
+		background: var(--cds-icon-inverse);
 	}
 
 	input:focus-visible {

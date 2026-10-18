@@ -29,6 +29,7 @@
 	import ArrowDown from '@carbon/icons/es/arrow--down/16.js';
 	import ArrowUp from '@carbon/icons/es/arrow--up/16.js';
 	import ArrowsVertical from '@carbon/icons/es/arrows--vertical/16.js';
+	import Checkbox from './Checkbox.svelte';
 	import Icon from './Icon.svelte';
 
 	interface Props {
@@ -50,6 +51,14 @@
 		rowHref?: (row: T) => string;
 		/** Carbon's table toolbar: filters, then the primary action at the right. */
 		toolbar?: Snippet;
+		/** Rows that can be selected for batch actions; none if not given. */
+		selectable?: (row: T) => boolean;
+		/** Keys of the selected rows. */
+		selected?: string[];
+		/** Carbon's batch actions, shown over the toolbar while rows are selected. */
+		batchActions?: Snippet<[selected: string[]]>;
+		/** E.g. "3 flights selected". */
+		selectedLabel?: (count: number) => string;
 	}
 
 	let {
@@ -63,8 +72,25 @@
 		defaultSort,
 		sortHref,
 		rowHref,
-		toolbar
+		toolbar,
+		selectable,
+		selected = $bindable([]),
+		batchActions,
+		selectedLabel = (count) => `${count} selected`
 	}: Props = $props();
+
+	const selectableKeys = $derived(selectable ? rows.filter(selectable).map(rowKey) : []);
+	const allSelected = $derived(
+		selectableKeys.length > 0 && selectableKeys.every((key) => selected.includes(key))
+	);
+
+	function toggle(key: string, on: boolean) {
+		selected = on ? [...selected, key] : selected.filter((other) => other !== key);
+	}
+
+	function toggleAll(on: boolean) {
+		selected = on ? selectableKeys : [];
+	}
 
 	/**
 	 * Carbon's cycle: unsorted, ascending, descending, back to the default order.
@@ -89,8 +115,17 @@
 	}
 </script>
 
-{#if toolbar}
-	<div class="toolbar">{@render toolbar()}</div>
+{#if selected.length > 0 && batchActions}
+	<!-- Carbon's batch actions: the count, the actions, and Cancel to deselect. -->
+	<div class="toolbar batch" role="region" aria-label="Batch actions">
+		<p class="count" aria-live="polite">{selectedLabel(selected.length)}</p>
+		{@render batchActions(selected)}
+		<button class="cancel" type="button" onclick={() => (selected = [])}>Cancel</button>
+	</div>
+{:else if toolbar || selectable}
+	<div class="toolbar">
+		{#if toolbar}{@render toolbar()}{/if}
+	</div>
 {/if}
 
 {#snippet content(row: T, column: Column<T>)}
@@ -113,6 +148,18 @@
 		<caption class="visually-hidden">{label}</caption>
 		<thead>
 			<tr>
+				{#if selectable}
+					<th scope="col" class="select">
+						<Checkbox
+							label="Select all"
+							hideLabel
+							checked={allSelected}
+							indeterminate={selected.length > 0 && !allSelected}
+							disabled={selectableKeys.length === 0}
+							onchange={(event) => toggleAll(event.currentTarget.checked)}
+						/>
+					</th>
+				{/if}
 				{#each columns as column (column.key)}
 					<th scope="col" class:numeric={column.numeric} aria-sort={ariaSort(column.key)}>
 						{#if column.sortable && sortHref}
@@ -135,7 +182,19 @@
 		</thead>
 		<tbody>
 			{#each rows as row (rowKey(row))}
-				<tr class:linked={rowHref}>
+				{@const key = rowKey(row)}
+				<tr class:linked={rowHref} class:selected={selected.includes(key)}>
+					{#if selectable}
+						<td class="select">
+							<Checkbox
+								label="Select row"
+								hideLabel
+								checked={selected.includes(key)}
+								disabled={!selectable(row)}
+								onchange={(event) => toggle(key, event.currentTarget.checked)}
+							/>
+						</td>
+					{/if}
 					{#each columns as column, index (column.key)}
 						<td class:numeric={column.numeric} class:identifier={column.identifier}>
 							{#if index === 0 && rowHref}
@@ -297,5 +356,68 @@
 		align-items: center;
 		min-height: var(--cds-size-large);
 		background: var(--cds-layer-01);
+	}
+
+	/* Batch actions: the brand colour, the count at the left, the actions as
+	   primary buttons and Cancel at the right. */
+	.batch {
+		background: var(--cds-background-brand);
+		color: var(--cds-text-on-color);
+	}
+
+	.count {
+		flex: 1;
+		padding-inline: var(--cds-spacing-05);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+	}
+
+	.cancel {
+		position: relative;
+		min-height: var(--cds-size-large);
+		padding: 0 var(--cds-spacing-05);
+		border: 0;
+		background: transparent;
+		color: var(--cds-text-on-color);
+		font: inherit;
+		font-size: var(--cds-body-compact-01-font-size);
+		cursor: pointer;
+	}
+
+	/* The divider between the actions and Cancel. */
+	.cancel::before {
+		content: '';
+		position: absolute;
+		inset: var(--cds-spacing-05) auto var(--cds-spacing-05) 0;
+		width: 1px;
+		background: var(--cds-text-on-color);
+	}
+
+	.cancel:hover {
+		background: var(--cds-button-primary-hover);
+	}
+
+	/* White on the blue bar in both themes; focus-inverse is blue in dark. */
+	.cancel:focus-visible {
+		outline: 2px solid var(--cds-text-on-color);
+		outline-offset: -2px;
+	}
+
+	/* The selection column: a 48px cell, the checkbox 16px from the edge. */
+	.select {
+		width: var(--cds-size-large);
+		padding-inline: var(--cds-spacing-05) 0;
+	}
+
+	/* Above the row link, which covers the row. */
+	td.select :global(label) {
+		position: relative;
+		z-index: 1;
+	}
+
+	tbody tr.selected td {
+		background: var(--cds-layer-selected-01);
+		color: var(--cds-text-primary);
 	}
 </style>
