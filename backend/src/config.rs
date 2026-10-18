@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use openidconnect::url::Url;
 
 /// Runtime configuration, read from environment variables.
 pub struct Config {
@@ -14,9 +15,21 @@ pub struct Config {
     /// DJI app key for requesting log decryption keys (`DJI_APP_KEY`). Logs from
     /// format version 13 on can't be processed without it.
     pub dji_app_key: Option<String>,
-    /// Serves the flight API without login (`FLEETRANGER_INSECURE_DEV_API=true`).
-    /// For local development only, until login exists.
-    pub insecure_dev_api: bool,
+    /// Where browsers reach the install (`FLEETRANGER_PUBLIC_URL`), e.g.
+    /// `https://fleet.example.org`. Login redirects back to it, and changes are
+    /// only accepted from its origin.
+    pub public_url: Url,
+    /// The login provider. Without it nobody can log in.
+    pub oidc: Option<OidcConfig>,
+}
+
+pub struct OidcConfig {
+    /// `OIDC_ISSUER`, Google by default.
+    pub issuer: String,
+    /// `OIDC_CLIENT_ID`.
+    pub client_id: String,
+    /// `OIDC_CLIENT_SECRET`.
+    pub client_secret: String,
 }
 
 impl Config {
@@ -29,18 +42,33 @@ impl Config {
         let log_dir = std::env::var("FLEETRANGER_LOG_DIR")
             .unwrap_or_else(|_| "/data/flightlogs".to_owned())
             .into();
-        let dji_app_key = std::env::var("DJI_APP_KEY")
-            .ok()
-            .filter(|key| !key.is_empty());
-        let insecure_dev_api =
-            std::env::var("FLEETRANGER_INSECURE_DEV_API").is_ok_and(|value| value == "true");
+        let dji_app_key = non_empty_var("DJI_APP_KEY");
+        let public_url = std::env::var("FLEETRANGER_PUBLIC_URL")
+            .unwrap_or_else(|_| "http://localhost:5173".to_owned())
+            .parse()
+            .context("FLEETRANGER_PUBLIC_URL is not a valid URL")?;
+        let oidc = match non_empty_var("OIDC_CLIENT_ID") {
+            Some(client_id) => Some(OidcConfig {
+                issuer: non_empty_var("OIDC_ISSUER")
+                    .unwrap_or_else(|| "https://accounts.google.com".to_owned()),
+                client_id,
+                client_secret: non_empty_var("OIDC_CLIENT_SECRET")
+                    .context("OIDC_CLIENT_ID is set but OIDC_CLIENT_SECRET is not")?,
+            }),
+            None => None,
+        };
 
         Ok(Self {
             bind,
             database_url,
             log_dir,
             dji_app_key,
-            insecure_dev_api,
+            public_url,
+            oidc,
         })
     }
+}
+
+fn non_empty_var(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|value| !value.is_empty())
 }

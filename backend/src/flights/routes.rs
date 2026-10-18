@@ -1,9 +1,8 @@
-//! Flight API. Until login exists it is only served when
-//! `FLEETRANGER_INSECURE_DEV_API` is set, and without any access checks.
+//! Flight API. Until teams exist, every logged-in account sees all flights.
 
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{FromRef, Query, State},
     http::StatusCode,
     routing::get,
 };
@@ -11,11 +10,16 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use super::db::{self, FlightSummary, Sort, SortKey};
+use crate::auth::Actor;
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAX_PAGE_SIZE: u32 = 100;
 
-pub fn router() -> Router<PgPool> {
+pub fn router<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    PgPool: FromRef<S>,
+{
     Router::new().route("/api/flights", get(list))
 }
 
@@ -35,6 +39,7 @@ struct FlightPage {
 }
 
 async fn list(
+    _actor: Actor,
     State(db): State<PgPool>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<FlightPage>, (StatusCode, String)> {

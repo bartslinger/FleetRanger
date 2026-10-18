@@ -1,19 +1,23 @@
 mod accounts;
+mod auth;
 mod config;
 mod flights;
 mod health;
 mod ingest;
 
 use std::io::IsTerminal;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use axum::{Router, routing::get};
+use axum::{Router, extract::FromRef, middleware, routing::get};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
+use crate::auth::Auth;
 use crate::config::Config;
 
 #[tokio::main]
@@ -49,6 +53,25 @@ async fn main() -> Result<()> {
     }
 }
 
+/// What request handlers can extract with `State`.
+#[derive(Clone)]
+struct AppState {
+    db: PgPool,
+    auth: Arc<Auth>,
+}
+
+impl FromRef<AppState> for PgPool {
+    fn from_ref(state: &AppState) -> Self {
+        state.db.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<Auth> {
+    fn from_ref(state: &AppState) -> Self {
+        state.auth.clone()
+    }
+}
+
 async fn serve(config: &Config, db: PgPool) -> Result<()> {
     tokio::spawn(ingest::process::run(
         db.clone(),
@@ -56,20 +79,41 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         config.dji_app_key.clone(),
     ));
 
-    let mut app = Router::new().route("/healthz", get(health::check));
-    if config.insecure_dev_api {
-        tracing::warn!("serving the flight API without login (FLEETRANGER_INSECURE_DEV_API)");
-        app = app.merge(flights::routes::router());
-    }
-    let app = app.with_state(db);
+    let provider = match &config.oidc {
+        Some(oidc) => Some(auth::Provider::new(oidc, &config.public_url)?),
+        None => {
+            tracing::warn!("no login provider configured (OIDC_CLIENT_ID); nobody can log in");
+            None
+        }
+    };
+    let state = AppState {
+        db,
+        auth: Arc::new(Auth {
+            public_url: config.public_url.clone(),
+            provider,
+        }),
+    };
+
+    let app = Router::new()
+        .route("/healthz", get(health::check))
+        .merge(auth::routes::router())
+        .merge(flights::routes::router())
+        .layer(middleware::from_fn_with_state(
+            state.auth.clone(),
+            auth::same_origin,
+        ))
+        .with_state(state);
 
     let listener = TcpListener::bind(config.bind)
         .await
         .with_context(|| format!("failed to listen on {}", config.bind))?;
     tracing::info!("listening on {}", config.bind);
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     Ok(())
 }

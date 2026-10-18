@@ -33,13 +33,19 @@ Run the backend, rebuilding and restarting on every change:
 ```
 cd backend
 DATABASE_URL=postgres://fleetranger:fleetranger@127.0.0.1/fleetranger \
-FLEETRANGER_BIND=127.0.0.1:8080 FLEETRANGER_INSECURE_DEV_API=true \
+FLEETRANGER_BIND=127.0.0.1:8080 \
   watchexec -r -w src -w migrations -- cargo run --locked
 ```
 
-The backend listens on http://127.0.0.1:8080. Until login exists, `FLEETRANGER_INSECURE_DEV_API=true` serves the flight API without any access checks, so the web app has data. Never set it on a server.
+The backend listens on http://127.0.0.1:8080.
 
-Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default). The backend processes pending logs in the background. Encrypted logs need a DJI app key in `DJI_APP_KEY`; keep it in `backend/.env` (ignored by git) and load it with `set -a; . ./.env; set +a` before starting the backend. To register logs that are already in that directory, run the backend with the `import` command:
+Logging in needs a Google OAuth client (type "Web application") with the redirect URI `http://localhost:5173/auth/callback`. Put `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` in `backend/.env` (see below). Another OpenID Connect provider can be set with `OIDC_ISSUER`, and `FLEETRANGER_PUBLIC_URL` is where browsers reach the app (`http://localhost:5173` by default). Nobody can log in without an account, so add yours first:
+
+```
+cargo run --locked -- add-account you@example.org
+```
+
+Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default). The backend processes pending logs in the background. Encrypted logs need a DJI app key in `DJI_APP_KEY`; keep it and the OIDC settings in `backend/.env` (ignored by git) and load it with `set -a; . ./.env; set +a` before starting the backend. To register logs that are already in that directory, run the backend with the `import` command:
 
 ```
 FLEETRANGER_LOG_DIR=~/fleetranger-testlogs cargo run --locked -- import

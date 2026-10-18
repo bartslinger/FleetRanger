@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update login_sessions set revoked_at = now()\n         where token_sha256 = $1 and revoked_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4e43ad4d566d9c57841228e3d67dce3d2b9a7ebb94ab61227bf34c7e39ecb935"
+}

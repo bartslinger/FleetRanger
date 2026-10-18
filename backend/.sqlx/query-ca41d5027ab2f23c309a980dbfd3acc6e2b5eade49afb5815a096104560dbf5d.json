@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update login_sessions s\n         set last_seen_at = now(), expires_at = now() + make_interval(days => $2)\n         from accounts a\n         where s.token_sha256 = $1 and a.id = s.account_id\n           and s.revoked_at is null and s.expires_at > now() and a.disabled_at is null\n         returning s.id, s.account_id, a.email, a.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ca41d5027ab2f23c309a980dbfd3acc6e2b5eade49afb5815a096104560dbf5d"
+}
