@@ -1,6 +1,8 @@
 package org.fleetranger.rc
 
 import android.app.DatePickerDialog
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -260,6 +262,7 @@ private fun ColumnScope.NetworksTab(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     Label("Upload logs over")
     RadioButton(
         "Approved Wi-Fi networks",
@@ -299,7 +302,14 @@ private fun ColumnScope.NetworksTab(
         } else {
             ContainedList("Current network") {
                 when {
-                    currentNetwork == null -> ListRow("Not connected to Wi-Fi", secondary = true)
+                    // Back from Android's settings, the app looks again (onResume).
+                    currentNetwork == null -> ListRow("Connect to Wi-Fi to approve a network", secondary = true) {
+                        Button(
+                            "Wi-Fi settings",
+                            { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
+                            kind = ButtonKind.Tertiary,
+                        )
+                    }
                     currentNetwork in networks -> ListRow(currentNetwork) {
                         BasicText(
                             "Approved",
