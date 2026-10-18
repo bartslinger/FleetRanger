@@ -18,8 +18,8 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 - **Tokens:** colour, layering, spacing, type scale and motion values come from Carbon's official packages (`@carbon/themes`, `@carbon/layout`, `@carbon/type`, Apache-2.0). `pnpm tokens` (`web/scripts/tokens.js`) exports them to CSS custom properties in `web/src/lib/ui/tokens.css`, which is committed so upgrades show as a diff. Names follow Carbon's (`--cds-layer-01`, `--cds-spacing-05`, `--cds-heading-01-font-size`). Components use only these variables, never literal values.
 - **No install telemetry.** The Carbon and Plex packages run IBM's telemetry on install; `web/pnpm-workspace.yaml` denies those scripts.
 - **Themes:** Carbon's Gray 10 (`g10`) for light and Gray 100 (`g100`) for dark. Gray 10 puts white containers (tables, tiles) on a light gray page. The app follows the system setting unless the user chooses light or dark in the profile panel (the header's Profile action: who is logged in, the theme as a radio group, and Log out). The choice is kept in a cookie, so the server renders it directly.
-- **Shell:** a dark (Gray 100) header and side navigation in both themes, through Carbon's inline theming. The side navigation is Carbon's rail: icons only, expanding to show labels.
-- **Page header:** the title (and later a breadcrumb) sits on the page background, without Carbon's page header band.
+- **Shell:** a dark (Gray 100) header, side navigation and profile panel in both themes, through Carbon's inline theming (the `.theme-dark` class from `tokens.js`). From lg the side navigation is Carbon's rail: 48 px of icons, expanding to 256 px over the content on hover or keyboard focus. Below lg it is hidden behind the menu button. Every navigation item has a 16 px icon.
+- **Page header:** the title (and later a breadcrumb) sits on the page background, without Carbon's page header band, with 32 px above and below. This deviates from Carbon, whose page header always has the band.
 - **Typography:** IBM Plex Sans and IBM Plex Mono (SIL Open Font License), self-hosted from the `@ibm/plex-*` packages and bundled by Vite. Numbers in tables and statistics use tabular figures.
 - **Styling:** plain CSS with custom properties, scoped per Svelte component. No utility framework.
 
@@ -180,7 +180,7 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 
 - Done:
   - tokens, fonts and base styles
-  - the UI shell, with a skip link and keyboard focus handling
+  - the UI shell, with a skip link and keyboard focus handling; dark, with the side nav rail
   - the 2x Grid (`Grid`, `Column`; narrow mode for containers)
   - components: button, tag, inline notification, text input, select, data table (sortable), pagination, empty state, page header
   - the logbook, reviewed against Carbon
