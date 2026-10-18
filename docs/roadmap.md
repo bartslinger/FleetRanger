@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Each flight has a page with its track on a Mapbox map, linked from the logbook. Sessions (phase 3) are in progress: flights are grouped per pilot by a time gap, and the Sessions list (a table, or cards beside a map) leads to a page per session with all tracks on one map and its totals. Sessions can be merged and split. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Each flight has a page with its track on a Mapbox map, linked from the logbook. Sessions (phase 3) are in progress: flights are grouped per pilot by a time gap, and the Sessions list (a table, or cards beside a map) leads to a page per session with all tracks on one map and its totals. Sessions can be merged and split. The remote controller app (phase 6) has started: it runs on a DJI RC Pro Enterprise, asks who's flying (test names for now) and opens DJI Pilot 2; pairing controllers with the install is in progress. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -48,10 +48,11 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 
 ## Phase 6: remote controller app
 
-- [ ] Pilot picker that works offline, last pilot as the default, with "Not in the list"
-- [ ] Launching DJI Pilot 2
+- [x] App skeleton: Kotlin, Compose with our own Carbon components (light only), built in a pinned Docker image
+- [~] Pilot picker that works offline, last pilot as the default, with "Not in the list" (with test names until pairing)
+- [x] Launching DJI Pilot 2
 - [ ] Syncing finished logs over selected Wi-Fi networks
-- [ ] Device enrollment
+- [ ] Pairing: linking a (new) controller to the organisation, which any user can do
 
 ## Before production use
 
