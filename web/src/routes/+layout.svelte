@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '#lib/ui/base.css';
+	import Drone from '@carbon/icons/es/drone/16.js';
 	import Events from '@carbon/icons/es/events/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
 	import Template from '@carbon/icons/es/template/16.js';
@@ -20,6 +21,7 @@
 			? [
 					{ href: resolve('/pilots'), label: 'Pilots', icon: UserMultiple },
 					{ href: resolve('/teams'), label: 'Teams', icon: Events },
+					{ href: resolve('/equipment'), label: 'Equipment', icon: Drone },
 					{ href: resolve('/users'), label: 'Users', icon: UserAdmin }
 				]
 			: []),

@@ -51,6 +51,18 @@ export interface User {
 	last_login_at: string | null;
 }
 
+/** A drone or remote controller, from `/api/aircraft` or `/api/remote-controllers`. */
+export interface Equipment {
+	id: string;
+	serial: string;
+	name: string | null;
+	team_id: string | null;
+	team_name: string | null;
+	holder_pilot_id: string | null;
+	holder_name: string | null;
+	last_flight_at: string | null;
+}
+
 /** The logged-in account, from `GET /api/me`. */
 export interface Account {
 	email: string;
