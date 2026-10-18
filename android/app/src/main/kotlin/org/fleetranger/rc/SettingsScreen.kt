@@ -108,7 +108,10 @@ fun SettingsScreen(
             Button("Back", onBack, kind = ButtonKind.Ghost)
         }
 
-        Column(Modifier.widthIn(max = 560.dp)) {
+        // Two columns: the landscape screen is wide, and scrolling with gloves
+        // is clumsy. Syncing on the left; when to sync and pairing on the right.
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s07)) {
+        Column(Modifier.weight(1f)) {
             if (syncStatus != null) {
                 Section("Sync")
                 Paragraph(syncStatus.summary())
@@ -165,7 +168,9 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
 
+        Column(Modifier.weight(1f)) {
             Section("Sync logs from")
             RadioButton(
                 "All logs",
@@ -192,6 +197,7 @@ fun SettingsScreen(
                 kind = ButtonKind.DangerTertiary,
                 modifier = Modifier.padding(top = Spacing.s06),
             )
+        }
         }
     }
 
