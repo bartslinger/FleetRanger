@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Now: a page per flight with its track on a Mapbox map, so it's clear where a flight was. Then sessions (phase 3), which are grouped per pilot and reuse the map. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Each flight has a page with its track on a Mapbox map, linked from the logbook. Next are sessions (phase 3), which are grouped per pilot and reuse the map. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -44,7 +44,7 @@ Waits for pilots (phase 4): sessions are grouped per pilot.
 - [x] Design system foundation: tokens, fonts, UI shell, 2x Grid, first components, theme setting
 - [x] Page layout: Gray 10 for light mode, a dark shell with the side nav rail, page header without the band
 - [x] Logbook (paging, sorting, pilot and team, batch actions to set them)
-- [~] Flight detail with map
+- [x] Flight detail with map
 - [ ] Session overview
 - [x] Admin pages: users, teams, equipment
 

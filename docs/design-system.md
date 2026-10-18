@@ -185,6 +185,7 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
   - components: button, tag, inline notification, toast notification, text input, select, checkbox, radio button group, data table (sortable, with toolbar and row links), pagination, empty state, page header (with breadcrumb and status), modal, tabs
   - the admin pattern (Users, Teams, Equipment): a list with a toolbar ("Show archived", "New …" in a modal), and a page per item with read-only facts, an in-page form, archiving after confirmation, and deleting after a danger confirmation where allowed. Confirmations of completed actions are toasts; errors stay inline.
   - batch actions in the logbook: select rows, then act on them from the blue bar over the toolbar
+  - a track map (Mapbox, with a content switcher for satellite or map and a legend) and the flight page: the map beside read-only facts
   - not yet reviewed by the Carbon expert: everything since the dark shell; one review is planned for the end
   - the logbook, reviewed against Carbon
   - a theme setting (system, light or dark)
