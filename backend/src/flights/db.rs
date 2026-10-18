@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -106,6 +107,53 @@ pub async fn list(
         scope.user_id,
     )
     .fetch_all(db)
+    .await
+}
+
+/// One flight with its track, for the flight's page.
+#[derive(Serialize)]
+pub struct FlightDetail {
+    pub id: Uuid,
+    pub takeoff_at: DateTime<Utc>,
+    pub landed_at: DateTime<Utc>,
+    pub air_time_s: i32,
+    pub distance_m: f64,
+    pub aircraft_serial: Option<String>,
+    pub aircraft_name: Option<String>,
+    pub rc_serial: Option<String>,
+    pub rc_name: Option<String>,
+    pub pilot_id: Option<Uuid>,
+    pub pilot_name: Option<String>,
+    /// None: in the organisation's queue.
+    pub team_id: Option<Uuid>,
+    pub team_name: Option<String>,
+    /// GeoJSON LineString: [longitude, latitude, height above takeoff].
+    pub track: Value,
+    pub metrics: Value,
+}
+
+/// A flight in the scope, or None if it doesn't exist or isn't in the scope.
+pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Option<FlightDetail>> {
+    sqlx::query_as!(
+        FlightDetail,
+        r#"select id, takeoff_at, landed_at, air_time_s, distance_m,
+                aircraft_serial,
+                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_name?",
+                rc_serial,
+                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
+                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
+                team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?",
+                track, metrics
+         from flights
+         where id = $1
+           and ($2
+                or pilot_id = $3
+                or team_id in (select team_id from team_members where user_id = $3))"#,
+        id,
+        scope.all,
+        scope.user_id,
+    )
+    .fetch_optional(db)
     .await
 }
 
@@ -284,6 +332,15 @@ mod tests {
             .collect();
         assert_eq!(count(db, scope).await.unwrap(), ids.len() as i64);
         ids.sort();
+        // A single flight is found exactly when it is listed.
+        let all: Vec<Uuid> = sqlx::query_scalar("select id from flights")
+            .fetch_all(db)
+            .await
+            .unwrap();
+        for id in all {
+            let found = get(db, scope, id).await.unwrap().is_some();
+            assert_eq!(found, ids.contains(&id), "flight {id}");
+        }
         ids
     }
 

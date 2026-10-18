@@ -1,0 +1,178 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                team_id, (select t.name from teams t where t.id = flights.team_id) as \"team_name?\",\n                track, metrics\n         from flights\n         where id = $1\n           and ($2\n                or pilot_id = $3\n                or team_id in (select team_id from team_members where user_id = $3))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "takeoff_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "takeoff_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "landed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "landed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "air_time_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "air_time_s"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "distance_m",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "distance_m"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "aircraft_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "aircraft_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "aircraft_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "rc_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "rc_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "rc_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "pilot_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "pilot_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "pilot_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "team_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "team_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "track",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "track"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "metrics",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "metrics"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      null,
+      true,
+      null,
+      true,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "f6d099283ef88039023f0578b7dcd56c278a188d8b3abfcba9914ea361bd8f68"
+}

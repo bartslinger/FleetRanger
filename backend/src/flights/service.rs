@@ -2,7 +2,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, FlightSummary, PilotChoice, Sort, TeamChoice};
+use super::db::{self, FlightDetail, FlightSummary, PilotChoice, Sort, TeamChoice};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -21,6 +21,13 @@ pub async fn list(
     let flights = db::list(db, &scope, sort, limit, offset).await?;
     let total = db::count(db, &scope).await?;
     Ok((flights, total))
+}
+
+/// A flight the actor may see. One they may not see is not found, so its
+/// existence isn't revealed.
+pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<FlightDetail> {
+    let scope = policy::flight_scope(actor);
+    db::get(db, &scope, id).await?.ok_or(ApiError::NotFound)
 }
 
 /// What the actor can change in the logbook, so it offers only that.

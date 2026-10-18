@@ -2,7 +2,7 @@
 
 use axum::{
     Json, Router,
-    extract::{FromRef, Query, State},
+    extract::{FromRef, Path, Query, State},
     http::StatusCode,
     routing::{get, post},
 };
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{FlightSummary, Sort, SortKey};
+use super::db::{FlightDetail, FlightSummary, Sort, SortKey};
 use super::service;
 use crate::{auth::Actor, error::ApiResult};
 
@@ -25,6 +25,7 @@ where
     Router::new()
         .route("/api/flights", get(list))
         .route("/api/flights/choices", get(choices))
+        .route("/api/flights/{id}", get(show))
         .route("/api/flights/pilot", post(set_pilot))
         .route("/api/flights/team", post(set_team))
 }
@@ -46,6 +47,14 @@ struct TeamChange {
 #[derive(Serialize)]
 struct Changed {
     changed: u64,
+}
+
+async fn show(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<FlightDetail>> {
+    Ok(Json(service::get(&db, &actor, id).await?))
 }
 
 async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Choices>> {
