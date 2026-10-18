@@ -1,14 +1,20 @@
 <!--
 	@component
-	Carbon's UI shell: a header, side navigation and the page content. Below the
-	lg breakpoint the navigation is hidden behind a menu button. Without an
-	account (the login page) the header holds only the product name.
+	Carbon's UI shell: a header, side navigation and the page content, inline
+	themed dark. From the lg breakpoint the navigation is Carbon's rail: icons
+	only, expanding over the content on hover or focus. Below lg it is hidden
+	behind a menu button. Without an account (the login page) the header holds
+	only the product name.
 -->
 <script lang="ts" module>
+	import type { IconDescriptor } from './Icon.svelte';
+
 	export interface NavItem {
 		/** Already passed through `resolve()`. */
 		href: string;
 		label: string;
+		/** A 16px icon from @carbon/icons. */
+		icon: IconDescriptor;
 	}
 
 	export interface ShellAccount {
@@ -43,6 +49,25 @@
 	let open = $state(false);
 	let menuButton: HTMLButtonElement | undefined = $state();
 	let navElement: HTMLElement | undefined = $state();
+
+	// The rail (lg and up) expands after Carbon's 100ms delay, so passing over
+	// it with the mouse doesn't flash the labels, and collapses at once.
+	let expanded = $state(false);
+	let expandTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function expandSoon() {
+		clearTimeout(expandTimer);
+		expandTimer = setTimeout(() => (expanded = true), 100);
+	}
+
+	function collapse() {
+		clearTimeout(expandTimer);
+		expanded = false;
+	}
+
+	function onNavFocusout(event: FocusEvent) {
+		if (!navElement?.contains(event.relatedTarget as Node | null)) collapse();
+	}
 
 	// The profile panel: who is logged in, the theme and logging out. The theme
 	// starts from the server's value, then follows the user's choices.
@@ -86,6 +111,10 @@
 		} else if (open) {
 			open = false;
 			menuButton?.focus();
+		} else if (expanded) {
+			// As Carbon's rail: collapse and continue in the content.
+			collapse();
+			document.getElementById('main-content')?.focus();
 		}
 	}
 
@@ -119,7 +148,7 @@
 
 <a class="skip" href="#main-content">Skip to main content</a>
 
-<header>
+<header class="theme-dark">
 	{#if account}
 		<button
 			bind:this={menuButton}
@@ -193,13 +222,28 @@
 </header>
 
 {#if account}
-	<nav bind:this={navElement} id="side-nav" class:open aria-label="Main">
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+	<!-- A click expands the rail at once; keyboard users expand it by focus. -->
+	<nav
+		bind:this={navElement}
+		id="side-nav"
+		class="theme-dark"
+		class:open
+		class:expanded
+		aria-label="Main"
+		onmouseenter={expandSoon}
+		onmouseleave={collapse}
+		onfocusin={expandSoon}
+		onfocusout={onNavFocusout}
+		onclick={() => (expanded = true)}
+	>
 		<ul>
 			{#each nav as item (item.href)}
 				<li>
 					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
 					<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
-						{item.label}
+						<Icon icon={item.icon} />
+						<span>{item.label}</span>
 					</a>
 				</li>
 			{/each}
@@ -262,7 +306,7 @@
 		align-items: center;
 		height: var(--cds-size-large);
 		background: var(--cds-background);
-		border-bottom: 1px solid var(--cds-border-subtle-01);
+		border-bottom: 1px solid var(--cds-border-subtle-00);
 	}
 
 	.menu {
@@ -339,7 +383,7 @@
 
 	/* Open: outlined, with the bottom edge flowing into the panel. */
 	.action.active {
-		border-color: var(--cds-border-subtle-01);
+		border-color: var(--cds-border-subtle-00);
 		border-bottom-color: transparent;
 		background: var(--cds-layer-01);
 		color: var(--cds-icon-primary);
@@ -376,7 +420,7 @@
 		padding: var(--cds-spacing-05);
 		overflow-y: auto;
 		background: var(--cds-layer-01);
-		border-inline: 1px solid var(--cds-border-subtle-01);
+		border-inline: 1px solid var(--cds-border-subtle-00);
 		animation: panel-in 110ms cubic-bezier(0, 0, 0.38, 0.9);
 	}
 
@@ -403,7 +447,7 @@
 	/* Full width, below a divider, as the last item of the panel. */
 	.logout {
 		margin-inline: calc(-1 * var(--cds-spacing-05));
-		border-top: 1px solid var(--cds-border-subtle-01);
+		border-top: 1px solid var(--cds-border-subtle-00);
 	}
 
 	@keyframes panel-in {
@@ -420,7 +464,7 @@
 		z-index: 2;
 		width: 16rem;
 		padding-top: var(--cds-spacing-05);
-		overflow-y: auto;
+		overflow: hidden auto;
 		background: var(--cds-background);
 		/* Hidden, not just moved, so closed links can't be focused. */
 		visibility: hidden;
@@ -440,10 +484,14 @@
 			visibility 0s;
 	}
 
+	/* Carbon's side nav link: a 16px icon, then the label 24px further. In the
+	   collapsed rail the label is clipped, not removed, so it still names the
+	   link for screen readers. */
 	nav a {
 		position: relative;
 		display: flex;
 		align-items: center;
+		gap: var(--cds-spacing-06);
 		min-height: var(--cds-size-small);
 		padding: 0 var(--cds-spacing-05);
 		color: var(--cds-text-secondary);
@@ -452,6 +500,11 @@
 		line-height: var(--cds-heading-compact-01-line-height);
 		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
 		text-decoration: none;
+		white-space: nowrap;
+	}
+
+	nav a :global(svg) {
+		flex: none;
 	}
 
 	nav a:hover {
@@ -487,8 +540,9 @@
 		padding: var(--cds-size-large) 0 var(--cds-spacing-09);
 	}
 
-	/* Carbon's lg breakpoint (66rem): navigation always visible. Custom properties
-	   can't be used in media queries. */
+	/* Carbon's lg breakpoint (66rem): the rail, always visible, 48px wide and
+	   256px when expanded over the content. Custom properties can't be used in
+	   media queries. */
 	@media (min-width: 66rem) {
 		.menu,
 		.scrim {
@@ -496,9 +550,14 @@
 		}
 
 		nav {
+			width: var(--cds-size-large);
 			visibility: visible;
 			transform: none;
-			transition: none;
+			transition: width 110ms cubic-bezier(0.2, 0, 0.38, 0.9);
+		}
+
+		nav.expanded {
+			width: 16rem;
 		}
 
 		.name {
@@ -506,7 +565,7 @@
 		}
 
 		main:not(.bare) {
-			margin-left: 16rem;
+			margin-left: var(--cds-size-large);
 		}
 	}
 </style>

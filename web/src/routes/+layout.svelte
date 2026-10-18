@@ -1,5 +1,7 @@
 <script lang="ts">
 	import '#lib/ui/base.css';
+	import Notebook from '@carbon/icons/es/notebook/16.js';
+	import Template from '@carbon/icons/es/template/16.js';
 	import { dev } from '$app/env';
 	import { resolve } from '$app/paths';
 	import favicon from '#lib/assets/favicon.svg';
@@ -9,8 +11,8 @@
 	let { data, children }: LayoutProps = $props();
 
 	const nav: NavItem[] = [
-		{ href: resolve('/'), label: 'Logbook' },
-		...(dev ? [{ href: resolve('/design'), label: 'Components' }] : [])
+		{ href: resolve('/'), label: 'Logbook', icon: Notebook },
+		...(dev ? [{ href: resolve('/design'), label: 'Components', icon: Template }] : [])
 	];
 </script>
 
