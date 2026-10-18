@@ -3,7 +3,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, Request, Waiting};
+use super::db::{self, Approved, Waiting};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -82,24 +82,17 @@ pub async fn waiting(db: &PgPool, _actor: &Actor) -> ApiResult<Vec<Waiting>> {
     Ok(db::waiting(db).await?)
 }
 
-/// A pairing request, for the user about to approve it. Any user may pair a
-/// controller; see "Clients" in docs/architecture.md.
-pub async fn request(db: &PgPool, actor: &Actor, code: &str) -> ApiResult<Request> {
-    db::request(db, &normalize(code), actor.user_id)
-        .await?
-        .ok_or(ApiError::NotFound)
-}
-
 /// Approves a request: the controller is paired and joins the approver's team,
-/// or no team when the approver has none. Returns the controller's serial.
-pub async fn approve(db: &PgPool, actor: &Actor, code: &str) -> ApiResult<String> {
+/// or no team when the approver has none. Any user may pair a controller; see
+/// "Clients" in docs/architecture.md.
+pub async fn approve(db: &PgPool, actor: &Actor, code: &str) -> ApiResult<Approved> {
     let team = flights::db::own_team(db, actor.user_id).await?;
     db::approve(db, &normalize(code), team)
         .await?
         .ok_or_else(|| {
             ApiError::Invalid(
-                "No controller is waiting with this code any more. A code works while the \
-                 controller shows it: open pairing on the controller again."
+                "No controller is waiting with this code. Check the code on the controller’s \
+                 screen."
                     .to_owned(),
             )
         })

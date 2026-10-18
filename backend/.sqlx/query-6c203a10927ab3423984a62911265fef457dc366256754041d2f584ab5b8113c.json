@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select serial, model, expires_at,\n                (select t.name from team_members m join teams t on t.id = m.team_id\n                 where m.user_id = $2) as \"team_name?\"\n           from pairing_requests\n           where code = $1 and expires_at > now()",
+  "query": "delete from pairing_requests where code = $1 and expires_at > now()\n         returning serial, model, token_sha256",
   "describe": {
     "columns": [
       {
@@ -27,34 +27,26 @@
       },
       {
         "ordinal": 2,
-        "name": "expires_at",
-        "type_info": "Timestamptz",
+        "name": "token_sha256",
+        "type_info": "Bytea",
         "origin": {
           "Table": {
             "table": "pairing_requests",
-            "name": "expires_at"
+            "name": "token_sha256"
           }
         }
-      },
-      {
-        "ordinal": 3,
-        "name": "team_name?",
-        "type_info": "Text",
-        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
       false,
       false,
-      false,
-      null
+      false
     ]
   },
-  "hash": "55837af96ce32814d5065e7c4833db52aca51864e753a68048f091d736c57627"
+  "hash": "6c203a10927ab3423984a62911265fef457dc366256754041d2f584ab5b8113c"
 }

@@ -74,44 +74,25 @@ pub async fn waiting(db: &PgPool) -> sqlx::Result<Vec<Waiting>> {
     .await
 }
 
-/// A pairing request as the approving user sees it.
+/// The controller a user just paired.
 #[derive(Serialize)]
-pub struct Request {
+pub struct Approved {
     pub serial: String,
     pub model: String,
-    pub expires_at: DateTime<Utc>,
-    /// The team the controller joins when this user approves: theirs.
-    pub team_name: Option<String>,
-}
-
-/// The request with this code, unless it has expired, as this user sees it.
-pub async fn request(db: &PgPool, code: &str, user_id: Uuid) -> sqlx::Result<Option<Request>> {
-    sqlx::query_as!(
-        Request,
-        r#"select serial, model, expires_at,
-                (select t.name from team_members m join teams t on t.id = m.team_id
-                 where m.user_id = $2) as "team_name?"
-           from pairing_requests
-           where code = $1 and expires_at > now()"#,
-        code,
-        user_id,
-    )
-    .fetch_optional(db)
-    .await
 }
 
 /// Approves a request: the controller with its serial (registered now if it's
-/// new) gets the request's token and joins the team. Returns the serial, or
-/// None if there is no such request or it has expired.
+/// new) gets the request's token and joins the team. Returns the controller,
+/// or None if there is no such request or it has expired.
 pub async fn approve(
     db: &PgPool,
     code: &str,
     team_id: Option<Uuid>,
-) -> sqlx::Result<Option<String>> {
+) -> sqlx::Result<Option<Approved>> {
     let mut tx = db.begin().await?;
     let Some(request) = sqlx::query!(
         "delete from pairing_requests where code = $1 and expires_at > now()
-         returning serial, token_sha256",
+         returning serial, model, token_sha256",
         code,
     )
     .fetch_optional(&mut *tx)
@@ -131,7 +112,10 @@ pub async fn approve(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Some(request.serial))
+    Ok(Some(Approved {
+        serial: request.serial,
+        model: request.model,
+    }))
 }
 
 /// A paired controller, as it authenticates.
@@ -190,8 +174,8 @@ mod tests {
                 .unwrap()
         );
 
-        let serial = approve(&db, "AAAA2222", Some(team)).await.unwrap();
-        assert_eq!(serial.as_deref(), Some("RC1"));
+        let approved = approve(&db, "AAAA2222", Some(team)).await.unwrap();
+        assert_eq!(approved.map(|a| a.serial).as_deref(), Some("RC1"));
         assert!(
             approve(&db, "AAAA2222", Some(team))
                 .await

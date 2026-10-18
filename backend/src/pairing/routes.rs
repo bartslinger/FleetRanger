@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use super::{
     Controller,
-    db::{self, Request, Waiting},
+    db::{self, Approved, Waiting},
     service::{self, Check, Started},
 };
 use crate::{
@@ -28,7 +28,6 @@ where
 {
     Router::new()
         .route("/api/pairing", get(waiting).post(start))
-        .route("/api/pairing/{code}", get(show))
         .route("/api/pairing/{code}/approve", post(approve))
         .route("/api/controller", get(me).delete(unpair_self))
         .route("/api/remote-controllers/{id}/pairing", delete(unpair))
@@ -52,27 +51,12 @@ async fn waiting(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<W
     Ok(Json(service::waiting(&db, &actor).await?))
 }
 
-async fn show(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(code): Path<String>,
-) -> ApiResult<Json<Request>> {
-    Ok(Json(service::request(&db, &actor, &code).await?))
-}
-
 async fn approve(
     actor: Actor,
     State(db): State<PgPool>,
     Path(code): Path<String>,
 ) -> ApiResult<Json<Approved>> {
-    let serial = service::approve(&db, &actor, &code).await?;
-    Ok(Json(Approved { serial }))
-}
-
-/// The controller that was paired.
-#[derive(Serialize)]
-struct Approved {
-    serial: String,
+    Ok(Json(service::approve(&db, &actor, &code).await?))
 }
 
 #[derive(Serialize)]
