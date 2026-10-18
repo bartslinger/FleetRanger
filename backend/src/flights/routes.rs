@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use super::db::{FlightDetail, FlightSummary, Sort, SortKey};
 use super::service;
-use crate::{auth::Actor, error::ApiResult};
+use crate::{auth::Actor, error::ApiResult, sessions::SessionGap};
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAX_PAGE_SIZE: u32 = 100;
@@ -21,6 +21,7 @@ pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     PgPool: FromRef<S>,
+    SessionGap: FromRef<S>,
 {
     Router::new()
         .route("/api/flights", get(list))
@@ -64,18 +65,20 @@ async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<servi
 async fn set_pilot(
     actor: Actor,
     State(db): State<PgPool>,
+    State(gap): State<SessionGap>,
     Json(change): Json<PilotChange>,
 ) -> ApiResult<Json<Changed>> {
-    let changed = service::set_pilot(&db, &actor, &change.flight_ids, change.pilot_id).await?;
+    let changed = service::set_pilot(&db, gap, &actor, &change.flight_ids, change.pilot_id).await?;
     Ok(Json(Changed { changed }))
 }
 
 async fn set_team(
     actor: Actor,
     State(db): State<PgPool>,
+    State(gap): State<SessionGap>,
     Json(change): Json<TeamChange>,
 ) -> ApiResult<Json<Changed>> {
-    let changed = service::set_team(&db, &actor, &change.flight_ids, change.team_id).await?;
+    let changed = service::set_team(&db, gap, &actor, &change.flight_ids, change.team_id).await?;
     Ok(Json(Changed { changed }))
 }
 

@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Each flight has a page with its track on a Mapbox map, linked from the logbook. Next are sessions (phase 3), which are grouped per pilot and reuse the map. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Each flight has a page with its track on a Mapbox map, linked from the logbook. Sessions (phase 3) are in progress: flights are grouped per pilot by a time gap; the sessions list and a session page with all tracks on one map come next. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -26,9 +26,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 
 ## Phase 3: sessions
 
-Waits for pilots (phase 4): sessions are grouped per pilot.
-
-- [ ] Automatic grouping by time gap
+- [x] Automatic grouping by time gap
 - [ ] Assigning a pilot per session
 - [ ] Moving flights between sessions, splitting and merging sessions
 
@@ -73,5 +71,4 @@ Waits for pilots (phase 4): sessions are grouped per pilot.
 ## Open questions
 
 - Re-uploads with the same file name but different content (a log synced while still being written): how should they replace the earlier version? Decide in phase 6; until then files are only deduplicated by hash.
-- Do session "time on/off" values mean first takeoff and last landing?
 - Who sees flights with no pilot and no team?

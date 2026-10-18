@@ -6,6 +6,7 @@ mod flights;
 mod health;
 mod ingest;
 mod policy;
+mod sessions;
 mod teams;
 mod users;
 
@@ -24,6 +25,7 @@ use tracing_subscriber::EnvFilter;
 use crate::auth::Auth;
 use crate::config::Config;
 use crate::ingest::activity::Activity;
+use crate::sessions::SessionGap;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -67,6 +69,13 @@ struct AppState {
     db: PgPool,
     auth: Arc<Auth>,
     activity: Activity,
+    session_gap: SessionGap,
+}
+
+impl FromRef<AppState> for SessionGap {
+    fn from_ref(state: &AppState) -> Self {
+        state.session_gap
+    }
 }
 
 impl FromRef<AppState> for Activity {
@@ -88,6 +97,13 @@ impl FromRef<AppState> for Arc<Auth> {
 }
 
 async fn serve(config: &Config, db: PgPool) -> Result<()> {
+    // Places flights that were given a pilot while grouping wasn't possible,
+    // e.g. before sessions existed or when grouping failed.
+    let session_gap = SessionGap(config.session_gap_minutes);
+    sessions::db::group(&db, session_gap)
+        .await
+        .context("failed to group flights into sessions")?;
+
     let activity = Activity::default();
     tokio::spawn(ingest::process::run(
         db.clone(),
@@ -110,6 +126,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
             provider,
         }),
         activity,
+        session_gap,
     };
 
     let app = Router::new()

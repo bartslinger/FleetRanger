@@ -21,6 +21,9 @@ pub struct Config {
     pub public_url: Url,
     /// The login provider. Without it nobody can log in.
     pub oidc: Option<OidcConfig>,
+    /// The longest break within a session, in minutes
+    /// (`FLEETRANGER_SESSION_GAP_MINUTES`, 120 by default).
+    pub session_gap_minutes: i32,
 }
 
 pub struct OidcConfig {
@@ -57,6 +60,13 @@ impl Config {
             }),
             None => None,
         };
+        let session_gap_minutes =
+            match non_empty_var("FLEETRANGER_SESSION_GAP_MINUTES") {
+                Some(value) => value.parse().ok().filter(|minutes| *minutes > 0).context(
+                    "FLEETRANGER_SESSION_GAP_MINUTES is not a positive number of minutes",
+                )?,
+                None => 120,
+            };
 
         Ok(Self {
             bind,
@@ -65,6 +75,7 @@ impl Config {
             dji_app_key,
             public_url,
             oidc,
+            session_gap_minutes,
         })
     }
 }

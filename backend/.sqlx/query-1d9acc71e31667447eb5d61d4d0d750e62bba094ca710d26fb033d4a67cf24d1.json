@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update flights set pilot_id = $2, team_id = coalesce($3, team_id),\n             session_id = case when pilot_id is not distinct from $2 then session_id end\n         where id = any($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1d9acc71e31667447eb5d61d4d0d750e62bba094ca710d26fb033d4a67cf24d1"
+}

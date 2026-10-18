@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from sessions s where not exists (select 1 from flights f where f.session_id = s.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "fcf704f90deae2d627b7889171280353197896b3fa85261ee54ca4cb96417d03"
+}
