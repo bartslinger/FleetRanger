@@ -48,7 +48,7 @@
 				onsuccess={() => toast('Team archived.')}
 			>
 				<p>
-					{data.team.name} is hidden from lists and can't get new pilots. Its flights stay as they are.
+					{data.team.name} is hidden from lists and can't get new members. Its flights stay as they are.
 					You can restore it later.
 				</p>
 			</Modal>

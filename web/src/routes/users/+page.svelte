@@ -9,6 +9,7 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import RadioButtonGroup from '#lib/ui/RadioButtonGroup.svelte';
+	import Select from '#lib/ui/Select.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
@@ -19,26 +20,31 @@
 
 	let role: Role = $state('member');
 
-	// The status column only while disabled users are shown.
+	// The status column only while archived users are shown.
 	const columns: TableColumn<Row>[] = $derived([
-		{ key: 'email', header: 'Email' },
 		{ key: 'name', header: 'Name' },
+		{ key: 'team_name', header: 'Team' },
+		{ key: 'email', header: 'Login' },
 		{ key: 'role', header: 'Role', format: (user) => ROLE_LABELS[user.role] },
-		{ key: 'pilot_name', header: 'Pilot' },
-		...(data.disabled
+		...(data.archived
 			? [
 					{
-						key: 'disabled_at',
+						key: 'archived_at',
 						header: 'Status',
-						format: (user: Row) => (user.disabled_at ? 'Disabled' : 'Active')
+						format: (user: Row) => (user.archived_at ? 'Archived' : 'Active')
 					} satisfies TableColumn<Row>
 				]
 			: [])
 	]);
 
-	function showDisabled(event: Event) {
+	const teamOptions = $derived([
+		{ value: '', label: 'None' },
+		...data.teams.map((team) => ({ value: team.id, label: team.name }))
+	]);
+
+	function showArchived(event: Event) {
 		const checked = (event.currentTarget as HTMLInputElement).checked;
-		goto(resolve(checked ? '/users?disabled' : '/users'), {
+		goto(resolve(checked ? '/users?archived' : '/users'), {
 			replaceState: true,
 			reset: false
 		});
@@ -59,22 +65,28 @@
 		>
 			{#snippet toolbar()}
 				<div class="filter">
-					<Checkbox label="Show disabled" checked={data.disabled} onchange={showDisabled} />
+					<Checkbox label="Show archived" checked={data.archived} onchange={showArchived} />
 				</div>
 				<Modal
 					title="New user"
 					submitLabel="Create"
 					action="?/create"
 					error={form && 'message' in form ? form.message : undefined}
-					onsuccess={(created) => toast(`User ${created?.created} created.`)}
+					onsuccess={(created) => toast(`${created?.created} created.`)}
 				>
+					<TextInput label="Name" name="name" required autocomplete="off" />
+					<Select
+						label="Team"
+						name="team_id"
+						options={teamOptions}
+						helper="The team they fly for. None for someone who doesn't fly."
+					/>
 					<TextInput
-						label="Email"
+						label="Email (optional)"
 						name="email"
 						type="email"
-						required
 						autocomplete="off"
-						helper="They log in with the Google account for this address."
+						helper="To log in with the Google account for this address. Leave empty for a pilot who doesn't use the website."
 					/>
 					<RadioButtonGroup legend="Role" name="role" options={ROLE_OPTIONS} bind:value={role} />
 					<p class="help">{ROLE_HELP}</p>

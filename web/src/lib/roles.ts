@@ -17,4 +17,4 @@ export const ROLE_OPTIONS = (Object.keys(ROLE_LABELS) as Role[]).map((value) => 
 
 /** What each role may do, for help text next to the choice. */
 export const ROLE_HELP =
-	'Members see their own flights and their team’s. All flights sees every flight. Admins also manage users, pilots, teams and equipment.';
+	'Members see their own flights and their team’s. All flights sees every flight. Admins also manage users, teams and equipment.';

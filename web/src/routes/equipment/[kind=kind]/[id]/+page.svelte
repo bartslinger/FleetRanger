@@ -24,7 +24,7 @@
 	);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
 
-	// Active teams and pilots, plus the current ones if archived since.
+	// Active teams and users, plus the current ones if archived since.
 	const teamOptions = $derived([
 		{ value: '', label: 'None' },
 		...data.teams.map((team) => ({ value: team.id, label: team.name })),
@@ -34,9 +34,9 @@
 	]);
 	const holderOptions = $derived([
 		{ value: '', label: 'None' },
-		...data.pilots.map((pilot) => ({ value: pilot.id, label: pilot.name })),
-		...(item.holder_pilot_id && !data.pilots.some((pilot) => pilot.id === item.holder_pilot_id)
-			? [{ value: item.holder_pilot_id, label: `${item.holder_name} (archived)` }]
+		...data.users.map((user) => ({ value: user.id, label: user.name })),
+		...(item.holder_user_id && !data.users.some((user) => user.id === item.holder_user_id)
+			? [{ value: item.holder_user_id, label: `${item.holder_name} (archived)` }]
 			: [])
 	]);
 </script>
@@ -100,9 +100,9 @@
 			/>
 			<Select
 				label="Holder"
-				name="holder_pilot_id"
+				name="holder_user_id"
 				options={holderOptions}
-				value={item.holder_pilot_id ?? ''}
+				value={item.holder_user_id ?? ''}
 				helper="Who has it now. For information only; it gives no access."
 			/>
 			<div class="buttons">

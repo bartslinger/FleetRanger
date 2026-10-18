@@ -7,7 +7,7 @@
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
 
 	type Props = {
-		kind?: 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger';
+		kind?: 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger' | 'danger-tertiary';
 		size?: 'sm' | 'md' | 'lg' | 'xl';
 		/** Fills its container, e.g. in a form or a panel. */
 		fill?: boolean;
@@ -147,6 +147,26 @@
 	}
 	.danger:active {
 		background: var(--cds-button-danger-active);
+	}
+
+	/* A destructive action next to others, such as "Delete user". */
+	.danger-tertiary {
+		background: transparent;
+		border-color: var(--cds-button-danger-secondary);
+		color: var(--cds-button-danger-secondary);
+	}
+	.danger-tertiary:hover {
+		background: var(--cds-button-danger-hover);
+		border-color: var(--cds-button-danger-hover);
+		color: var(--cds-text-on-color);
+	}
+	.danger-tertiary:active {
+		background: var(--cds-button-danger-active);
+		color: var(--cds-text-on-color);
+	}
+	.danger-tertiary:focus-visible {
+		background: var(--cds-button-danger-primary);
+		color: var(--cds-text-on-color);
 	}
 
 	.button:disabled,

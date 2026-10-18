@@ -19,7 +19,7 @@
 	// The status column only while archived teams are shown.
 	const columns: TableColumn<Row>[] = $derived([
 		{ key: 'name', header: 'Name' },
-		{ key: 'pilots', header: 'Pilots', numeric: true },
+		{ key: 'members', header: 'Members', numeric: true },
 		...(data.archived
 			? [
 					{

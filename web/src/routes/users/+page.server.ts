@@ -1,19 +1,26 @@
 import { fail } from '@sveltejs/kit';
-import { get, send, type User } from '#lib/server/backend.js';
+import { get, send, type Team, type User } from '#lib/server/backend.js';
 
 export async function load({ fetch, url }) {
-	const disabled = url.searchParams.has('disabled');
-	const users = await get<User[]>(fetch, '/api/accounts');
-	return { users: disabled ? users : users.filter((user) => !user.disabled_at), disabled };
+	const archived = url.searchParams.has('archived');
+	const [users, teams] = await Promise.all([
+		get<User[]>(fetch, `/api/users${archived ? '?archived=true' : ''}`),
+		get<Team[]>(fetch, '/api/teams')
+	]);
+	return { users, teams, archived };
 }
 
 export const actions = {
 	create: async ({ fetch, request }) => {
 		const form = await request.formData();
-		const email = String(form.get('email') ?? '');
-		const role = String(form.get('role') ?? 'member');
-		const result = await send<User>(fetch, 'POST', '/api/accounts', { email, role });
+		const body = {
+			name: String(form.get('name') ?? ''),
+			role: String(form.get('role') ?? 'member'),
+			team_id: String(form.get('team_id') ?? '') || null,
+			email: String(form.get('email') ?? '') || null
+		};
+		const result = await send<User>(fetch, 'POST', '/api/users', body);
 		if (!result.ok) return fail(result.status, { message: result.message });
-		return { created: result.data.email };
+		return { created: result.data.name };
 	}
 };

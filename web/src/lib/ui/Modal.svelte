@@ -22,7 +22,7 @@
 		/** The trigger's label, which is also the title. */
 		title: string;
 		/** The trigger's style: primary for "New …", tertiary as a page action. */
-		triggerKind?: 'primary' | 'tertiary';
+		triggerKind?: 'primary' | 'tertiary' | 'danger-tertiary';
 		/** The primary button, e.g. "Create". */
 		submitLabel: string;
 		/** Carbon's danger modal, for actions that can't be undone. */

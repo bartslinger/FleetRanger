@@ -4,7 +4,6 @@
 	import Events from '@carbon/icons/es/events/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
 	import Template from '@carbon/icons/es/template/16.js';
-	import UserAdmin from '@carbon/icons/es/user--admin/16.js';
 	import UserMultiple from '@carbon/icons/es/user--multiple/16.js';
 	import { dev } from '$app/env';
 	import { resolve } from '$app/paths';
@@ -19,10 +18,9 @@
 		{ href: resolve('/'), label: 'Logbook', icon: Notebook },
 		...(data.account?.role === 'admin'
 			? [
-					{ href: resolve('/pilots'), label: 'Pilots', icon: UserMultiple },
+					{ href: resolve('/users'), label: 'Users', icon: UserMultiple },
 					{ href: resolve('/teams'), label: 'Teams', icon: Events },
-					{ href: resolve('/equipment'), label: 'Equipment', icon: Drone },
-					{ href: resolve('/users'), label: 'Users', icon: UserAdmin }
+					{ href: resolve('/equipment'), label: 'Equipment', icon: Drone }
 				]
 			: []),
 		...(dev ? [{ href: resolve('/design'), label: 'Components', icon: Template }] : [])

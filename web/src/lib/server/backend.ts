@@ -38,32 +38,24 @@ export interface Team {
 	id: string;
 	name: string;
 	archived_at: string | null;
-	/** Pilots in the team that aren't archived. */
-	pilots: number;
+	/** Users in the team that aren't archived. */
+	members: number;
 }
 
-/** A pilot, from `/api/pilots`. */
-export interface Pilot {
-	id: string;
-	name: string;
-	team_id: string | null;
-	team_name: string | null;
-	/** The linked user. */
-	account_id: string | null;
-	account_email: string | null;
-	archived_at: string | null;
-}
-
-/** An account as admins manage it, from `/api/accounts`; "user" in the UI. */
+/** A user as admins manage them, from `/api/users`. */
 export interface User {
 	id: string;
-	email: string;
-	name: string | null;
+	name: string;
 	role: 'member' | 'all_flights' | 'admin';
-	disabled_at: string | null;
-	pilot_id: string | null;
-	pilot_name: string | null;
+	/** The team the user flies for. */
+	team_id: string | null;
+	team_name: string | null;
+	/** The login's email; null if the user can't log in. */
+	email: string | null;
 	last_login_at: string | null;
+	archived_at: string | null;
+	/** Flights with this user as pilot. */
+	flights: number;
 }
 
 /** A drone or remote controller, from `/api/aircraft` or `/api/remote-controllers`. */
@@ -73,19 +65,20 @@ export interface Equipment {
 	name: string | null;
 	team_id: string | null;
 	team_name: string | null;
-	holder_pilot_id: string | null;
+	holder_user_id: string | null;
 	holder_name: string | null;
 	last_flight_at: string | null;
 }
 
-/** The logged-in account, from `GET /api/me`. */
+/** The logged-in user, from `GET /api/me`. */
 export interface Account {
+	id: string;
 	email: string;
-	name: string | null;
+	name: string;
 	role: 'member' | 'all_flights' | 'admin';
 }
 
-/** The account of the browser's login session, or null if it isn't logged in. */
+/** The user of the browser's login session, or null if it isn't logged in. */
 export async function me(fetch: typeof globalThis.fetch): Promise<Account | null> {
 	let response: Response;
 	try {
@@ -129,6 +122,25 @@ export async function send<T>(
 	if (response.status === 403 || response.status === 404) error(response.status);
 	if (!response.ok) error(502, `The backend answered ${response.status}.`);
 	return { ok: true, data: await response.json() };
+}
+
+/** Deletes something; like `send`, a refusal (400 or 409) comes back with its message. */
+export async function remove(
+	fetch: typeof globalThis.fetch,
+	path: string
+): Promise<SendResult<null>> {
+	let response: Response;
+	try {
+		response = await fetch(`${BACKEND_URL}${path}`, { method: 'DELETE' });
+	} catch {
+		error(503, 'The backend is not reachable.');
+	}
+	if (response.status === 400 || response.status === 409) {
+		return { ok: false, status: response.status, message: await response.text() };
+	}
+	if (response.status === 403 || response.status === 404) error(response.status);
+	if (!response.ok) error(502, `The backend answered ${response.status}.`);
+	return { ok: true, data: null };
 }
 
 /** Fetches JSON from the backend, failing the request if the backend does. */
