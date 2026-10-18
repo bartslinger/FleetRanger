@@ -1,7 +1,8 @@
 <!--
 	@component
-	Carbon's page header: a band across the content area with the page title,
-	an optional description and page actions, on the grid.
+	The page header: the page title, an optional description and page actions,
+	on the grid. Unlike Carbon's page header it has no band; it sits on the
+	page background (see docs/design-system.md). The inner geometry is Carbon's.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -36,11 +37,10 @@
 </header>
 
 <style>
+	/* 32px from the shell header, as Carbon's content inset, and 32px to the
+	   content below. */
 	header {
-		margin-bottom: var(--cds-spacing-07);
-		padding-block: var(--cds-spacing-06);
-		background: var(--cds-layer-01);
-		border-bottom: 1px solid var(--cds-border-subtle-01);
+		padding-block: var(--cds-spacing-07);
 	}
 
 	.content {
