@@ -17,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.Colors
 import org.fleetranger.rc.ui.Spacing
@@ -30,7 +29,7 @@ import org.fleetranger.rc.ui.Type
  */
 @Composable
 fun LogAccessScreen(refused: Boolean, onContinue: () -> Unit, onOpenAppSettings: () -> Unit) {
-    val text = Type.bodyCompact01.copy(color = Colors.textPrimary, fontSize = 16.sp, lineHeight = 22.sp)
+    val text = Type.bodyCompact02.copy(color = Colors.textPrimary)
     Column(
         Modifier
             .fillMaxSize()

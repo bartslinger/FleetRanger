@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -120,11 +121,11 @@ class UploadService : Service() {
         SyncStatus.write(this, status)
         val busy = state == SyncStatus.State.Uploading && current != null
         getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION, notification(status.summary(), busy))
+            .notify(NOTIFICATION, notification(status.summary(), busy, settings = state == SyncStatus.State.WaitingForNetwork))
     }
 
     /** The system's upload icon is animated, so it's only shown while uploading. */
-    private fun notification(text: String, busy: Boolean): Notification =
+    private fun notification(text: String, busy: Boolean, settings: Boolean = false): Notification =
         Notification.Builder(this, CHANNEL)
             .setSmallIcon(
                 if (busy) android.R.drawable.stat_sys_upload else android.R.drawable.stat_sys_upload_done,
@@ -132,7 +133,21 @@ class UploadService : Service() {
             .setContentTitle("FleetRanger")
             .setContentText(text)
             .setOngoing(true)
+            .setContentIntent(openApp(settings))
             .build()
+
+    /** Tapping the notification opens the app; its settings when something needs fixing there. */
+    private fun openApp(settings: Boolean): PendingIntent {
+        val intent = Intent(this, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_SETTINGS, settings)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            this,
+            if (settings) 1 else 0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
 
     companion object {
         private const val TAG = "FleetRanger"

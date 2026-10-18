@@ -1,5 +1,11 @@
 package org.fleetranger.rc.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,9 +22,11 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -44,25 +52,66 @@ fun RadioButton(
                 indication = null,
                 role = Role.RadioButton,
                 onClick = onSelect,
-            ),
+            )
+            // Centres a one-line label in the 64dp row.
+            .padding(vertical = 21.dp),
+        // With two lines, Carbon aligns the circle with the first one.
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s03),
+    ) {
+        // 20dp, a 1dp ring, an 8dp dot when selected; centred on the 22dp first line.
+        Box(
+            Modifier
+                .padding(top = 1.dp)
+                .size(20.dp)
+                .border(1.dp, Colors.iconPrimary, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Box(Modifier.size(8.dp).background(Colors.iconPrimary, CircleShape))
+        }
+        Column {
+            BasicText(label, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
+            if (detail != null) {
+                BasicText(detail, style = Type.label02.copy(color = Colors.textSecondary))
+            }
+        }
+    }
+}
+
+/**
+ * Carbon's inline loading: a small spinner before the text, for something the
+ * app is doing right now, such as waiting for approval.
+ */
+@Composable
+fun InlineLoading(text: String, modifier: Modifier = Modifier) {
+    val turning = rememberInfiniteTransition(label = "loading")
+    val angle by turning.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(690, easing = LinearEasing)),
+        label = "angle",
+    )
+    Row(
+        modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.s03),
     ) {
-        // 20dp, a 1dp ring; selected: a 2dp ring around a dot.
-        Box(
-            Modifier
-                .size(20.dp)
-                .border(if (selected) 2.dp else 1.dp, Colors.iconPrimary, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (selected) Box(Modifier.size(10.dp).background(Colors.iconPrimary, CircleShape))
+        // Carbon's small loading: a 16dp ring, a quarter of it in the
+        // interactive colour, turning.
+        Canvas(Modifier.size(16.dp)) {
+            val stroke = Stroke(width = 2.dp.toPx())
+            drawCircle(Colors.borderSubtle01, style = stroke, radius = size.minDimension / 2 - stroke.width / 2)
+            drawArc(
+                Colors.interactive,
+                startAngle = angle,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = androidx.compose.ui.geometry.Offset(stroke.width / 2, stroke.width / 2),
+                size = androidx.compose.ui.geometry.Size(size.width - stroke.width, size.height - stroke.width),
+                style = stroke,
+            )
         }
-        Column {
-            BasicText(label, style = Type.bodyCompact01.copy(color = Colors.textPrimary))
-            if (detail != null) {
-                BasicText(detail, style = Type.label01.copy(color = Colors.textSecondary))
-            }
-        }
+        BasicText(text, style = Type.bodyCompact02.copy(color = Colors.textSecondary))
     }
 }
 
@@ -85,7 +134,7 @@ fun DangerDialog(
                 verticalArrangement = Arrangement.spacedBy(Spacing.s05),
             ) {
                 BasicText(title, style = Type.heading03.copy(color = Colors.textPrimary))
-                BasicText(text, style = Type.bodyCompact01.copy(color = Colors.textPrimary))
+                BasicText(text, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
             }
             Row(Modifier.fillMaxWidth().padding(top = Spacing.s07)) {
                 Button(

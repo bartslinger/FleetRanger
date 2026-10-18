@@ -30,7 +30,11 @@ import androidx.compose.ui.unit.dp
 // Carbon's components, as far as the app needs them. Touch targets are at
 // least 64dp, Carbon's extra large size: pilots may wear gloves.
 
-enum class ButtonKind { Primary, Secondary, Tertiary, Ghost, Danger }
+/**
+ * Carbon's button kinds. Danger is for a destructive action that is the
+ * point of the screen (a confirmation); DangerTertiary for one among others.
+ */
+enum class ButtonKind { Primary, Secondary, Tertiary, Ghost, Danger, DangerTertiary }
 
 /** Carbon's button, extra large (64dp), with its text at the top left. */
 @Composable
@@ -49,15 +53,18 @@ fun Button(
         ButtonKind.Tertiary -> if (pressed) Colors.buttonTertiaryActive else Color.Transparent
         ButtonKind.Ghost -> if (pressed) Colors.layerActive01 else Color.Transparent
         ButtonKind.Danger -> if (pressed) Colors.buttonDangerActive else Colors.buttonDanger
+        ButtonKind.DangerTertiary -> if (pressed) Colors.buttonDangerActive else Color.Transparent
     }
     val foreground = when {
         kind == ButtonKind.Ghost -> Colors.interactive
         kind == ButtonKind.Tertiary && !pressed -> Colors.interactive
+        kind == ButtonKind.DangerTertiary && !pressed -> Colors.buttonDanger
         else -> Colors.textOnColor
     }
     val border = when {
         focused -> Colors.focus
         kind == ButtonKind.Tertiary -> Colors.interactive
+        kind == ButtonKind.DangerTertiary -> Colors.buttonDanger
         else -> Color.Transparent
     }
     // Carbon leaves room on the right for an icon, except on ghost buttons,
@@ -111,7 +118,7 @@ fun ClickableTile(
             if (detail != null) {
                 BasicText(
                     detail,
-                    style = Type.label01.copy(color = Colors.textSecondary),
+                    style = Type.label02.copy(color = Colors.textSecondary),
                     modifier = Modifier.padding(top = Spacing.s02),
                 )
             }
@@ -145,9 +152,11 @@ fun WarningNotification(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(Colors.supportWarning))
+        // Status by icon and colour, not colour alone; aligned with the title.
+        WarningIcon(Modifier.align(Alignment.Top).padding(start = Spacing.s05, top = Spacing.s04 + 1.dp))
         Column(Modifier.weight(1f).padding(horizontal = Spacing.s05, vertical = Spacing.s04)) {
-            BasicText(title, style = Type.headingCompact01.copy(color = Colors.textPrimary))
-            BasicText(text, style = Type.bodyCompact01.copy(color = Colors.textPrimary))
+            BasicText(title, style = Type.headingCompact02.copy(color = Colors.textPrimary))
+            BasicText(text, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
         }
         if (action != null) {
             Button(

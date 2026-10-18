@@ -3,6 +3,7 @@ package org.fleetranger.rc
 import android.app.DatePickerDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -32,8 +35,10 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.ButtonKind
+import org.fleetranger.rc.ui.CarbonIcons
 import org.fleetranger.rc.ui.Colors
 import org.fleetranger.rc.ui.DangerDialog
+import org.fleetranger.rc.ui.Icon
 import org.fleetranger.rc.ui.RadioButton
 import org.fleetranger.rc.ui.Spacing
 import org.fleetranger.rc.ui.Type
@@ -107,12 +112,12 @@ fun SettingsScreen(
                 Section("Sync")
                 Paragraph(syncStatus.summary())
                 Paragraph(
-                    "${syncStatus.uploaded} ${if (syncStatus.uploaded == 1) "log" else "logs"} uploaded" +
-                        if (syncStatus.lastUploadAt > 0) {
-                            ", the last at ${TIME.format(Instant.ofEpochMilli(syncStatus.lastUploadAt).atZone(ZoneId.systemDefault()))}"
-                        } else {
-                            ""
-                        },
+                    when {
+                        syncStatus.uploaded == 0 -> "No logs uploaded yet"
+                        else -> "${syncStatus.uploaded} ${if (syncStatus.uploaded == 1) "log" else "logs"} " +
+                            "uploaded, the last at " +
+                            TIME.format(Instant.ofEpochMilli(syncStatus.lastUploadAt).atZone(ZoneId.systemDefault()))
+                    },
                     secondary = true,
                 )
             }
@@ -130,7 +135,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    BasicText(network, style = Type.bodyCompact01.copy(color = Colors.textPrimary))
+                    BasicText(network, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
                     Button("Remove", {
                         networks = networks - network
                         settings.networks = networks
@@ -150,10 +155,13 @@ fun SettingsScreen(
                     currentNetwork == null -> Paragraph("Not connected to Wi-Fi.", secondary = true)
                     currentNetwork in networks ->
                         Paragraph("Connected to $currentNetwork.", secondary = true)
-                    else -> Button("Add $currentNetwork", {
-                        networks = networks + currentNetwork
-                        settings.networks = networks
-                    }, kind = ButtonKind.Tertiary)
+                    else -> {
+                        Paragraph("Connected to $currentNetwork.", secondary = true)
+                        Button("Add this network", {
+                            networks = networks + currentNetwork
+                            settings.networks = networks
+                        }, kind = ButtonKind.Tertiary)
+                    }
                 }
             }
 
@@ -166,21 +174,26 @@ fun SettingsScreen(
                     syncFrom = null
                 },
             )
-            RadioButton(
-                "From a date",
-                detail = syncFrom?.let { "${DATE.format(it)}. Tap to change." } ?: "Choose a date",
-                selected = syncFrom != null,
-                onSelect = ::pickDate,
-            )
+            RadioButton("From a date", selected = syncFrom != null, onSelect = ::pickDate)
+            syncFrom?.let { date ->
+                // The chosen date as a field of its own, indented to the labels.
+                DateField("Start date", DATE.format(date), ::pickDate, Modifier.padding(start = 28.dp))
+            }
 
             Section("Pairing")
-            Paragraph("Paired with ${serverUrl ?: "no server"}.")
-            Paragraph("Serial number ${Serial.read()}", secondary = true)
+            Paragraph("Paired with")
+            BasicText(serverUrl ?: "no server", style = Type.code02.copy(color = Colors.textPrimary))
+            BasicText(
+                "Serial number ${Serial.read()}",
+                style = Type.code02.copy(color = Colors.textSecondary),
+                modifier = Modifier.padding(top = Spacing.s03),
+            )
+            // Rare, and never the point of this screen: not a primary danger button.
             Button(
                 "Unpair controller",
                 { confirmingUnpair = true },
-                kind = ButtonKind.Danger,
-                modifier = Modifier.padding(top = Spacing.s05),
+                kind = ButtonKind.DangerTertiary,
+                modifier = Modifier.padding(top = Spacing.s06),
             )
         }
     }
@@ -216,9 +229,42 @@ private fun Section(text: String) {
 private fun Paragraph(text: String, secondary: Boolean = false) {
     BasicText(
         text,
-        style = Type.bodyCompact01.copy(
+        style = Type.bodyCompact02.copy(
             color = if (secondary) Colors.textSecondary else Colors.textPrimary,
         ),
         modifier = Modifier.padding(bottom = Spacing.s03),
     )
+}
+
+/**
+ * A field showing a date, which opens Android's own date picker: Carbon's
+ * date input (label, value, calendar icon), 64dp high for gloves.
+ */
+@Composable
+private fun DateField(label: String, value: String, onPick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier.padding(top = Spacing.s03)) {
+        BasicText(label, style = Type.label02.copy(color = Colors.textSecondary))
+        Row(
+            Modifier
+                .padding(top = Spacing.s03)
+                .widthIn(min = 288.dp)
+                .height(64.dp)
+                .background(Colors.layer01)
+                .drawBehind {
+                    drawLine(
+                        Colors.borderStrong01,
+                        Offset(0f, size.height - 0.5f),
+                        Offset(size.width, size.height - 0.5f),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
+                .clickable(onClickLabel = "Change $label", onClick = onPick)
+                .padding(horizontal = Spacing.s05),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BasicText(value, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
+            Icon(CarbonIcons.Calendar, Colors.iconPrimary)
+        }
+    }
 }

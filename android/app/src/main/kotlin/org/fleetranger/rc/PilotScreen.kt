@@ -28,13 +28,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.ButtonKind
+import org.fleetranger.rc.ui.CarbonIcons
 import org.fleetranger.rc.ui.ClickableTile
 import org.fleetranger.rc.ui.Colors
+import org.fleetranger.rc.ui.Icon
 import org.fleetranger.rc.ui.Spacing
 import org.fleetranger.rc.ui.Type
+import org.fleetranger.rc.ui.WarningIcon
 import org.fleetranger.rc.ui.WarningNotification
 
 /** Every tile in the list the same height, whether or not it has a second line. */
@@ -96,17 +98,33 @@ fun PilotScreen(
     }
 }
 
-/** The upload status in one line; tapping it opens the settings. */
+/**
+ * The upload status, as a ghost button that opens the settings: logs that
+ * aren't uploading get a warning icon, so it isn't missed.
+ */
 @Composable
 private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
-    BasicText(
-        "Sync: ${status.summary()}",
-        style = Type.label01.copy(color = Colors.textSecondary),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClickLabel = "Open settings", onClick = onSettings)
-            .padding(vertical = Spacing.s03),
+    val problem = status.state in setOf(
+        SyncStatus.State.NotPaired,
+        SyncStatus.State.NoAccess,
+        SyncStatus.State.WaitingForNetwork,
+        SyncStatus.State.Unreachable,
     )
+    Row(
+        Modifier
+            .height(64.dp)
+            .clickable(onClickLabel = "Open settings", onClick = onSettings)
+            .padding(horizontal = Spacing.s05),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s03),
+    ) {
+        if (problem) WarningIcon()
+        BasicText(
+            "Sync: ${status.summary()}",
+            style = Type.bodyCompact02.copy(color = Colors.interactive),
+        )
+        Icon(CarbonIcons.ArrowRight, Colors.interactive)
+    }
 }
 
 /** The usual case: the same pilot again, in one tap. */
@@ -118,12 +136,8 @@ private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
             title = last.name,
             detail = "Flew last",
             onClick = onFly,
-            titleStyle = Type.heading04.copy(
-                color = Colors.textPrimary,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 32.sp,
-                lineHeight = 40.sp,
-            ),
+            // Carbon's heading-05 is regular; semibold on purpose, to read outdoors.
+            titleStyle = Type.heading05.copy(color = Colors.textPrimary, fontWeight = FontWeight.SemiBold),
             modifier = Modifier.weight(2f).height(144.dp),
         )
         ClickableTile(

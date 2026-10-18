@@ -66,9 +66,9 @@ class MainActivity : ComponentActivity() {
         sync = SyncSettings(this)
         syncStatus = SyncStatus.read(this)
         syncListener = SyncStatus.listen(this) { syncStatus = it }
-        setUp(intent)
         serverUrl = server.url
         paired = server.paired
+        setUp(intent)
         setContent {
             when {
                 !paired -> Pairing(server, serverUrl, onPaired = {
@@ -197,6 +197,11 @@ class MainActivity : ComponentActivity() {
      * app which install it belongs to. A different install means pairing again.
      */
     private fun setUp(intent: Intent?) {
+        // From the upload notification, when logs wait for an approved network.
+        if (intent?.getBooleanExtra(EXTRA_SETTINGS, false) == true && paired) {
+            refreshNetwork()
+            showSettings = true
+        }
         val link: Uri = intent?.data ?: return
         if (link.scheme != "fleetranger" || link.host != "setup") return
         val url = link.getQueryParameter("server")?.trimEnd('/') ?: return
@@ -206,6 +211,11 @@ class MainActivity : ComponentActivity() {
             serverUrl = url
             paired = false
         }
+    }
+
+    companion object {
+        /** Opens the settings, e.g. from the upload notification. */
+        const val EXTRA_SETTINGS = "settings"
     }
 
     private fun fly(pilot: Pilot?) {

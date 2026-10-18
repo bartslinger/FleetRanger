@@ -46,10 +46,32 @@ val Plex = FontFamily(
     Font(R.font.ibm_plex_sans_semibold, FontWeight.SemiBold),
 )
 
-/** Carbon's type tokens (productive set). */
+/** Tells 0 from O and 1 from I, for codes and serial numbers. */
+val PlexMono = FontFamily(Font(R.font.ibm_plex_mono_regular, FontWeight.Normal))
+
+/**
+ * Carbon's type tokens. Read at arm's length outdoors, the app uses the
+ * larger ones: body text is body-compact-02 (16), small text label-02 (14).
+ */
 object Type {
     val heading03 = TextStyle(fontFamily = Plex, fontSize = 20.sp, lineHeight = 28.sp)
     val heading04 = TextStyle(fontFamily = Plex, fontSize = 28.sp, lineHeight = 36.sp)
+    val heading05 = TextStyle(fontFamily = Plex, fontSize = 32.sp, lineHeight = 40.sp)
+    val heading06 = TextStyle(fontFamily = Plex, fontSize = 42.sp, lineHeight = 50.sp)
+    val bodyCompact02 = TextStyle(fontFamily = Plex, fontSize = 16.sp, lineHeight = 22.sp)
+    val label02 = TextStyle(
+        fontFamily = Plex,
+        fontSize = 14.sp,
+        lineHeight = 18.sp,
+        letterSpacing = 0.16.sp,
+    )
+    /** Codes and serial numbers, which are read out or typed. */
+    val code02 = TextStyle(
+        fontFamily = PlexMono,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.32.sp,
+    )
     val headingCompact01 = TextStyle(
         fontFamily = Plex,
         fontWeight = FontWeight.SemiBold,

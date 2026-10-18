@@ -18,16 +18,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.Colors
+import org.fleetranger.rc.ui.InlineLoading
+import org.fleetranger.rc.ui.PlexMono
 import org.fleetranger.rc.ui.QrCode
 import org.fleetranger.rc.ui.Spacing
 import org.fleetranger.rc.ui.Type
@@ -120,7 +120,7 @@ fun PairingScreen(state: PairingState, serial: String, onRestart: () -> Unit = {
                     "On this controller, open your organisation’s FleetRanger download page, and " +
                         "tap Open FleetRanger.",
                 )
-                PairingState.Starting -> Text("Asking for a code…")
+                PairingState.Starting -> InlineLoading("Asking for a code…")
                 PairingState.Stopped -> {
                     Text("Pairing stopped after an hour without approval.")
                     Button("Show a new code", onRestart)
@@ -130,24 +130,17 @@ fun PairingScreen(state: PairingState, serial: String, onRestart: () -> Unit = {
                     text = "Check the Wi-Fi connection. Trying ${state.server} again shortly.",
                 )
                 is PairingState.Waiting -> {
-                    Text("Scan the QR code with your phone, or go to ${pageUrl(state.server)} and enter:")
+                    Text("Scan the QR code with your phone, or go to this address and enter the code:")
+                    BasicText(pageUrl(state.server), style = Type.code02.copy(color = Colors.textPrimary))
+                    // Monospaced, so 0 and O, 1 and I can't be confused.
                     BasicText(
                         formatCode(state.code),
-                        style = Type.heading04.copy(
-                            color = Colors.textPrimary,
-                            fontSize = 42.sp,
-                            lineHeight = 50.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 2.sp,
-                        ),
+                        style = Type.heading06.copy(color = Colors.textPrimary, fontFamily = PlexMono),
                     )
-                    Text("Waiting for approval…", secondary = true)
+                    InlineLoading("Waiting for approval…")
                 }
             }
-            BasicText(
-                "Serial number $serial",
-                style = Type.label01.copy(color = Colors.textSecondary),
-            )
+            BasicText("Serial number $serial", style = Type.code02.copy(color = Colors.textSecondary))
         }
         if (state is PairingState.Waiting) {
             QrCode(
@@ -163,10 +156,8 @@ fun PairingScreen(state: PairingState, serial: String, onRestart: () -> Unit = {
 private fun Text(text: String, secondary: Boolean = false) {
     BasicText(
         text,
-        style = Type.bodyCompact01.copy(
+        style = Type.bodyCompact02.copy(
             color = if (secondary) Colors.textSecondary else Colors.textPrimary,
-            fontSize = 16.sp,
-            lineHeight = 22.sp,
         ),
     )
 }
