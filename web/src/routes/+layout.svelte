@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '#lib/ui/base.css';
+	import Events from '@carbon/icons/es/events/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
 	import Template from '@carbon/icons/es/template/16.js';
 	import { dev } from '$app/env';
@@ -10,10 +11,14 @@
 
 	let { data, children }: LayoutProps = $props();
 
-	const nav: NavItem[] = [
+	// Admin pages only for admins; the backend refuses everyone else anyway.
+	const nav: NavItem[] = $derived([
 		{ href: resolve('/'), label: 'Logbook', icon: Notebook },
+		...(data.account?.role === 'admin'
+			? [{ href: resolve('/teams'), label: 'Teams', icon: Events }]
+			: []),
 		...(dev ? [{ href: resolve('/design'), label: 'Components', icon: Template }] : [])
-	];
+	]);
 </script>
 
 <svelte:head>

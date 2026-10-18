@@ -18,6 +18,15 @@ export interface FlightPage {
 	total: number;
 }
 
+/** A team, from `/api/teams`. */
+export interface Team {
+	id: string;
+	name: string;
+	archived_at: string | null;
+	/** Pilots in the team that aren't archived. */
+	pilots: number;
+}
+
 /** The logged-in account, from `GET /api/me`. */
 export interface Account {
 	email: string;
