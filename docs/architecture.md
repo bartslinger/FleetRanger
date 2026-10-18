@@ -26,14 +26,15 @@ The decisions made so far, each with a short reason. Open questions are listed i
 
 - **Login via OpenID Connect**, with Google first. Sessions are stored on the server, so they can be revoked immediately and audit records reference them.
 - **The backend runs the login**: authorization code flow with PKCE, the provider found through its issuer URL. One provider per install for now.
-- **No open sign-up.** An admin adds an account by email. The first login with that verified email ties the account to the provider's permanent subject ID, and later logins match on that ID only, so a reassigned or renamed address can't take over or lock out an account. The first account of an install is added with `fleetranger add-account --admin <email>`.
-- **Login sessions** (named so to tell them apart from flight sessions) are a random token in the cookie; the database stores only its SHA-256 hash. They expire after 30 days without use. Disabling an account revokes its sessions; accounts are never deleted, so the audit log can refer to them.
-- **Pilots and accounts are separate.** A pilot can be created on a remote controller, offline too, with an ID generated on the controller. Admins can also create pilots ahead of time. Admins link a login account to a pilot (at most one pilot per account); invite links come later. Merging duplicate pilots comes with the remote controller app, where duplicates arise.
-- **Teams.** Each pilot is in exactly one team. Membership is still a separate table, with a uniqueness constraint, so multiple teams remain possible later.
-- **Archived, not deleted.** Pilots and teams that are no longer active are archived, so flights and history keep referring to them. A pilot without flights can be deleted, for example one created by mistake.
-- **Roles** are one per account: member, all flights, or admin.
+- **Everyone is a user.** Pilots, viewers and admins are all users, with one name entered by an admin. A user flies for a team, can log in, or both. Only admins create users, also for pilots; the remote controller only downloads the list (see "Clients"). That avoids duplicates, so there is no merging of users.
+- **Logins are separate from users.** A user can have a login: an email address, tied to the provider's subject ID on first use. Login data (`logins`, `login_sessions`) is kept apart from what a user is, so the security-sensitive part stays small. Removing a login stops someone from logging in while they keep flying.
+- **No open sign-up.** An admin gives a user a login by email. The first login with that verified email ties it to the provider's permanent subject ID, and later logins match on that ID only, so a reassigned or renamed address can't take over or lock out a login. The first user of an install is added with `fleetranger add-user --admin <email> <name>`.
+- **Login sessions** (named so to tell them apart from flight sessions) are a random token in the cookie; the database stores only its SHA-256 hash. They expire after 30 days without use. Archiving a user or removing their login revokes their sessions.
+- **Teams.** A user flies for at most one team; admins and viewers who don't fly have none. Membership is still a separate table, with a uniqueness constraint, so multiple teams remain possible later.
+- **Archived, not deleted.** Users and teams that are no longer active are archived, so flights and history keep referring to them. An archived user can't log in and can't be chosen as a pilot. A user without flights can be deleted, for example one created by mistake.
+- **Roles** are one per user: member, all flights, or admin.
 - **Flights** have a team and an optional pilot. The team is the pilot's team at flight time. A flight with no pilot takes the remote controller's team, or else goes to an organisation-level queue. Changing a pilot's team does not move their past flights.
-- **Drones and remote controllers** belong to the organisation. Each can have a team and a current holder (a pilot). The holder is informational only and grants no access. They are registered automatically from the serials in imported logs; flights keep the serials as text.
+- **Drones and remote controllers** belong to the organisation. Each can have a team and a current holder (a user). The holder is informational only and grants no access. They are registered automatically from the serials in imported logs; flights keep the serials as text.
 - **One table per kind of equipment** (`aircraft`, `remote_controllers`, later batteries), not one devices table: they share a few columns but will differ, for example controllers get enrollment and sync settings, and only a controller's team decides the team of a flight without a pilot.
 - **Who sees a flight:**
   - its pilot
@@ -43,10 +44,10 @@ The decisions made so far, each with a short reason. Open questions are listed i
   - admins
   - later, people it has been shared with
 - **Within a team**, any member can change a flight's pilot to another member, or to nobody. No acceptance is needed. "This wasn't me" means setting the pilot to nobody, and the flight stays in the team.
-- **Admins** manage users, pilots, teams and devices, and can move flights between teams.
+- **Admins** manage users, teams and devices, and can move flights between teams.
 - **Setting a flight's pilot:**
-  - Members can change flights of their pilot's current team, choosing a pilot of that team or nobody.
-  - Admins can choose any active pilot, and the flight's team follows the pilot, also when changing from one pilot to another. That keeps "the team is the pilot's team" true and empties the organisation's queue in one step.
+  - Members can change flights of their own current team, choosing a user of that team or nobody.
+  - Admins can choose any active user in a team, and the flight's team follows the pilot, also when changing from one pilot to another. That keeps "the team is the pilot's team" true and empties the organisation's queue in one step.
   - When an admin moves a flight to another team without choosing a pilot, the pilot is cleared unless they are in the new team. A flight never has a pilot from another team.
   - The all-flights role only views.
   - These changes work on many flights at once (batch actions in the logbook). A batch is applied whole or not at all.
@@ -78,7 +79,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 
 - **Backend:** Rust with axum.
 - **Web:** SvelteKit with server-side rendering (Node), TypeScript, pnpm, Prettier and ESLint. The UI follows the Carbon Design System through our own components; see [design-system.md](design-system.md).
-- **Remote controller app:** Kotlin, for DJI Enterprise controllers running DJI Pilot 2. The controller is configured to launch FleetRanger on boot. After a pilot is selected (default: the last pilot), the app starts DJI Pilot 2. Finished logs sync only over Wi-Fi networks chosen in the app.
+- **Remote controller app:** Kotlin, for DJI Enterprise controllers running DJI Pilot 2. The controller is configured to launch FleetRanger on boot. After a pilot is selected (default: the last pilot), the app starts DJI Pilot 2. The app downloads the users it can offer and keeps the list for offline use; it doesn't create users. A pilot who isn't in the list chooses "Not in the list": the flight has no pilot, goes to the controller's team or the queue, and gets its pilot later in the logbook. Finished logs sync only over Wi-Fi networks chosen in the app.
 
 ## Customer-specific needs
 

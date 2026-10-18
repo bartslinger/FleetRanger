@@ -50,8 +50,7 @@ Waits for pilots (phase 4): sessions are grouped per pilot.
 
 ## Phase 6: remote controller app
 
-- [ ] Pilot picker that works offline, last pilot as the default
-- [ ] Creating pilots on the controller
+- [ ] Pilot picker that works offline, last pilot as the default, with "Not in the list"
 - [ ] Launching DJI Pilot 2
 - [ ] Syncing finished logs over selected Wi-Fi networks
 - [ ] Device enrollment
