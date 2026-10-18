@@ -58,7 +58,8 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
 
 /// Saves the flight found in a raw log, or removes an earlier one if the log turned
 /// out to have none, and marks the log done. Unknown drone and controller serials
-/// are registered. A new flight gets its controller's team; re-processing updates
+/// are registered. A new flight gets its controller's team unless that team is
+/// archived; re-processing updates
 /// the flight in place, so its id, team and pilot stay the same.
 pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<()> {
     let mut tx = db.begin().await?;
@@ -85,7 +86,9 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
                                       aircraft_serial, rc_serial, track, metrics, team_id)
                  values ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-                         (select team_id from remote_controllers where serial = $7))
+                         (select r.team_id from remote_controllers r
+                          join teams t on t.id = r.team_id
+                          where r.serial = $7 and t.archived_at is null))
                  on conflict (raw_log_id) do update set
                      takeoff_at = excluded.takeoff_at,
                      landed_at = excluded.landed_at,
