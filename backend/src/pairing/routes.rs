@@ -60,9 +60,15 @@ async fn approve(
     actor: Actor,
     State(db): State<PgPool>,
     Path(code): Path<String>,
-) -> ApiResult<StatusCode> {
-    service::approve(&db, &actor, &code).await?;
-    Ok(StatusCode::NO_CONTENT)
+) -> ApiResult<Json<Approved>> {
+    let serial = service::approve(&db, &actor, &code).await?;
+    Ok(Json(Approved { serial }))
+}
+
+/// The controller that was paired.
+#[derive(Serialize)]
+struct Approved {
+    serial: String,
 }
 
 #[derive(Serialize)]

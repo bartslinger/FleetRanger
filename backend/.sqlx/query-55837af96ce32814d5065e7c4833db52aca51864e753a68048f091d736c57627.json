@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select serial, model, expires_at from pairing_requests\n         where code = $1 and expires_at > now()",
+  "query": "select serial, model, expires_at,\n                (select t.name from team_members m join teams t on t.id = m.team_id\n                 where m.user_id = $2) as \"team_name?\"\n           from pairing_requests\n           where code = $1 and expires_at > now()",
   "describe": {
     "columns": [
       {
@@ -35,18 +35,26 @@
             "name": "expires_at"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "team_name?",
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Text",
+        "Uuid"
       ]
     },
     "nullable": [
       false,
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "f40c43524e67a99aa7654dfe3acd87acbdb56cbf3a2d582f56980b2785a054a0"
+  "hash": "55837af96ce32814d5065e7c4833db52aca51864e753a68048f091d736c57627"
 }

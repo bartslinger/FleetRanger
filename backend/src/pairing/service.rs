@@ -54,21 +54,25 @@ pub async fn start(
 
 /// A pairing request, for the user about to approve it. Any user may pair a
 /// controller; see "Clients" in docs/architecture.md.
-pub async fn request(db: &PgPool, _actor: &Actor, code: &str) -> ApiResult<Request> {
-    db::request(db, &normalize(code))
+pub async fn request(db: &PgPool, actor: &Actor, code: &str) -> ApiResult<Request> {
+    db::request(db, &normalize(code), actor.user_id)
         .await?
         .ok_or(ApiError::NotFound)
 }
 
 /// Approves a request: the controller is paired and joins the approver's team,
-/// or no team when the approver has none.
-pub async fn approve(db: &PgPool, actor: &Actor, code: &str) -> ApiResult<()> {
+/// or no team when the approver has none. Returns the controller's serial.
+pub async fn approve(db: &PgPool, actor: &Actor, code: &str) -> ApiResult<String> {
     let team = flights::db::own_team(db, actor.user_id).await?;
-    if db::approve(db, &normalize(code), team).await? {
-        Ok(())
-    } else {
-        Err(ApiError::NotFound)
-    }
+    db::approve(db, &normalize(code), team)
+        .await?
+        .ok_or_else(|| {
+            ApiError::Invalid(
+                "No controller is waiting with this code any more. Codes expire after 10 minutes: \
+             start pairing on the controller again."
+                    .to_owned(),
+            )
+        })
 }
 
 /// Unpairs a controller from the web app. Admins only; a controller can also

@@ -45,24 +45,34 @@ pub struct Request {
     pub serial: String,
     pub model: String,
     pub expires_at: DateTime<Utc>,
+    /// The team the controller joins when this user approves: theirs.
+    pub team_name: Option<String>,
 }
 
-/// The request with this code, unless it has expired.
-pub async fn request(db: &PgPool, code: &str) -> sqlx::Result<Option<Request>> {
+/// The request with this code, unless it has expired, as this user sees it.
+pub async fn request(db: &PgPool, code: &str, user_id: Uuid) -> sqlx::Result<Option<Request>> {
     sqlx::query_as!(
         Request,
-        "select serial, model, expires_at from pairing_requests
-         where code = $1 and expires_at > now()",
+        r#"select serial, model, expires_at,
+                (select t.name from team_members m join teams t on t.id = m.team_id
+                 where m.user_id = $2) as "team_name?"
+           from pairing_requests
+           where code = $1 and expires_at > now()"#,
         code,
+        user_id,
     )
     .fetch_optional(db)
     .await
 }
 
 /// Approves a request: the controller with its serial (registered now if it's
-/// new) gets the request's token and joins the team. Returns false if there is
-/// no such request, or it has expired.
-pub async fn approve(db: &PgPool, code: &str, team_id: Option<Uuid>) -> sqlx::Result<bool> {
+/// new) gets the request's token and joins the team. Returns the serial, or
+/// None if there is no such request or it has expired.
+pub async fn approve(
+    db: &PgPool,
+    code: &str,
+    team_id: Option<Uuid>,
+) -> sqlx::Result<Option<String>> {
     let mut tx = db.begin().await?;
     let Some(request) = sqlx::query!(
         "delete from pairing_requests where code = $1 and expires_at > now()
@@ -72,7 +82,7 @@ pub async fn approve(db: &PgPool, code: &str, team_id: Option<Uuid>) -> sqlx::Re
     .fetch_optional(&mut *tx)
     .await?
     else {
-        return Ok(false);
+        return Ok(None);
     };
     sqlx::query!(
         "insert into remote_controllers (serial, team_id, token_sha256) values ($1, $2, $3)
@@ -86,7 +96,7 @@ pub async fn approve(db: &PgPool, code: &str, team_id: Option<Uuid>) -> sqlx::Re
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(true)
+    Ok(Some(request.serial))
 }
 
 /// A paired controller, as it authenticates.
@@ -145,8 +155,14 @@ mod tests {
                 .unwrap()
         );
 
-        assert!(approve(&db, "AAAA2222", Some(team)).await.unwrap());
-        assert!(!approve(&db, "AAAA2222", Some(team)).await.unwrap());
+        let serial = approve(&db, "AAAA2222", Some(team)).await.unwrap();
+        assert_eq!(serial.as_deref(), Some("RC1"));
+        assert!(
+            approve(&db, "AAAA2222", Some(team))
+                .await
+                .unwrap()
+                .is_none()
+        );
         let paired = by_token(&db, b"token-hash").await.unwrap().unwrap();
         assert_eq!(paired.serial, "RC1");
         let team_of: Option<Uuid> =
@@ -161,7 +177,7 @@ mod tests {
         add_request(&db, "BBBB3333", b"late", "RC3", "Test RC", past)
             .await
             .unwrap();
-        assert!(!approve(&db, "BBBB3333", None).await.unwrap());
+        assert!(approve(&db, "BBBB3333", None).await.unwrap().is_none());
 
         assert!(unpair(&db, paired.id).await.unwrap());
         assert!(by_token(&db, b"token-hash").await.unwrap().is_none());

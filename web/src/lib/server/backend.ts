@@ -121,6 +121,15 @@ export interface Equipment {
 	last_flight_at: string | null;
 }
 
+/** A controller waiting to be paired, from `GET /api/pairing/{code}`. */
+export interface PairingRequest {
+	serial: string;
+	model: string;
+	expires_at: string;
+	/** The team the controller joins when this user approves: theirs. */
+	team_name: string | null;
+}
+
 /** Progress through the current batch of logs, from `GET /api/logs/processing` (admins). */
 export interface ProcessingStatus {
 	/** Zero, with everything else empty, when nothing is waiting. */
@@ -216,6 +225,20 @@ export async function remove(
 	if (response.status === 403 || response.status === 404) error(response.status);
 	if (!response.ok) error(502, `The backend answered ${response.status}.`);
 	return { ok: true, data: null };
+}
+
+/** Like `get`, but something that isn't there is null rather than a 404 page. */
+export async function find<T>(fetch: typeof globalThis.fetch, path: string): Promise<T | null> {
+	let response: Response;
+	try {
+		response = await fetch(`${BACKEND_URL}${path}`);
+	} catch {
+		error(503, 'The backend is not reachable.');
+	}
+	if (response.status === 404) return null;
+	if (response.status === 403) error(response.status);
+	if (!response.ok) error(502, `The backend answered ${response.status}.`);
+	return response.json();
 }
 
 /** Fetches JSON from the backend, failing the request if the backend does. */
