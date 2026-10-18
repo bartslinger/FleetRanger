@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
                         askForNetworkNames.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                     },
                     onUnpair = ::unpair,
+                    onChanged = ::startUploads,
                     onBack = { showSettings = false },
                     syncStatus = syncStatus,
                 )

@@ -45,7 +45,8 @@ data class SyncStatus(
             "${plural(waiting, "log")} waiting for an approved Wi-Fi network"
         State.Uploading -> "Uploading ${current ?: "a log"} (${waiting} waiting)"
         State.Unreachable -> "Can’t reach FleetRanger; ${plural(waiting, "log")} waiting"
-        State.Done -> "All logs uploaded"
+        // Nothing uploaded yet, e.g. every log is from before the chosen date.
+        State.Done -> if (uploaded == 0) "No logs to upload" else "All logs uploaded"
     }
 
     companion object {

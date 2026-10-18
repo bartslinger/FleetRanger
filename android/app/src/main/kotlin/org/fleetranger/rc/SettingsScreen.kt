@@ -68,6 +68,8 @@ private const val PAIRING = 2
  * - `currentNetwork`: the Wi-Fi network the controller is on, if Android
  *   reveals its name.
  * - `canSeeNetworkNames`: false until the location permission is granted.
+ * - `onChanged`: after a change to the networks or the date, so the uploads
+ *   look again straight away and the count of waiting logs follows.
  */
 @Composable
 fun SettingsScreen(
@@ -77,6 +79,7 @@ fun SettingsScreen(
     canSeeNetworkNames: Boolean,
     onAllowNetworkNames: () -> Unit,
     onUnpair: () -> Unit,
+    onChanged: () -> Unit,
     onBack: () -> Unit,
     syncStatus: SyncStatus? = null,
 ) {
@@ -95,6 +98,7 @@ fun SettingsScreen(
                 val date = LocalDate.of(year, month + 1, day)
                 settings.syncFrom = date
                 syncFrom = date
+                onChanged()
             },
             initial.year,
             initial.monthValue - 1,
@@ -121,6 +125,7 @@ fun SettingsScreen(
                         onAllLogs = {
                             settings.syncFrom = null
                             syncFrom = null
+                            onChanged()
                         },
                         onPickDate = ::pickDate,
                         onAddNetwork = { tab = WIFI },
@@ -133,10 +138,12 @@ fun SettingsScreen(
                         onAdd = { network ->
                             networks = networks + network
                             settings.networks = networks
+                            onChanged()
                         },
                         onRemove = { network ->
                             networks = networks - network
                             settings.networks = networks
+                            onChanged()
                         },
                     )
                     PAIRING -> PairingTab(serverUrl, onUnpair = { confirmingUnpair = true })
