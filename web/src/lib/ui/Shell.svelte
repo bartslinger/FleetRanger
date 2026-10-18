@@ -12,7 +12,7 @@
 </script>
 
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -26,8 +26,26 @@
 	let { name, nav, children }: Props = $props();
 
 	let open = $state(false);
+	let menuButton: HTMLButtonElement | undefined = $state();
+	let navElement: HTMLElement | undefined = $state();
 
 	afterNavigate(() => (open = false));
+
+	async function toggle() {
+		open = !open;
+		if (open) {
+			// Move focus into the navigation, as Carbon's left panel does.
+			await tick();
+			navElement?.querySelector('a')?.focus();
+		}
+	}
+
+	function onkeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && open) {
+			open = false;
+			menuButton?.focus();
+		}
+	}
 
 	const home = resolve('/');
 
@@ -39,16 +57,19 @@
 	}
 </script>
 
-<svelte:window onkeydown={(event) => event.key === 'Escape' && (open = false)} />
+<svelte:window {onkeydown} />
+
+<a class="skip" href="#main-content">Skip to main content</a>
 
 <header>
 	<button
+		bind:this={menuButton}
 		class="menu"
 		type="button"
 		aria-label={open ? 'Close menu' : 'Open menu'}
 		aria-expanded={open}
 		aria-controls="side-nav"
-		onclick={() => (open = !open)}
+		onclick={toggle}
 	>
 		<!-- Carbon icons "menu" and "close" (Apache-2.0). -->
 		<svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true" fill="currentColor">
@@ -64,7 +85,7 @@
 	<a class="name" href={home}>{name}</a>
 </header>
 
-<nav id="side-nav" class:open aria-label="Main">
+<nav bind:this={navElement} id="side-nav" class:open aria-label="Main">
 	<ul>
 		{#each nav as item (item.href)}
 			<li>
@@ -87,11 +108,43 @@
 	></button>
 {/if}
 
-<main>
+<main id="main-content" tabindex="-1">
 	{@render children()}
 </main>
 
 <style>
+	/* Carbon's skip link: hidden until focused, then shown over the header. */
+	.skip {
+		position: absolute;
+		top: 0;
+		left: 0;
+		z-index: 4;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+
+	.skip:focus {
+		display: flex;
+		align-items: center;
+		width: auto;
+		height: var(--cds-size-large);
+		padding: 0 var(--cds-spacing-05);
+		clip-path: none;
+		outline: none;
+		border: 4px solid var(--cds-focus);
+		background: var(--cds-background);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		text-decoration: none;
+	}
+
+	main:focus {
+		outline: none;
+	}
+
 	header {
 		position: fixed;
 		inset: 0 0 auto;
@@ -119,15 +172,22 @@
 		background: var(--cds-background-hover);
 	}
 
+	.menu:active {
+		background: var(--cds-background-active);
+	}
+
+	/* Carbon's header name: body-compact-01 in semibold, close to the menu
+	   button while that is shown. */
 	.name {
 		display: flex;
 		align-items: center;
 		height: 100%;
-		padding: 0 var(--cds-spacing-05);
+		padding: 0 var(--cds-spacing-07) 0 var(--cds-spacing-03);
 		color: var(--cds-text-primary);
-		font-size: var(--cds-heading-compact-01-font-size);
-		font-weight: var(--cds-heading-compact-01-font-weight);
-		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
+		font-size: var(--cds-body-compact-01-font-size);
+		font-weight: 600;
+		line-height: 1.25rem;
+		letter-spacing: 0.1px;
 		text-decoration: none;
 	}
 
@@ -149,9 +209,14 @@
 			visibility 110ms;
 	}
 
+	/* Visible at once when opening, so focus can move into it; the delay
+	   above only applies when closing. */
 	nav.open {
 		visibility: visible;
 		transform: none;
+		transition:
+			transform 110ms cubic-bezier(0.2, 0, 0.38, 0.9),
+			visibility 0s;
 	}
 
 	nav a {
