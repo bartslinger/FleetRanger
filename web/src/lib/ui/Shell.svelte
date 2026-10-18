@@ -140,7 +140,7 @@
 		width: 16rem;
 		padding-top: var(--cds-spacing-05);
 		overflow-y: auto;
-		background: var(--cds-layer-01);
+		background: var(--cds-background);
 		/* Hidden, not just moved, so closed links can't be focused. */
 		visibility: hidden;
 		transform: translateX(-100%);
@@ -169,12 +169,12 @@
 	}
 
 	nav a:hover {
-		background: var(--cds-layer-hover-01);
+		background: var(--cds-background-hover);
 		color: var(--cds-text-primary);
 	}
 
 	nav a[aria-current='page'] {
-		background: var(--cds-layer-selected-01);
+		background: var(--cds-background-selected);
 		color: var(--cds-text-primary);
 	}
 
@@ -195,9 +195,10 @@
 		background: var(--cds-overlay);
 	}
 
+	/* Carbon pads the content by 2rem; phones get 1rem to keep room for content. */
 	main {
 		padding: calc(var(--cds-size-large) + var(--cds-spacing-07)) var(--cds-spacing-05)
-			var(--cds-spacing-09);
+			var(--cds-spacing-07);
 	}
 
 	/* Carbon's lg breakpoint (66rem): navigation always visible. Custom properties
@@ -212,7 +213,6 @@
 			visibility: visible;
 			transform: none;
 			transition: none;
-			border-right: 1px solid var(--cds-border-subtle-01);
 		}
 
 		.name {
