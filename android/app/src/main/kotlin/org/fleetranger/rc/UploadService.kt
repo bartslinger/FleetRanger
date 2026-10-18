@@ -9,6 +9,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
@@ -34,6 +36,14 @@ class UploadService : Service() {
 
     private val scan = Runnable { scan() }
 
+    /** A new connection looks again straight away, not at the next minute. */
+    private val networkWatch = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            worker.removeCallbacks(scan)
+            worker.post(scan)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         server = Server(this)
@@ -47,6 +57,13 @@ class UploadService : Service() {
         val thread = HandlerThread("uploads").apply { start() }
         worker = Handler(thread.looper)
         worker.post(scan)
+        getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(networkWatch)
+    }
+
+    override fun onDestroy() {
+        getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkWatch)
+        worker.looper.quitSafely()
+        super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

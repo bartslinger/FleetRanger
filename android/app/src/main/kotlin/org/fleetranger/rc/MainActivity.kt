@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -131,6 +134,30 @@ class MainActivity : ComponentActivity() {
         logAccessRefused = !hasLogAccess &&
             getSharedPreferences("onboarding", MODE_PRIVATE).getBoolean("asked_for_logs", false)
         if (paired && hasLogAccess) UploadService.start(this)
+    }
+
+    /**
+     * Follows the connection while the app is in front, for the settings:
+     * Wi-Fi often connects only after the return from Android's settings.
+     * The upload service follows it by itself.
+     */
+    private val networkWatch = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = runOnUiThread { refreshNetwork() }
+
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) =
+            runOnUiThread { refreshNetwork() }
+
+        override fun onLost(network: Network) = runOnUiThread { refreshNetwork() }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(networkWatch)
+    }
+
+    override fun onStop() {
+        getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkWatch)
+        super.onStop()
     }
 
     private fun refreshNetwork() {
