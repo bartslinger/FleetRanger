@@ -167,6 +167,8 @@
 				if (status === 401 || status === 403 || !instance.isStyleLoaded()) failed = true;
 			});
 			fit(instance, tracks, false);
+			// Tracks that arrived while the style was loading weren't fitted yet.
+			instance.once('load', () => fit(instance, tracks, false));
 			map = instance;
 		});
 		return () => {
