@@ -428,21 +428,26 @@
 		bottom: 0;
 		left: 0;
 		z-index: 2;
-		width: 16rem;
+		/* As wide as the rail while closed, so crossing the lg breakpoint
+		   doesn't animate it from the menu's width. */
+		width: var(--cds-size-large);
 		padding-top: var(--cds-spacing-05);
 		overflow: hidden auto;
 		background: var(--cds-background);
 		/* Hidden, not just moved, so closed links can't be focused. */
 		visibility: hidden;
 		transform: translateX(-100%);
+		/* The width changes back only once it has slid out. */
 		transition:
 			transform 110ms cubic-bezier(0.2, 0, 0.38, 0.9),
-			visibility 110ms;
+			visibility 110ms,
+			width 0s 110ms;
 	}
 
-	/* Visible at once when opening, so focus can move into it; the delay
-	   above only applies when closing. */
+	/* Visible at once when opening, so focus can move into it; the delays
+	   above only apply when closing. */
 	nav.open {
+		width: 16rem;
 		visibility: visible;
 		transform: none;
 		transition:
@@ -517,7 +522,8 @@
 			display: none;
 		}
 
-		nav {
+		nav,
+		nav.open {
 			width: var(--cds-size-large);
 			visibility: visible;
 			transform: none;
