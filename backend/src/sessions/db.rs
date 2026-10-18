@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
@@ -75,8 +77,103 @@ pub async fn count(db: &PgPool, scope: &FlightScope) -> sqlx::Result<i64> {
     .await
 }
 
-/// Any constant, so that only one grouping runs at a time.
-const GROUPING_LOCK: i64 = 0x5e55_1015;
+/// Any constant, so that only one change to sessions (grouping, splitting,
+/// merging) runs at a time.
+const SESSIONS_LOCK: i64 = 0x5e55_1015;
+
+/// A transaction holding the sessions lock.
+async fn locked(db: &PgPool) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+    let mut tx = db.begin().await?;
+    sqlx::query!("select pg_advisory_xact_lock($1)", SESSIONS_LOCK)
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
+}
+
+/// The team of every flight in these sessions, or None if one of them doesn't
+/// exist. The visibility check is the policy's job, not this query's.
+pub async fn flight_teams(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
+    let flights = sqlx::query!(
+        r#"select session_id as "session_id!", team_id from flights where session_id = any($1)"#,
+        ids
+    )
+    .fetch_all(db)
+    .await?;
+    let found: HashSet<Uuid> = flights.iter().map(|flight| flight.session_id).collect();
+    Ok((found.len() == ids.len())
+        .then(|| flights.into_iter().map(|flight| flight.team_id).collect()))
+}
+
+/// The one session all these flights are in, or None if one of them doesn't
+/// exist, isn't in a session, or they are in different sessions.
+pub async fn session_of(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Option<Uuid>> {
+    let sessions = sqlx::query_scalar!(
+        "select session_id from flights where id = any($1)",
+        flight_ids
+    )
+    .fetch_all(db)
+    .await?;
+    let first = sessions.first().copied().flatten();
+    let same = sessions.len() == flight_ids.len() && sessions.iter().all(|s| *s == first);
+    Ok(first.filter(|_| same))
+}
+
+/// Puts all flights of these sessions in the one that starts first, deletes
+/// the others, and returns the remaining session.
+pub async fn merge(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Uuid> {
+    let mut tx = locked(db).await?;
+    let target = sqlx::query_scalar!(
+        r#"select session_id as "session_id!" from flights where session_id = any($1)
+           order by takeoff_at, id limit 1"#,
+        ids
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "update flights set session_id = $2 where session_id = any($1)",
+        ids,
+        target
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "delete from sessions where id = any($1) and id <> $2",
+        ids,
+        target
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(target)
+}
+
+/// Moves these flights into a new session, and returns it. Deletes a session
+/// left without flights.
+pub async fn split(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Uuid> {
+    let mut tx = locked(db).await?;
+    let session = sqlx::query_scalar!("insert into sessions default values returning id")
+        .fetch_one(&mut *tx)
+        .await?;
+    sqlx::query!(
+        "update flights set session_id = $2 where id = any($1)",
+        flight_ids,
+        session
+    )
+    .execute(&mut *tx)
+    .await?;
+    delete_empty(&mut tx).await?;
+    tx.commit().await?;
+    Ok(session)
+}
+
+async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
+    sqlx::query!(
+        "delete from sessions s where not exists (select 1 from flights f where f.session_id = s.id)"
+    )
+    .execute(tx)
+    .await?;
+    Ok(())
+}
 
 /// Places every flight that has a pilot but no session, in takeoff order: it
 /// joins the nearest session holding a flight of the same pilot less than the
@@ -84,11 +181,7 @@ const GROUPING_LOCK: i64 = 0x5e55_1015;
 /// where they are, so this never undoes a user's changes. Deletes sessions
 /// that have no flights left.
 pub async fn group(db: &PgPool, gap: SessionGap) -> sqlx::Result<()> {
-    let mut tx = db.begin().await?;
-    sqlx::query!("select pg_advisory_xact_lock($1)", GROUPING_LOCK)
-        .execute(&mut *tx)
-        .await?;
-
+    let mut tx = locked(db).await?;
     let unplaced = sqlx::query!(
         r#"select id, pilot_id as "pilot_id!", takeoff_at, landed_at
            from flights
@@ -132,11 +225,7 @@ pub async fn group(db: &PgPool, gap: SessionGap) -> sqlx::Result<()> {
         .await?;
     }
 
-    sqlx::query!(
-        "delete from sessions s where not exists (select 1 from flights f where f.session_id = s.id)"
-    )
-    .execute(&mut *tx)
-    .await?;
+    delete_empty(&mut tx).await?;
     tx.commit().await
 }
 
@@ -241,6 +330,33 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(left, 0);
+    }
+
+    /// Merging keeps the session that starts first; a split survives the next
+    /// grouping, so automatic grouping never undoes it.
+    #[sqlx::test]
+    async fn merges_and_splits_stay(db: PgPool) {
+        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
+        let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
+        let gap = SessionGap(120);
+        let first = flight(&db, a, "08:00", "08:20").await;
+        let second = flight(&db, a, "08:30", "08:50").await;
+        let other_pilot = flight(&db, b, "07:30", "07:50").await;
+        group(&db, gap).await.unwrap();
+
+        let a_session = session_of(&db, first).await.unwrap();
+        let b_session = session_of(&db, other_pilot).await.unwrap();
+        let merged = merge(&db, &[a_session, b_session]).await.unwrap();
+        assert_eq!(merged, b_session, "B's session starts first");
+        assert_eq!(session_of(&db, first).await, Some(merged));
+
+        let split_off = split(&db, &[second]).await.unwrap();
+        // A new flight of A right after `second` joins one of the sessions
+        // without moving the split flight back.
+        flight(&db, a, "09:00", "09:20").await;
+        group(&db, gap).await.unwrap();
+        assert_eq!(session_of(&db, second).await, Some(split_off));
+        assert_eq!(session_of(&db, first).await, Some(merged));
     }
 
     /// A session merged across teams shows each team only its own flights,

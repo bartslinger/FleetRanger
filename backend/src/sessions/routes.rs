@@ -4,7 +4,7 @@
 use axum::{
     Json, Router,
     extract::{FromRef, Path, Query, State},
-    routing::get,
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -28,6 +28,42 @@ where
     Router::new()
         .route("/api/sessions", get(list))
         .route("/api/sessions/{id}", get(show))
+        .route("/api/sessions/merge", post(merge))
+        .route("/api/sessions/split", post(split))
+}
+
+#[derive(Deserialize)]
+struct Merge {
+    session_ids: Vec<Uuid>,
+}
+
+#[derive(Deserialize)]
+struct Split {
+    flight_ids: Vec<Uuid>,
+}
+
+/// The session that resulted.
+#[derive(Serialize)]
+struct Changed {
+    id: Uuid,
+}
+
+async fn merge(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Json(change): Json<Merge>,
+) -> ApiResult<Json<Changed>> {
+    let id = service::merge(&db, &actor, &change.session_ids).await?;
+    Ok(Json(Changed { id }))
+}
+
+async fn split(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Json(change): Json<Split>,
+) -> ApiResult<Json<Changed>> {
+    let id = service::split(&db, &actor, &change.flight_ids).await?;
+    Ok(Json(Changed { id }))
 }
 
 #[derive(Deserialize)]

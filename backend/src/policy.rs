@@ -60,6 +60,30 @@ pub fn flight_scope(actor: &Actor) -> FlightScope {
     }
 }
 
+/// Whether the actor may split or merge sessions holding flights of these
+/// teams: the same rule as setting a flight's pilot.
+pub fn change_sessions(
+    role: Role,
+    own_team: Option<Uuid>,
+    flight_teams: &[Option<Uuid>],
+) -> ApiResult<()> {
+    match role {
+        Role::Admin => Ok(()),
+        Role::AllFlights => Err(ApiError::Forbidden),
+        Role::Member => {
+            let Some(own_team) = own_team else {
+                return Err(ApiError::Forbidden);
+            };
+            if flight_teams.iter().any(|team| *team != Some(own_team)) {
+                return Err(ApiError::Conflict(
+                    "You can only change sessions of your own team.".to_owned(),
+                ));
+            }
+            Ok(())
+        }
+    }
+}
+
 /// What happens to the flights' team when their pilot is set.
 #[derive(Debug, PartialEq, Eq)]
 pub enum TeamChange {
@@ -141,5 +165,17 @@ mod tests {
         let own = A;
         assert!(set_pilot(Role::AllFlights, Some(own), &[Some(own)], None).is_err());
         assert!(set_pilot(Role::Member, None, &[None], None).is_err());
+    }
+
+    /// A member can't split or merge a session that holds another team's
+    /// flight, also when it was merged across teams by an admin.
+    #[test]
+    fn members_change_only_sessions_of_their_own_team() {
+        let (own, other) = (A, B);
+        assert!(change_sessions(Role::Member, Some(own), &[Some(own), Some(own)]).is_ok());
+        assert!(change_sessions(Role::Member, Some(own), &[Some(own), Some(other)]).is_err());
+        assert!(change_sessions(Role::Member, None, &[Some(own)]).is_err());
+        assert!(change_sessions(Role::AllFlights, Some(own), &[Some(own)]).is_err());
+        assert!(change_sessions(Role::Admin, None, &[Some(own), Some(other)]).is_ok());
     }
 }

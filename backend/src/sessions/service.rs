@@ -41,3 +41,43 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<Session> {
     }
     Ok(Session { id, flights })
 }
+
+/// Merges sessions into the one that starts first, and returns it.
+pub async fn merge(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<Uuid> {
+    let ids = distinct(ids);
+    if ids.len() < 2 {
+        return Err(ApiError::Invalid("Select two or more sessions.".to_owned()));
+    }
+    let teams = db::flight_teams(db, &ids)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let own_team = flights::db::own_team(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, own_team, &teams)?;
+    Ok(db::merge(db, &ids).await?)
+}
+
+/// Moves flights of one session into a new session, and returns it.
+pub async fn split(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResult<Uuid> {
+    let flight_ids = distinct(flight_ids);
+    let session = db::session_of(db, &flight_ids)
+        .await?
+        .ok_or_else(|| ApiError::Invalid("Select flights of one session.".to_owned()))?;
+    let teams = db::flight_teams(db, &[session])
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let own_team = flights::db::own_team(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, own_team, &teams)?;
+    if flight_ids.len() == teams.len() {
+        return Err(ApiError::Invalid(
+            "Leave at least one flight in the session.".to_owned(),
+        ));
+    }
+    Ok(db::split(db, &flight_ids).await?)
+}
+
+fn distinct(ids: &[Uuid]) -> Vec<Uuid> {
+    let mut ids = ids.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}

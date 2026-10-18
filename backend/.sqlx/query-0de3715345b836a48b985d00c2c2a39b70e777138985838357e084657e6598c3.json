@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select session_id as \"session_id!\" from flights where session_id = any($1)\n           order by takeoff_at, id limit 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "session_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0de3715345b836a48b985d00c2c2a39b70e777138985838357e084657e6598c3"
+}

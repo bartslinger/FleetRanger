@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select session_id from flights where id = any($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "session_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "3b6dbcdc3740cb38399f979f0553c113925d2578c31361695f9afcbd8af98c68"
+}

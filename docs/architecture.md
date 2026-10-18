@@ -60,6 +60,8 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **Sessions exist for reporting:** they summarise several flights as one thing.
 - **A session is one pilot's consecutive flights**, for example a morning shift. A remote controller often powers off during a session while the pilot relocates, and the pilot may drive several kilometres between flights, so neither power cycles nor distance are boundaries. Sessions are grouped automatically by a time-gap rule: a flight joins its pilot's session when it is less than the gap away from one of its flights (2 hours, `FLEETRANGER_SESSION_GAP_MINUTES`), and otherwise starts a new one. Grouping waits for pilots: a flight without a pilot is in no session, because the remote controller is not a reliable stand-in. Users can move flights between sessions, and split or merge sessions. Automatic grouping only places flights that have no session yet, so it never undoes a user's changes.
 - **Different pilots are never grouped automatically.** Several pilots in one session is rare, so it only happens when a user merges sessions. A session therefore stores no pilot: its pilots, teams, times and totals come from its flights.
+- **Who changes sessions** (moving flights, splitting, merging) follows setting a flight's pilot: admins change any session, members only sessions whose flights are all in their own team, and the all-flights role none.
+- **Merging** puts all flights in the earliest of the sessions and deletes the others. **Splitting** moves selected flights of a session into a new session. Moving flights to another session is splitting them off and merging.
 - **Changing a flight's pilot takes it out of its session**, and it is grouped again with the new pilot's flights. Sessions left without flights are deleted.
 - **Report fields such as an organisation's "time on" and "time off"** are organisation-specific and are not derived from the flights; they come with session reports.
 - **Selecting a pilot on the remote controller** sets who is flying from that moment on.
@@ -79,6 +81,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - The backend owns login and the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`). SvelteKit holds no secrets and has no database access. During server-side rendering and in form actions it calls the backend over the internal network, forwarding the browser's cookie and client IP.
 - The backend trusts forwarded client IP headers only from the internal network.
 - **Maps use Mapbox GL JS**, with Mapbox's satellite-with-streets style by default. Each install has its own public access token (`MAPBOX_ACCESS_TOKEN` on the web app), read at runtime so one image serves every install. The browser loads tiles, styles and fonts from Mapbox, which learns roughly which area is viewed; tracks themselves are drawn in the browser and never sent to Mapbox.
+- **Views:** the same data can be shown in different views, depending on what the user wants to do with it. Sessions, for example, are a table, or cards beside one map that shows the selected session. The view is part of the URL.
 - **Times are shown in the organisation's time zone**, one setting per install (`TIME_ZONE` on the web app for now). Everyone sees the same times, as in reports, and server and browser render the same text.
 
 ## Clients
