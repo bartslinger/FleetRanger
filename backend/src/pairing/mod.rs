@@ -19,6 +19,8 @@ pub struct Controller {
     pub id: Uuid,
     #[expect(dead_code, reason = "read by uploads, which come next")]
     pub serial: String,
+    /// The team its flights without a pilot go to; its pilots come first.
+    pub team_id: Option<Uuid>,
 }
 
 impl<S> FromRequestParts<S> for Controller
@@ -40,6 +42,7 @@ where
         Ok(Self {
             id: paired.id,
             serial: paired.serial,
+            team_id: paired.team_id,
         })
     }
 }

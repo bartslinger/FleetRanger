@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, serial from remote_controllers where token_sha256 = $1",
+  "query": "select id, serial, team_id from remote_controllers where token_sha256 = $1",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,17 @@
             "name": "serial"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "team_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "remote_controllers",
+            "name": "team_id"
+          }
+        }
       }
     ],
     "parameters": {
@@ -33,8 +44,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "530e1cd3ccd61f631a2c5da60a5a39500c66b1c590738cbcd0395b52963d8d6f"
+  "hash": "7f0c2b87ee9a9be5b7c0c9380e44f33fea2b042ebf8f010cd42f95f464b23224"
 }

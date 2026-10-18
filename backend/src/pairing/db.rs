@@ -122,12 +122,13 @@ pub async fn approve(
 pub struct Paired {
     pub id: Uuid,
     pub serial: String,
+    pub team_id: Option<Uuid>,
 }
 
 pub async fn by_token(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<Paired>> {
     sqlx::query_as!(
         Paired,
-        "select id, serial from remote_controllers where token_sha256 = $1",
+        "select id, serial, team_id from remote_controllers where token_sha256 = $1",
         token_sha256,
     )
     .fetch_optional(db)

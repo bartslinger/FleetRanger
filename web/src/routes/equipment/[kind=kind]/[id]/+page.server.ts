@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { get, send, type Equipment, type Team, type User } from '#lib/server/backend.js';
+import { get, remove, send, type Equipment, type Team, type User } from '#lib/server/backend.js';
 import { KINDS } from '#lib/equipment.js';
 
 export async function load({ fetch, params }) {
@@ -23,5 +23,11 @@ export const actions = {
 		const result = await send<Equipment>(fetch, 'PUT', path, body);
 		if (!result.ok) return fail(result.status, { message: result.message });
 		return { saved: true };
+	},
+	unpair: async ({ fetch, params }) => {
+		const result = await remove(fetch, `/api/remote-controllers/${params.id}/pairing`);
+		// Shown in the confirmation dialog, not on the page.
+		if (!result.ok) return fail(result.status, { unpairMessage: result.message });
+		return { unpaired: true };
 	}
 };

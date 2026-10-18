@@ -119,6 +119,8 @@ export interface Equipment {
 	holder_user_id: string | null;
 	holder_name: string | null;
 	last_flight_at: string | null;
+	/** Whether a controller is paired with the install; null for drones. */
+	paired: boolean | null;
 }
 
 /** A controller waiting to be paired, from `GET /api/pairing`: without its code. */

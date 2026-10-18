@@ -3,11 +3,13 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::Controller;
 use super::db::{self, Approved, Waiting};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    flights, policy,
+    flights::{self, db::PilotChoice},
+    policy,
 };
 
 /// Without 0/O and 1/I, which are easily confused when typed. 32 letters, so a
@@ -73,6 +75,22 @@ pub async fn check(db: &PgPool, token_sha256: &[u8]) -> ApiResult<Check> {
         Check::Waiting
     } else {
         Check::Unknown
+    })
+}
+
+/// The pilots a controller offers: every active user in a team. The controller
+/// shows its own team first, and keeps the list for when it's offline.
+#[derive(Serialize)]
+pub struct PilotList {
+    /// The controller's team; None if it has none.
+    pub team_id: Option<Uuid>,
+    pub pilots: Vec<PilotChoice>,
+}
+
+pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
+    Ok(PilotList {
+        team_id: controller.team_id,
+        pilots: flights::db::pilot_choices(db, None).await?,
     })
 }
 

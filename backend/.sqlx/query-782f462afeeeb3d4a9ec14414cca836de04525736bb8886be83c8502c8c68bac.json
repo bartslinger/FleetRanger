@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.rc_serial = e.serial) as last_flight_at\n                   from remote_controllers e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   where e.id = $1",
+  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.aircraft_serial = e.serial) as last_flight_at,\n                          null::bool as \"paired?\"\n                   from aircraft e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   where e.id = $1",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "serial"
           }
         }
@@ -31,7 +31,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "name"
           }
         }
@@ -42,7 +42,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "team_id"
           }
         }
@@ -64,7 +64,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "holder_user_id"
           }
         }
@@ -85,6 +85,12 @@
         "name": "last_flight_at",
         "type_info": "Timestamptz",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "paired?",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -100,8 +106,9 @@
       true,
       true,
       true,
+      null,
       null
     ]
   },
-  "hash": "e6faf04949d056318d4d4de165844ba5786942c49ae09681121fdb7dd593df3a"
+  "hash": "782f462afeeeb3d4a9ec14414cca836de04525736bb8886be83c8502c8c68bac"
 }

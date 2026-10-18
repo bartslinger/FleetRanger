@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.aircraft_serial = e.serial) as last_flight_at\n                   from aircraft e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   where e.id = $1",
+  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.aircraft_serial = e.serial) as last_flight_at,\n                          null::bool as \"paired?\"\n                   from aircraft e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   order by lower(coalesce(e.name, e.serial)), e.id",
   "describe": {
     "columns": [
       {
@@ -85,23 +85,28 @@
         "name": "last_flight_at",
         "type_info": "Timestamptz",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "paired?",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Left": [
-        "Uuid"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
       false,
       true,
       true,
+      false,
       true,
-      true,
-      true,
+      false,
+      null,
       null
     ]
   },
-  "hash": "9f6fbd950d7388a462953017145b46ddfb76aa75b2d0ce4289e1a19634a8d546"
+  "hash": "cccef108b8848997b9d2109b21d6602e9539a2caa9fd63d5ff9a635fcf3cc033"
 }

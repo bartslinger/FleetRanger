@@ -14,7 +14,7 @@ use uuid::Uuid;
 use super::{
     Controller,
     db::{self, Approved, Waiting},
-    service::{self, Check, Started},
+    service::{self, Check, PilotList, Started},
 };
 use crate::{
     auth::Actor,
@@ -30,6 +30,7 @@ where
         .route("/api/pairing", get(waiting).post(start))
         .route("/api/pairing/{code}/approve", post(approve))
         .route("/api/controller", get(me).delete(unpair_self))
+        .route("/api/controller/pilots", get(pilots))
         .route("/api/remote-controllers/{id}/pairing", delete(unpair))
 }
 
@@ -73,6 +74,10 @@ async fn me(State(db): State<PgPool>, headers: HeaderMap) -> ApiResult<Json<Me>>
         Check::Waiting => Ok(Json(Me { paired: false })),
         Check::Unknown => Err(ApiError::Unauthorized),
     }
+}
+
+async fn pilots(controller: Controller, State(db): State<PgPool>) -> ApiResult<Json<PilotList>> {
+    Ok(Json(service::pilots(&db, &controller).await?))
 }
 
 async fn unpair_self(controller: Controller, State(db): State<PgPool>) -> ApiResult<StatusCode> {

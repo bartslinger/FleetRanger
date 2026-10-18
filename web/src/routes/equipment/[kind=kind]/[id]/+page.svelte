@@ -7,6 +7,7 @@
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
+	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
@@ -41,7 +42,26 @@
 	]);
 </script>
 
-<PageHeader title={item.name ?? item.serial} breadcrumb={[{ href: list, label: 'Equipment' }]} />
+<PageHeader title={item.name ?? item.serial} breadcrumb={[{ href: list, label: 'Equipment' }]}>
+	{#snippet actions()}
+		{#if item.paired}
+			<Modal
+				title="Remove pairing"
+				triggerKind="danger-tertiary"
+				submitLabel="Remove pairing"
+				danger
+				action="?/unpair"
+				error={form && 'unpairMessage' in form ? form.unpairMessage : undefined}
+				onsuccess={() => toast('Pairing removed.')}
+			>
+				<p>
+					The controller stops uploading flight logs and can’t download the pilot list. Its flights
+					stay as they are. To use it again, pair it again from the controller.
+				</p>
+			</Modal>
+		{/if}
+	{/snippet}
+</PageHeader>
 
 <Grid rowGap>
 	{#if message}
@@ -60,6 +80,12 @@
 				<dt>Serial number</dt>
 				<dd class="identifier">{item.serial}</dd>
 			</div>
+			{#if item.paired !== null}
+				<div>
+					<dt>Pairing</dt>
+					<dd>{item.paired ? 'Paired' : 'Not paired'}</dd>
+				</div>
+			{/if}
 			<div>
 				<dt>Last flight</dt>
 				<dd>

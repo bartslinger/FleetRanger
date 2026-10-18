@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.rc_serial = e.serial) as last_flight_at\n                   from remote_controllers e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   order by lower(coalesce(e.name, e.serial)), e.id",
+  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.rc_serial = e.serial) as last_flight_at,\n                          e.token_sha256 is not null as \"paired?\"\n                   from remote_controllers e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   where e.id = $1",
   "describe": {
     "columns": [
       {
@@ -85,21 +85,30 @@
         "name": "last_flight_at",
         "type_info": "Timestamptz",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "paired?",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
       false,
       true,
       true,
-      false,
       true,
-      false,
+      true,
+      true,
+      null,
       null
     ]
   },
-  "hash": "3b5afd79cc67c1b69054249c885e976ab5d83ea4b44ca33de7c994dcc62e7dbb"
+  "hash": "0d8fd8a847fa09cd911eab5d3441a966956cac67309fc70e08d0f0a230417e6c"
 }
