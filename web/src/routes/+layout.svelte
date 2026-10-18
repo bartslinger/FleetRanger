@@ -2,6 +2,7 @@
 	import '#lib/ui/base.css';
 	import Drone from '@carbon/icons/es/drone/16.js';
 	import Events from '@carbon/icons/es/events/16.js';
+	import FlightRoster from '@carbon/icons/es/flight--roster/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
 	import Template from '@carbon/icons/es/template/16.js';
 	import UserMultiple from '@carbon/icons/es/user--multiple/16.js';
@@ -61,6 +62,7 @@
 	// Admin pages only for admins; the backend refuses everyone else anyway.
 	const nav: NavItem[] = $derived([
 		{ href: resolve('/'), label: 'Logbook', icon: Notebook },
+		{ href: resolve('/sessions'), label: 'Sessions', icon: FlightRoster },
 		...(data.account?.role === 'admin'
 			? [
 					{ href: resolve('/users'), label: 'Users', icon: UserMultiple },

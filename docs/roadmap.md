@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Each flight has a page with its track on a Mapbox map, linked from the logbook. Sessions (phase 3) are in progress: flights are grouped per pilot by a time gap; the sessions list and a session page with all tracks on one map come next. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches. Each flight has a page with its track on a Mapbox map, linked from the logbook. Sessions (phase 3) are in progress: flights are grouped per pilot by a time gap, and a Sessions list leads to a page per session with all tracks on one map and its totals. Next: moving flights between sessions, splitting and merging. The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -43,7 +43,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Page layout: Gray 10 for light mode, a dark shell with the side nav rail, page header without the band
 - [x] Logbook (paging, sorting, pilot and team, batch actions to set them)
 - [x] Flight detail with map
-- [ ] Session overview
+- [x] Session overview (list, and a page with all tracks on one map)
 - [x] Admin pages: users, teams, equipment
 
 ## Phase 6: remote controller app

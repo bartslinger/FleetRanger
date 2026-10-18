@@ -42,6 +42,31 @@ export interface FlightDetail {
 	};
 }
 
+/** A session as listed by `GET /api/sessions`: what its visible flights add up to. */
+export interface SessionSummary {
+	id: string;
+	first_takeoff_at: string;
+	last_landed_at: string;
+	flights: number;
+	air_time_s: number;
+	distance_m: number;
+	/** Names in alphabetical order. */
+	pilots: string[];
+	teams: string[];
+}
+
+/** One page of `GET /api/sessions`, newest first. */
+export interface SessionPage {
+	sessions: SessionSummary[];
+	total: number;
+}
+
+/** A session with its visible flights in takeoff order, from `GET /api/sessions/{id}`. */
+export interface Session {
+	id: string;
+	flights: FlightDetail[];
+}
+
 /** What the logged-in account can change in the logbook, from `GET /api/flights/choices`. */
 export interface FlightChoices {
 	/** The team whose flights a member can change. */
