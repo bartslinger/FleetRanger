@@ -6,16 +6,22 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import Breadcrumb, { type Crumb } from './Breadcrumb.svelte';
 	import Column from './Column.svelte';
 	import Grid from './Grid.svelte';
+	import Tag from './Tag.svelte';
 
 	interface Props {
 		title: string;
+		/** The pages above this one, for a page about one item. */
+		breadcrumb?: Crumb[];
+		/** A state shown as a gray tag after the title, e.g. "Archived". */
+		status?: string;
 		description?: string;
 		actions?: Snippet;
 	}
 
-	let { title, description, actions }: Props = $props();
+	let { title, breadcrumb, status, description, actions }: Props = $props();
 </script>
 
 <svelte:head>
@@ -27,7 +33,11 @@
 		<Column>
 			<div class="content">
 				<div class="text">
-					<h1>{title}</h1>
+					{#if breadcrumb}<div class="breadcrumb"><Breadcrumb items={breadcrumb} /></div>{/if}
+					<div class="title">
+						<h1>{title}</h1>
+						{#if status}<Tag>{status}</Tag>{/if}
+					</div>
 					{#if description}<p>{description}</p>{/if}
 				</div>
 				{#if actions}<div class="actions">{@render actions()}</div>{/if}
@@ -56,6 +66,18 @@
 		flex-direction: column;
 		gap: var(--cds-spacing-03);
 		max-width: 40rem;
+	}
+
+	/* 16px to the title (with the gap), keeping it attached to the title. */
+	.breadcrumb {
+		margin-bottom: var(--cds-spacing-03);
+	}
+
+	.title {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--cds-spacing-03);
 	}
 
 	h1 {
