@@ -25,6 +25,8 @@
 		triggerKind?: 'primary' | 'tertiary';
 		/** The primary button, e.g. "Create". */
 		submitLabel: string;
+		/** Carbon's danger modal, for actions that can't be undone. */
+		danger?: boolean;
 		/** The form action, e.g. "?/create". */
 		action: string;
 		/** The backend's message for a rejected change. */
@@ -38,6 +40,7 @@
 		title,
 		triggerKind = 'primary',
 		submitLabel,
+		danger = false,
 		action,
 		error,
 		onsuccess,
@@ -76,9 +79,10 @@
 					return async ({ result, update }) => {
 						busy = false;
 						await update();
-						if (result.type === 'success') {
+						// A redirect, e.g. to the list after deleting, is a success too.
+						if (result.type === 'success' || result.type === 'redirect') {
 							open = false;
-							onsuccess?.(result.data);
+							onsuccess?.(result.type === 'success' ? result.data : undefined);
 						}
 					};
 				}}
@@ -99,7 +103,9 @@
 							<Button {...props} kind="secondary" size="xl" fill>Cancel</Button>
 						{/snippet}
 					</Dialog.Close>
-					<Button type="submit" size="xl" fill disabled={busy}>{submitLabel}</Button>
+					<Button type="submit" kind={danger ? 'danger' : 'primary'} size="xl" fill disabled={busy}>
+						{submitLabel}
+					</Button>
 				</div>
 			</form>
 		</Dialog.Content>
