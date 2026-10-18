@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Base64
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -118,6 +119,42 @@ class Server(context: Context) {
                 }
                 else -> Upload.Refused
             }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /**
+     * Tells the server this controller synced: it looked for logs on a
+     * connection its settings allow (and uploaded any), with this app version.
+     */
+    fun reportSync(appVersion: String) {
+        call("POST", "/api/controller/sync", JSONObject().put("app_version", appVersion))
+            ?: throw IOException("the server refused the sync report")
+    }
+
+    /** A release of this app, as the server offers it. */
+    data class AppVersion(val code: Int, val name: String)
+
+    /**
+     * The release the server's download page offers; null if it has none, or
+     * doesn't know its version.
+     */
+    fun offeredApp(): AppVersion? {
+        val android = call("GET", "/api/download")?.optJSONObject("android") ?: return null
+        if (android.isNull("version_code")) return null
+        return AppVersion(android.getInt("version_code"), android.optString("version_name"))
+    }
+
+    /** Downloads the offered APK and hands it to `read` with its length. */
+    fun <T> downloadApp(read: (InputStream, Long) -> T): T {
+        val base = url ?: throw IOException("no server set up")
+        val connection = URL("$base/api/download/FleetRanger.apk").openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 60_000
+            if (connection.responseCode != 200) throw IOException("the server answered ${connection.responseCode}")
+            return connection.inputStream.use { read(it, connection.contentLengthLong) }
         } finally {
             connection.disconnect()
         }

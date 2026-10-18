@@ -33,6 +33,9 @@ class UploadService : Service() {
     private lateinit var pilots: Pilots
     private lateinit var sync: SyncSettings
     private lateinit var logs: FlightLogs
+    private lateinit var updates: Updates
+    /** When the last sync was reported to the server; 0: not since the service started. */
+    private var lastSyncReport = 0L
 
     private val scan = Runnable { scan() }
 
@@ -50,6 +53,7 @@ class UploadService : Service() {
         pilots = Pilots(this)
         sync = SyncSettings(this)
         logs = FlightLogs(this)
+        updates = Updates(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Uploads", NotificationManager.IMPORTANCE_LOW),
         )
@@ -77,10 +81,22 @@ class UploadService : Service() {
 
     private fun scan() {
         worker.removeCallbacks(scan)
+        val uploadedBefore = SyncStatus.read(this).uploaded
         try {
             uploadWaiting()
         } catch (error: Exception) {
             Log.w(TAG, "upload scan failed", error)
+        }
+        try {
+            reportSync(uploaded = SyncStatus.read(this).uploaded != uploadedBefore)
+        } catch (error: Exception) {
+            Log.w(TAG, "sync report failed", error)
+        }
+        // This service runs all the time, so it also looks for updates daily.
+        try {
+            if (server.paired) updates.checkIfDue(server)
+        } catch (error: Exception) {
+            Log.w(TAG, "update check failed", error)
         }
         worker.postDelayed(scan, RESCAN_MS)
     }
@@ -131,6 +147,22 @@ class UploadService : Service() {
         report(if (waiting.isEmpty()) SyncStatus.State.Done else SyncStatus.State.Uploading, waiting.size)
     }
 
+    /**
+     * A sync is a scan that could upload: paired, the logs readable, and on a
+     * connection the settings allow; also when there was nothing to upload.
+     * The server shows when the controller last synced, so it's reported, at
+     * most every [SYNC_REPORT_MS] and straight after uploads.
+     */
+    private fun reportSync(uploaded: Boolean) {
+        val state = SyncStatus.read(this).state
+        if (state == SyncStatus.State.NotPaired || state == SyncStatus.State.NoAccess) return
+        if (!sync.mayUploadNow()) return
+        val now = System.currentTimeMillis()
+        if (!uploaded && now - lastSyncReport < SYNC_REPORT_MS) return
+        server.reportSync(BuildConfig.VERSION_NAME)
+        lastSyncReport = now
+    }
+
     /** Tells the screens and the notification what the service is doing. */
     private fun report(state: SyncStatus.State, waiting: Int, current: String? = null) {
         val status = SyncStatus.read(this)
@@ -171,6 +203,7 @@ class UploadService : Service() {
         private const val CHANNEL = "uploads"
         private const val NOTIFICATION = 1
         private const val RESCAN_MS = 60_000L
+        private const val SYNC_REPORT_MS = 15 * 60_000L
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, UploadService::class.java))

@@ -39,6 +39,12 @@ class MainActivity : ComponentActivity() {
     private var last by mutableStateOf<Pilot?>(null)
     private lateinit var sync: SyncSettings
     private var showSettings by mutableStateOf(false)
+    /** The settings' tab to open with, e.g. the app's from the update hint. */
+    private var settingsTab by mutableStateOf(SettingsTab.Sync)
+    private lateinit var updates: Updates
+    private var update by mutableStateOf<Server.AppVersion?>(null)
+    private var updateFailed by mutableStateOf(false)
+    private var updatesListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     /** Opened from the settings, and back to them. */
     private var showLogs by mutableStateOf(false)
     private var currentNetwork by mutableStateOf<String?>(null)
@@ -71,6 +77,13 @@ class MainActivity : ComponentActivity() {
         sync = SyncSettings(this)
         syncStatus = SyncStatus.read(this)
         syncListener = SyncStatus.listen(this) { syncStatus = it }
+        updates = Updates(this)
+        update = updates.available
+        updateFailed = updates.failed
+        updatesListener = Updates.listen(this) {
+            update = updates.available
+            updateFailed = updates.failed
+        }
         // Downloaded from the install's download page: the APK knows the address.
         if (server.url == null) Setup.server(this)?.let { server.url = it }
         serverUrl = server.url
@@ -112,6 +125,11 @@ class MainActivity : ComponentActivity() {
                     onShowLogs = { showLogs = true },
                     onBack = { showSettings = false },
                     syncStatus = syncStatus,
+                    initialTab = settingsTab,
+                    server = server,
+                    updates = updates,
+                    update = update,
+                    updateFailed = updateFailed,
                 )
                 else -> PilotScreen(
                     list = pilotList,
@@ -121,9 +139,15 @@ class MainActivity : ComponentActivity() {
                     onOpenStartupSettings = { DjiPilot.openSettings(this) },
                     onSettings = {
                         refreshNetwork()
+                        settingsTab = SettingsTab.Sync
                         showSettings = true
                     },
                     syncStatus = syncStatus,
+                    update = update,
+                    onUpdate = {
+                        settingsTab = SettingsTab.App
+                        showSettings = true
+                    },
                 )
             }
         }
@@ -189,6 +213,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         syncListener?.let { SyncStatus.stopListening(this, it) }
+        updatesListener?.let { Updates.stopListening(this, it) }
         super.onDestroy()
     }
 
@@ -237,6 +262,7 @@ class MainActivity : ComponentActivity() {
         // From the upload notification, when logs wait for an approved network.
         if (intent?.getBooleanExtra(EXTRA_SETTINGS, false) == true && paired) {
             refreshNetwork()
+            settingsTab = SettingsTab.Sync
             showSettings = true
         }
         val link: Uri = intent?.data ?: return

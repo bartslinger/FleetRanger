@@ -127,13 +127,13 @@ export interface Equipment {
 	app_version: string | null;
 }
 
-/** A controller waiting to be paired, from `GET /api/pairing`: without its code. */
 /** The controller app's download, from `GET /api/download` (public). */
 export interface Download {
 	/** Null when the install has no APK. */
-	android: { size_bytes: number } | null;
+	android: { size_bytes: number; version_code: number | null; version_name: string | null } | null;
 }
 
+/** A controller waiting to be paired, from `GET /api/pairing`: without its code. */
 export interface WaitingController {
 	serial: string;
 	model: string;

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +40,7 @@ import org.fleetranger.rc.ui.CarbonIcons
 import org.fleetranger.rc.ui.ClickableTile
 import org.fleetranger.rc.ui.Colors
 import org.fleetranger.rc.ui.Icon
+import org.fleetranger.rc.ui.InformationIcon
 import org.fleetranger.rc.ui.Spacing
 import org.fleetranger.rc.ui.Type
 import org.fleetranger.rc.ui.WarningIcon
@@ -62,6 +64,8 @@ fun PilotScreen(
     onOpenStartupSettings: () -> Unit,
     onSettings: () -> Unit,
     syncStatus: SyncStatus? = null,
+    update: Server.AppVersion? = null,
+    onUpdate: () -> Unit = {},
 ) {
     var choosing by rememberSaveable { mutableStateOf(false) }
     val settingsButton: @Composable () -> Unit = {
@@ -103,9 +107,35 @@ fun PilotScreen(
             }
         }
         // Not on "Other pilot", which needs the room for the list; the first
-        // screen shows it.
+        // screen shows it. An update shares the row, so it takes no height.
         val choosingOther = last != null && choosing
-        if (syncStatus != null && !choosingOther) SyncLine(syncStatus, onSettings)
+        if ((syncStatus != null || update != null) && !choosingOther) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (syncStatus != null) SyncLine(syncStatus, onSettings)
+                Spacer(Modifier.weight(1f))
+                if (update != null) UpdateLine(update, onUpdate)
+            }
+        }
+    }
+}
+
+/** A newer release is on the server: opens the settings' App tab to update. */
+@Composable
+private fun UpdateLine(update: Server.AppVersion, onUpdate: () -> Unit) {
+    Row(
+        Modifier
+            .height(48.dp)
+            .clickable(onClickLabel = "Update the app", onClick = onUpdate)
+            .padding(horizontal = Spacing.s05),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s03),
+    ) {
+        InformationIcon()
+        BasicText(
+            "Update available: version ${update.name}",
+            style = Type.bodyCompact02.copy(color = Colors.interactive),
+        )
+        Icon(CarbonIcons.ArrowRight, Colors.interactive)
     }
 }
 

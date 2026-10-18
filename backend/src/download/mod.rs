@@ -44,18 +44,32 @@ struct Available {
 #[derive(Serialize)]
 struct Apk {
     size_bytes: u64,
+    /// From the build's metadata next to the APK (`FleetRanger.json` beside
+    /// `FleetRanger.apk`); the app compares it with its own to offer updates.
+    /// Null without that file.
+    version_code: Option<i64>,
+    version_name: Option<String>,
 }
 
 async fn available(State(apk): State<AndroidApk>) -> Json<Available> {
-    let size = tokio::task::spawn_blocking(move || std::fs::metadata(&apk.path))
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .filter(|metadata| metadata.is_file())
-        .map(|metadata| Apk {
+    let android = tokio::task::spawn_blocking(move || {
+        let metadata = std::fs::metadata(&apk.path).ok().filter(|m| m.is_file())?;
+        let version = std::fs::read(apk.path.with_extension("json"))
+            .ok()
+            .and_then(|json| serde_json::from_slice::<serde_json::Value>(&json).ok())
+            .and_then(|json| json["elements"].get(0).cloned());
+        Some(Apk {
             size_bytes: metadata.len(),
-        });
-    Json(Available { android: size })
+            version_code: version.as_ref().and_then(|v| v["versionCode"].as_i64()),
+            version_name: version
+                .as_ref()
+                .and_then(|v| v["versionName"].as_str().map(str::to_owned)),
+        })
+    })
+    .await
+    .ok()
+    .flatten();
+    Json(Available { android })
 }
 
 async fn apk(State(apk): State<AndroidApk>) -> ApiResult<impl IntoResponse> {

@@ -24,9 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,12 +36,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import java.io.IOException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.ButtonKind
 import org.fleetranger.rc.ui.CarbonIcons
@@ -51,6 +55,7 @@ import org.fleetranger.rc.ui.DangerDialog
 import org.fleetranger.rc.ui.Icon
 import org.fleetranger.rc.ui.IconButton
 import org.fleetranger.rc.ui.InfoCallout
+import org.fleetranger.rc.ui.InlineLoading
 import org.fleetranger.rc.ui.ListRow
 import org.fleetranger.rc.ui.PlexMono
 import org.fleetranger.rc.ui.RadioButton
@@ -64,14 +69,18 @@ import org.fleetranger.rc.ui.WarningIcon
 private val DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 private val TIME = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", Locale.ENGLISH)
 
-private const val SYNC = 0
-private const val WIFI = 1
-private const val PAIRING = 2
+/** The settings' tabs, in their order. */
+enum class SettingsTab(val label: String) {
+    Sync("Sync"),
+    Networks("Networks"),
+    Pairing("Pairing"),
+    App("App"),
+}
 
 /**
- * The controller's settings: when logs sync, and its pairing. Anyone holding
- * the controller may change them. Three groups that nobody compares, so
- * Carbon's vertical tabs, each fitting the screen without scrolling.
+ * The controller's settings: when logs sync, its pairing, and the app's
+ * version and updates. Anyone holding the controller may change them. Groups
+ * that nobody compares, so Carbon's vertical tabs.
  *
  * - `currentNetwork`: the Wi-Fi network the controller is on, if Android
  *   reveals its name.
@@ -90,10 +99,15 @@ fun SettingsScreen(
     onChanged: () -> Unit,
     onShowLogs: () -> Unit,
     onBack: () -> Unit,
-    syncStatus: SyncStatus? = null,
+    syncStatus: SyncStatus?,
+    initialTab: SettingsTab,
+    server: Server,
+    updates: Updates,
+    update: Server.AppVersion?,
+    updateFailed: Boolean,
 ) {
     BackHandler(onBack = onBack)
-    var tab by rememberSaveable { mutableIntStateOf(SYNC) }
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
     var uploadOver by remember { mutableStateOf(settings.uploadOver) }
     var networks by remember { mutableStateOf(settings.networks) }
     var syncFrom by remember { mutableStateOf(settings.syncFrom) }
@@ -119,9 +133,9 @@ fun SettingsScreen(
     Column(Modifier.fillMaxSize().background(Colors.background)) {
         TopBar("Settings", onBack)
         VerticalTabs(
-            tabs = listOf("Sync", "Networks", "Pairing"),
-            selected = tab,
-            onSelect = { tab = it },
+            tabs = SettingsTab.entries.map { it.label },
+            selected = tab.ordinal,
+            onSelect = { tab = SettingsTab.entries[it] },
             modifier = Modifier
                 .weight(1f)
                 .padding(start = Spacing.s05, end = Spacing.s05, bottom = Spacing.s05),
@@ -140,7 +154,7 @@ fun SettingsScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.verticalScroll(scroll)) {
                 when (tab) {
-                    SYNC -> SyncTab(
+                    SettingsTab.Sync -> SyncTab(
                         syncStatus,
                         syncFrom,
                         onAllLogs = {
@@ -149,10 +163,10 @@ fun SettingsScreen(
                             onChanged()
                         },
                         onPickDate = ::pickDate,
-                        onAddNetwork = { tab = WIFI },
+                        onAddNetwork = { tab = SettingsTab.Networks },
                         onShowLogs = onShowLogs,
                     )
-                    WIFI -> NetworksTab(
+                    SettingsTab.Networks -> NetworksTab(
                         uploadOver,
                         onUploadOver = {
                             uploadOver = it
@@ -175,7 +189,8 @@ fun SettingsScreen(
                             onChanged()
                         },
                     )
-                    PAIRING -> PairingTab(serverUrl, onUnpair = { confirmingUnpair = true })
+                    SettingsTab.Pairing -> PairingTab(serverUrl, onUnpair = { confirmingUnpair = true })
+                    SettingsTab.App -> AppTab(server, updates, update, updateFailed)
                 }
             }
             if (scroll.canScrollForward) {
@@ -339,6 +354,80 @@ private fun ColumnScope.PairingTab(serverUrl: String?, onUnpair: () -> Unit) {
         kind = ButtonKind.DangerTertiary,
         modifier = Modifier.padding(top = Spacing.s07),
     )
+}
+
+/** Where checking or updating stands, in the App tab. */
+private enum class UpdateStep { Idle, Checking, UpToDate, Unreachable, Downloading, DownloadFailed }
+
+/**
+ * The app's version and its updates: checked daily by the upload service, or
+ * here on request. Updating downloads the release and hands it to Android's
+ * installer, which asks to confirm (the first time also to allow FleetRanger
+ * to install apps).
+ */
+@Composable
+private fun ColumnScope.AppTab(
+    server: Server,
+    updates: Updates,
+    update: Server.AppVersion?,
+    updateFailed: Boolean,
+) {
+    var step by remember { mutableStateOf(UpdateStep.Idle) }
+    val scope = rememberCoroutineScope()
+
+    fun check() {
+        step = UpdateStep.Checking
+        scope.launch {
+            step = try {
+                withContext(Dispatchers.IO) { updates.check(server) }
+                UpdateStep.UpToDate
+            } catch (_: IOException) {
+                UpdateStep.Unreachable
+            }
+        }
+    }
+
+    fun install() {
+        step = UpdateStep.Downloading
+        scope.launch {
+            step = try {
+                withContext(Dispatchers.IO) { updates.install(server) }
+                // Android's installer takes over from here.
+                UpdateStep.Idle
+            } catch (_: Exception) {
+                // Mostly the connection; also an installer that refuses the session.
+                UpdateStep.DownloadFailed
+            }
+        }
+    }
+
+    Label("Version")
+    Text(BuildConfig.VERSION_NAME)
+    Column(Modifier.padding(top = Spacing.s06), verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
+        when {
+            step == UpdateStep.Checking -> InlineLoading("Checking for updates…")
+            step == UpdateStep.Downloading -> InlineLoading("Downloading the update…")
+            update != null -> {
+                Text(
+                    when {
+                        step == UpdateStep.DownloadFailed ->
+                            "The update couldn’t be downloaded. Check the connection and try again."
+                        updateFailed -> "Version ${update.name} wasn’t installed. Try again."
+                        else -> "Version ${update.name} is available."
+                    },
+                )
+                Button("Update", ::install, Modifier.padding(top = Spacing.s03))
+            }
+            else -> {
+                when (step) {
+                    UpdateStep.UpToDate -> Text("This is the latest version.")
+                    UpdateStep.Unreachable -> Text("FleetRanger can’t be reached. Try again later.")
+                    else -> Unit
+                }
+                Button("Check for updates", ::check, kind = ButtonKind.Tertiary)
+            }
+        }
+    }
 }
 
 /** A label above a value or group, 14sp secondary. */
