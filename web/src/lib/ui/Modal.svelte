@@ -15,7 +15,8 @@
 	import Close from '@carbon/icons/es/close/20.js';
 	import { enhance } from '$app/forms';
 	import Button from './Button.svelte';
-	import Icon from './Icon.svelte';
+	import Icon, { type IconDescriptor } from './Icon.svelte';
+	import IconButton from './IconButton.svelte';
 	import InlineNotification from './InlineNotification.svelte';
 
 	interface Props {
@@ -23,6 +24,9 @@
 		title: string;
 		/** The trigger's style: primary for "New …", tertiary as a page action. */
 		triggerKind?: 'primary' | 'tertiary' | 'danger-tertiary';
+		/** An icon-only trigger instead, e.g. Edit beside a value; the title is
+		 * its label and tooltip. */
+		triggerIcon?: IconDescriptor;
 		/** The primary button, e.g. "Create". */
 		submitLabel: string;
 		/** Carbon's danger modal, for actions that can't be undone. */
@@ -39,6 +43,7 @@
 	let {
 		title,
 		triggerKind = 'primary',
+		triggerIcon,
 		submitLabel,
 		danger = false,
 		action,
@@ -57,7 +62,11 @@
 <Dialog.Root bind:open>
 	<Dialog.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} kind={triggerKind}>{title}</Button>
+			{#if triggerIcon}
+				<IconButton {...props} icon={triggerIcon} label={title} />
+			{:else}
+				<Button {...props} kind={triggerKind}>{title}</Button>
+			{/if}
 		{/snippet}
 	</Dialog.Trigger>
 	<Dialog.Portal>

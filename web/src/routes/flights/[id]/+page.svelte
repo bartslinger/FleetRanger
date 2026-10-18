@@ -3,14 +3,44 @@
 	import { dateTime, distance, duration } from '#lib/format.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
+	import Edit from '@carbon/icons/es/edit/16.js';
 	import Link from '#lib/ui/Link.svelte';
+	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
+	import Select from '#lib/ui/Select.svelte';
+	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import type { PageProps } from './$types';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 
 	const flight = $derived(data.flight);
+
+	// Setting the pilot: admins on any flight, members on their team's.
+	const canSetPilot = $derived(
+		data.choices.admin ||
+			(data.choices.own_team_id !== null && flight.team_id === data.choices.own_team_id)
+	);
+	const pilotOptions = $derived([
+		{ value: '', label: 'Unknown' },
+		...data.choices.pilots.map((pilot) => ({
+			value: pilot.id,
+			label: data.choices.admin ? `${pilot.name} (${pilot.team_name})` : pilot.name
+		}))
+	]);
+	// "That was me": an unknown pilot starts as the viewer, if they can be chosen.
+	const pilotChoice = $derived(
+		flight.pilot_id ??
+			(data.choices.pilots.some((pilot) => pilot.id === data.account?.id)
+				? (data.account?.id ?? '')
+				: '')
+	);
+
+	function pilotSet(result: Record<string, unknown> | undefined) {
+		const name = (result?.pilotName as string | null) ?? 'Unknown';
+		const team = result?.movedTo as string | null | undefined;
+		toast(`Pilot set to ${name}.${team ? ` The flight moved to ${team}.` : ''}`);
+	}
 	const time = (iso: string) => `${dateTime(iso, data.timeZone)} (${data.timeZoneName})`;
 
 	/** A name with its serial, the serial alone, or "Unknown". */
@@ -77,12 +107,35 @@
 				{#each facts as fact (fact.label)}
 					<div>
 						<dt>{fact.label}</dt>
-						<dd class:numeric={fact.numeric}>
+						<dd class:numeric={fact.numeric} class:editable={fact.label === 'Pilot' && canSetPilot}>
 							<!-- The drone's and controller's pages, for who may see them. -->
 							{#if 'href' in fact && fact.href}
 								<Link href={fact.href}>{fact.value}</Link>
 							{:else}
 								{fact.value}
+							{/if}
+							{#if fact.label === 'Pilot' && canSetPilot}
+								<Modal
+									title="Change pilot"
+									triggerIcon={Edit}
+									submitLabel="Save"
+									action="?/setPilot"
+									error={form?.pilotMessage}
+									onsuccess={pilotSet}
+								>
+									<input type="hidden" name="team_before" value={flight.team_id ?? ''} />
+									<Select
+										label="Pilot"
+										name="pilot_id"
+										options={pilotOptions}
+										value={pilotChoice}
+									/>
+									<p class="help">
+										{data.choices.admin
+											? 'The flight moves to the pilot’s team. With Unknown, it keeps its team.'
+											: 'Choose Unknown for a flight that wasn’t flown by someone in your team. It stays in your team.'}
+									</p>
+								</Modal>
 							{/if}
 						</dd>
 					</div>
@@ -116,5 +169,20 @@
 
 	.numeric {
 		font-variant-numeric: tabular-nums slashed-zero;
+	}
+
+	/* The pilot with its Change pilot button 8px after it, centred on the line. */
+	.editable {
+		display: flex;
+		align-items: center;
+		gap: var(--cds-spacing-03);
+	}
+
+	.help {
+		margin-top: calc(-1 * var(--cds-spacing-03));
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-helper-text-01-font-size);
+		line-height: var(--cds-helper-text-01-line-height);
+		letter-spacing: var(--cds-helper-text-01-letter-spacing);
 	}
 </style>
