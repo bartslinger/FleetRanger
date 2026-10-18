@@ -86,6 +86,15 @@ fun InformationIcon(modifier: Modifier = Modifier) {
     }
 }
 
+/** Carbon's error status icon, as in an invalid field: a red circle with a white exclamation mark. */
+@Composable
+fun ErrorIcon(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.Box(modifier.size(20.dp)) {
+        Icon(CarbonIcons.WarningMark, Colors.textOnColor)
+        Icon(CarbonIcons.Warning, Colors.supportError)
+    }
+}
+
 /** Carbon's warning status icon: a yellow circle with a black exclamation mark. */
 @Composable
 fun WarningIcon(modifier: Modifier = Modifier) {

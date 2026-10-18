@@ -76,7 +76,10 @@ class MainActivity : ComponentActivity() {
         setUp(intent)
         setContent {
             when {
-                !paired -> Pairing(server, serverUrl, onPaired = {
+                !paired -> Pairing(server, serverUrl, onServer = { url ->
+                    server.url = url
+                    serverUrl = url
+                }, onPaired = {
                     paired = true
                     refreshPilots()
                     startUploads()

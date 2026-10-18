@@ -9,6 +9,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.security.SecureRandom
+import org.json.JSONException
 import org.json.JSONObject
 
 /**
@@ -20,7 +21,8 @@ class Server(context: Context) {
     private val prefs = context.getSharedPreferences("server", Context.MODE_PRIVATE)
 
     /**
-     * E.g. https://fleet.example.org; null until the download page set it up.
+     * E.g. https://fleet.example.org; null until the download page's link set
+     * it up or someone typed it on the pairing screen.
      * Another install means pairing again, so changing it forgets the token.
      */
     var url: String?
@@ -54,7 +56,7 @@ class Server(context: Context) {
             .put("token_sha256", sha256Hex(token))
         val answer = call("POST", "/api/pairing", body)
             ?: throw IOException("the server refused the pairing request")
-        return answer.getString("code")
+        return answer.optString("code").ifEmpty { throw IOException("the server gave no pairing code") }
     }
 
     /**
@@ -151,7 +153,12 @@ class Server(context: Context) {
             return when (val status = connection.responseCode) {
                 in 200..299 -> {
                     val text = connection.inputStream.bufferedReader().use { it.readText() }
-                    if (text.isBlank()) JSONObject() else JSONObject(text)
+                    // Something else than FleetRanger answers with something else than JSON.
+                    try {
+                        if (text.isBlank()) JSONObject() else JSONObject(text)
+                    } catch (_: JSONException) {
+                        throw IOException("the server's answer isn't FleetRanger's")
+                    }
                 }
                 401, 404 -> null
                 else -> throw IOException("the server answered $status")

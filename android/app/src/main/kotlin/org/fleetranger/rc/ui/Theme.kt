@@ -40,6 +40,11 @@ object Colors {
     val supportInfo = Color(0xFF0043CE)
     val notificationBackgroundInfo = Color(0xFFEDF5FF)
     val borderInteractive = Color(0xFF0F62FE)
+    val field01 = Color(0xFFFFFFFF)
+    val textPlaceholder = Color(0x66161616)
+    val textHelper = Color(0xFF6F6F6F)
+    val textError = Color(0xFFDA1E28)
+    val supportError = Color(0xFFDA1E28)
     val supportWarning = Color(0xFFF1C21B)
     val notificationBackgroundWarning = Color(0xFFFCF4D6)
 }

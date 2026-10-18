@@ -9,11 +9,13 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,15 +23,93 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+
+/**
+ * Carbon's text input: a label, a 64dp field (for gloves) on the page's
+ * background in field-01, and either helper text or, when `invalid` is set,
+ * the error with a red outline and icon.
+ */
+@Composable
+fun TextInput(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    helper: String? = null,
+    invalid: String? = null,
+    enabled: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    onDone: () -> Unit = {},
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
+        BasicText(label, style = Type.label02.copy(color = Colors.textSecondary))
+        BasicTextField(
+            value,
+            onValueChange,
+            enabled = enabled,
+            singleLine = true,
+            textStyle = Type.bodyCompact02.copy(color = Colors.textPrimary),
+            cursorBrush = SolidColor(Colors.focus),
+            keyboardOptions = keyboardOptions,
+            keyboardActions = KeyboardActions(onDone = { onDone() }, onGo = { onDone() }),
+            interactionSource = interaction,
+            decorationBox = { field ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .background(Colors.field01)
+                        .then(
+                            when {
+                                invalid != null -> Modifier.border(2.dp, Colors.supportError)
+                                focused -> Modifier.border(2.dp, Colors.focus)
+                                else -> Modifier.drawBehind {
+                                    drawLine(
+                                        Colors.borderStrong01,
+                                        Offset(0f, size.height - 0.5f),
+                                        Offset(size.width, size.height - 0.5f),
+                                        1.dp.toPx(),
+                                    )
+                                }
+                            },
+                        )
+                        .padding(horizontal = Spacing.s05),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (value.isEmpty()) {
+                            BasicText(placeholder, style = Type.bodyCompact02.copy(color = Colors.textPlaceholder))
+                        }
+                        field()
+                    }
+                    if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
+                }
+            },
+        )
+        when {
+            invalid != null -> BasicText(invalid, style = Type.label02.copy(color = Colors.textError))
+            helper != null -> BasicText(helper, style = Type.label02.copy(color = Colors.textHelper))
+        }
+    }
+}
 
 /**
  * Carbon's radio button, with its label: the whole row is the target, 64dp
