@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { dateTime, distance, duration } from '#lib/format.js';
 	import type { Session } from '#lib/server/backend.js';
@@ -78,11 +79,12 @@
 		data.sessions.find((session) => session.id === chosen) ?? data.sessions[0]
 	);
 
-	// Below lg the map is above the cards: bring it into view.
+	// Below lg the map is above the cards: bring it into view, but only for a
+	// tap or click, so arrow keys don't move the focused card out of view.
 	let mapSide: HTMLElement | undefined = $state();
-	function choose(id: string) {
+	function choose(id: string, pointer: boolean) {
 		chosen = id;
-		if (!matchMedia('(min-width: 66rem)').matches) {
+		if (pointer && !matchMedia('(min-width: 66rem)').matches) {
 			const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 			mapSide?.scrollIntoView({ behavior: motion, block: 'start' });
 		}
@@ -97,13 +99,25 @@
 
 	// The chosen session's tracks, fetched when it is chosen; not cached, as
 	// merging and splitting change them.
-	let shownTracks: Track[] = $state([]);
+	// The first session's tracks came with the page; later choices (and other
+	// pages of the list) fetch theirs.
+	const initial = untrack(() => data.firstTracks);
+	let shownTracks: Track[] = $state(initial?.tracks ?? []);
+	let tracksFor: string | undefined = initial?.id;
+	let tracksLoading = $state(false);
 	let tracksFailed = $state(false);
 
 	$effect(() => {
 		if (data.view !== 'cards' || !shown) return;
 		const id = shown.id;
+		if (id === tracksFor) return;
+		tracksFor = id;
 		let cancelled = false;
+		let finished = false;
+		// Never the previous session's tracks under this session's heading;
+		// the map keeps its view until the new ones arrive.
+		shownTracks = [];
+		tracksLoading = true;
 		tracksFailed = false;
 		fetch(`/api/sessions/${id}`)
 			.then((response) => {
@@ -115,9 +129,15 @@
 			})
 			.catch(() => {
 				if (!cancelled) tracksFailed = true;
+			})
+			.finally(() => {
+				finished = true;
+				if (!cancelled) tracksLoading = false;
 			});
 		return () => {
 			cancelled = true;
+			// Cut off before the tracks came: load them again next time.
+			if (!finished) tracksFor = undefined;
 		};
 	});
 
@@ -176,11 +196,10 @@
 				</fieldset>
 				<div class="map-side" bind:this={mapSide}>
 					{#if shown}
-						<p class="map-heading">
-							<a href={resolve('/sessions/[id]', { id: shown.id })}
-								>{dateTime(shown.first_takeoff_at, data.timeZone)}</a
-							>
-						</p>
+						<div class="map-heading">
+							<h2>{dateTime(shown.first_takeoff_at, data.timeZone)}</h2>
+							<a href={resolve('/sessions/[id]', { id: shown.id })}>View session</a>
+						</div>
 					{/if}
 					{#if tracksFailed}
 						<InlineNotification kind="error" title="The tracks couldn’t load">
@@ -191,6 +210,8 @@
 							tracks={shownTracks}
 							token={data.mapboxToken}
 							label="Map of the chosen session’s tracks"
+							loading={tracksLoading}
+							squareOnPhones
 						/>
 					{/if}
 				</div>
@@ -291,29 +312,50 @@
 		order: -1;
 	}
 
+	/* On the page's 16 columns: narrow columns, so 16px apart. */
 	@media (min-width: 66rem) {
 		.cards-view {
-			grid-template-columns: 5fr 11fr;
+			grid-template-columns: repeat(16, minmax(0, 1fr));
+			column-gap: var(--cds-spacing-05);
 			align-items: start;
+		}
+
+		.cards {
+			grid-column: span 5;
 		}
 
 		.map-side {
 			position: sticky;
 			top: calc(3rem + var(--cds-spacing-05));
+			grid-column: span 11;
 			order: 0;
 		}
 	}
 
+	/* The chosen session's date, and the way to its page. */
 	.map-heading {
-		margin: 0 0 var(--cds-spacing-03);
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--cds-spacing-05);
+		margin-bottom: var(--cds-spacing-03);
 		padding-inline: var(--cds-spacing-05);
+	}
+
+	.map-heading h2 {
+		margin: 0;
+		color: var(--cds-text-primary);
 		font-size: var(--cds-heading-compact-01-font-size);
 		font-weight: var(--cds-heading-compact-01-font-weight);
 		line-height: var(--cds-heading-compact-01-line-height);
+		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
 	}
 
 	.map-heading a {
 		color: var(--cds-link-primary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 		text-decoration: none;
 	}
 

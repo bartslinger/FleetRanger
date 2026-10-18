@@ -47,12 +47,17 @@ export function timeZoneName(timeZone: string): string {
 	);
 }
 
-/** Hours, minutes and seconds, e.g. 1:05:09. */
+/**
+ * With units, to the nearest minute: "2 h 19 min", "21 min"; under a minute
+ * in seconds, "45 s". A bare 0:21:29 was easy to misread.
+ */
 export function duration(seconds: number): string {
-	const h = Math.floor(seconds / 3600);
-	const m = Math.floor((seconds % 3600) / 60);
-	const s = Math.floor(seconds % 60);
-	return `${h}:${pad(m)}:${pad(s)}`;
+	if (seconds < 59.5) return `${Math.round(seconds)} s`;
+	const minutes = Math.round(seconds / 60);
+	const h = Math.floor(minutes / 60);
+	const m = minutes % 60;
+	if (h === 0) return `${m} min`;
+	return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
 /** Kilometres with one decimal; "<0.1 km" rather than a misleading "0.0 km". */

@@ -28,17 +28,21 @@
 </nav>
 
 <style>
+	/* Every option as wide as the widest, as Carbon asks. */
 	.switcher {
-		display: inline-flex;
+		display: inline-grid;
+		grid-auto-columns: 1fr;
+		grid-auto-flow: column;
 	}
 
 	a {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		height: 2rem;
 		padding: 0 var(--cds-spacing-05);
 		border: 1px solid var(--cds-border-inverse);
-		background: var(--cds-layer-01);
+		background: transparent;
 		color: var(--cds-text-secondary);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
@@ -52,7 +56,7 @@
 	}
 
 	a:hover:not(.selected) {
-		background: var(--cds-layer-hover-01);
+		background: var(--cds-background-hover);
 		color: var(--cds-text-primary);
 	}
 

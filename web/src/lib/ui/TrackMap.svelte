@@ -18,6 +18,7 @@
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
 	import InlineNotification from './InlineNotification.svelte';
+	import Loading from './Loading.svelte';
 
 	interface Props {
 		tracks: Track[];
@@ -25,9 +26,13 @@
 		token: string;
 		/** For screen readers, e.g. "Map of the flight's track". */
 		label: string;
+		/** Tracks are on their way: shows Carbon's inline loading over the map. */
+		loading?: boolean;
+		/** Square below md, so on a phone the content under the map stays in view. */
+		squareOnPhones?: boolean;
 	}
 
-	let { tracks, token, label }: Props = $props();
+	let { tracks, token, label, loading = false, squareOnPhones = false }: Props = $props();
 
 	type View = 'satellite' | 'map';
 	let view: View = $state('satellite');
@@ -204,7 +209,17 @@
 	</InlineNotification>
 {:else}
 	<figure class="track-map">
-		<div class="map" bind:this={container} role="region" aria-label={label}></div>
+		<div
+			class="map"
+			class:square={squareOnPhones}
+			bind:this={container}
+			role="region"
+			aria-label={label}
+			aria-busy={loading}
+		></div>
+		{#if loading}
+			<p class="loading" role="status"><Loading /> Loading tracks…</p>
+		{/if}
 		<div class="switcher" role="group" aria-label="Map style">
 			{#each [['satellite', 'Satellite'], ['map', 'Map']] as const as [value, text] (value)}
 				<button
@@ -231,6 +246,31 @@
 	.map {
 		height: clamp(20rem, 60vh, 40rem);
 		background: var(--cds-layer-01);
+	}
+
+	@media (max-width: 41.99rem) {
+		.map.square {
+			height: auto;
+			aspect-ratio: 1;
+		}
+	}
+
+	/* Carbon's inline loading, on a layer over the map's centre. */
+	.loading {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		display: flex;
+		align-items: center;
+		gap: var(--cds-spacing-03);
+		margin: 0;
+		padding: var(--cds-spacing-03) var(--cds-spacing-05);
+		transform: translate(-50%, -50%);
+		background: var(--cds-layer-01);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 	}
 
 	/* Carbon's content switcher, small (32px), over the map's top left. */
