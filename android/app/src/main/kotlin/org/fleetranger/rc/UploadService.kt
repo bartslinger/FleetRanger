@@ -79,6 +79,7 @@ class UploadService : Service() {
             .filter { it.state == FlightLogs.State.Waiting || it.state == FlightLogs.State.BeingWritten }
             .reversed()
             .toMutableList()
+        pilots.forgetBefore(waiting.firstOrNull()?.file?.lastModified() ?: System.currentTimeMillis())
         if (waiting.isEmpty()) return report(SyncStatus.State.Done, waiting = 0)
         if (!sync.mayUploadNow()) {
             return report(SyncStatus.State.WaitingForNetwork, waiting = waiting.size)

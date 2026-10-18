@@ -50,7 +50,8 @@ data class PilotList(
 /**
  * The pilot list, kept so the controller works offline, and who chose to fly
  * when: each choice is stored with its time, so a log can later be given the
- * pilot chosen most recently before it was written.
+ * pilot chosen most recently before it was written. Choices no waiting log
+ * needs are forgotten, so they don't pile up.
  */
 class Pilots(context: Context) {
     private val list = context.getSharedPreferences("pilot_list", Context.MODE_PRIVATE)
@@ -78,6 +79,19 @@ class Pilots(context: Context) {
             .filter { (at, _) -> at <= time }
             .maxByOrNull { (at, _) -> at } ?: return null
         return id.takeIf { it != NOT_IN_THE_LIST && time - chosenAt < EXPIRES_MS }
+    }
+
+    /**
+     * Forgets the choices no log needs any more: those before `time`, the
+     * oldest log still to upload, except the one that log falls under. With
+     * nothing to upload, `time` is now and only the last choice stays.
+     */
+    fun forgetBefore(time: Long) {
+        val older = choices.all.keys.map { it.toLong() }.filter { it <= time }.sorted()
+        if (older.size < 2) return
+        val editor = choices.edit()
+        older.dropLast(1).forEach { editor.remove(it.toString()) }
+        editor.apply()
     }
 
     /** The pilot chosen last, if they can still be chosen. */
