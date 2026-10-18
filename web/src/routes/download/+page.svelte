@@ -30,7 +30,10 @@
 					<!-- eslint-enable svelte/no-navigation-without-resolve -->
 					<span class="detail">FleetRanger.apk, {fileSize(data.download.android.size_bytes)}</span>
 				</div>
-				<p>On the controller, install the app, open it and enter this address:</p>
+				<p>
+					On the controller, install the app and open it. It connects to this FleetRanger by itself;
+					if it asks for the address, enter:
+				</p>
 				<p class="address"><code>{data.address}</code></p>
 				<p>
 					The app then shows a code. Anyone with a FleetRanger account approves it at

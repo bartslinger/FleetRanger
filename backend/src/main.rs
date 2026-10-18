@@ -147,7 +147,10 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         activity,
         session_gap,
         log_dir: LogDir(config.log_dir.clone()),
-        android_apk: AndroidApk(config.android_apk.clone()),
+        android_apk: AndroidApk {
+            path: config.android_apk.clone(),
+            server: config.public_url.as_str().trim_end_matches('/').to_owned(),
+        },
     };
 
     let app = Router::new()

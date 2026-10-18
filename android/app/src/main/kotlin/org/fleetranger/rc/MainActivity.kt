@@ -71,6 +71,8 @@ class MainActivity : ComponentActivity() {
         sync = SyncSettings(this)
         syncStatus = SyncStatus.read(this)
         syncListener = SyncStatus.listen(this) { syncStatus = it }
+        // Downloaded from the install's download page: the APK knows the address.
+        if (server.url == null) Setup.server(this)?.let { server.url = it }
         serverUrl = server.url
         paired = server.paired
         setUp(intent)
