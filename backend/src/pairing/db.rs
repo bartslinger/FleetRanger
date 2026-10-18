@@ -1,0 +1,169 @@
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+/// Adds a pairing request, and deletes expired ones. Returns false if the code
+/// is already taken, so the caller can try another.
+pub async fn add_request(
+    db: &PgPool,
+    code: &str,
+    token_sha256: &[u8],
+    serial: &str,
+    model: &str,
+    expires_at: DateTime<Utc>,
+) -> sqlx::Result<bool> {
+    let mut tx = db.begin().await?;
+    sqlx::query!("delete from pairing_requests where expires_at < now()")
+        .execute(&mut *tx)
+        .await?;
+    // A controller that asks again replaces its earlier request.
+    sqlx::query!("delete from pairing_requests where serial = $1", serial)
+        .execute(&mut *tx)
+        .await?;
+    let added = sqlx::query!(
+        "insert into pairing_requests (code, token_sha256, serial, model, expires_at)
+         values ($1, $2, $3, $4, $5)
+         on conflict (code) do nothing",
+        code,
+        token_sha256,
+        serial,
+        model,
+        expires_at,
+    )
+    .execute(&mut *tx)
+    .await?
+    .rows_affected()
+        == 1;
+    tx.commit().await?;
+    Ok(added)
+}
+
+/// A pairing request as the approving user sees it.
+#[derive(Serialize)]
+pub struct Request {
+    pub serial: String,
+    pub model: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// The request with this code, unless it has expired.
+pub async fn request(db: &PgPool, code: &str) -> sqlx::Result<Option<Request>> {
+    sqlx::query_as!(
+        Request,
+        "select serial, model, expires_at from pairing_requests
+         where code = $1 and expires_at > now()",
+        code,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// Approves a request: the controller with its serial (registered now if it's
+/// new) gets the request's token and joins the team. Returns false if there is
+/// no such request, or it has expired.
+pub async fn approve(db: &PgPool, code: &str, team_id: Option<Uuid>) -> sqlx::Result<bool> {
+    let mut tx = db.begin().await?;
+    let Some(request) = sqlx::query!(
+        "delete from pairing_requests where code = $1 and expires_at > now()
+         returning serial, token_sha256",
+        code,
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    else {
+        return Ok(false);
+    };
+    sqlx::query!(
+        "insert into remote_controllers (serial, team_id, token_sha256) values ($1, $2, $3)
+         on conflict (serial) do update set
+             team_id = excluded.team_id,
+             token_sha256 = excluded.token_sha256",
+        request.serial,
+        team_id,
+        request.token_sha256,
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// A paired controller, as it authenticates.
+pub struct Paired {
+    pub id: Uuid,
+    pub serial: String,
+}
+
+pub async fn by_token(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<Paired>> {
+    sqlx::query_as!(
+        Paired,
+        "select id, serial from remote_controllers where token_sha256 = $1",
+        token_sha256,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// Unpairs a controller: its token stops working. Returns false if there is no
+/// such controller.
+pub async fn unpair(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    let result = sqlx::query!(
+        "update remote_controllers set token_sha256 = null where id = $1",
+        id
+    )
+    .execute(db)
+    .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Duration;
+
+    use super::*;
+
+    /// Approving gives the controller the token whose hash it sent, in the
+    /// approver's team; the request can't be approved twice, and an expired
+    /// request can't be approved at all.
+    #[sqlx::test]
+    async fn approving_pairs_the_controller(db: PgPool) {
+        let team: Uuid =
+            sqlx::query_scalar("insert into teams (name) values ('North') returning id")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        let soon = Utc::now() + Duration::minutes(10);
+        assert!(
+            add_request(&db, "AAAA2222", b"token-hash", "RC1", "Test RC", soon)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !add_request(&db, "AAAA2222", b"other", "RC2", "Test RC", soon)
+                .await
+                .unwrap()
+        );
+
+        assert!(approve(&db, "AAAA2222", Some(team)).await.unwrap());
+        assert!(!approve(&db, "AAAA2222", Some(team)).await.unwrap());
+        let paired = by_token(&db, b"token-hash").await.unwrap().unwrap();
+        assert_eq!(paired.serial, "RC1");
+        let team_of: Option<Uuid> =
+            sqlx::query_scalar("select team_id from remote_controllers where id = $1")
+                .bind(paired.id)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(team_of, Some(team));
+
+        let past = Utc::now() - Duration::minutes(1);
+        add_request(&db, "BBBB3333", b"late", "RC3", "Test RC", past)
+            .await
+            .unwrap();
+        assert!(!approve(&db, "BBBB3333", None).await.unwrap());
+
+        assert!(unpair(&db, paired.id).await.unwrap());
+        assert!(by_token(&db, b"token-hash").await.unwrap().is_none());
+    }
+}

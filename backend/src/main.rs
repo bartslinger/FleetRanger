@@ -5,6 +5,7 @@ mod error;
 mod flights;
 mod health;
 mod ingest;
+mod pairing;
 mod policy;
 mod sessions;
 mod teams;
@@ -134,6 +135,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .merge(auth::routes::router())
         .merge(flights::routes::router())
         .merge(ingest::routes::router())
+        .merge(pairing::routes::router())
         .merge(sessions::routes::router())
         .merge(teams::routes::router())
         .merge(equipment::routes::router())

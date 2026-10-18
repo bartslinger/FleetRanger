@@ -23,4 +23,4 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 # 2.x rather than 3.x: dji-log-parser already depends on it.
 ureq = "2.12.1"
-uuid = { version = "1.28.0", features = ["serde"] }
+uuid = { version = "1.28.0", features = ["serde", "v4"] }

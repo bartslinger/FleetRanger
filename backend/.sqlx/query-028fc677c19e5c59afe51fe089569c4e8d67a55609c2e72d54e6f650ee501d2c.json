@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from pairing_requests where serial = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "028fc677c19e5c59afe51fe089569c4e8d67a55609c2e72d54e6f650ee501d2c"
+}
