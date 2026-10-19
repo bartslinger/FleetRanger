@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
-	import { dateTime, distance, duration } from '#lib/format.js';
+	import { dateTime, daySpan, distance, duration, month } from '#lib/format.js';
 	import type { Session } from '#lib/server/backend.js';
+	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
@@ -11,7 +12,6 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
-	import RadioTile from '#lib/ui/RadioTile.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap, { type Track } from '#lib/ui/TrackMap.svelte';
 	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
@@ -66,78 +66,96 @@
 		const query = [
 			page > 1 ? `page=${page}` : '',
 			size !== data.defaultSize ? `size=${size}` : '',
-			view !== 'table' ? `view=${view}` : ''
+			view !== 'cards' ? `view=${view}` : ''
 		]
 			.filter(Boolean)
 			.join('&');
 		return `${resolve('/sessions')}${query ? `?${query}` : ''}`;
 	}
 
-	// Cards: the map shows the chosen session, the first one until another is chosen.
-	let chosen: string | undefined = $state();
+	// Cards, grouped by month; the list comes newest first.
+	const months = $derived.by(() => {
+		const groups: { name: string; sessions: Row[] }[] = [];
+		for (const session of data.sessions) {
+			const name = month(session.first_takeoff_at, data.timeZone);
+			const last = groups.at(-1);
+			if (last?.name === name) last.sessions.push(session);
+			else groups.push({ name, sessions: [session] });
+		}
+		return groups;
+	});
+
+	// From lg, a map beside the cards previews one session: the first, then
+	// the one last hovered or focused. Below lg there's no map; a tap opens
+	// the session, whose page has the map.
+	const wide = new MediaQuery('min-width: 66rem');
+	let previewed: string | undefined = $state();
 	const shown = $derived(
-		data.sessions.find((session) => session.id === chosen) ?? data.sessions[0]
+		data.sessions.find((session) => session.id === previewed) ?? data.sessions[0]
 	);
 
-	// Below lg the map is above the cards: bring it into view, but only for a
-	// tap or click, so arrow keys don't move the focused card out of view.
-	let mapSide: HTMLElement | undefined = $state();
-	function choose(id: string, pointer: boolean) {
-		chosen = id;
-		if (pointer && !matchMedia('(min-width: 66rem)').matches) {
-			const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-			mapSide?.scrollIntoView({ behavior: motion, block: 'start' });
-		}
+	// Hovering previews after a short pause, so moving the pointer across the
+	// cards doesn't fetch every session on the way.
+	let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+	function hover(id: string) {
+		clearTimeout(hoverTimer);
+		hoverTimer = setTimeout(() => (previewed = id), 150);
 	}
 
 	// Kept in the browser's history, so going back from a session's page
-	// restores the choice and the selection.
-	export const snapshot: Snapshot<{ chosen?: string; selected: string[] }> = {
-		capture: () => ({ chosen, selected }),
-		restore: (value) => ({ chosen, selected } = value)
+	// restores the preview and the selection.
+	export const snapshot: Snapshot<{ previewed?: string; selected: string[] }> = {
+		capture: () => ({ previewed, selected }),
+		restore: (value) => ({ previewed, selected } = value)
 	};
 
-	// The chosen session's tracks, fetched when it is chosen; not cached, as
-	// merging and splitting change them.
-	// The first session's tracks came with the page; later choices (and other
-	// pages of the list) fetch theirs.
-	const initial = untrack(() => data.firstTracks);
-	let shownTracks: Track[] = $state(initial?.tracks ?? []);
-	let tracksFor: string | undefined = initial?.id;
+	// Tracks are fetched when a session is previewed, and kept while the list
+	// stays the same: merging and splitting reload the list and change them.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a plain store, nothing renders from it
+	let cache = new Map<string, Track[]>();
+	let cacheOf: Row[] | undefined;
+	let shownTracks: Track[] = $state([]);
 	let tracksLoading = $state(false);
 	let tracksFailed = $state(false);
 
 	$effect(() => {
-		if (data.view !== 'cards' || !shown) return;
+		if (data.view !== 'cards' || !shown || !wide.current) return;
 		const id = shown.id;
-		if (id === tracksFor) return;
-		tracksFor = id;
+		if (cacheOf !== data.sessions) {
+			cache = new Map();
+			cacheOf = data.sessions;
+		}
+		tracksFailed = false;
+		const cached = cache.get(id);
+		if (cached) {
+			shownTracks = cached;
+			tracksLoading = false;
+			return;
+		}
 		let cancelled = false;
-		let finished = false;
 		// Never the previous session's tracks under this session's heading;
 		// the map keeps its view until the new ones arrive.
 		shownTracks = [];
 		tracksLoading = true;
-		tracksFailed = false;
+		const store = cache;
 		fetch(`/api/sessions/${id}`)
 			.then((response) => {
 				if (!response.ok) throw new Error(String(response.status));
 				return response.json() as Promise<Session>;
 			})
 			.then((session) => {
-				if (!cancelled) shownTracks = session.flights.map((flight) => flight.track);
+				const tracks = session.flights.map((flight) => flight.track);
+				store.set(id, tracks);
+				if (!cancelled) shownTracks = tracks;
 			})
 			.catch(() => {
 				if (!cancelled) tracksFailed = true;
 			})
 			.finally(() => {
-				finished = true;
 				if (!cancelled) tracksLoading = false;
 			});
 		return () => {
 			cancelled = true;
-			// Cut off before the tracks came: load them again next time.
-			if (!finished) tracksFor = undefined;
 		};
 	});
 
@@ -175,46 +193,60 @@
 	{:else if data.view === 'cards'}
 		<Column narrow>
 			<div class="cards-view">
-				<fieldset class="cards">
-					<legend class="visually-hidden">Session shown on the map</legend>
-					{#each data.sessions as session (session.id)}
-						<RadioTile
-							name="session"
-							value={session.id}
-							checked={session.id === shown?.id}
-							onselect={choose}
-						>
-							<span class="card-title">{dateTime(session.first_takeoff_at, data.timeZone)}</span>
-							<span class="card-who">{session.pilots.join(', ')} · {session.teams.join(', ')}</span>
-							<span class="card-numbers">
-								{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the air · {distance(
-									session.distance_m
-								)}
-							</span>
-						</RadioTile>
+				<div class="cards">
+					{#each months as group (group.name)}
+						<section>
+							<h2 class="month">{group.name}</h2>
+							<ul>
+								{#each group.sessions as session (session.id)}
+									<li>
+										<ClickableTile
+											href={resolve('/sessions/[id]', { id: session.id })}
+											marked={wide.current && session.id === shown?.id}
+											onpointerenter={() => hover(session.id)}
+											onpointerleave={() => clearTimeout(hoverTimer)}
+											onfocus={() => (previewed = session.id)}
+										>
+											<span class="card-title">
+												{daySpan(session.first_takeoff_at, session.last_landed_at, data.timeZone)}
+											</span>
+											<span class="card-who">
+												{session.pilots.join(', ')} · {session.teams.join(', ')}
+											</span>
+											<span class="card-numbers">
+												{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the air
+												· {distance(session.distance_m)}
+											</span>
+										</ClickableTile>
+									</li>
+								{/each}
+							</ul>
+						</section>
 					{/each}
-				</fieldset>
-				<div class="map-side" bind:this={mapSide}>
-					{#if shown}
-						<div class="map-heading">
-							<h2>{dateTime(shown.first_takeoff_at, data.timeZone)}</h2>
-							<a href={resolve('/sessions/[id]', { id: shown.id })}>View session</a>
-						</div>
-					{/if}
-					{#if tracksFailed}
-						<InlineNotification kind="error" title="The tracks couldn’t load">
-							Try again later.
-						</InlineNotification>
-					{:else}
-						<TrackMap
-							tracks={shownTracks}
-							token={data.mapboxToken}
-							label="Map of the chosen session’s tracks"
-							loading={tracksLoading}
-							squareOnPhones
-						/>
-					{/if}
 				</div>
+				{#if wide.current}
+					<div class="map-side">
+						{#if shown}
+							<h2 class="map-heading">
+								{daySpan(shown.first_takeoff_at, shown.last_landed_at, data.timeZone)} · {shown.pilots.join(
+									', '
+								)}
+							</h2>
+						{/if}
+						{#if tracksFailed}
+							<InlineNotification kind="error" title="The tracks couldn’t load">
+								Try again later.
+							</InlineNotification>
+						{:else}
+							<TrackMap
+								tracks={shownTracks}
+								token={data.mapboxToken}
+								label="Map of the previewed session’s tracks"
+								loading={tracksLoading}
+							/>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</Column>
 		<Column narrow>
@@ -270,13 +302,33 @@
 </Grid>
 
 <style>
-	/* Tiles 2px apart, as in Carbon's tile groups. */
+	/* Each month under its heading, which stays in view while its cards
+	   scroll; tiles 2px apart, as in Carbon's tile groups. */
 	.cards {
+		display: grid;
+		gap: var(--cds-spacing-06);
+	}
+
+	.month {
+		position: sticky;
+		top: 3rem;
+		z-index: 1;
+		margin: 0;
+		padding: var(--cds-spacing-03) var(--cds-spacing-05);
+		background: var(--cds-background);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-heading-compact-01-font-size);
+		font-weight: var(--cds-heading-compact-01-font-weight);
+		line-height: var(--cds-heading-compact-01-line-height);
+		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
+	}
+
+	.cards ul {
 		display: grid;
 		gap: var(--cds-spacing-01);
 		margin: 0;
 		padding: 0;
-		border: 0;
+		list-style: none;
 	}
 
 	.card-title {
@@ -301,15 +353,11 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* The map above the cards on small screens; from lg, 5 of 16 columns of
-	   cards and the map beside them, in view while the cards scroll. */
+	/* Only the cards below lg; from lg, 5 of 16 columns of cards and the map
+	   beside them, in view while the cards scroll. */
 	.cards-view {
 		display: grid;
 		gap: var(--cds-spacing-07);
-	}
-
-	.map-side {
-		order: -1;
 	}
 
 	/* On the page's 16 columns: narrow columns, so 16px apart. */
@@ -326,50 +374,19 @@
 
 		.map-side {
 			position: sticky;
-			top: calc(3rem + var(--cds-spacing-05));
+			top: 3rem;
 			grid-column: span 11;
-			order: 0;
 		}
 	}
 
-	/* The chosen session's date, and the way to its page. */
+	/* The previewed session, level with the first month's heading. */
 	.map-heading {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: var(--cds-spacing-05);
-		margin-bottom: var(--cds-spacing-03);
-		padding-inline: var(--cds-spacing-05);
-	}
-
-	.map-heading h2 {
 		margin: 0;
+		padding: var(--cds-spacing-03) var(--cds-spacing-05);
 		color: var(--cds-text-primary);
 		font-size: var(--cds-heading-compact-01-font-size);
 		font-weight: var(--cds-heading-compact-01-font-weight);
 		line-height: var(--cds-heading-compact-01-line-height);
 		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
-	}
-
-	.map-heading a {
-		color: var(--cds-link-primary);
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-		text-decoration: none;
-	}
-
-	.map-heading a:hover {
-		color: var(--cds-link-primary-hover);
-		text-decoration: underline;
-	}
-
-	.visually-hidden {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0 0 0 0);
-		white-space: nowrap;
 	}
 </style>

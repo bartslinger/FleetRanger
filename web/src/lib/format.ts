@@ -38,6 +38,39 @@ export function dateTime(iso: string, timeZone: string): string {
 	return `${day} ${MONTHS[month - 1]} ${year}, ${pad(hour)}:${pad(minute)}`;
 }
 
+const MONTH_NAMES = [
+	'January',
+	'February',
+	'March',
+	'April',
+	'May',
+	'June',
+	'July',
+	'August',
+	'September',
+	'October',
+	'November',
+	'December'
+];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** For example "October 2026": a heading over that month's items. */
+export function month(iso: string, timeZone: string): string {
+	const { year, month } = parts(iso, timeZone);
+	return `${MONTH_NAMES[month - 1]} ${year}`;
+}
+
+/**
+ * The day and times of a span, for example "Mon 12 Oct, 18:32–21:01". Night
+ * work can end after midnight; the end is then the next morning's time.
+ */
+export function daySpan(start: string, end: string, timeZone: string): string {
+	const from = parts(start, timeZone);
+	const to = parts(end, timeZone);
+	const weekday = WEEKDAYS[new Date(Date.UTC(from.year, from.month - 1, from.day)).getUTCDay()];
+	return `${weekday} ${from.day} ${MONTHS[from.month - 1]}, ${pad(from.hour)}:${pad(from.minute)}–${pad(to.hour)}:${pad(to.minute)}`;
+}
+
 /** The time zone's abbreviation, e.g. "UTC" or "GMT+2", as it is now. */
 export function timeZoneName(timeZone: string): string {
 	return (

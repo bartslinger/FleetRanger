@@ -28,11 +28,9 @@
 		label: string;
 		/** Tracks are on their way: shows Carbon's inline loading over the map. */
 		loading?: boolean;
-		/** Square below md, so on a phone the content under the map stays in view. */
-		squareOnPhones?: boolean;
 	}
 
-	let { tracks, token, label, loading = false, squareOnPhones = false }: Props = $props();
+	let { tracks, token, label, loading = false }: Props = $props();
 
 	type View = 'satellite' | 'map';
 	let view: View = $state('satellite');
@@ -241,7 +239,6 @@
 		<div
 			class="map"
 			class:placed
-			class:square={squareOnPhones}
 			bind:this={container}
 			role="region"
 			aria-label={label}
@@ -281,13 +278,6 @@
 	/* Mapbox draws into the canvas; until the tracks are fitted, don't show it. */
 	.map:not(.placed) :global(canvas) {
 		visibility: hidden;
-	}
-
-	@media (max-width: 41.99rem) {
-		.map.square {
-			height: auto;
-			aspect-ratio: 1;
-		}
 	}
 
 	/* Carbon's inline loading, on a layer over the map's centre. */

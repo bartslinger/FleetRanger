@@ -1,12 +1,6 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
-import {
-	get,
-	send,
-	type FlightChoices,
-	type Session,
-	type SessionPage
-} from '#lib/server/backend.js';
+import { get, send, type FlightChoices, type SessionPage } from '#lib/server/backend.js';
 
 const PAGE_SIZES = [25, 50, 100];
 const DEFAULT_SIZE = 50;
@@ -15,7 +9,7 @@ export async function load({ fetch, url }) {
 	const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '', 10) || 1);
 	const asked = Number.parseInt(url.searchParams.get('size') ?? '', 10);
 	const size = PAGE_SIZES.includes(asked) ? asked : DEFAULT_SIZE;
-	const view: 'table' | 'cards' = url.searchParams.get('view') === 'cards' ? 'cards' : 'table';
+	const view: 'table' | 'cards' = url.searchParams.get('view') === 'table' ? 'table' : 'cards';
 	const api = new URLSearchParams({ page: String(page), size: String(size) });
 	const [{ sessions, total }, choices] = await Promise.all([
 		get<SessionPage>(fetch, `/api/sessions?${api}`),
@@ -26,13 +20,6 @@ export async function load({ fetch, url }) {
 	const pages = Math.max(1, Math.ceil(total / size));
 	if (page > pages) redirect(307, `${url.pathname}?page=${pages}&size=${size}&view=${view}`);
 
-	// Cards: the first session's tracks come with the page, so its map opens on
-	// them rather than on Mapbox's default view.
-	const first =
-		view === 'cards' && sessions.length > 0
-			? await get<Session>(fetch, `/api/sessions/${sessions[0].id}`)
-			: null;
-
 	return {
 		sessions,
 		total,
@@ -42,9 +29,6 @@ export async function load({ fetch, url }) {
 		defaultSize: DEFAULT_SIZE,
 		view,
 		choices,
-		firstTracks: first
-			? { id: first.id, tracks: first.flights.map((flight) => flight.track) }
-			: null,
 		mapboxToken: MAPBOX_ACCESS_TOKEN
 	};
 }
