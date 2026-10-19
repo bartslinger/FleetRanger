@@ -23,7 +23,6 @@
 <header class="theme-dark">
 	<a class="name" href="/"><img src={logo} alt="" width="20" height="20" />FleetRanger</a>
 	<nav aria-label="Sections">
-		<a href="/#privacy">Privacy</a>
 		<a href="/#how-it-works">How it works</a>
 		<a href="/#features">Features</a>
 	</nav>

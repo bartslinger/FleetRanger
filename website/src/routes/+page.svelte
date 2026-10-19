@@ -66,32 +66,6 @@
 			text: 'Pilots work in teams. Drones and controllers are registered from their logs, so the fleet list keeps itself up to date.'
 		}
 	];
-
-	const privacy = [
-		{
-			title: 'One install per organisation',
-			text: 'FleetRanger runs on your own server, and your flight logs are stored there only.'
-		},
-		{
-			title: 'Pilots see their own flights',
-			text: 'Pilots see only their own flights, unless you give them more access. Raw logs and full telemetry are never shown to users.'
-		},
-		{
-			title: 'Open source',
-			text: 'Licensed under the AGPL-3.0, so you can check what it does with your data.'
-		}
-	];
-
-	const services = [
-		{
-			title: 'DJI, to read a log',
-			text: "DJI encrypts flight logs. To read one, your server asks DJI for its keys, sending only the log's encrypted key records, not the flight."
-		},
-		{
-			title: 'Mapbox, for the maps',
-			text: "Map images come from Mapbox, which sees the area being viewed and the viewer's IP address. Flight tracks are drawn in the browser and are never sent."
-		}
-	];
 </script>
 
 <svelte:head>
@@ -124,33 +98,6 @@
 					alt="A session in FleetRanger: a flight's track on a satellite map, with its pilot, team, times and distance, and the list of its flights."
 				/>
 			</div>
-		</Column>
-	</Grid>
-</section>
-
-<section id="privacy" class="layer" aria-labelledby="privacy-title">
-	<Grid centered rowGap>
-		<Column md={8} lg={4}>
-			<h2 id="privacy-title">Privacy</h2>
-		</Column>
-		<Column md={8} lg={12}>
-			<ul class="blocks three">
-				{#each privacy as point (point.title)}
-					<li>
-						<h3>{point.title}</h3>
-						<p>{point.text}</p>
-					</li>
-				{/each}
-			</ul>
-			<h3 class="group">Two outside services</h3>
-			<ul class="blocks">
-				{#each services as service (service.title)}
-					<li>
-						<h4>{service.title}</h4>
-						<p>{service.text}</p>
-					</li>
-				{/each}
-			</ul>
 		</Column>
 	</Grid>
 </section>
@@ -238,10 +185,6 @@
 		scroll-margin-top: var(--cds-spacing-05);
 	}
 
-	.layer {
-		background: var(--cds-layer-01);
-	}
-
 	/* The headline: Carbon's largest expressive heading, semibold. */
 	h1 {
 		font-size: var(--cds-fluid-heading-06-font-size);
@@ -257,8 +200,7 @@
 		letter-spacing: var(--cds-fluid-heading-04-letter-spacing);
 	}
 
-	h3,
-	h4 {
+	h3 {
 		font-size: var(--cds-heading-03-font-size);
 		font-weight: var(--cds-heading-03-font-weight);
 		line-height: var(--cds-heading-03-line-height);
@@ -428,23 +370,8 @@
 		}
 	}
 
-	@media (min-width: 66rem) {
-		.three {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-		}
-	}
-
 	.blocks p {
 		margin-top: var(--cds-spacing-03);
 		color: var(--cds-text-secondary);
-	}
-
-	/* A group of blocks within the section: a smaller heading above them. */
-	.group {
-		margin-block: var(--cds-spacing-10) var(--cds-spacing-06);
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-heading-02-font-size);
-		font-weight: var(--cds-heading-02-font-weight);
-		line-height: var(--cds-heading-02-line-height);
 	}
 </style>
