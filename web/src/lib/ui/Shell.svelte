@@ -51,6 +51,8 @@
 
 	interface Props {
 		name: string;
+		/** The product's logo, before its name. */
+		logo?: string;
 		nav: NavItem[];
 		/** Who is logged in; null before logging in. */
 		account: ShellAccount | null;
@@ -61,7 +63,7 @@
 		children: Snippet;
 	}
 
-	let { name, nav, account, theme: initialTheme, actions = [], children }: Props = $props();
+	let { name, logo, nav, account, theme: initialTheme, actions = [], children }: Props = $props();
 
 	let open = $state(false);
 	let menuButton: HTMLButtonElement | undefined = $state();
@@ -192,7 +194,9 @@
 			</svg>
 		</button>
 	{/if}
-	<a class="name" href={home} use:startsTrail>{name}</a>
+	<a class="name" href={home} use:startsTrail>
+		{#if logo}<img src={logo} alt="" width="20" height="20" />{/if}{name}
+	</a>
 	{#if account}
 		<div class="utilities">
 			{#each actions as action (action.id)}
@@ -390,6 +394,11 @@
 		line-height: 1.25rem;
 		letter-spacing: 0.1px;
 		text-decoration: none;
+	}
+
+	/* The logo 8px before the name, at the size of a header icon. */
+	.name img {
+		margin-right: var(--cds-spacing-03);
 	}
 
 	/* Header utilities: Carbon's header global actions, at the right edge. */

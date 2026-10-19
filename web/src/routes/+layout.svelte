@@ -146,7 +146,7 @@
 	{#if shownProcessing}<ProcessingPanel status={shownProcessing} timeZone={data.timeZone} />{/if}
 {/snippet}
 
-<Shell name="FleetRanger" {nav} account={data.account} theme={data.theme} {actions}>
+<Shell name="FleetRanger" logo={favicon} {nav} account={data.account} theme={data.theme} {actions}>
 	{@render children()}
 </Shell>
 
