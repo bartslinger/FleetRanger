@@ -5,7 +5,10 @@
 	so until the next step; Create and edit opens the new session.
 -->
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
+	import Add from '@carbon/icons/es/add/16.js';
+	import Subtract from '@carbon/icons/es/subtract/16.js';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -14,7 +17,9 @@
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
+	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
+	import IconButton from '#lib/ui/IconButton.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Link from '#lib/ui/Link.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
@@ -28,18 +33,13 @@
 	const flights = $derived(data.suggestion.flights);
 	type Row = (typeof flights)[number];
 
-	// The flights left out of the session, and those selected in either table
-	// to leave out or put back. Another suggestion starts afresh.
+	// The flights left out of the session. Another suggestion starts afresh.
 	let excluded: string[] = $state([]);
-	let selectedIn: string[] = $state([]);
-	let selectedOut: string[] = $state([]);
 	let stateFor = untrack(() => data.suggestion.key);
 	$effect(() => {
 		if (data.suggestion.key === stateFor) return;
 		stateFor = data.suggestion.key;
 		excluded = [];
-		selectedIn = [];
-		selectedOut = [];
 	});
 	// Back from a flight's page finds the same flights left out.
 	export const snapshot: Snapshot<{ key: string; excluded: string[] }> = {
@@ -49,14 +49,23 @@
 		}
 	};
 
-	function leaveOut(ids: string[]) {
-		excluded = [...excluded, ...ids];
-		selectedIn = [];
-	}
-
-	function putBack(ids: string[]) {
-		excluded = excluded.filter((id) => !ids.includes(id));
-		selectedOut = [];
+	// Each row's own button moves its flight between the two tables. Its row
+	// is gone then, so focus goes to the button that took its place in that
+	// table, or else to the other table's.
+	let tables: HTMLElement | undefined = $state();
+	async function move(id: string, out: boolean) {
+		const from = out ? 'in' : 'out';
+		const buttons = () => [
+			...(tables?.querySelectorAll<HTMLElement>(`[data-table="${from}"] td.action button`) ?? [])
+		];
+		const index = buttons().findIndex((button) => button.dataset.flight === id);
+		excluded = out ? [...excluded, id] : excluded.filter((other) => other !== id);
+		await tick();
+		const rest = buttons();
+		const next =
+			rest[Math.min(index, rest.length - 1)] ??
+			tables?.querySelector<HTMLElement>(`[data-table="${out ? 'out' : 'in'}"] td.action button`);
+		next?.focus();
 	}
 
 	const chosen = $derived(flights.filter((flight) => !excluded.includes(flight.id)));
@@ -81,6 +90,8 @@
 
 	const flightsLabel = (count: number) => `${count} ${count === 1 ? 'flight' : 'flights'}`;
 
+	// On phones the row's button stays in view: only takeoff and air time beside it.
+	const wide = new MediaQuery('min-width: 42rem');
 	const columns: TableColumn<Row>[] = $derived([
 		{
 			key: 'takeoff_at',
@@ -93,25 +104,29 @@
 			numeric: true,
 			format: (flight) => duration(flight.air_time_s)
 		},
-		{
-			key: 'distance_m',
-			header: 'Distance',
-			numeric: true,
-			format: (flight) => distance(flight.distance_m)
-		},
-		{ key: 'pilot_name', header: 'Pilot' },
-		{
-			key: 'aircraft_serial',
-			header: 'Drone',
-			identifier: true,
-			format: (flight) => flight.aircraft_name ?? flight.aircraft_serial ?? ''
-		},
-		{
-			key: 'rc_serial',
-			header: 'Controller',
-			identifier: true,
-			format: (flight) => flight.rc_name ?? flight.rc_serial ?? ''
-		}
+		...(wide.current
+			? ([
+					{
+						key: 'distance_m',
+						header: 'Distance',
+						numeric: true,
+						format: (flight) => distance(flight.distance_m)
+					},
+					{ key: 'pilot_name', header: 'Pilot' },
+					{
+						key: 'aircraft_serial',
+						header: 'Drone',
+						identifier: true,
+						format: (flight) => flight.aircraft_name ?? flight.aircraft_serial ?? ''
+					},
+					{
+						key: 'rc_serial',
+						header: 'Controller',
+						identifier: true,
+						format: (flight) => flight.rc_name ?? flight.rc_serial ?? ''
+					}
+				] satisfies TableColumn<Row>[])
+			: [])
 	]);
 
 	// "?/create" alone would drop the list's query (see Modal).
@@ -202,43 +217,61 @@
 	<Column lg={5}>
 		<SessionFacts flights={shown} timeZone={data.timeZone} timeZoneName={data.timeZoneName} />
 	</Column>
+	<!-- Carbon's inline row actions: remove (subtract) and add, one per row. -->
 	<Column narrow>
-		<DataTable
-			label="Flights of the suggested session"
-			{columns}
-			rows={chosen}
-			rowKey={(flight) => flight.id}
-			rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
-			selectable={() => true}
-			bind:selected={selectedIn}
-			summary={flightsLabel(chosen.length)}
-			selectedLabel={(count) => `${flightsLabel(count)} selected`}
-		>
-			{#snippet batchActions(ids)}
-				<Button onclick={() => leaveOut(ids)}>Leave out</Button>
-			{/snippet}
-		</DataTable>
+		<div class="tables" bind:this={tables}>
+			<div data-table="in">
+				{#if chosen.length === 0}
+					<EmptyState
+						title="No flights left in the session"
+						body="Put a flight back to create the session."
+					/>
+				{:else}
+					<DataTable
+						label="Flights of the suggested session"
+						{columns}
+						rows={chosen}
+						rowKey={(flight) => flight.id}
+						rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+						summary={flightsLabel(chosen.length)}
+					>
+						{#snippet rowAction(flight)}
+							<IconButton
+								icon={Subtract}
+								label="Leave out flight"
+								size="md"
+								data-flight={flight.id}
+								onclick={() => move(flight.id, true)}
+							/>
+						{/snippet}
+					</DataTable>
+				{/if}
+			</div>
+			{#if leftOut.length > 0}
+				<!-- They become a suggestion of their own once the session is made. -->
+				<div data-table="out">
+					<DataTable
+						label="Flights left out"
+						{columns}
+						rows={leftOut}
+						rowKey={(flight) => flight.id}
+						rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+						summary="{flightsLabel(leftOut.length)} left out"
+					>
+						{#snippet rowAction(flight)}
+							<IconButton
+								icon={Add}
+								label="Put back flight"
+								size="md"
+								data-flight={flight.id}
+								onclick={() => move(flight.id, false)}
+							/>
+						{/snippet}
+					</DataTable>
+				</div>
+			{/if}
+		</div>
 	</Column>
-	{#if leftOut.length > 0}
-		<!-- They become a suggestion of their own once the session is made. -->
-		<Column narrow>
-			<DataTable
-				label="Flights left out"
-				{columns}
-				rows={leftOut}
-				rowKey={(flight) => flight.id}
-				rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
-				selectable={() => true}
-				bind:selected={selectedOut}
-				summary="{flightsLabel(leftOut.length)} left out"
-				selectedLabel={(count) => `${flightsLabel(count)} selected`}
-			>
-				{#snippet batchActions(ids)}
-					<Button onclick={() => putBack(ids)}>Put back</Button>
-				{/snippet}
-			</DataTable>
-		</Column>
-	{/if}
 </Grid>
 
 <style>
@@ -251,5 +284,13 @@
 
 	.buttons {
 		display: flex;
+	}
+
+	/* The two tables 32px apart, as the page's other rows. A wide table
+	   scrolls inside its column rather than widening the page. */
+	.tables {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--cds-spacing-07);
 	}
 </style>
