@@ -3,10 +3,12 @@
 	import Asleep from '@carbon/icons/es/asleep/20.js';
 	import Launch from '@carbon/icons/es/launch/16.js';
 	import Light from '@carbon/icons/es/light/20.js';
+	import Screen from '@carbon/icons/es/screen/20.js';
 	import logo from '$assets/favicon.svg';
 	import Column from '$ui/Column.svelte';
 	import Grid from '$ui/Grid.svelte';
 	import Icon from '$ui/Icon.svelte';
+	import RadioButtonGroup from '$ui/RadioButtonGroup.svelte';
 	import { CONTACT, SOURCE } from '#lib/site.js';
 
 	let { children } = $props();
@@ -26,14 +28,27 @@
 		<a href="/#how-it-works">How it works</a>
 		<a href="/#features">Features</a>
 	</nav>
-	<!-- Carbon's header actions; the one for the other theme shows (app.html). -->
+	<!-- Carbon's header action with a panel, as the app's profile panel: the
+	     theme choice, with the chosen one's icon on the button. The browser's
+	     popover opens and closes it; the script in app.html applies the choice. -->
 	<div class="actions">
-		<button type="button" class="to-light" data-set-theme="light" aria-label="Light theme">
-			<Icon icon={Light} />
+		<button type="button" class="action" popovertarget="theme-panel" aria-label="Theme">
+			<span class="system"><Icon icon={Screen} /></span>
+			<span class="light"><Icon icon={Light} /></span>
+			<span class="dark"><Icon icon={Asleep} /></span>
 		</button>
-		<button type="button" class="to-dark" data-set-theme="dark" aria-label="Dark theme">
-			<Icon icon={Asleep} />
-		</button>
+		<section id="theme-panel" class="panel layer-01" popover aria-label="Theme">
+			<RadioButtonGroup
+				legend="Theme"
+				name="theme"
+				options={[
+					{ value: 'system', label: 'System' },
+					{ value: 'light', label: 'Light' },
+					{ value: 'dark', label: 'Dark' }
+				]}
+				value="system"
+			/>
+		</section>
 	</div>
 </header>
 
@@ -143,49 +158,63 @@
 		margin-inline-start: auto;
 	}
 
-	/* Shown only with the script that makes them work. */
-	.actions button {
+	/* As the app's header actions. Shown only with the script that makes the
+	   choice work. */
+	.action {
 		display: none;
 		align-items: center;
 		justify-content: center;
 		width: var(--cds-size-large);
 		height: var(--cds-size-large);
 		padding: 0;
-		border: 0;
+		border: 1px solid transparent;
 		background: none;
 		color: var(--cds-icon-primary);
 		cursor: pointer;
 	}
 
-	.actions button:hover {
+	:global(.js) .action {
+		display: flex;
+	}
+
+	.action:hover {
 		background: var(--cds-background-hover);
 	}
 
-	.actions button:focus-visible {
+	.action:focus-visible {
 		outline: 2px solid var(--cds-focus);
 		outline-offset: -2px;
 	}
 
-	:global(.js) .to-dark {
-		display: flex;
+	/* Open: outlined, with the bottom edge flowing into the panel. */
+	.actions:has(.panel:popover-open) .action {
+		border-color: var(--cds-border-subtle-00);
+		border-bottom-color: transparent;
+		background: var(--cds-layer-01);
 	}
 
-	@media (prefers-color-scheme: dark) {
-		:global(.js:not([data-theme='light'])) .to-dark {
-			display: none;
-		}
-
-		:global(.js:not([data-theme='light'])) .to-light {
-			display: flex;
-		}
-	}
-
-	:global(.js[data-theme='dark']) .to-dark {
+	/* The icon of the choice: system unless the visitor chose a theme. */
+	.action span {
 		display: none;
 	}
 
-	:global(.js[data-theme='dark']) .to-light {
+	:global(:root:not([data-theme])) .system,
+	:global(:root[data-theme='light']) .light,
+	:global(:root[data-theme='dark']) .dark {
 		display: flex;
+	}
+
+	/* The app's header panel, below the header at the right, only as tall as
+	   its contents. Undoes the browser's popover styles. */
+	.panel {
+		inset: var(--cds-size-large) 0 auto auto;
+		width: 16rem;
+		margin: 0;
+		padding: var(--cds-spacing-05);
+		border: 1px solid var(--cds-border-subtle-00);
+		border-top: 0;
+		background: var(--cds-layer-01);
+		color: var(--cds-text-primary);
 	}
 
 	/* The website's one colour outside Carbon's tokens: the app's track colour
