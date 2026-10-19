@@ -1,0 +1,13 @@
+{
+	"extends": "$app/tsconfig",
+	"compilerOptions": {
+		"strict": true,
+		"types": ["$app/types", "node"],
+		"paths": {
+			"$ui/*": ["../web/src/lib/ui/*"],
+			// For the web app's components, which would look in web/node_modules.
+			"svelte/elements": ["./node_modules/svelte/elements.d.ts"]
+		}
+	},
+	"include": ["src", "vite.config.ts"]
+}
