@@ -17,6 +17,7 @@ export async function load({ fetch, url }) {
 	});
 	if (state.drone) api.set('aircraft', state.drone);
 	if (state.controller) api.set('controller', state.controller);
+	if (state.withoutSession) api.set('session', 'none');
 	const [{ flights, total }, choices, devices] = await Promise.all([
 		get<FlightPage>(fetch, `/api/flights?${api}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),
@@ -55,5 +56,22 @@ export const actions = {
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/team', body);
 		if (!result.ok) return fail(result.status, { teamMessage: result.message });
 		return { changed: result.data.changed };
+	},
+	newSession: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const body = { flight_ids: flightIds(form) };
+		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions', body);
+		if (!result.ok) return fail(result.status, { newSessionMessage: result.message });
+		return { session: result.data.id };
+	},
+	addToSession: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const session = String(form.get('session_id') ?? '');
+		if (!session) return fail(400, { addMessage: 'Choose a session.' });
+		const body = { flight_ids: flightIds(form) };
+		const path = `/api/sessions/${encodeURIComponent(session)}/flights`;
+		const result = await send<{ id: string }>(fetch, 'POST', path, body);
+		if (!result.ok) return fail(result.status, { addMessage: result.message });
+		return { session: result.data.id };
 	}
 };

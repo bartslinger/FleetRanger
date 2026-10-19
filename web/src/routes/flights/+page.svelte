@@ -13,6 +13,7 @@
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import { dateTime, distance, duration } from '#lib/format.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
+	import SessionChoice from './SessionChoice.svelte';
 	import type { PageProps, Snapshot } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -77,7 +78,13 @@
 	const controllerOptions = $derived(
 		deviceOptions(data.devices.controllers, 'All controllers', data.state.controller)
 	);
-	const filtering = $derived(data.state.drone !== null || data.state.controller !== null);
+	const filtering = $derived(
+		data.state.drone !== null || data.state.controller !== null || data.state.withoutSession
+	);
+	const sessionOptions = [
+		{ value: '', label: 'All' },
+		{ value: 'none', label: 'Without session' }
+	];
 
 	// In a later page's breadcrumb, a filtered list names its filters:
 	// "Flights · Drone-2".
@@ -87,11 +94,12 @@
 		[
 			'Flights',
 			...(data.state.drone ? [name(data.devices.aircraft, data.state.drone)] : []),
-			...(data.state.controller ? [name(data.devices.controllers, data.state.controller)] : [])
+			...(data.state.controller ? [name(data.devices.controllers, data.state.controller)] : []),
+			...(data.state.withoutSession ? ['without session'] : [])
 		].join(' · ')
 	);
 
-	function filter(change: Partial<Pick<LogbookState, 'drone' | 'controller'>>) {
+	function filter(change: Partial<Pick<LogbookState, 'drone' | 'controller' | 'withoutSession'>>) {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves.
 		goto(href({ ...data.state, ...change, page: 1 }), { reset: false });
 	}
@@ -121,10 +129,15 @@
 		{ value: '', label: 'No team (organisation queue)' }
 	]);
 
-	function done(count: number) {
+	const flights = (count: number) => `${count} ${count === 1 ? 'flight' : 'flights'}`;
+
+	function done(message: string) {
 		selected = [];
-		toast(`${count} ${count === 1 ? 'flight' : 'flights'} changed.`);
+		toast(message);
 	}
+
+	/** The selected flights on this page, for the sessions near them. */
+	const selectedRows = (ids: string[]) => data.flights.filter((flight) => ids.includes(flight.id));
 
 	function href(state: LogbookState) {
 		return `${resolve('/flights')}${query(state)}`;
@@ -149,18 +162,25 @@
 					value={data.state.controller ?? ''}
 					onchange={(event) => filter({ controller: event.currentTarget.value || null })}
 				/>
+				<Select
+					label="Session"
+					options={sessionOptions}
+					value={data.state.withoutSession ? 'none' : ''}
+					onchange={(event) => filter({ withoutSession: event.currentTarget.value === 'none' })}
+				/>
 				{#if filtering}
-					<Button kind="ghost" size="md" onclick={() => filter({ drone: null, controller: null })}>
+					<Button
+						kind="ghost"
+						size="md"
+						onclick={() => filter({ drone: null, controller: null, withoutSession: false })}
+					>
 						Clear filters
 					</Button>
 				{/if}
 			</div>
 		{/if}
 		{#if data.total === 0 && filtering}
-			<EmptyState
-				title="No flights match"
-				body="No flights you can see were flown with this drone and controller."
-			/>
+			<EmptyState title="No flights match" body="No flights you can see pass these filters." />
 		{:else if data.total === 0}
 			<EmptyState
 				title="No flights yet"
@@ -186,7 +206,7 @@
 						submitLabel="Set pilot"
 						action="?/setPilot"
 						error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
-						onsuccess={() => done(ids.length)}
+						onsuccess={() => done(`${flights(ids.length)} changed.`)}
 					>
 						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
 						<Select label="Pilot" name="pilot_id" options={pilotOptions} />
@@ -202,13 +222,36 @@
 							submitLabel="Move"
 							action="?/setTeam"
 							error={form && 'teamMessage' in form ? form.teamMessage : undefined}
-							onsuccess={() => done(ids.length)}
+							onsuccess={() => done(`${flights(ids.length)} changed.`)}
 						>
 							{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
 							<Select label="Team" name="team_id" options={teamOptions} />
 							<p class="help">A pilot who isn’t in the new team is cleared.</p>
 						</Modal>
 					{/if}
+					<Modal
+						title="New session"
+						submitLabel="Create"
+						action="?/newSession"
+						error={form && 'newSessionMessage' in form ? form.newSessionMessage : undefined}
+						onsuccess={() => done(`New session with ${flights(ids.length)}.`)}
+					>
+						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+						<p>
+							The {flights(ids.length)} become one new session. Flights that are in a session leave it.
+						</p>
+					</Modal>
+					<Modal
+						title="Add to session"
+						submitLabel="Add"
+						action="?/addToSession"
+						error={form && 'addMessage' in form ? form.addMessage : undefined}
+						onsuccess={() => done(`${flights(ids.length)} added to the session.`)}
+					>
+						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+						<SessionChoice flights={selectedRows(ids)} timeZone={data.timeZone} />
+						<p class="help">Flights that are in another session leave it.</p>
+					</Modal>
 				{/snippet}
 			</DataTable>
 			<Pagination
@@ -238,7 +281,7 @@
 	@media (min-width: 42rem) {
 		.filters {
 			padding-inline: 0;
-			grid-template-columns: repeat(2, minmax(0, 20rem)) auto;
+			grid-template-columns: repeat(3, minmax(0, 16rem)) auto;
 			justify-content: start;
 		}
 	}

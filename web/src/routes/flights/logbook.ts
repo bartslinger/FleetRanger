@@ -15,6 +15,8 @@ export interface LogbookState {
 	drone: string | null;
 	/** Only the flights of this controller serial. */
 	controller: string | null;
+	/** Only the flights in no session, the ones still to be grouped. */
+	withoutSession: boolean;
 }
 
 export function parse(params: URLSearchParams): LogbookState {
@@ -27,7 +29,8 @@ export function parse(params: URLSearchParams): LogbookState {
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		sort: SORTABLE.includes(key) ? { key, descending: sort.startsWith('-') } : DEFAULT_SORT,
 		drone: params.get('drone') || null,
-		controller: params.get('controller') || null
+		controller: params.get('controller') || null,
+		withoutSession: params.get('session') === 'none'
 	};
 }
 
@@ -36,6 +39,7 @@ export function query(state: LogbookState): string {
 	const params = new URLSearchParams();
 	if (state.drone) params.set('drone', state.drone);
 	if (state.controller) params.set('controller', state.controller);
+	if (state.withoutSession) params.set('session', 'none');
 	if (state.page > 1) params.set('page', String(state.page));
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
 	const { key, descending } = state.sort;
@@ -53,7 +57,8 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 		size: DEFAULT_SIZE,
 		sort: DEFAULT_SORT,
 		drone: filters.drone ?? null,
-		controller: filters.controller ?? null
+		controller: filters.controller ?? null,
+		withoutSession: false
 	});
 }
 
