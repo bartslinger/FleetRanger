@@ -152,9 +152,6 @@
 								</DateRangePicker.GridBody>
 							</DateRangePicker.Grid>
 						{/each}
-						<p class="calendar-help">
-							Click the first and the last day; the same day twice for one day.
-						</p>
 					{/snippet}
 				</DateRangePicker.Calendar>
 			</DateRangePicker.Content>
@@ -398,13 +395,5 @@
 	:global(.calendar-day[data-selection-end]) {
 		background: var(--cds-button-primary);
 		color: var(--cds-text-on-color);
-	}
-
-	.calendar-help {
-		margin: var(--cds-spacing-03) var(--cds-spacing-03) 0;
-		color: var(--cds-text-helper);
-		font-size: var(--cds-helper-text-01-font-size);
-		line-height: var(--cds-helper-text-01-line-height);
-		letter-spacing: var(--cds-helper-text-01-letter-spacing);
 	}
 </style>
