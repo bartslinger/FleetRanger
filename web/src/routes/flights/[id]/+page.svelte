@@ -93,7 +93,8 @@
 </script>
 
 <PageHeader
-	title={dateTime(flight.takeoff_at, data.timeZone)}
+	title={`Flight ${dateTime(flight.takeoff_at, data.timeZone)}`}
+	description={`${flight.aircraft_name ?? flight.aircraft_serial ?? 'Unknown drone'} · ${flight.pilot_name ?? 'Unknown pilot'}`}
 	crumb={`Flight ${dayMonth(flight.takeoff_at, data.timeZone)}, ${clock(flight.takeoff_at, data.timeZone)}`}
 	breadcrumb={[{ href: resolve('/flights'), label: 'Flights' }]}
 />

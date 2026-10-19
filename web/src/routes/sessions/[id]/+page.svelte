@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { dateTime, day, daySpan, distance, duration } from '#lib/format.js';
+	import { clock, dateTime, day, distance, duration } from '#lib/format.js';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -26,22 +26,24 @@
 	const sum = (value: (flight: Row) => number) =>
 		flights.reduce((total, flight) => total + value(flight), 0);
 
+	const pilots = $derived(
+		names(
+			flights.map((f) => f.pilot_name),
+			'Unknown'
+		)
+	);
+	const teams = $derived(
+		names(
+			flights.map((f) => f.team_name),
+			'None (organisation queue)'
+		)
+	);
+	const span = $derived(`${clock(start, data.timeZone)}–${clock(end, data.timeZone)}`);
+
 	const groups = $derived([
 		[
-			{
-				label: 'Pilot',
-				value: names(
-					flights.map((f) => f.pilot_name),
-					'Unknown'
-				)
-			},
-			{
-				label: 'Team',
-				value: names(
-					flights.map((f) => f.team_name),
-					'None (organisation queue)'
-				)
-			}
+			{ label: 'Pilot', value: pilots },
+			{ label: 'Team', value: teams }
 		],
 		[
 			{ label: `First takeoff (${data.timeZoneName})`, value: dateTime(start, data.timeZone) },
@@ -94,8 +96,10 @@
 </script>
 
 <PageHeader
-	title={daySpan(start, end, data.timeZone, true)}
+	title={`Session ${day(start, data.timeZone, true)}`}
 	crumb={`Session ${day(start, data.timeZone)}`}
+	description={`${span} · ${flights.length} ${flights.length === 1 ? 'flight' : 'flights'} · ${duration(sum((f) => f.air_time_s))} in the air`}
+	phoneDescription={`${span} · ${pilots} · ${teams}`}
 	breadcrumb={[{ href: resolve('/sessions'), label: 'Sessions' }]}
 />
 

@@ -24,10 +24,14 @@
 		/** A state shown as a gray tag after the title, e.g. "Archived". */
 		status?: string;
 		description?: string;
+		/** Below md, instead of `description`: e.g. facts that on wider
+		 * screens show beside the content, but on phones only further down. */
+		phoneDescription?: string;
 		actions?: Snippet;
 	}
 
-	let { title, breadcrumb, crumb, status, description, actions }: Props = $props();
+	let { title, breadcrumb, crumb, status, description, phoneDescription, actions }: Props =
+		$props();
 
 	$effect(() => {
 		trail.title = crumb ?? title;
@@ -58,7 +62,12 @@
 						<h1>{title}</h1>
 						{#if status}<Tag>{status}</Tag>{/if}
 					</div>
-					{#if description}<p>{description}</p>{/if}
+					{#if phoneDescription}
+						<p class="phone">{phoneDescription}</p>
+						{#if description}<p class="wide">{description}</p>{/if}
+					{:else if description}
+						<p>{description}</p>
+					{/if}
 				</div>
 				{#if actions}<div class="actions">{@render actions()}</div>{/if}
 			</div>
@@ -113,6 +122,18 @@
 		font-size: var(--cds-body-01-font-size);
 		line-height: var(--cds-body-01-line-height);
 		letter-spacing: var(--cds-body-01-letter-spacing);
+	}
+
+	@media (max-width: 41.99rem) {
+		.wide {
+			display: none;
+		}
+	}
+
+	@media (min-width: 42rem) {
+		.phone {
+			display: none;
+		}
 	}
 
 	.actions {

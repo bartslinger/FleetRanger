@@ -32,10 +32,14 @@ function parts(iso: string, timeZone: string) {
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
+/** A non-breaking space: a date never wraps between its parts, e.g. in a
+ * title on a phone. It may wrap after the comma before the time. */
+const NBSP = ' ';
+
 /** For example "12 Oct 2026, 17:49". */
 export function dateTime(iso: string, timeZone: string): string {
 	const { year, month, day, hour, minute } = parts(iso, timeZone);
-	return `${day} ${MONTHS[month - 1]} ${year}, ${pad(hour)}:${pad(minute)}`;
+	return `${day}${NBSP}${MONTHS[month - 1]}${NBSP}${year}, ${pad(hour)}:${pad(minute)}`;
 }
 
 const MONTH_NAMES = [
@@ -64,13 +68,13 @@ export function month(iso: string, timeZone: string): string {
 export function day(iso: string, timeZone: string, withYear = false): string {
 	const { year, month, day } = parts(iso, timeZone);
 	const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
-	return `${weekday} ${day} ${MONTHS[month - 1]}${withYear ? ` ${year}` : ''}`;
+	return `${weekday}${NBSP}${day}${NBSP}${MONTHS[month - 1]}${withYear ? `${NBSP}${year}` : ''}`;
 }
 
 /** For example "12 Oct": short, where the year is clear from the context. */
 export function dayMonth(iso: string, timeZone: string): string {
 	const { month, day } = parts(iso, timeZone);
-	return `${day} ${MONTHS[month - 1]}`;
+	return `${day}${NBSP}${MONTHS[month - 1]}`;
 }
 
 /** For example "18:32". */
