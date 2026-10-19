@@ -34,6 +34,15 @@
 		return flight.pilot_id ? (own[0]?.value ?? '') : '';
 	});
 
+	const teamOptions = $derived([
+		...data.choices.teams.map((team) => ({ value: team.id, label: team.name })),
+		{ value: '', label: 'No team (organisation queue)' }
+	]);
+	function teamSet(result: Record<string, unknown> | undefined) {
+		const team = (result?.teamName as string | null) ?? 'the organisation queue';
+		toast(`Flight moved to ${team}.`);
+	}
+
 	function pilotSet(result: Record<string, unknown> | undefined) {
 		const name = (result?.pilotName as string | null) ?? 'Unknown';
 		const team = result?.movedTo as string | null | undefined;
@@ -109,7 +118,11 @@
 				{#each facts as fact (fact.label)}
 					<div>
 						<dt>{fact.label}</dt>
-						<dd class:numeric={fact.numeric} class:editable={fact.label === 'Pilot' && canSetPilot}>
+						<dd
+							class:numeric={fact.numeric}
+							class:editable={(fact.label === 'Pilot' && canSetPilot) ||
+								(fact.label === 'Team' && data.choices.admin)}
+						>
 							<!-- The drone's and controller's pages, for who may see them. -->
 							{#if 'href' in fact && fact.href}
 								<Link href={fact.href}>{fact.value}</Link>
@@ -132,6 +145,25 @@
 											? 'The flight moves to the pilot’s team. With Unknown, it keeps its team.'
 											: 'Choose Unknown for a flight that wasn’t flown by someone in your team. It stays in your team.'}
 									</p>
+								</Modal>
+							{/if}
+							<!-- Admins only, as Move to team in Flights. -->
+							{#if fact.label === 'Team' && data.choices.admin}
+								<Modal
+									title="Move to team"
+									triggerIcon={Edit}
+									submitLabel="Move"
+									action="?/setTeam"
+									error={form?.teamMessage}
+									onsuccess={teamSet}
+								>
+									<Select
+										label="Team"
+										name="team_id"
+										options={teamOptions}
+										value={flight.team_id ?? ''}
+									/>
+									<p class="help">A pilot who isn’t in the new team is cleared.</p>
 								</Modal>
 							{/if}
 						</dd>
