@@ -24,16 +24,17 @@
 						localStorage.setItem('theme', root.dataset.theme);
 					} catch (e) {}
 				});
-				// The current step is the last one whose top has passed the picture's
-				// middle when the picture is beside the steps, or the picture's bottom
-				// when it is above them (on phones).
+				// The current step is the last one whose top has passed 40% of the
+				// window when the picture is beside the steps, a little above the
+				// picture's middle, or the picture's bottom when it is above them (on
+				// phones).
 				var pending = false;
 				function showSteps() {
 					pending = false;
 					document.querySelectorAll('[data-steps]').forEach(function (group) {
 						var picture = group.querySelector('[data-picture]').getBoundingClientRect();
 						var beside = picture.left > group.getBoundingClientRect().left;
-						var line = beside ? picture.top + picture.height / 2 : picture.bottom;
+						var line = beside ? innerHeight * 0.4 : picture.bottom;
 						var current = '0';
 						group.querySelectorAll('[data-step]').forEach(function (step) {
 							if (step.getBoundingClientRect().top < line) current = step.dataset.step;

@@ -438,7 +438,8 @@
 	}
 
 	/* The picture stays in place while the steps scroll past it: at the top on
-	   phones, beside them near the top of the window from md. */
+	   phones, beside them from md, where it stops in the middle of the window
+	   (it is 24rem tall at most). */
 	.steps {
 		display: grid;
 		margin-top: var(--cds-spacing-07);
@@ -482,7 +483,7 @@
 			grid-column: 2;
 			grid-row: 1;
 			align-self: start;
-			top: var(--cds-spacing-09);
+			top: max(var(--cds-spacing-09), calc(50vh - 12rem));
 			padding-block: 0;
 			background: none;
 		}
@@ -494,8 +495,9 @@
 
 	/* Three moments along a line, marked like a track: a ring at take-off,
 	   dots after it. Each is tall enough to be read while its picture shows;
-	   the last one only needs to pass the picture's middle (half its 24rem
-	   height at most, and some room) before the picture moves on. */
+	   the last one must pass the switching line at 40% of the window before
+	   the picture's bottom (12rem below the middle at most) moves on: 10vh +
+	   12rem, and some room. */
 	.timeline {
 		display: grid;
 		gap: var(--cds-spacing-05);
@@ -518,7 +520,7 @@
 		}
 
 		.timeline li.last {
-			min-height: 14rem;
+			min-height: calc(10vh + 14rem);
 		}
 	}
 
