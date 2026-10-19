@@ -1,8 +1,12 @@
 import { fail } from '@sveltejs/kit';
-import { get, send, type Team } from '#lib/server/backend.js';
+import { get, send, type Team, type User } from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
-	return { team: await get<Team>(fetch, `/api/teams/${params.id}`) };
+	const [team, users] = await Promise.all([
+		get<Team>(fetch, `/api/teams/${params.id}`),
+		get<User[]>(fetch, '/api/users')
+	]);
+	return { team, members: users.filter((user) => user.team_id === team.id) };
 }
 
 export const actions = {

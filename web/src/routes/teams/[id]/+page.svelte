@@ -2,8 +2,11 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { back } from '#lib/back.svelte.js';
+	import { ROLE_LABELS } from '#lib/roles.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
+	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
+	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
@@ -20,6 +23,14 @@
 
 	const archived = $derived(data.team.archived_at !== null);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
+
+	type Member = (typeof data.members)[number];
+
+	const columns: TableColumn<Member>[] = [
+		{ key: 'name', header: 'Name' },
+		{ key: 'email', header: 'Login' },
+		{ key: 'role', header: 'Role', format: (user) => ROLE_LABELS[user.role] }
+	];
 </script>
 
 <PageHeader
@@ -87,6 +98,23 @@
 			</div>
 		</form>
 	</Column>
+	<Column narrow>
+		<h2 class="section">Members</h2>
+		{#if data.members.length === 0}
+			<EmptyState
+				title="No members yet"
+				body="Users join a team when you choose it as their team on the Users page."
+			/>
+		{:else}
+			<DataTable
+				label="Members"
+				{columns}
+				rows={data.members}
+				rowKey={(user) => user.id}
+				rowHref={(user) => resolve('/users/[id]', { id: user.id })}
+			/>
+		{/if}
+	</Column>
 </Grid>
 
 <style>
@@ -102,5 +130,15 @@
 		flex-wrap: wrap;
 		gap: var(--cds-spacing-05);
 		margin-top: var(--cds-spacing-05);
+	}
+
+	.section {
+		margin-top: var(--cds-spacing-07);
+		margin-bottom: var(--cds-spacing-05);
+		/* The column has no gutter; line up with the table's text. */
+		padding-inline: var(--cds-spacing-05);
+		font-size: var(--cds-heading-03-font-size);
+		font-weight: var(--cds-heading-03-font-weight);
+		line-height: var(--cds-heading-03-line-height);
 	}
 </style>
