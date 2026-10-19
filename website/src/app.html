@@ -7,7 +7,7 @@
 		<!-- The page's only script. The theme switch applies the visitor's choice
 		     before the page is drawn, and remembers a new one in this browser;
 		     without a choice the system setting applies. Steps that scroll past a
-		     picture show theirs when they reach the middle of the window. -->
+		     picture show theirs when they reach it. -->
 		<script>
 			(function () {
 				var root = document.documentElement;
@@ -24,14 +24,19 @@
 						localStorage.setItem('theme', root.dataset.theme);
 					} catch (e) {}
 				});
-				// The current step is the last one whose top has passed the middle.
+				// The current step is the last one whose top has passed the picture's
+				// middle when the picture is beside the steps, or the picture's bottom
+				// when it is above them (on phones).
 				var pending = false;
 				function showSteps() {
 					pending = false;
 					document.querySelectorAll('[data-steps]').forEach(function (group) {
+						var picture = group.querySelector('[data-picture]').getBoundingClientRect();
+						var beside = picture.left > group.getBoundingClientRect().left;
+						var line = beside ? picture.top + picture.height / 2 : picture.bottom;
 						var current = '0';
 						group.querySelectorAll('[data-step]').forEach(function (step) {
-							if (step.getBoundingClientRect().top < innerHeight / 2) current = step.dataset.step;
+							if (step.getBoundingClientRect().top < line) current = step.dataset.step;
 						});
 						group.querySelectorAll('[data-shown]').forEach(function (shown) {
 							shown.classList.toggle('active', shown.dataset.shown === current);

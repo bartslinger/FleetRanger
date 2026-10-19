@@ -157,9 +157,9 @@
 		</Column>
 		<Column>
 			<!-- The steps scroll past the picture, which stays in place and shows the
-			     step in the middle of the window (the script in app.html). -->
+			     step that has reached it (the script in app.html). -->
 			<div class="steps" data-steps>
-				<div class="picture">
+				<div class="picture" data-picture>
 					{#each moments as moment, i (moment.when)}
 						<div class="shown" class:active={i === 0} data-shown={i}>
 							{#if moment.screen}
@@ -219,12 +219,12 @@
 
 <style>
 	section {
-		padding-block: var(--cds-spacing-10);
+		padding-block: var(--cds-spacing-09);
 	}
 
 	@media (min-width: 66rem) {
 		section {
-			padding-block: var(--cds-spacing-11);
+			padding-block: var(--cds-spacing-10);
 		}
 	}
 
@@ -352,10 +352,10 @@
 	}
 
 	/* The picture stays in place while the steps scroll past it: at the top on
-	   phones, beside them from md. */
+	   phones, beside them near the top of the window from md. */
 	.steps {
 		display: grid;
-		margin-top: var(--cds-spacing-09);
+		margin-top: var(--cds-spacing-07);
 	}
 
 	.picture {
@@ -396,7 +396,7 @@
 			grid-column: 2;
 			grid-row: 1;
 			align-self: start;
-			top: calc(50vh - 12rem);
+			top: var(--cds-spacing-09);
 			padding-block: 0;
 			background: none;
 		}
@@ -407,15 +407,17 @@
 	}
 
 	/* Three moments along a line, marked like a track: a ring at take-off,
-	   dots after it. Each is tall enough to be read while its picture shows. */
+	   dots after it. Each is tall enough to be read while its picture shows;
+	   the last one only needs to pass the picture's middle (half its 24rem
+	   height at most, and some room) before the picture moves on. */
 	.timeline {
 		display: grid;
-		gap: var(--cds-spacing-07);
+		gap: var(--cds-spacing-05);
 	}
 
 	.timeline li {
 		position: relative;
-		min-height: 50vh;
+		min-height: 30vh;
 		padding-inline-start: var(--cds-spacing-08);
 	}
 
@@ -423,11 +425,14 @@
 		.timeline {
 			grid-column: 1;
 			grid-row: 1;
-			padding-top: calc(50vh - 12rem);
 		}
 
 		.timeline li {
-			min-height: 24rem;
+			min-height: 16rem;
+		}
+
+		.timeline li.last {
+			min-height: 14rem;
 		}
 	}
 
@@ -452,7 +457,7 @@
 		content: '';
 		position: absolute;
 		top: 1.5rem;
-		bottom: calc(-1 * var(--cds-spacing-07) + 0.25rem);
+		bottom: calc(-1 * var(--cds-spacing-05) + 0.25rem);
 		left: calc(0.4375rem - 1px);
 		border-left: 2px solid var(--cds-border-subtle-01);
 	}
