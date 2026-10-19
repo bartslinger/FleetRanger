@@ -6,3 +6,5 @@ build/
 local.properties
 .env
 *.local
+# Claude Code's personal settings, such as permissions.
+.claude/settings.local.json
