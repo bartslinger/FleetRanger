@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select u.id, u.name, u.role, m.team_id as \"team_id?\", t.name as \"team_name?\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id) as \"flights!\"\n           from users u\n           left join team_members m on m.user_id = u.id\n           left join teams t on t.id = m.team_id\n           left join logins l on l.user_id = u.id\n           where u.id = $1",
+  "query": "select u.id, u.name, u.role,\n                  array(select m.team_id from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_ids!\",\n                  array(select t.name from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_names!\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id) as \"flights!\"\n           from users u\n           left join logins l on l.user_id = u.id\n           where u.id = $1",
   "describe": {
     "columns": [
       {
@@ -38,25 +38,15 @@
       },
       {
         "ordinal": 3,
-        "name": "team_id?",
-        "type_info": "Uuid",
-        "origin": {
-          "Table": {
-            "table": "team_members",
-            "name": "team_id"
-          }
-        }
+        "name": "team_ids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
-        "name": "team_name?",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "teams",
-            "name": "name"
-          }
-        }
+        "name": "team_names!",
+        "type_info": "TextArray",
+        "origin": "Expression"
       },
       {
         "ordinal": 5,
@@ -102,13 +92,13 @@
       false,
       false,
       false,
-      true,
-      true,
+      null,
+      null,
       true,
       null,
       true,
       null
     ]
   },
-  "hash": "0f8920997302745ecae13bae919a8090575c250e5587a5e7b099e35392210b2c"
+  "hash": "072689e66952cc02eec3efd46590a4761bfa3aa854a6eceb21bbf4271f08c5e5"
 }

@@ -12,7 +12,8 @@ use crate::{
 pub struct UserInput {
     pub name: String,
     pub role: String,
-    pub team_id: Option<Uuid>,
+    /// The teams they fly for; none for someone who doesn't fly.
+    pub team_ids: Vec<Uuid>,
     /// Empty or None: no login.
     pub email: Option<String>,
 }
@@ -96,12 +97,12 @@ pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
     Ok(())
 }
 
-/// A user's input, checked: a name, a known role, an active team if any, and a
+/// A user's input, checked: a name, a known role, active teams if any, and a
 /// valid email address if any.
 struct Checked {
     name: String,
     role: Role,
-    team_id: Option<Uuid>,
+    team_ids: Vec<Uuid>,
     email: Option<String>,
 }
 
@@ -110,10 +111,13 @@ impl Checked {
         let name = error::name(&input.name)?;
         let role = Role::parse(&input.role)
             .ok_or_else(|| ApiError::Invalid("Choose a role.".to_owned()))?;
-        if let Some(team) = input.team_id
-            && !db::team_is_active(db, team).await?
-        {
-            return Err(ApiError::Invalid("Choose an active team.".to_owned()));
+        let mut team_ids = input.team_ids.clone();
+        team_ids.sort_unstable();
+        team_ids.dedup();
+        for team in &team_ids {
+            if !db::team_is_active(db, *team).await? {
+                return Err(ApiError::Invalid("Choose active teams.".to_owned()));
+            }
         }
         let email = match input.email.as_deref().map(str::trim) {
             None | Some("") => None,
@@ -125,7 +129,7 @@ impl Checked {
         Ok(Self {
             name,
             role,
-            team_id: input.team_id,
+            team_ids,
             email,
         })
     }
@@ -134,7 +138,7 @@ impl Checked {
         UserFields {
             name: &self.name,
             role: self.role.as_str(),
-            team_id: self.team_id,
+            team_ids: &self.team_ids,
             email: self.email.as_deref(),
         }
     }

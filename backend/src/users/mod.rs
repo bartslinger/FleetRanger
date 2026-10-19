@@ -34,7 +34,7 @@ pub async fn add(db: &PgPool, email: &str, name: &str, admin: bool) -> Result<()
     let fields = UserFields {
         name,
         role,
-        team_id: None,
+        team_ids: &[],
         email: Some(&email),
     };
     db::insert(db, &fields).await?;

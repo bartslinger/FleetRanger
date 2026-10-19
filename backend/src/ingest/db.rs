@@ -82,14 +82,18 @@ pub async fn save_upload(
     path: &str,
     size_bytes: i64,
     pilot_id: Option<Uuid>,
+    team_id: Option<Uuid>,
 ) -> sqlx::Result<Stored> {
+    // The team only with a pilot who is in it.
     let replaced = sqlx::query_scalar!(
-        r#"insert into raw_logs (sha256, path, size_bytes, pilot_id)
-           values ($1, $2, $3, (select id from users where id = $4))
+        r#"insert into raw_logs (sha256, path, size_bytes, pilot_id, team_id)
+           values ($1, $2, $3, (select id from users where id = $4),
+                   (select team_id from team_members where user_id = $4 and team_id = $5))
            on conflict (path) do update set
                sha256 = excluded.sha256,
                size_bytes = excluded.size_bytes,
                pilot_id = excluded.pilot_id,
+               team_id = excluded.team_id,
                received_at = now(),
                status = 'pending',
                attempts = 0,
@@ -101,6 +105,7 @@ pub async fn save_upload(
         path,
         size_bytes,
         pilot_id,
+        team_id,
     )
     .fetch_one(db)
     .await?;
@@ -156,7 +161,10 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 .await?;
             }
             sqlx::query!(
-                "with pilot as (
+                // The flight's team (user's decisions, 2026-10-19): the one chosen
+                // with the pilot on the controller; else the pilot's, if they're
+                // in one team; else the controller's; else the drone's.
+                "with pilot_teams as (
                      select u.id, m.team_id from raw_logs l
                      join users u on u.id = l.pilot_id and u.archived_at is null
                      join team_members m on m.user_id = u.id
@@ -167,11 +175,18 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                                       aircraft_serial, rc_serial, track, metrics,
                                       pilot_id, team_id)
                  values ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-                         (select id from pilot),
-                         coalesce((select team_id from pilot),
+                         (select distinct id from pilot_teams),
+                         coalesce((select p.team_id from pilot_teams p
+                                   join raw_logs l on l.team_id = p.team_id
+                                   where l.id = $1),
+                                  (select (array_agg(team_id))[1] from pilot_teams
+                                   having count(*) = 1),
                                   (select r.team_id from remote_controllers r
                                    join teams t on t.id = r.team_id
-                                   where r.serial = $7 and t.archived_at is null)))
+                                   where r.serial = $7 and t.archived_at is null),
+                                  (select a.team_id from aircraft a
+                                   join teams t on t.id = a.team_id
+                                   where a.serial = $6 and t.archived_at is null)))
                  on conflict (raw_log_id) do update set
                      takeoff_at = excluded.takeoff_at,
                      landed_at = excluded.landed_at,
@@ -367,7 +382,7 @@ mod tests {
             .unwrap();
         let path = "raw/TESTRC0003/FlightRecord/DJIFlightRecord_test.txt";
 
-        let first = save_upload(&db, &[1; 32], path, 10, Some(pilot))
+        let first = save_upload(&db, &[1; 32], path, 10, Some(pilot), None)
             .await
             .unwrap();
         assert_eq!(first, Stored::Added);
@@ -375,7 +390,7 @@ mod tests {
         save_result(&db, log.id, Some(&flight())).await.unwrap();
         assert_eq!(pilot_and_team(&db, log.id).await, (Some(pilot), Some(team)));
 
-        let second = save_upload(&db, &[2; 32], path, 20, Some(pilot))
+        let second = save_upload(&db, &[2; 32], path, 20, Some(pilot), None)
             .await
             .unwrap();
         assert_eq!(second, Stored::Replaced);
@@ -390,6 +405,66 @@ mod tests {
             stored,
             HashSet::from([vec![2; 32]]),
             "only the latest version"
+        );
+    }
+
+    /// A pilot in two teams: the flight belongs to the team chosen with them on
+    /// the controller; without one, or with a team they're not in, to the
+    /// controller's team.
+    #[sqlx::test]
+    async fn the_flights_team_is_the_one_chosen_on_the_controller(db: PgPool) {
+        let team = |name: &'static str| {
+            let db = db.clone();
+            async move {
+                sqlx::query_scalar::<_, Uuid>("insert into teams (name) values ($1) returning id")
+                    .bind(name)
+                    .fetch_one(&db)
+                    .await
+                    .unwrap()
+            }
+        };
+        let (north, south, base, other) = (
+            team("North").await,
+            team("South").await,
+            team("Base").await,
+            team("Other").await,
+        );
+        let pilot: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        for team in [north, south] {
+            sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
+                .bind(pilot)
+                .bind(team)
+                .execute(&db)
+                .await
+                .unwrap();
+        }
+        sqlx::query("insert into remote_controllers (serial, team_id) values ('TESTRC0003', $1)")
+            .bind(base)
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let mut processed = Vec::new();
+        for (n, chosen) in [Some(south), None, Some(other)].into_iter().enumerate() {
+            let path = format!("raw/TESTRC0003/FlightRecord/DJIFlightRecord_test{n}.txt");
+            let sha256 = [u8::try_from(n).unwrap(); 32];
+            save_upload(&db, &sha256, &path, 10, Some(pilot), chosen)
+                .await
+                .unwrap();
+            let log = next_pending(&db).await.unwrap().unwrap();
+            save_result(&db, log.id, Some(&flight())).await.unwrap();
+            processed.push(pilot_and_team(&db, log.id).await);
+        }
+        assert_eq!(
+            processed,
+            [
+                (Some(pilot), Some(south)),
+                (Some(pilot), Some(base)),
+                (Some(pilot), Some(base))
+            ]
         );
     }
 }

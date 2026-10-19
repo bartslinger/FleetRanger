@@ -15,6 +15,13 @@ use crate::{
     pairing::{Controller, parse_sha256},
 };
 
+/// Who was chosen on the controller before the log was written.
+pub struct Chosen {
+    pub pilot_id: Option<Uuid>,
+    /// The team the pilot was chosen with.
+    pub team_id: Option<Uuid>,
+}
+
 /// Checks an uploaded log against the hash the controller computed, and
 /// stores it unless the same content is stored already.
 pub async fn receive(
@@ -23,7 +30,7 @@ pub async fn receive(
     controller: &Controller,
     file_name: &str,
     sha256_hex: &str,
-    pilot_id: Option<Uuid>,
+    chosen: Chosen,
     body: &[u8],
 ) -> ApiResult<Stored> {
     if !is_log_name(file_name) {
@@ -54,7 +61,15 @@ pub async fn receive(
         .with_context(|| format!("failed to store {relative}"))
         .map_err(ApiError::Internal)?;
     let size = i64::try_from(body.len()).map_err(|error| ApiError::Internal(error.into()))?;
-    Ok(db::save_upload(db, &sha256, &relative, size, pilot_id).await?)
+    Ok(db::save_upload(
+        db,
+        &sha256,
+        &relative,
+        size,
+        chosen.pilot_id,
+        chosen.team_id,
+    )
+    .await?)
 }
 
 /// At most this many hashes per question; the controller asks in parts.

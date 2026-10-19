@@ -101,10 +101,26 @@ pub async fn waiting(db: &PgPool, _actor: &Actor) -> ApiResult<Vec<Waiting>> {
 }
 
 /// Approves a request: the controller is paired and joins the approver's team,
-/// or no team when the approver has none. Any user may pair a controller; see
-/// "Clients" in docs/architecture.md.
-pub async fn approve(db: &PgPool, actor: &Actor, code: &str) -> ApiResult<Approved> {
-    let team = flights::db::own_team(db, actor.user_id).await?;
+/// the one they choose if they're in several, or no team when they have none.
+/// Any user may pair a controller; see "Clients" in docs/architecture.md.
+pub async fn approve(
+    db: &PgPool,
+    actor: &Actor,
+    code: &str,
+    team: Option<Uuid>,
+) -> ApiResult<Approved> {
+    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
+    let team = match (team, own_teams.as_slice()) {
+        (_, []) => None,
+        (Some(team), teams) if teams.contains(&team) => Some(team),
+        (Some(_), _) => return Err(ApiError::Invalid("Choose one of your teams.".to_owned())),
+        (None, [team]) => Some(*team),
+        (None, _) => {
+            return Err(ApiError::Invalid(
+                "Choose the team the controller joins.".to_owned(),
+            ));
+        }
+    };
     db::approve(db, &normalize(code), team)
         .await?
         .ok_or_else(|| {

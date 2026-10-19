@@ -39,7 +39,8 @@ struct ListQuery {
 struct Body {
     name: String,
     role: String,
-    team_id: Option<Uuid>,
+    #[serde(default)]
+    team_ids: Vec<Uuid>,
     email: Option<String>,
 }
 
@@ -48,7 +49,7 @@ impl From<Body> for UserInput {
         Self {
             name: body.name,
             role: body.role,
-            team_id: body.team_id,
+            team_ids: body.team_ids,
             email: body.email,
         }
     }

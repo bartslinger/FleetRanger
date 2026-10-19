@@ -47,8 +47,8 @@ pub async fn create(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResul
     let teams = flights::db::teams_of(db, &flight_ids)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let own_team = flights::db::own_team(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, own_team, &teams)?;
+    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, &own_teams, &teams)?;
     Ok(db::split(db, &flight_ids).await?)
 }
 
@@ -66,8 +66,8 @@ pub async fn add(db: &PgPool, actor: &Actor, session: Uuid, flight_ids: &[Uuid])
             .await?
             .ok_or(ApiError::NotFound)?,
     );
-    let own_team = flights::db::own_team(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, own_team, &teams)?;
+    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, &own_teams, &teams)?;
     Ok(db::add(db, session, &flight_ids).await?)
 }
 
@@ -82,8 +82,8 @@ pub async fn remove(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResul
     let teams = flights::db::teams_of(db, &flight_ids)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let own_team = flights::db::own_team(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, own_team, &teams)?;
+    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, &own_teams, &teams)?;
     Ok(db::remove(db, &flight_ids).await?)
 }
 
@@ -116,8 +116,8 @@ pub async fn merge(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<Uuid> 
     let teams = db::flight_teams(db, &ids)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let own_team = flights::db::own_team(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, own_team, &teams)?;
+    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, &own_teams, &teams)?;
     Ok(db::merge(db, &ids).await?)
 }
 
@@ -130,8 +130,8 @@ pub async fn split(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResult
     let teams = db::flight_teams(db, &[session])
         .await?
         .ok_or(ApiError::NotFound)?;
-    let own_team = flights::db::own_team(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, own_team, &teams)?;
+    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, &own_teams, &teams)?;
     if flight_ids.len() == teams.len() {
         return Err(ApiError::Invalid(
             "Leave at least one flight in the session.".to_owned(),

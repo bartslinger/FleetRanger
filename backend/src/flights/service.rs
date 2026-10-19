@@ -83,12 +83,12 @@ pub async fn link_equipment(
     actor: &Actor,
     flights: &mut [FlightDetail],
 ) -> sqlx::Result<()> {
-    let own_team = db::own_team(db, actor.user_id).await?;
+    let own_teams = db::own_teams(db, actor.user_id).await?;
     for flight in flights {
-        if !policy::see_equipment(actor.role, own_team, flight.aircraft_team_id) {
+        if !policy::see_equipment(actor.role, &own_teams, flight.aircraft_team_id) {
             flight.aircraft_id = None;
         }
-        if !policy::see_equipment(actor.role, own_team, flight.rc_team_id) {
+        if !policy::see_equipment(actor.role, &own_teams, flight.rc_team_id) {
             flight.rc_id = None;
         }
     }
@@ -98,10 +98,11 @@ pub async fn link_equipment(
 /// What the actor can change in the logbook, so it offers only that.
 #[derive(Serialize)]
 pub struct Choices {
-    /// The team whose flights a member can change; None for admins and viewers.
-    pub own_team_id: Option<Uuid>,
+    /// The teams whose flights a member can change; none for admins and viewers.
+    pub own_team_ids: Vec<Uuid>,
     /// Admins change any flight and can move flights between teams.
     pub admin: bool,
+    /// A pilot in several teams is a choice per team: the flights move to it.
     pub pilots: Vec<PilotChoice>,
     /// Teams to move flights to, for admins.
     pub teams: Vec<TeamChoice>,
@@ -110,20 +111,23 @@ pub struct Choices {
 pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
     Ok(match actor.role {
         Role::Admin => Choices {
-            own_team_id: None,
+            own_team_ids: Vec::new(),
             admin: true,
             pilots: db::pilot_choices(db, None).await?,
             teams: db::team_choices(db).await?,
         },
-        Role::Member => match db::own_team(db, actor.user_id).await? {
-            Some(team) => Choices {
-                own_team_id: Some(team),
+        Role::Member => {
+            let teams = db::own_teams(db, actor.user_id).await?;
+            if teams.is_empty() {
+                return Ok(Choices::none());
+            }
+            Choices {
+                pilots: db::pilot_choices(db, Some(&teams)).await?,
+                own_team_ids: teams,
                 admin: false,
-                pilots: db::pilot_choices(db, Some(team)).await?,
                 teams: Vec::new(),
-            },
-            None => Choices::none(),
-        },
+            }
+        }
         Role::AllFlights => Choices::none(),
     })
 }
@@ -131,7 +135,7 @@ pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
 impl Choices {
     fn none() -> Self {
         Self {
-            own_team_id: None,
+            own_team_ids: Vec::new(),
             admin: false,
             pilots: Vec::new(),
             teams: Vec::new(),
@@ -139,25 +143,41 @@ impl Choices {
     }
 }
 
-/// Sets the pilot of a batch of flights, all or none. Returns how many changed.
+/// Sets the pilot of a batch of flights, all or none, chosen with one of
+/// their teams; without one, a pilot in a single team brings that team.
+/// Returns how many changed.
 pub async fn set_pilot(
     db: &PgPool,
     actor: &Actor,
     ids: &[Uuid],
     pilot_id: Option<Uuid>,
+    team_id: Option<Uuid>,
 ) -> ApiResult<u64> {
     let ids = distinct(ids)?;
     let flight_teams = db::teams_of(db, &ids).await?.ok_or(ApiError::NotFound)?;
     let new_pilot_team = match pilot_id {
-        Some(pilot) => Some(
-            db::pilot_team(db, pilot)
-                .await?
-                .ok_or_else(|| ApiError::Invalid("Choose an active pilot.".to_owned()))?,
-        ),
+        Some(pilot) => {
+            let teams = db::pilot_teams(db, pilot).await?;
+            Some(match (team_id, teams.as_slice()) {
+                (_, []) => return Err(ApiError::Invalid("Choose an active pilot.".to_owned())),
+                (Some(team), teams) if teams.contains(&team) => team,
+                (Some(_), _) => {
+                    return Err(ApiError::Invalid(
+                        "The pilot isn’t in that team.".to_owned(),
+                    ));
+                }
+                (None, [team]) => *team,
+                (None, _) => {
+                    return Err(ApiError::Invalid(
+                        "Choose the team the pilot flew for.".to_owned(),
+                    ));
+                }
+            })
+        }
         None => None,
     };
-    let own_team = db::own_team(db, actor.user_id).await?;
-    let team = match policy::set_pilot(actor.role, own_team, &flight_teams, new_pilot_team)? {
+    let own_teams = db::own_teams(db, actor.user_id).await?;
+    let team = match policy::set_pilot(actor.role, &own_teams, &flight_teams, new_pilot_team)? {
         TeamChange::Keep => None,
         TeamChange::Follow(team) => Some(team),
     };

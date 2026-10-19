@@ -565,25 +565,26 @@ pub async fn teams_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Opti
     Ok((teams.len() == ids.len()).then_some(teams))
 }
 
-/// The team the user flies for, if any.
-pub async fn own_team(db: &PgPool, user_id: Uuid) -> sqlx::Result<Option<Uuid>> {
+/// The teams the user flies for; none for someone who doesn't fly.
+pub async fn own_teams(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar!(
-        "select team_id from team_members where user_id = $1",
+        "select team_id from team_members where user_id = $1 order by team_id",
         user_id
     )
-    .fetch_optional(db)
+    .fetch_all(db)
     .await
 }
 
-/// The team of an active user who can be chosen as pilot, or None if there is
+/// The teams of an active user who can be chosen as pilot; none if there is
 /// no such user or they aren't in a team.
-pub async fn pilot_team(db: &PgPool, user_id: Uuid) -> sqlx::Result<Option<Uuid>> {
+pub async fn pilot_teams(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar!(
         "select m.team_id from users u join team_members m on m.user_id = u.id
-         where u.id = $1 and u.archived_at is null",
+         where u.id = $1 and u.archived_at is null
+         order by m.team_id",
         user_id,
     )
-    .fetch_optional(db)
+    .fetch_all(db)
     .await
 }
 
@@ -643,17 +644,20 @@ pub struct PilotChoice {
     pub team_name: String,
 }
 
-/// Active users in a team by name, of one team or of all.
-pub async fn pilot_choices(db: &PgPool, team_id: Option<Uuid>) -> sqlx::Result<Vec<PilotChoice>> {
+/// Active users in a team by name, once per team, of these teams or of all.
+pub async fn pilot_choices(
+    db: &PgPool,
+    team_ids: Option<&[Uuid]>,
+) -> sqlx::Result<Vec<PilotChoice>> {
     sqlx::query_as!(
         PilotChoice,
         "select u.id, u.name, m.team_id, t.name as team_name
          from users u
          join team_members m on m.user_id = u.id
          join teams t on t.id = m.team_id
-         where u.archived_at is null and ($1::uuid is null or m.team_id = $1)
-         order by lower(u.name), u.id",
-        team_id,
+         where u.archived_at is null and ($1::uuid[] is null or m.team_id = any($1))
+         order by lower(u.name), u.id, lower(t.name)",
+        team_ids,
     )
     .fetch_all(db)
     .await

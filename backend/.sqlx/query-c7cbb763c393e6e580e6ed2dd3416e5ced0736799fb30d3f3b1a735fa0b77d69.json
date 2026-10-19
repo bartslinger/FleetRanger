@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select u.id, u.name, u.role, m.team_id as \"team_id?\", t.name as \"team_name?\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id) as \"flights!\"\n           from users u\n           left join team_members m on m.user_id = u.id\n           left join teams t on t.id = m.team_id\n           left join logins l on l.user_id = u.id\n           where $1 or u.archived_at is null\n           order by lower(u.name), u.id",
+  "query": "select u.id, u.name, u.role,\n                  array(select m.team_id from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_ids!\",\n                  array(select t.name from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_names!\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id) as \"flights!\"\n           from users u\n           left join logins l on l.user_id = u.id\n           where $1 or u.archived_at is null\n           order by lower(u.name), u.id",
   "describe": {
     "columns": [
       {
@@ -38,25 +38,15 @@
       },
       {
         "ordinal": 3,
-        "name": "team_id?",
-        "type_info": "Uuid",
-        "origin": {
-          "Table": {
-            "table": "team_members",
-            "name": "team_id"
-          }
-        }
+        "name": "team_ids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
-        "name": "team_name?",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "teams",
-            "name": "name"
-          }
-        }
+        "name": "team_names!",
+        "type_info": "TextArray",
+        "origin": "Expression"
       },
       {
         "ordinal": 5,
@@ -102,13 +92,13 @@
       false,
       false,
       false,
-      false,
-      false,
+      null,
+      null,
       false,
       null,
       true,
       null
     ]
   },
-  "hash": "febd14e8862e5382b73895c9399d3c7d06a170935d6ff619d3c898a40caf7812"
+  "hash": "c7cbb763c393e6e580e6ed2dd3416e5ced0736799fb30d3f3b1a735fa0b77d69"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select team_id from team_members where user_id = $1",
+  "query": "select team_id from team_members where user_id = $1 order by team_id",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "21d811847c7394ff8a754f60052637c52339d5feae45bdef691a540b1bc33c0f"
+  "hash": "58f96ea053381857927b4b4e3d2925aafe10531ba45b9acda82bdca1d46aad90"
 }

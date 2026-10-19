@@ -3,7 +3,7 @@
 
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, State},
+    extract::{FromRef, Path, Query, State},
     http::{HeaderMap, StatusCode},
     routing::{delete, get, post},
 };
@@ -59,13 +59,20 @@ async fn waiting(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<W
     Ok(Json(service::waiting(&db, &actor).await?))
 }
 
+#[derive(Deserialize)]
+struct ApproveQuery {
+    /// The approver's team the controller joins, if they're in several.
+    team: Option<Uuid>,
+}
+
 async fn approve(
     actor: Actor,
     State(db): State<PgPool>,
     State(changes): State<Changes>,
     Path(code): Path<String>,
+    Query(query): Query<ApproveQuery>,
 ) -> ApiResult<Json<Approved>> {
-    let approved = service::approve(&db, &actor, &code).await?;
+    let approved = service::approve(&db, &actor, &code, query.team).await?;
     changes.notify();
     Ok(Json(approved))
 }

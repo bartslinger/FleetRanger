@@ -8,9 +8,9 @@ pub struct User {
     pub id: Uuid,
     pub name: String,
     pub role: String,
-    /// The team the user flies for; none for users who don't fly.
-    pub team_id: Option<Uuid>,
-    pub team_name: Option<String>,
+    /// The teams the user flies for, by name; none for users who don't fly.
+    pub team_ids: Vec<Uuid>,
+    pub team_names: Vec<String>,
     /// The login's email address; none if the user can't log in.
     pub email: Option<String>,
     pub last_login_at: Option<DateTime<Utc>>,
@@ -23,7 +23,7 @@ pub struct User {
 pub struct UserFields<'a> {
     pub name: &'a str,
     pub role: &'a str,
-    pub team_id: Option<Uuid>,
+    pub team_ids: &'a [Uuid],
     /// Lowercase; None removes the login.
     pub email: Option<&'a str>,
 }
@@ -32,15 +32,17 @@ pub struct UserFields<'a> {
 pub async fn list(db: &PgPool, archived: bool) -> sqlx::Result<Vec<User>> {
     sqlx::query_as!(
         User,
-        r#"select u.id, u.name, u.role, m.team_id as "team_id?", t.name as "team_name?",
+        r#"select u.id, u.name, u.role,
+                  array(select m.team_id from team_members m join teams t on t.id = m.team_id
+                        where m.user_id = u.id order by lower(t.name), t.id) as "team_ids!",
+                  array(select t.name from team_members m join teams t on t.id = m.team_id
+                        where m.user_id = u.id order by lower(t.name), t.id) as "team_names!",
                   l.email as "email?",
                   (select max(created_at) from login_sessions s where s.user_id = u.id)
                       as last_login_at,
                   u.archived_at,
                   (select count(*) from flights f where f.pilot_id = u.id) as "flights!"
            from users u
-           left join team_members m on m.user_id = u.id
-           left join teams t on t.id = m.team_id
            left join logins l on l.user_id = u.id
            where $1 or u.archived_at is null
            order by lower(u.name), u.id"#,
@@ -53,15 +55,17 @@ pub async fn list(db: &PgPool, archived: bool) -> sqlx::Result<Vec<User>> {
 pub async fn get(db: &PgPool, id: Uuid) -> sqlx::Result<Option<User>> {
     sqlx::query_as!(
         User,
-        r#"select u.id, u.name, u.role, m.team_id as "team_id?", t.name as "team_name?",
+        r#"select u.id, u.name, u.role,
+                  array(select m.team_id from team_members m join teams t on t.id = m.team_id
+                        where m.user_id = u.id order by lower(t.name), t.id) as "team_ids!",
+                  array(select t.name from team_members m join teams t on t.id = m.team_id
+                        where m.user_id = u.id order by lower(t.name), t.id) as "team_names!",
                   l.email as "email?",
                   (select max(created_at) from login_sessions s where s.user_id = u.id)
                       as last_login_at,
                   u.archived_at,
                   (select count(*) from flights f where f.pilot_id = u.id) as "flights!"
            from users u
-           left join team_members m on m.user_id = u.id
-           left join teams t on t.id = m.team_id
            left join logins l on l.user_id = u.id
            where u.id = $1"#,
         id,
@@ -79,7 +83,7 @@ pub async fn insert(db: &PgPool, fields: &UserFields<'_>) -> sqlx::Result<Uuid> 
     )
     .fetch_one(&mut *tx)
     .await?;
-    set_team(&mut tx, id, fields.team_id).await?;
+    set_teams(&mut tx, id, fields.team_ids).await?;
     set_login(&mut tx, id, fields.email).await?;
     tx.commit().await?;
     Ok(id)
@@ -100,31 +104,30 @@ pub async fn update(db: &PgPool, id: Uuid, fields: &UserFields<'_>) -> sqlx::Res
         == 1;
     if updated {
         // Past flights keep their team; only new flights follow the user.
-        set_team(&mut tx, id, fields.team_id).await?;
+        set_teams(&mut tx, id, fields.team_ids).await?;
         set_login(&mut tx, id, fields.email).await?;
     }
     tx.commit().await?;
     Ok(updated)
 }
 
-async fn set_team(db: &mut PgConnection, id: Uuid, team_id: Option<Uuid>) -> sqlx::Result<()> {
-    match team_id {
-        Some(team_id) => {
-            sqlx::query!(
-                "insert into team_members (user_id, team_id) values ($1, $2)
-                 on conflict (user_id) do update set team_id = excluded.team_id",
-                id,
-                team_id,
-            )
-            .execute(db)
-            .await?;
-        }
-        None => {
-            sqlx::query!("delete from team_members where user_id = $1", id)
-                .execute(db)
-                .await?;
-        }
-    }
+/// Makes these the user's teams: the others are left, the new ones joined.
+async fn set_teams(db: &mut PgConnection, id: Uuid, team_ids: &[Uuid]) -> sqlx::Result<()> {
+    sqlx::query!(
+        "delete from team_members where user_id = $1 and team_id <> all($2)",
+        id,
+        team_ids,
+    )
+    .execute(&mut *db)
+    .await?;
+    sqlx::query!(
+        "insert into team_members (user_id, team_id) select $1, unnest($2::uuid[])
+         on conflict do nothing",
+        id,
+        team_ids,
+    )
+    .execute(db)
+    .await?;
     Ok(())
 }
 

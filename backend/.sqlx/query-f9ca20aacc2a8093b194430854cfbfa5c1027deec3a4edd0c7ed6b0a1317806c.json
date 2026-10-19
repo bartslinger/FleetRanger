@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select m.team_id from users u join team_members m on m.user_id = u.id\n         where u.id = $1 and u.archived_at is null",
+  "query": "select m.team_id from users u join team_members m on m.user_id = u.id\n         where u.id = $1 and u.archived_at is null\n         order by m.team_id",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "cf6b9ffa65649ec7c163049fac7e6fa62331961824358d488005e90eb527cf73"
+  "hash": "f9ca20aacc2a8093b194430854cfbfa5c1027deec3a4edd0c7ed6b0a1317806c"
 }

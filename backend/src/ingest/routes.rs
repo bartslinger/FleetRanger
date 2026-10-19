@@ -81,7 +81,7 @@ struct Received {
 
 /// A log from a paired controller: the file itself as the body, with headers
 /// `X-File-Name` (its name on the controller), `X-SHA256` (hex) and, if a pilot
-/// was chosen, `X-Pilot-Id`.
+/// was chosen, `X-Pilot-Id` with the team they were chosen with, `X-Team-Id`.
 async fn receive(
     controller: Controller,
     State(db): State<PgPool>,
@@ -93,23 +93,19 @@ async fn receive(
     let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
     let file_name = header("x-file-name").unwrap_or_default();
     let sha256 = header("x-sha256").unwrap_or_default();
-    let pilot_id = match header("x-pilot-id") {
-        Some(id) => Some(
-            id.parse::<Uuid>()
-                .map_err(|_| ApiError::Invalid("X-Pilot-Id is not a user id.".to_owned()))?,
-        ),
-        None => None,
+    let id = |name: &str| match header(name) {
+        Some(id) => id
+            .parse::<Uuid>()
+            .map(Some)
+            .map_err(|_| ApiError::Invalid(format!("{name} is not an id."))),
+        None => Ok(None),
     };
-    let result = upload::receive(
-        &db,
-        &log_dir,
-        &controller,
-        file_name,
-        sha256,
-        pilot_id,
-        &body,
-    )
-    .await?;
+    let chosen = upload::Chosen {
+        pilot_id: id("x-pilot-id")?,
+        team_id: id("x-team-id")?,
+    };
+    let result =
+        upload::receive(&db, &log_dir, &controller, file_name, sha256, chosen, &body).await?;
     let status = match result {
         Stored::Duplicate => StatusCode::OK,
         Stored::Added | Stored::Replaced => {
