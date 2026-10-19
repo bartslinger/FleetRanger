@@ -156,42 +156,29 @@ struct Open {
     flights: Vec<FlightSummary>,
     landed_at: DateTime<Utc>,
     team_id: Option<Uuid>,
-    pilot_id: Option<Uuid>,
 }
 
 /// Groups flights given in takeoff order. A flight joins a group when it took
-/// off less than `gap` after the group's last landing, it has the group's
-/// team, and its pilot doesn't differ from the group's (user's decisions,
-/// 2026-10-19). Flights without a team are a team of their own: they're often
-/// another team's, still to be sorted out. An unknown pilot fits any. So two
-/// teams flying the same evening make two groups. Of several groups it fits,
-/// it joins the one with its known pilot, then the one that landed last.
+/// off less than `gap` after the group's last landing and has the group's
+/// team (user's decisions, 2026-10-19). Flights without a team are a team of
+/// their own: they're often another team's, still to be sorted out. Pilots
+/// don't keep flights apart: a session can have several, and the list's
+/// filters (e.g. a team's drones) leave out others flying at the same time.
+/// So two teams flying the same evening make two groups.
 fn group(flights: Vec<FlightSummary>, gap: Duration) -> Vec<Vec<FlightSummary>> {
     let mut groups: Vec<Open> = Vec::new();
     for flight in flights {
-        let joins = groups
-            .iter_mut()
-            .filter(|open| {
-                flight.takeoff_at - open.landed_at < gap
-                    && open.team_id == flight.team_id
-                    && (open.pilot_id.is_none()
-                        || flight.pilot_id.is_none()
-                        || open.pilot_id == flight.pilot_id)
-            })
-            .max_by_key(|open| {
-                let same_pilot = open.pilot_id.is_some() && open.pilot_id == flight.pilot_id;
-                (same_pilot, open.landed_at)
-            });
+        let joins = groups.iter_mut().find(|open| {
+            flight.takeoff_at - open.landed_at < gap && open.team_id == flight.team_id
+        });
         match joins {
             Some(open) => {
                 open.landed_at = open.landed_at.max(flight.landed_at);
-                open.pilot_id = open.pilot_id.or(flight.pilot_id);
                 open.flights.push(flight);
             }
             None => groups.push(Open {
                 landed_at: flight.landed_at,
                 team_id: flight.team_id,
-                pilot_id: flight.pilot_id,
                 flights: vec![flight],
             }),
         }
@@ -235,10 +222,10 @@ mod tests {
     }
 
     /// Two teams flying the same evening stay apart, and so do flights
-    /// without a team; flights without a pilot join in, another pilot
-    /// doesn't, and a long break starts a new suggestion.
+    /// without a team; pilots, known or not, don't; and a long break starts
+    /// a new suggestion.
     #[test]
-    fn teams_pilots_and_breaks_keep_suggestions_apart() {
+    fn teams_and_breaks_keep_suggestions_apart() {
         let (north, south) = (Some(Uuid::from_u128(1)), Some(Uuid::from_u128(2)));
         let (anna, ben) = (Some(Uuid::from_u128(3)), Some(Uuid::from_u128(4)));
         let flights = vec![
@@ -255,7 +242,7 @@ mod tests {
         let groups = group(flights, Duration::minutes(120));
         assert_eq!(
             minutes(&groups),
-            [vec![0, 45], vec![10, 40], vec![30, 50], vec![60], vec![201]]
+            [vec![0, 45, 60], vec![10, 40], vec![30, 50], vec![201]]
         );
     }
 }
