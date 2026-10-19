@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '$ui/base.css';
 	import Launch from '@carbon/icons/es/launch/16.js';
+	import logo from '$assets/favicon.svg';
 	import Column from '$ui/Column.svelte';
 	import Grid from '$ui/Grid.svelte';
 	import Icon from '$ui/Icon.svelte';
@@ -12,12 +13,13 @@
 <svelte:head>
 	<meta name="color-scheme" content="light dark" />
 	<meta name="theme-color" content="#161616" />
+	<link rel="icon" href={logo} />
 </svelte:head>
 
 <a class="skip" href="#main">Skip to main content</a>
 
 <header class="theme-dark">
-	<a class="name" href="/">FleetRanger</a>
+	<a class="name" href="/"><img src={logo} alt="" width="20" height="20" />FleetRanger</a>
 	<nav aria-label="Sections">
 		<a href="/#privacy">Privacy</a>
 		<a href="/#how-it-works">How it works</a>
@@ -32,7 +34,7 @@
 <footer class="theme-dark">
 	<Grid centered rowGap>
 		<Column md={4} lg={4}>
-			<p class="name">FleetRanger</p>
+			<p class="name"><img src={logo} alt="" width="24" height="24" />FleetRanger</p>
 		</Column>
 		<Column md={4} lg={4}>
 			<p class="label">Source code</p>
@@ -91,6 +93,16 @@
 	header .name {
 		color: var(--cds-text-primary);
 		font-weight: 600;
+	}
+
+	/* The logo 12px before the name, as in the app's header. */
+	.name img {
+		margin-right: var(--cds-spacing-04);
+	}
+
+	footer .name {
+		display: flex;
+		align-items: center;
 	}
 
 	/* Tighter on phones so the links fit beside the name; they scroll if not. */

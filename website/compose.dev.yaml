@@ -16,6 +16,7 @@ services:
       - .:/repo/website
       # The web app's components and tokens, which the website uses.
       - ../web/src/lib/ui:/repo/web/src/lib/ui:ro
+      - ../web/src/lib/assets:/repo/web/src/lib/assets:ro
       # Kept out of the shared folder: faster, and no host-specific binaries in the repo.
       - node-modules:/repo/website/node_modules
 
