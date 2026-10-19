@@ -320,6 +320,166 @@
 	--cds-quotation-02-font-weight: 300;
 	--cds-quotation-02-line-height: 1.25;
 	--cds-quotation-02-letter-spacing: 0;
+
+	--cds-fluid-display-01-font-size: calc(2.625rem + 0 * ((100vw - 20rem) / 22));
+	--cds-fluid-display-01-font-weight: 300;
+	--cds-fluid-display-01-line-height: 1.19;
+	--cds-fluid-display-01-letter-spacing: 0;
+	--cds-fluid-display-02-font-size: calc(2.625rem + 0 * ((100vw - 20rem) / 22));
+	--cds-fluid-display-02-font-weight: 600;
+	--cds-fluid-display-02-line-height: 1.19;
+	--cds-fluid-display-02-letter-spacing: 0;
+	--cds-fluid-display-03-font-size: calc(2.625rem + 0.75 * ((100vw - 20rem) / 22));
+	--cds-fluid-display-03-font-weight: 300;
+	--cds-fluid-display-03-line-height: 1.19;
+	--cds-fluid-display-03-letter-spacing: 0;
+	--cds-fluid-display-04-font-size: calc(2.625rem + 1.625 * ((100vw - 20rem) / 22));
+	--cds-fluid-display-04-font-weight: 300;
+	--cds-fluid-display-04-line-height: 1.19;
+	--cds-fluid-display-04-letter-spacing: 0;
+	--cds-fluid-heading-03-font-size: calc(1.25rem + 0 * ((100vw - 20rem) / 62));
+	--cds-fluid-heading-03-font-weight: 400;
+	--cds-fluid-heading-03-line-height: 1.4;
+	--cds-fluid-heading-03-letter-spacing: 0;
+	--cds-fluid-heading-04-font-size: calc(1.75rem + 0.25 * ((100vw - 20rem) / 62));
+	--cds-fluid-heading-04-font-weight: 400;
+	--cds-fluid-heading-04-line-height: 1.28572;
+	--cds-fluid-heading-04-letter-spacing: 0;
+	--cds-fluid-heading-05-font-size: calc(2rem + 0.25 * ((100vw - 20rem) / 22));
+	--cds-fluid-heading-05-font-weight: 400;
+	--cds-fluid-heading-05-line-height: 1.25;
+	--cds-fluid-heading-05-letter-spacing: 0;
+	--cds-fluid-heading-06-font-size: calc(2rem + 0.25 * ((100vw - 20rem) / 22));
+	--cds-fluid-heading-06-font-weight: 600;
+	--cds-fluid-heading-06-line-height: 1.25;
+	--cds-fluid-heading-06-letter-spacing: 0;
+	--cds-fluid-paragraph-01-font-size: calc(1.5rem + 0.25 * ((100vw - 20rem) / 46));
+	--cds-fluid-paragraph-01-font-weight: 300;
+	--cds-fluid-paragraph-01-line-height: 1.334;
+	--cds-fluid-paragraph-01-letter-spacing: 0;
+	--cds-fluid-quotation-01-font-size: calc(1.25rem + 0 * ((100vw - 20rem) / 22));
+	--cds-fluid-quotation-01-font-weight: 400;
+	--cds-fluid-quotation-01-line-height: 1.3;
+	--cds-fluid-quotation-01-letter-spacing: 0;
+	--cds-fluid-quotation-02-font-size: calc(2rem + 0.25 * ((100vw - 20rem) / 22));
+	--cds-fluid-quotation-02-font-weight: 300;
+	--cds-fluid-quotation-02-line-height: 1.25;
+	--cds-fluid-quotation-02-letter-spacing: 0;
+}
+
+@media (min-width: 42rem) {
+	:root {
+		--cds-fluid-display-01-font-size: calc(2.625rem + 0.75 * ((100vw - 42rem) / 24));
+		--cds-fluid-display-02-font-size: calc(2.625rem + 0.75 * ((100vw - 42rem) / 24));
+		--cds-fluid-display-03-font-size: calc(3.375rem + 0.375 * ((100vw - 42rem) / 24));
+		--cds-fluid-display-03-line-height: 1.18;
+		--cds-fluid-display-04-font-size: calc(4.25rem + 1.5 * ((100vw - 42rem) / 24));
+		--cds-fluid-display-04-line-height: 1.15;
+		--cds-fluid-heading-05-font-size: calc(2.25rem + 0.375 * ((100vw - 42rem) / 24));
+		--cds-fluid-heading-05-font-weight: 300;
+		--cds-fluid-heading-05-line-height: 1.22;
+		--cds-fluid-heading-05-letter-spacing: 0;
+		--cds-fluid-heading-06-font-size: calc(2.25rem + 0.375 * ((100vw - 42rem) / 24));
+		--cds-fluid-heading-06-font-weight: 600;
+		--cds-fluid-heading-06-line-height: 1.22;
+		--cds-fluid-heading-06-letter-spacing: 0;
+		--cds-fluid-quotation-01-font-size: calc(1.25rem + 0.25 * ((100vw - 42rem) / 24));
+		--cds-fluid-quotation-01-font-weight: 400;
+		--cds-fluid-quotation-01-letter-spacing: 0;
+		--cds-fluid-quotation-02-font-size: calc(2.25rem + 0.375 * ((100vw - 42rem) / 24));
+		--cds-fluid-quotation-02-line-height: 1.22;
+	}
+}
+
+@media (min-width: 66rem) {
+	:root {
+		--cds-fluid-display-01-font-size: calc(3.375rem + 0.375 * ((100vw - 66rem) / 16));
+		--cds-fluid-display-02-font-size: calc(3.375rem + 0.375 * ((100vw - 66rem) / 16));
+		--cds-fluid-display-03-font-size: calc(3.75rem + 1 * ((100vw - 66rem) / 16));
+		--cds-fluid-display-03-line-height: 1.16;
+		--cds-fluid-display-03-letter-spacing: -0.64px;
+		--cds-fluid-display-04-font-size: calc(5.75rem + 1.875 * ((100vw - 66rem) / 16));
+		--cds-fluid-display-04-line-height: 1.11;
+		--cds-fluid-display-04-letter-spacing: -0.64px;
+		--cds-fluid-heading-05-font-size: calc(2.625rem + 0.375 * ((100vw - 66rem) / 16));
+		--cds-fluid-heading-05-line-height: 1.19;
+		--cds-fluid-heading-05-letter-spacing: 0;
+		--cds-fluid-heading-06-font-size: calc(2.625rem + 0.375 * ((100vw - 66rem) / 16));
+		--cds-fluid-heading-06-font-weight: 600;
+		--cds-fluid-heading-06-line-height: 1.19;
+		--cds-fluid-heading-06-letter-spacing: 0;
+		--cds-fluid-paragraph-01-font-size: calc(1.75rem + 0.25 * ((100vw - 66rem) / 33));
+		--cds-fluid-paragraph-01-line-height: 1.28572;
+		--cds-fluid-quotation-01-font-size: calc(1.5rem + 0.25 * ((100vw - 66rem) / 16));
+		--cds-fluid-quotation-01-font-weight: 400;
+		--cds-fluid-quotation-01-line-height: 1.334;
+		--cds-fluid-quotation-01-letter-spacing: 0;
+		--cds-fluid-quotation-02-font-size: calc(2.625rem + 0.375 * ((100vw - 66rem) / 16));
+		--cds-fluid-quotation-02-line-height: 1.19;
+	}
+}
+
+@media (min-width: 82rem) {
+	:root {
+		--cds-fluid-display-01-font-size: calc(3.75rem + 1 * ((100vw - 82rem) / 17));
+		--cds-fluid-display-01-line-height: 1.17;
+		--cds-fluid-display-02-font-size: calc(3.75rem + 1 * ((100vw - 82rem) / 17));
+		--cds-fluid-display-02-line-height: 1.16;
+		--cds-fluid-display-03-font-size: calc(4.75rem + 0.5 * ((100vw - 82rem) / 17));
+		--cds-fluid-display-03-line-height: 1.13;
+		--cds-fluid-display-04-font-size: calc(7.625rem + 2.125 * ((100vw - 82rem) / 17));
+		--cds-fluid-display-04-line-height: 1.07;
+		--cds-fluid-display-04-letter-spacing: -0.64px;
+		--cds-fluid-heading-03-font-size: calc(1.25rem + 0.25 * ((100vw - 82rem) / 17));
+		--cds-fluid-heading-03-line-height: 1.4;
+		--cds-fluid-heading-04-font-size: calc(2rem + 0 * ((100vw - 82rem) / 17));
+		--cds-fluid-heading-04-font-weight: 400;
+		--cds-fluid-heading-04-line-height: 1.25;
+		--cds-fluid-heading-05-font-size: calc(3rem + 0.75 * ((100vw - 82rem) / 17));
+		--cds-fluid-heading-05-line-height: 1.17;
+		--cds-fluid-heading-05-letter-spacing: 0;
+		--cds-fluid-heading-06-font-size: calc(3rem + 0.75 * ((100vw - 82rem) / 17));
+		--cds-fluid-heading-06-font-weight: 600;
+		--cds-fluid-heading-06-line-height: 1.17;
+		--cds-fluid-heading-06-letter-spacing: 0;
+		--cds-fluid-quotation-01-font-size: calc(1.75rem + 0.25 * ((100vw - 82rem) / 17));
+		--cds-fluid-quotation-01-font-weight: 400;
+		--cds-fluid-quotation-01-line-height: 1.28572;
+		--cds-fluid-quotation-01-letter-spacing: 0;
+		--cds-fluid-quotation-02-font-size: calc(3rem + 0.75 * ((100vw - 82rem) / 17));
+		--cds-fluid-quotation-02-line-height: 1.17;
+	}
+}
+
+@media (min-width: 99rem) {
+	:root {
+		--cds-fluid-display-01-font-size: 4.75rem;
+		--cds-fluid-display-01-line-height: 1.13;
+		--cds-fluid-display-02-font-size: 4.75rem;
+		--cds-fluid-display-02-line-height: 1.13;
+		--cds-fluid-display-03-font-size: 5.25rem;
+		--cds-fluid-display-03-line-height: 1.11;
+		--cds-fluid-display-03-letter-spacing: -0.96px;
+		--cds-fluid-display-04-font-size: 9.75rem;
+		--cds-fluid-display-04-line-height: 1.05;
+		--cds-fluid-display-04-letter-spacing: -0.96px;
+		--cds-fluid-heading-03-font-size: 1.5rem;
+		--cds-fluid-heading-03-line-height: 1.334;
+		--cds-fluid-heading-04-font-size: 2rem;
+		--cds-fluid-heading-04-font-weight: 400;
+		--cds-fluid-heading-05-font-size: 3.75rem;
+		--cds-fluid-heading-05-letter-spacing: 0;
+		--cds-fluid-heading-06-font-size: 3.75rem;
+		--cds-fluid-heading-06-font-weight: 600;
+		--cds-fluid-heading-06-letter-spacing: 0;
+		--cds-fluid-paragraph-01-font-size: 2rem;
+		--cds-fluid-paragraph-01-line-height: 1.25;
+		--cds-fluid-quotation-01-font-size: 2rem;
+		--cds-fluid-quotation-01-font-weight: 400;
+		--cds-fluid-quotation-01-line-height: 1.25;
+		--cds-fluid-quotation-01-letter-spacing: 0;
+		--cds-fluid-quotation-02-font-size: 3.75rem;
+	}
 }
 
 /* Dark follows the system unless the user chose light; data-theme on <html>

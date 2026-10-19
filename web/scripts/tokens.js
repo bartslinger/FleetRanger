@@ -63,6 +63,33 @@ function typeTokens() {
 	return lines;
 }
 
+// Carbon's fluid (expressive) styles, for the website: they grow with the
+// viewport between breakpoints. Returns the base declarations and one block of
+// declarations per media query, as Carbon's `fluid()` computes them.
+function fluidTypeTokens() {
+	const base = [];
+	const media = new Map();
+	const declare = (lines, style, values) => {
+		for (const [property, value] of Object.entries(values)) {
+			if (property === 'fontFamily' || typeof value === 'object') continue;
+			lines.push(`${name(style)}-${themes.formatTokenName(property)}: ${value};`);
+		}
+	};
+	for (const [style, values] of Object.entries(type.styles)) {
+		if (!style.startsWith('fluid')) continue;
+		const fluid = type.fluid(values);
+		declare(base, style, fluid);
+		for (const [query, values] of Object.entries(fluid)) {
+			if (!query.startsWith('@media')) continue;
+			if (!media.has(query)) media.set(query, []);
+			declare(media.get(query), style, values);
+		}
+	}
+	return { base, media };
+}
+
+const fluid = fluidTypeTokens();
+
 const light = colors(LIGHT);
 // Only what differs from the light theme.
 const dark = [...colors(DARK)].filter(([token, value]) => light.get(token) !== value);
@@ -77,7 +104,13 @@ ${declarations(light, '\t')}
 ${layoutTokens().join('\n')}
 
 ${typeTokens().join('\n')}
+
+${fluid.base.map((line) => `\t${line}`).join('\n')}
 }
+
+${[...fluid.media]
+	.map(([query, lines]) => `${query} {\n\t:root {\n${lines.map((line) => `\t\t${line}`).join('\n')}\n\t}\n}`)
+	.join('\n\n')}
 
 /* Dark follows the system unless the user chose light; data-theme on <html>
    holds the user's choice. */
