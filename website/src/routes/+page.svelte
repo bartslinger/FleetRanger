@@ -7,12 +7,21 @@
 	import Laptop from '#lib/Laptop.svelte';
 	import pilot640 from '#lib/images/pilot-640.webp';
 	import pilot1280 from '#lib/images/pilot-1280.webp';
-	import session800 from '#lib/images/session-800.webp';
-	import session1600 from '#lib/images/session-1600.webp';
-	import session2400 from '#lib/images/session-2400.webp';
+	import dark800 from '#lib/images/session-dark-800.webp';
+	import dark1600 from '#lib/images/session-dark-1600.webp';
+	import dark2400 from '#lib/images/session-dark-2400.webp';
+	import light800 from '#lib/images/session-light-800.webp';
+	import light1600 from '#lib/images/session-light-1600.webp';
+	import light2400 from '#lib/images/session-light-2400.webp';
 	import sync640 from '#lib/images/sync-640.webp';
 	import sync1280 from '#lib/images/sync-1280.webp';
 	import { CONTACT, SOURCE } from '#lib/site.js';
+
+	// The session page in the web app, in each theme.
+	const session = {
+		light: { src: light1600, srcset: `${light800} 800w, ${light1600} 1600w, ${light2400} 2400w` },
+		dark: { src: dark1600, srcset: `${dark800} 800w, ${dark1600} 1600w, ${dark2400} 2400w` }
+	};
 
 	const moments = [
 		{
@@ -110,8 +119,7 @@
 		<Column md={8} lg={9}>
 			<div class="hero-laptop">
 				<Laptop
-					src={session1600}
-					srcset="{session800} 800w, {session1600} 1600w, {session2400} 2400w"
+					{...session}
 					width={40}
 					alt="A session in FleetRanger: a flight's track on a satellite map, with its pilot, team, times and distance, and the list of its flights."
 				/>
@@ -162,11 +170,7 @@
 							{#if moment.screen}
 								<Controller {...moment.screen} />
 							{:else}
-								<Laptop
-									src={session1600}
-									srcset="{session800} 800w, {session1600} 1600w"
-									alt="The session in the web app on a laptop."
-								/>
+								<Laptop {...session} alt="The session in the web app on a laptop." />
 							{/if}
 						</div>
 					{/each}
