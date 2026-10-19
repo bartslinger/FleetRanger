@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { clock, dateTime, day, distance, duration } from '#lib/format.js';
+	import { dateTime, day, distance, duration } from '#lib/format.js';
+	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -15,49 +16,7 @@
 	const flights = $derived(data.session.flights);
 	type Row = (typeof flights)[number];
 
-	/** Distinct names in order of first appearance. */
-	const names = (values: (string | null)[], none: string) =>
-		[...new Set(values.map((value) => value ?? none))].join(', ');
-
-	const start = $derived(flights[0].takeoff_at);
-	const end = $derived(
-		flights.reduce((last, flight) => (flight.landed_at > last ? flight.landed_at : last), start)
-	);
-	const sum = (value: (flight: Row) => number) =>
-		flights.reduce((total, flight) => total + value(flight), 0);
-
-	const pilots = $derived(
-		names(
-			flights.map((f) => f.pilot_name),
-			'Unknown'
-		)
-	);
-	const teams = $derived(
-		names(
-			flights.map((f) => f.team_name),
-			'None (organisation queue)'
-		)
-	);
-	const span = $derived(`${clock(start, data.timeZone)}–${clock(end, data.timeZone)}`);
-
-	const groups = $derived([
-		[
-			{ label: 'Pilot', value: pilots },
-			{ label: 'Team', value: teams }
-		],
-		[
-			{ label: `First takeoff (${data.timeZoneName})`, value: dateTime(start, data.timeZone) },
-			{ label: `Last landing (${data.timeZoneName})`, value: dateTime(end, data.timeZone) },
-			{
-				label: 'Duration',
-				value: duration((Date.parse(end) - Date.parse(start)) / 1000),
-				numeric: true
-			},
-			{ label: 'Air time', value: duration(sum((f) => f.air_time_s)), numeric: true },
-			{ label: 'Distance', value: distance(sum((f) => f.distance_m)), numeric: true },
-			{ label: 'Flights', value: String(flights.length), numeric: true }
-		]
-	]);
+	const facts = $derived(summary(flights, data.timeZone));
 
 	// Splitting: admins change any session, members those of their own team.
 	let selected: string[] = $state([]);
@@ -101,10 +60,10 @@
 </script>
 
 <PageHeader
-	title={`Session ${day(start, data.timeZone, true)}`}
-	crumb={`Session ${day(start, data.timeZone)}`}
-	description={`${span} · ${flights.length} ${flights.length === 1 ? 'flight' : 'flights'} · ${duration(sum((f) => f.air_time_s))} in the air`}
-	phoneDescription={`${span} · ${pilots} · ${teams}`}
+	title={`Session ${day(facts.start, data.timeZone, true)}`}
+	crumb={`Session ${day(facts.start, data.timeZone)}`}
+	description={`${facts.span} · ${flights.length} ${flights.length === 1 ? 'flight' : 'flights'} · ${duration(facts.airTime)} in the air`}
+	phoneDescription={`${facts.span} · ${facts.pilots} · ${facts.teams}`}
 	breadcrumb={[{ href: resolve('/sessions'), label: 'Sessions' }]}
 />
 
@@ -117,16 +76,7 @@
 		/>
 	</Column>
 	<Column lg={5}>
-		{#each groups as facts, index (index)}
-			<dl class="facts">
-				{#each facts as fact (fact.label)}
-					<div>
-						<dt>{fact.label}</dt>
-						<dd class:numeric={fact.numeric}>{fact.value}</dd>
-					</div>
-				{/each}
-			</dl>
-		{/each}
+		<SessionFacts {flights} timeZone={data.timeZone} timeZoneName={data.timeZoneName} />
 	</Column>
 	<Column narrow>
 		<DataTable
@@ -179,30 +129,3 @@
 		</DataTable>
 	</Column>
 </Grid>
-
-<style>
-	/* Related facts 16px apart; 32px between groups. */
-	.facts {
-		display: grid;
-		gap: var(--cds-spacing-05);
-		margin: 0 0 var(--cds-spacing-07);
-	}
-
-	dt {
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-label-01-font-size);
-		line-height: var(--cds-label-01-line-height);
-		letter-spacing: var(--cds-label-01-letter-spacing);
-	}
-
-	dd {
-		margin: var(--cds-spacing-02) 0 0;
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-	}
-
-	.numeric {
-		font-variant-numeric: tabular-nums slashed-zero;
-	}
-</style>
