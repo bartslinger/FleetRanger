@@ -86,8 +86,20 @@
 	const filtering = $derived(
 		data.state.drones.length > 0 ||
 			data.state.controllers.length > 0 ||
+			data.state.teams.length > 0 ||
 			data.state.withoutSession ||
 			data.state.from !== null
+	);
+	// Teams, for admins: members see their own team's flights anyway.
+	const teamName = (id: string) =>
+		id === 'none'
+			? 'No team (queue)'
+			: (data.devices.teams.find((team) => team.id === id)?.name ?? 'Unknown team');
+	const teamFilterOptions = $derived(
+		data.devices.teams.map((team) => ({
+			value: team.id ?? 'none',
+			label: team.name ?? 'No team (queue)'
+		}))
 	);
 	const sessionOptions = [
 		{ value: '', label: 'All' },
@@ -116,14 +128,19 @@
 			...(data.state.controllers.length > 0
 				? [names(data.devices.controllers, data.state.controllers)]
 				: []),
+			...(data.state.teams.length > 0 ? [data.state.teams.map(teamName).join(', ')] : []),
 			...(data.state.withoutSession ? ['without session'] : [])
 		].join(' · ')
 	);
 
-	type Filters = Pick<LogbookState, 'drones' | 'controllers' | 'withoutSession' | 'from' | 'to'>;
+	type Filters = Pick<
+		LogbookState,
+		'drones' | 'controllers' | 'teams' | 'withoutSession' | 'from' | 'to'
+	>;
 	const none: Filters = {
 		drones: [],
 		controllers: [],
+		teams: [],
 		withoutSession: false,
 		from: null,
 		to: null
@@ -239,6 +256,15 @@
 					value={data.state.controllers}
 					onchange={(controllers) => filter({ controllers })}
 				/>
+				{#if data.choices.admin}
+					<MultiSelect
+						label="Teams"
+						placeholder="All teams"
+						options={teamFilterOptions}
+						value={data.state.teams}
+						onchange={(teams) => filter({ teams })}
+					/>
+				{/if}
 				<Select
 					label="Session"
 					options={sessionOptions}
@@ -416,14 +442,24 @@
 		}
 	}
 
+	/* From lg a row of fixed widths that wraps onto a second line when the
+	   filters don't fit, rather than squeezing them. */
 	@media (min-width: 66rem) {
 		.filters {
-			grid-template-columns: minmax(0, 20rem) repeat(3, minmax(0, 14rem)) auto;
-			justify-content: start;
+			display: flex;
+			flex-wrap: wrap;
 		}
 
-		.dates {
-			grid-column: auto;
+		.filters > :global(*) {
+			flex: 0 0 13rem;
+		}
+
+		.filters > .dates {
+			flex-basis: 20rem;
+		}
+
+		.filters > :global(.button) {
+			flex: none;
 		}
 	}
 

@@ -17,6 +17,8 @@ export interface LogbookState {
 	drones: string[];
 	/** Only the flights of these controller serials; all if empty. */
 	controllers: string[];
+	/** Only the flights of these team ids, "none" for those without a team; all if empty. */
+	teams: string[];
 	/** Only the flights in no session, the ones still to be grouped. */
 	withoutSession: boolean;
 	/** Only flights taking off on this day ("2026-10-12"), or from it to `to`. */
@@ -41,6 +43,7 @@ export function parse(params: URLSearchParams): LogbookState {
 		sort: SORTABLE.includes(key) ? { key, descending: sort.startsWith('-') } : DEFAULT_SORT,
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
+		teams: list(params.get('team')),
 		withoutSession: params.get('session') === 'none',
 		from: isDay(from) ? from : null,
 		to: isDay(from) && isDay(to) && to > from ? to : null
@@ -54,6 +57,7 @@ export function query(state: LogbookState): string {
 	if (state.from && state.to) params.set('to', state.to);
 	if (state.drones.length > 0) params.set('drone', state.drones.join(','));
 	if (state.controllers.length > 0) params.set('controller', state.controllers.join(','));
+	if (state.teams.length > 0) params.set('team', state.teams.join(','));
 	if (state.withoutSession) params.set('session', 'none');
 	if (state.page > 1) params.set('page', String(state.page));
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
@@ -75,6 +79,7 @@ export function apiQuery(state: LogbookState, timeZone: string): URLSearchParams
 	});
 	if (state.drones.length > 0) api.set('aircraft', state.drones.join(','));
 	if (state.controllers.length > 0) api.set('controller', state.controllers.join(','));
+	if (state.teams.length > 0) api.set('team', state.teams.join(','));
 	if (state.withoutSession) api.set('session', 'none');
 	if (state.from) {
 		api.set('from', startOfDay(state.from, timeZone).toISOString());
@@ -91,6 +96,7 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 		sort: DEFAULT_SORT,
 		drones: filters.drone ? [filters.drone] : [],
 		controllers: filters.controller ? [filters.controller] : [],
+		teams: [],
 		withoutSession: false,
 		from: null,
 		to: null

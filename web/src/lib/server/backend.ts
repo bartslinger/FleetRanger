@@ -30,6 +30,8 @@ export interface Device {
 export interface Devices {
 	aircraft: Device[];
 	controllers: Device[];
+	/** No id: the flights without a team (the organisation queue). */
+	teams: { id: string | null; name: string | null }[];
 }
 
 /** One flight with its track, from `GET /api/flights/{id}`. */
