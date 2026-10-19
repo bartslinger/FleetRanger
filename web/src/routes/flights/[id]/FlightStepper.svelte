@@ -2,18 +2,13 @@
 	@component
 	Previous and next flight in the list the user came from (the breadcrumb
 	trail's last step, when that is the flights list), with the same filters
-	and order across all its pages, and the position: "3 of 47". Shown only
-	with such a list. Stepping replaces the history entry, so Back returns to
-	the list, and keeps focus on the button pressed. Carbon has no stepper;
-	these are its ghost icon buttons as in pagination.
+	and order across all its pages. Shown only with such a list.
 -->
 <script lang="ts">
-	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
-	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { trail } from '#lib/trail.svelte.js';
-	import IconButton from '#lib/ui/IconButton.svelte';
+	import Stepper from '#lib/ui/Stepper.svelte';
 	import { apiQuery, parse, type LogbookState } from '../logbook.js';
 
 	let { id }: { id: string } = $props();
@@ -75,43 +70,13 @@
 </script>
 
 {#if place}
-	<nav class="stepper" aria-label="Flights in this list">
-		<IconButton
-			icon={ChevronLeft}
-			label={previousLabel}
-			size="md"
-			href={place.previous ? href(place.previous) : undefined}
-			disabled={!place.previous}
-			data-sveltekit-replacestate
-			data-sveltekit-reset={false}
-		/>
-		<span class="position" aria-live="polite">{place.position} of {place.total}</span>
-		<IconButton
-			icon={ChevronRight}
-			label={nextLabel}
-			size="md"
-			href={place.next ? href(place.next) : undefined}
-			disabled={!place.next}
-			data-sveltekit-replacestate
-			data-sveltekit-reset={false}
-		/>
-	</nav>
+	<Stepper
+		label="Flights in this list"
+		previous={place.previous ? href(place.previous) : null}
+		next={place.next ? href(place.next) : null}
+		{previousLabel}
+		{nextLabel}
+		position={place.position}
+		total={place.total}
+	/>
 {/if}
-
-<style>
-	.stepper {
-		display: flex;
-		align-items: center;
-		gap: var(--cds-spacing-03);
-	}
-
-	.position {
-		min-width: 5rem;
-		color: var(--cds-text-secondary);
-		text-align: center;
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-		font-variant-numeric: tabular-nums;
-	}
-</style>
