@@ -367,14 +367,14 @@
 		color: var(--cds-text-secondary);
 	}
 
-	/* A pilot's words in one of Carbon's expressive heading styles, the opening
+	/* A pilot's words in Carbon's quotation style, the opening
 	   quotation mark hanging in the margin so the text lines up. */
 	.quote blockquote p {
 		position: relative;
-		font-size: var(--cds-fluid-heading-03-font-size);
-		font-weight: var(--cds-fluid-heading-03-font-weight);
-		line-height: var(--cds-fluid-heading-03-line-height);
-		letter-spacing: var(--cds-fluid-heading-03-letter-spacing);
+		font-size: var(--cds-fluid-quotation-01-font-size);
+		font-weight: var(--cds-fluid-quotation-01-font-weight);
+		line-height: var(--cds-fluid-quotation-01-line-height);
+		letter-spacing: var(--cds-fluid-quotation-01-letter-spacing);
 	}
 
 	.quote blockquote p::before {
