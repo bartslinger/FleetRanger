@@ -76,7 +76,7 @@
 				class="step"
 				href={href(page - 1, size)}
 				aria-label="Previous page"
-				data-sveltekit-noscroll
+				data-sveltekit-reset={false}
 			>
 				<Icon icon={CaretLeft} />
 			</a>
@@ -86,7 +86,12 @@
 			</span>
 		{/if}
 		{#if page < pages}
-			<a class="step" href={href(page + 1, size)} aria-label="Next page" data-sveltekit-noscroll>
+			<a
+				class="step"
+				href={href(page + 1, size)}
+				aria-label="Next page"
+				data-sveltekit-reset={false}
+			>
 				<Icon icon={CaretRight} />
 			</a>
 		{:else}

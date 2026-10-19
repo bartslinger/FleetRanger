@@ -21,7 +21,7 @@
 			href={option.href}
 			class:selected={option.selected}
 			aria-current={option.selected ? 'page' : undefined}
-			data-sveltekit-noscroll
+			data-sveltekit-reset={false}
 			data-sveltekit-replacestate>{option.label}</a
 		>
 	{/each}
