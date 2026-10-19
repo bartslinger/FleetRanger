@@ -41,10 +41,12 @@ services:
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       FLEETRANGER_SESSION_GAP_MINUTES: ${FLEETRANGER_SESSION_GAP_MINUTES:-}
+    # The owner of the flight log directory, so uploads and the logs copied
+    # there before share one owner (the image's default is uid 65532).
+    user: ${FLEETRANGER_UID:-65532}:${FLEETRANGER_GID:-65532}
     volumes:
       # Raw flight logs: uploads are written here, and `import` registers
-      # logs copied here before. The backend runs as uid 65532 (distroless
-      # nonroot), which must be able to write to it.
+      # logs copied here before.
       - ${FLEETRANGER_DATA_DIR}/flightlogs:/data/flightlogs
       # The Android app offered on the download page: FleetRanger.apk and its
       # output-metadata.json, from android/release.sh.
