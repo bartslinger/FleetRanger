@@ -9,5 +9,5 @@
 			"svelte/elements": ["./node_modules/svelte/elements.d.ts"]
 		}
 	},
-	"include": ["src", "vite.config.ts"]
+	"include": ["src", "vite.config.ts", "../web/src/lib/ui/carbon-icons.d.ts"]
 }
