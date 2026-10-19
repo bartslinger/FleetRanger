@@ -94,6 +94,12 @@
 	const shown = $derived(
 		data.sessions.find((session) => session.id === previewed) ?? data.sessions[0]
 	);
+	// Above the map, and in its name for screen readers.
+	const previewName = $derived(
+		shown
+			? `${daySpan(shown.first_takeoff_at, shown.last_landed_at, data.timeZone)} · ${shown.pilots.join(', ')}`
+			: ''
+	);
 
 	// Hovering previews after a short pause, so moving the pointer across the
 	// cards doesn't fetch every session on the way.
@@ -227,13 +233,8 @@
 				</div>
 				{#if wide.current}
 					<div class="map-side">
-						{#if shown}
-							<h2 class="map-heading">
-								{daySpan(shown.first_takeoff_at, shown.last_landed_at, data.timeZone)} · {shown.pilots.join(
-									', '
-								)}
-							</h2>
-						{/if}
+						<!-- Not a heading: it changes as the pointer moves over the cards. -->
+						<p class="map-heading">{previewName}</p>
 						{#if tracksFailed}
 							<InlineNotification kind="error" title="The tracks couldn’t load">
 								Try again later.
@@ -242,7 +243,7 @@
 							<TrackMap
 								tracks={shownTracks}
 								token={data.mapboxToken}
-								label="Map of the previewed session’s tracks"
+								label={`Map of the session ${previewName}`}
 								loading={tracksLoading}
 							/>
 						{/if}
