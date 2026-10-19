@@ -810,6 +810,50 @@
 	--cds-status-red: #fa4d56;
 }
 
+/* The White theme instead of Gray 10 in light mode, on pages with the
+   theme-white class on <html> (the website). */
+@media not (prefers-color-scheme: dark) {
+	:root.theme-white:not([data-theme='dark']) {
+		--cds-background: #ffffff;
+		--cds-border-subtle-00: #e0e0e0;
+		--cds-border-subtle-01: #c6c6c6;
+		--cds-border-subtle-02: #e0e0e0;
+		--cds-border-subtle-03: #c6c6c6;
+		--cds-border-tile-01: #c6c6c6;
+		--cds-border-tile-02: #a8a8a8;
+		--cds-border-tile-03: #c6c6c6;
+		--cds-field-01: #f4f4f4;
+		--cds-field-02: #ffffff;
+		--cds-field-03: #f4f4f4;
+		--cds-layer-01: #f4f4f4;
+		--cds-layer-02: #ffffff;
+		--cds-layer-03: #f4f4f4;
+		--cds-layer-background-01: #ffffff;
+		--cds-layer-background-02: #f4f4f4;
+		--cds-layer-background-03: #ffffff;
+	}
+}
+
+:root.theme-white[data-theme='light'] {
+	--cds-background: #ffffff;
+	--cds-border-subtle-00: #e0e0e0;
+	--cds-border-subtle-01: #c6c6c6;
+	--cds-border-subtle-02: #e0e0e0;
+	--cds-border-subtle-03: #c6c6c6;
+	--cds-border-tile-01: #c6c6c6;
+	--cds-border-tile-02: #a8a8a8;
+	--cds-border-tile-03: #c6c6c6;
+	--cds-field-01: #f4f4f4;
+	--cds-field-02: #ffffff;
+	--cds-field-03: #f4f4f4;
+	--cds-layer-01: #f4f4f4;
+	--cds-layer-02: #ffffff;
+	--cds-layer-03: #f4f4f4;
+	--cds-layer-background-01: #ffffff;
+	--cds-layer-background-02: #f4f4f4;
+	--cds-layer-background-03: #ffffff;
+}
+
 /* Carbon's inline theming: the dark theme for one part of the page (the
    shell), whichever theme the page has. */
 .theme-dark {
