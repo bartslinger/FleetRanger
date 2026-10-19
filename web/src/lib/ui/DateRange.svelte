@@ -75,100 +75,104 @@
 
 <div class="date-range">
 	<div class="wide">
-		<DateRangePicker.Root
-			{value}
-			onValueChange={changed}
-			bind:open
-			locale="en-GB"
-			weekStartsOn={1}
-			weekdayFormat="short"
-			fixedWeeks
-		>
-			<div class="fields" bind:this={fields} onfocusin={focusedField}>
-				{#each [['start', 'From'], ['end', 'To']] as const as [type, label] (type)}
-					<div class="field">
-						<span class="label" id={`${id}-${type}`}>{label}</span>
-						<DateRangePicker.Input {type} class="date-input" aria-labelledby={`${id}-${type}`}>
-							{#snippet children({ segments })}
-								{#each segments as { part, value: text }, index (index)}
-									<DateRangePicker.Segment {part} class="date-segment"
-										>{text}</DateRangePicker.Segment
-									>
-								{/each}
-							{/snippet}
-						</DateRangePicker.Input>
-					</div>
-				{/each}
-				<!-- Clears only the dates, as a combo box's clear button. -->
-				{#if from}
-					<button
-						type="button"
-						class="date-clear"
-						aria-label="Clear dates"
-						title="Clear dates"
-						onclick={() => onchange(null, null)}
-					>
-						<Icon icon={Close} />
-					</button>
-				{/if}
-				<DateRangePicker.Trigger class="date-trigger" aria-label="Open the calendar">
-					<Icon icon={Calendar} />
-				</DateRangePicker.Trigger>
-			</div>
-			<DateRangePicker.Content
-				class="date-menu"
-				customAnchor={fields}
-				sideOffset={0}
-				align="start"
-				collisionPadding={16}
-				onCloseAutoFocus={() => (closedAt = performance.now())}
-				onInteractOutside={(event) => {
-					// The fields are part of the picker.
-					if (fields?.contains(event.target as Node)) event.preventDefault();
-				}}
-				onFocusOutside={(event) => {
-					if (fields?.contains(event.target as Node)) event.preventDefault();
-				}}
+		<!-- Anew when the span is cleared: the fields keep typed segments
+		     when the value goes back to empty. -->
+		{#key from === null}
+			<DateRangePicker.Root
+				{value}
+				onValueChange={changed}
+				bind:open
+				locale="en-GB"
+				weekStartsOn={1}
+				weekdayFormat="short"
+				fixedWeeks
 			>
-				<DateRangePicker.Calendar class="calendar">
-					{#snippet children({ months, weekdays })}
-						<DateRangePicker.Header class="calendar-header">
-							<DateRangePicker.PrevButton class="calendar-nav" aria-label="Previous month">
-								<Icon icon={ChevronLeft} />
-							</DateRangePicker.PrevButton>
-							<DateRangePicker.Heading class="calendar-heading" />
-							<DateRangePicker.NextButton class="calendar-nav" aria-label="Next month">
-								<Icon icon={ChevronRight} />
-							</DateRangePicker.NextButton>
-						</DateRangePicker.Header>
-						{#each months as month (month.value)}
-							<DateRangePicker.Grid class="calendar-grid">
-								<DateRangePicker.GridHead>
-									<DateRangePicker.GridRow class="calendar-row">
-										{#each weekdays as weekday, index (index)}
-											<DateRangePicker.HeadCell class="calendar-weekday">
-												{weekday.slice(0, 2)}
-											</DateRangePicker.HeadCell>
-										{/each}
-									</DateRangePicker.GridRow>
-								</DateRangePicker.GridHead>
-								<DateRangePicker.GridBody>
-									{#each month.weeks as week, index (index)}
+				<div class="fields" bind:this={fields} onfocusin={focusedField}>
+					{#each [['start', 'From'], ['end', 'To']] as const as [type, label] (type)}
+						<div class="field">
+							<span class="label" id={`${id}-${type}`}>{label}</span>
+							<DateRangePicker.Input {type} class="date-input" aria-labelledby={`${id}-${type}`}>
+								{#snippet children({ segments })}
+									{#each segments as { part, value: text }, index (index)}
+										<DateRangePicker.Segment {part} class="date-segment"
+											>{text}</DateRangePicker.Segment
+										>
+									{/each}
+								{/snippet}
+							</DateRangePicker.Input>
+						</div>
+					{/each}
+					<!-- Clears only the dates, as a combo box's clear button. -->
+					{#if from}
+						<button
+							type="button"
+							class="date-clear"
+							aria-label="Clear dates"
+							title="Clear dates"
+							onclick={() => onchange(null, null)}
+						>
+							<Icon icon={Close} />
+						</button>
+					{/if}
+					<DateRangePicker.Trigger class="date-trigger" aria-label="Open the calendar">
+						<Icon icon={Calendar} />
+					</DateRangePicker.Trigger>
+				</div>
+				<DateRangePicker.Content
+					class="date-menu"
+					customAnchor={fields}
+					sideOffset={0}
+					align="start"
+					collisionPadding={16}
+					onCloseAutoFocus={() => (closedAt = performance.now())}
+					onInteractOutside={(event) => {
+						// The fields are part of the picker.
+						if (fields?.contains(event.target as Node)) event.preventDefault();
+					}}
+					onFocusOutside={(event) => {
+						if (fields?.contains(event.target as Node)) event.preventDefault();
+					}}
+				>
+					<DateRangePicker.Calendar class="calendar">
+						{#snippet children({ months, weekdays })}
+							<DateRangePicker.Header class="calendar-header">
+								<DateRangePicker.PrevButton class="calendar-nav" aria-label="Previous month">
+									<Icon icon={ChevronLeft} />
+								</DateRangePicker.PrevButton>
+								<DateRangePicker.Heading class="calendar-heading" />
+								<DateRangePicker.NextButton class="calendar-nav" aria-label="Next month">
+									<Icon icon={ChevronRight} />
+								</DateRangePicker.NextButton>
+							</DateRangePicker.Header>
+							{#each months as month (month.value)}
+								<DateRangePicker.Grid class="calendar-grid">
+									<DateRangePicker.GridHead>
 										<DateRangePicker.GridRow class="calendar-row">
-											{#each week as date (date.toString())}
-												<DateRangePicker.Cell {date} month={month.value} class="calendar-cell">
-													<DateRangePicker.Day class="calendar-day" />
-												</DateRangePicker.Cell>
+											{#each weekdays as weekday, index (index)}
+												<DateRangePicker.HeadCell class="calendar-weekday">
+													{weekday.slice(0, 2)}
+												</DateRangePicker.HeadCell>
 											{/each}
 										</DateRangePicker.GridRow>
-									{/each}
-								</DateRangePicker.GridBody>
-							</DateRangePicker.Grid>
-						{/each}
-					{/snippet}
-				</DateRangePicker.Calendar>
-			</DateRangePicker.Content>
-		</DateRangePicker.Root>
+									</DateRangePicker.GridHead>
+									<DateRangePicker.GridBody>
+										{#each month.weeks as week, index (index)}
+											<DateRangePicker.GridRow class="calendar-row">
+												{#each week as date (date.toString())}
+													<DateRangePicker.Cell {date} month={month.value} class="calendar-cell">
+														<DateRangePicker.Day class="calendar-day" />
+													</DateRangePicker.Cell>
+												{/each}
+											</DateRangePicker.GridRow>
+										{/each}
+									</DateRangePicker.GridBody>
+								</DateRangePicker.Grid>
+							{/each}
+						{/snippet}
+					</DateRangePicker.Calendar>
+				</DateRangePicker.Content>
+			</DateRangePicker.Root>
+		{/key}
 	</div>
 
 	<div class="narrow fields">
