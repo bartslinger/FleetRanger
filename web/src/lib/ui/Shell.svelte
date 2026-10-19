@@ -44,6 +44,7 @@
 	import { page } from '$app/state';
 	import { setTheme, type Theme } from '#lib/theme.js';
 	import Button from './Button.svelte';
+	import { startsTrail } from '#lib/trail.svelte.js';
 	import Icon from './Icon.svelte';
 	import RadioButtonGroup from './RadioButtonGroup.svelte';
 	import Toasts from './Toasts.svelte';
@@ -191,7 +192,7 @@
 			</svg>
 		</button>
 	{/if}
-	<a class="name" href={home}>{name}</a>
+	<a class="name" href={home} use:startsTrail>{name}</a>
 	{#if account}
 		<div class="utilities">
 			{#each actions as action (action.id)}
@@ -280,8 +281,13 @@
 		<ul>
 			{#each nav as item (item.href)}
 				<li>
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
-					<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- resolved by the caller -->
+					<a
+						href={item.href}
+						aria-current={isCurrent(item.href) ? 'page' : undefined}
+						use:startsTrail
+					>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
 						<Icon icon={item.icon} />
 						<span>{item.label}</span>
 					</a>

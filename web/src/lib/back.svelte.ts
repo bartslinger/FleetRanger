@@ -1,4 +1,5 @@
 import { afterNavigate, goto } from '$app/navigation';
+import { plainClick } from './click.js';
 
 /**
  * Where a detail page was opened from, for Save and Cancel to go back to: the
@@ -40,9 +41,7 @@ export function back(fallback: () => string): {
 		/** For a Cancel link to `href`: goes back as `go()` does; with a
 		 * modifier key the link opens normally, e.g. in a new tab. */
 		onclick(event: MouseEvent) {
-			if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-				return;
-			}
+			if (!plainClick(event)) return;
 			event.preventDefault();
 			void go();
 		}

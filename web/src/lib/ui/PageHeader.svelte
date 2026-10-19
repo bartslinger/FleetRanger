@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { trail } from '#lib/trail.svelte.js';
 	import Breadcrumb, { type Crumb } from './Breadcrumb.svelte';
 	import Column from './Column.svelte';
 	import Grid from './Grid.svelte';
@@ -13,7 +14,9 @@
 
 	interface Props {
 		title: string;
-		/** The pages above this one, for a page about one item. */
+		/** The pages above this one, for a page about one item: the breadcrumb
+		 * when the page was opened directly. Otherwise it shows the pages the
+		 * user came through (see trail.svelte.ts). */
 		breadcrumb?: Crumb[];
 		/** A state shown as a gray tag after the title, e.g. "Archived". */
 		status?: string;
@@ -22,6 +25,20 @@
 	}
 
 	let { title, breadcrumb, status, description, actions }: Props = $props();
+
+	$effect(() => {
+		trail.title = title;
+	});
+
+	const crumbs: Crumb[] | undefined = $derived(
+		trail.steps.length > 0
+			? trail.steps.map((step) => ({
+					href: step.href,
+					label: step.label,
+					follow: () => trail.go(step)
+				}))
+			: breadcrumb
+	);
 </script>
 
 <svelte:head>
@@ -33,7 +50,7 @@
 		<Column>
 			<div class="content">
 				<div class="text">
-					{#if breadcrumb}<div class="breadcrumb"><Breadcrumb items={breadcrumb} /></div>{/if}
+					{#if crumbs}<div class="breadcrumb"><Breadcrumb items={crumbs} /></div>{/if}
 					<div class="title">
 						<h1>{title}</h1>
 						{#if status}<Tag>{status}</Tag>{/if}

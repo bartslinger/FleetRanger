@@ -15,6 +15,7 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import PairingPanel from '#lib/PairingPanel.svelte';
 	import ProcessingPanel from '#lib/ProcessingPanel.svelte';
+	import { trackTrail } from '#lib/trail.svelte.js';
 	import type { ProcessingStatus } from '#lib/server/backend.js';
 	import Icon from '#lib/ui/Icon.svelte';
 	import Loading from '#lib/ui/Loading.svelte';
@@ -22,6 +23,8 @@
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
+
+	trackTrail();
 
 	// Log processing, for admins: from the server, then polled; often while
 	// logs are being processed, rarely otherwise (to notice new ones).

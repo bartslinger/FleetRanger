@@ -1,6 +1,6 @@
 <!--
 	@component
-	Carbon's small breadcrumb, for page headers. It lists the pages above the
+	Carbon's small breadcrumb, for page headers. It lists the pages before the
 	current one, each followed by a slash; the current page is the title below.
 -->
 <script lang="ts" module>
@@ -8,18 +8,32 @@
 		/** Already passed through `resolve()`. */
 		href: string;
 		label: string;
+		/** Goes there instead of opening the link, e.g. back through the
+		 * history; a click with a modifier key still opens the link. */
+		follow?: () => void;
 	}
 </script>
 
 <script lang="ts">
+	import { plainClick } from '#lib/click.js';
+
 	let { items }: { items: Crumb[] } = $props();
+
+	function onclick(event: MouseEvent, item: Crumb) {
+		if (!item.follow || !plainClick(event)) return;
+		event.preventDefault();
+		item.follow();
+	}
 </script>
 
 <nav aria-label="Breadcrumb">
 	<ol>
-		{#each items as item (item.href)}
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
-			<li><a href={item.href}>{item.label}</a></li>
+		<!-- A path can pass the same page twice. -->
+		{#each items as item, index (index)}
+			<li>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
+				<a href={item.href} onclick={(event) => onclick(event, item)}>{item.label}</a>
+			</li>
 		{/each}
 	</ol>
 </nav>
