@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select f.id, f.pilot_id as \"pilot_id!\", f.takeoff_at, f.landed_at, l.received_at\n           from flights f\n           join raw_logs l on l.id = f.raw_log_id\n           where f.raw_log_id = $1 and f.session_id is null\n             and f.pilot_id is not null and l.pilot_id is not null",
+  "query": "select f.id, f.pilot_id as \"pilot_id!\", f.team_id, f.takeoff_at, f.landed_at,\n                  l.received_at\n           from flights f\n           join raw_logs l on l.id = f.raw_log_id\n           where f.raw_log_id = $1 and f.session_id is null\n             and f.pilot_id is not null and l.pilot_id is not null",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "team_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "takeoff_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "landed_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "received_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -67,10 +78,11 @@
     "nullable": [
       false,
       true,
+      true,
       false,
       false,
       false
     ]
   },
-  "hash": "a71858b4d50a80689c234f6aa080d89777ca978c40e4fdebabf05a4f9cb158c0"
+  "hash": "dab6512a0083d3d31d9ede53d4582321977fc9201885a94b4c4003cb9489826e"
 }

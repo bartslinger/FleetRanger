@@ -348,7 +348,7 @@ async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
 
 /// Places the flight of a log uploaded with its pilot, the one case where a
 /// flight joins a session by itself. It joins the nearest session holding a
-/// flight of the same pilot less than the gap apart, if that session's flights
+/// flight of the same pilot for the same team less than the gap apart, if that session's flights
 /// came in less than [`LATE_UPLOAD_HOURS`] before it; a later one stays
 /// without a session, for someone to add. With no such session, it starts a
 /// new one. Imported logs have no pilot and flights already in a session stay
@@ -356,7 +356,8 @@ async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
 pub async fn place_upload(db: &PgPool, raw_log_id: Uuid, gap: SessionGap) -> sqlx::Result<()> {
     let mut tx = locked(db).await?;
     let Some(flight) = sqlx::query!(
-        r#"select f.id, f.pilot_id as "pilot_id!", f.takeoff_at, f.landed_at, l.received_at
+        r#"select f.id, f.pilot_id as "pilot_id!", f.team_id, f.takeoff_at, f.landed_at,
+                  l.received_at
            from flights f
            join raw_logs l on l.id = f.raw_log_id
            where f.raw_log_id = $1 and f.session_id is null
@@ -373,7 +374,8 @@ pub async fn place_upload(db: &PgPool, raw_log_id: Uuid, gap: SessionGap) -> sql
     let nearest = sqlx::query_scalar!(
         r#"select session_id as "session_id!"
            from flights
-           where pilot_id = $1 and session_id is not null
+           where pilot_id = $1 and team_id is not distinct from $5
+             and session_id is not null
              and takeoff_at < $3::timestamptz + make_interval(mins => $4)
              and landed_at > $2::timestamptz - make_interval(mins => $4)
            order by greatest(takeoff_at - $3::timestamptz, $2::timestamptz - landed_at), id
@@ -382,6 +384,7 @@ pub async fn place_upload(db: &PgPool, raw_log_id: Uuid, gap: SessionGap) -> sql
         flight.takeoff_at,
         flight.landed_at,
         gap.0,
+        flight.team_id,
     )
     .fetch_optional(&mut *tx)
     .await?;
@@ -458,7 +461,25 @@ mod tests {
     /// the pilot), received on 12 Oct at `received` or on a later day's
     /// `"+1 12:00"`, and places it as the processing loop does.
     async fn upload(db: &PgPool, pilot: Uuid, takeoff: &str, landed: &str, received: &str) -> Uuid {
+        upload_for(db, pilot, None, takeoff, landed, received).await
+    }
+
+    /// As `upload`, with the team chosen on the controller.
+    async fn upload_for(
+        db: &PgPool,
+        pilot: Uuid,
+        team: Option<Uuid>,
+        takeoff: &str,
+        landed: &str,
+        received: &str,
+    ) -> Uuid {
         let flight = flight(db, pilot, takeoff, landed).await;
+        sqlx::query("update flights set team_id = $2 where id = $1")
+            .bind(flight)
+            .bind(team)
+            .execute(db)
+            .await
+            .unwrap();
         let received: DateTime<Utc> = match received.strip_prefix("+1 ") {
             Some(time) => format!("2026-10-13T{time}:00Z"),
             None => format!("2026-10-12T{received}:00Z"),
@@ -534,6 +555,33 @@ mod tests {
             .unwrap();
         place_upload(&db, raw_log, SessionGap(120)).await.unwrap();
         assert_eq!(session_of(&db, imported).await, None);
+    }
+
+    /// A pilot flying for two teams in one evening gets a session per team.
+    #[sqlx::test]
+    async fn uploads_group_per_team(db: PgPool) {
+        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
+        let north = insert_id(
+            &db,
+            "insert into teams (name) values ('North') returning id",
+        )
+        .await;
+        let south = insert_id(
+            &db,
+            "insert into teams (name) values ('South') returning id",
+        )
+        .await;
+        let first = upload_for(&db, a, Some(north), "08:00", "08:20", "21:00").await;
+        let other_team = upload_for(&db, a, Some(south), "08:30", "08:50", "21:00").await;
+        let same_team = upload_for(&db, a, Some(north), "09:00", "09:20", "21:00").await;
+        assert_ne!(
+            session_of(&db, first).await,
+            session_of(&db, other_team).await
+        );
+        assert_eq!(
+            session_of(&db, first).await,
+            session_of(&db, same_team).await
+        );
     }
 
     /// Merging keeps the session that starts first, and a later upload
