@@ -23,9 +23,8 @@
 	import IconButton from '#lib/ui/IconButton.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Link from '#lib/ui/Link.svelte';
-	import Modal from '#lib/ui/Modal.svelte';
+	import PilotDialog from '#lib/PilotDialog.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
-	import Select from '#lib/ui/Select.svelte';
 	import Stepper from '#lib/ui/Stepper.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
@@ -44,6 +43,7 @@
 		if (data.suggestion.key === stateFor) return;
 		stateFor = data.suggestion.key;
 		excluded = [];
+		selected = [];
 	});
 	// Back from a flight's page finds the same flights left out.
 	export const snapshot: Snapshot<{ key: string; excluded: string[] }> = {
@@ -89,30 +89,21 @@
 	const flightsLabel = (count: number) => `${count} ${count === 1 ? 'flight' : 'flights'}`;
 	const when = (flight: Row) => dateTime(flight.takeoff_at, data.timeZone);
 
-	// The pilot, of the flights in the session or of one flight; one dialog
-	// for both, opened by their pencils.
+	// The pilot, of the flights in the session, the selected ones or one
+	// flight: one dialog, opened by the pencils and the batch bar.
+	let selected: string[] = $state([]);
 	let pilotOpen = $state(false);
 	let pilotFor: Row[] = $state([]);
+	let pilotWhich = $state('');
 	let pilotOpener: HTMLElement | undefined;
-	function changePilot(of: Row[], event: Event) {
+	function changePilot(of: Row[], which: string, event: Event) {
 		pilotFor = of;
+		pilotWhich = which;
 		pilotOpener = event.currentTarget as HTMLElement;
 		pilotOpen = true;
 	}
-	const pilotOptions = $derived([
-		{ value: '', label: 'Unknown' },
-		...data.choices.pilots.map((pilot) => ({
-			value: pilot.id,
-			label: data.choices.admin ? `${pilot.name} (${pilot.team_name})` : pilot.name
-		}))
-	]);
-	// Their pilot if they share one.
-	const pilotChoice = $derived(
-		new Set(pilotFor.map((flight) => flight.pilot_id)).size === 1
-			? (pilotFor[0]?.pilot_id ?? '')
-			: ''
-	);
 	function pilotSet(result: Record<string, unknown> | undefined) {
+		selected = [];
 		const id = result?.pilotId as string | null;
 		const name = data.choices.pilots.find((pilot) => pilot.id === id)?.name ?? 'Unknown';
 		toast(`Pilot set to ${name} for ${flightsLabel(Number(result?.changed ?? 0))}.`);
@@ -168,7 +159,7 @@
 			icon={Edit}
 			label="Change pilot"
 			name="Change pilot of flight {when(flight)}"
-			onclick={(event) => changePilot([flight], event)}
+			onclick={(event) => changePilot([flight], `Flight ${when(flight)}.`, event)}
 		/>
 	{/if}
 {/snippet}
@@ -221,29 +212,15 @@
 	{/snippet}
 </PageHeader>
 
-<Modal
-	title="Change pilot"
-	submitLabel="Save"
-	action="?/setPilot"
+<PilotDialog
+	flights={pilotFor}
+	which={pilotWhich}
+	choices={data.choices}
+	bind:open={pilotOpen}
+	returnFocus={() => (pilotOpener?.isConnected ? pilotOpener : undefined)}
 	error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
 	onsuccess={pilotSet}
-	trigger={false}
-	bind:open={pilotOpen}
-	returnFocus={() => pilotOpener}
->
-	{#each pilotFor as flight (flight.id)}
-		<input type="hidden" name="flight_id" value={flight.id} />
-	{/each}
-	<Select label="Pilot" name="pilot_id" options={pilotOptions} value={pilotChoice} />
-	<p class="help">
-		{pilotFor.length === 1
-			? `Flight ${when(pilotFor[0])}.`
-			: `All ${pilotFor.length} flights in the session.`}
-		{data.choices.admin
-			? 'A pilot of another team moves the flights to that team. With Unknown, they keep theirs.'
-			: 'Choose Unknown for flights not flown by someone in your team.'}
-	</p>
-</Modal>
+/>
 
 <Grid rowGap>
 	{#if form && 'message' in form}
@@ -292,7 +269,8 @@
 						icon={Edit}
 						label="Change pilot"
 						name="Change pilot of the session’s flights"
-						onclick={(event) => changePilot(chosen, event)}
+						onclick={(event) =>
+							changePilot(chosen, `All ${flightsLabel(chosen.length)} in the session.`, event)}
 					/>
 				{/if}
 			{/snippet}
@@ -311,7 +289,20 @@
 			rowState={(flight) => (excluded.includes(flight.id) ? 'Left out' : undefined)}
 			onrowhover={(flight) => (pointed = flight?.id ?? null)}
 			summary="{chosen.length} of {flightsLabel(flights.length)} in the session"
+			selectable={mayChange}
+			bind:selected
+			selectedLabel={(count) => `${flightsLabel(count)} selected`}
 		>
+			{#snippet batchActions(ids)}
+				<Button
+					onclick={(event: MouseEvent) =>
+						changePilot(
+							flights.filter((flight) => ids.includes(flight.id)),
+							`The ${flightsLabel(ids.length)} selected.`,
+							event
+						)}>Change pilot</Button
+				>
+			{/snippet}
 			{#snippet rowAction(flight)}
 				{@const out = excluded.includes(flight.id)}
 				<IconButton
@@ -332,13 +323,5 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--cds-spacing-05);
-	}
-
-	.help {
-		margin-top: calc(-1 * var(--cds-spacing-03));
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-helper-text-01-font-size);
-		line-height: var(--cds-helper-text-01-line-height);
-		letter-spacing: var(--cds-helper-text-01-letter-spacing);
 	}
 </style>
