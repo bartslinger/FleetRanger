@@ -1,34 +1,43 @@
 <!--
 	@component
-	Carbon's button. Renders a link when `href` is given.
+	Carbon's button. Renders a link when `href` is given. An `icon` (16px) sits
+	at the right edge, in the space Carbon leaves for it.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
+	import Icon, { type IconDescriptor } from './Icon.svelte';
 
 	type Props = {
 		kind?: 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger' | 'danger-tertiary';
 		size?: 'sm' | 'md' | 'lg' | 'xl';
 		/** Fills its container, e.g. in a form or a panel. */
 		fill?: boolean;
+		icon?: IconDescriptor;
 		children: Snippet;
 	} & (({ href: string } & HTMLAnchorAttributes) | ({ href?: never } & HTMLButtonAttributes));
 
-	let { kind = 'primary', size = 'lg', fill = false, children, ...rest }: Props = $props();
+	let { kind = 'primary', size = 'lg', fill = false, icon, children, ...rest }: Props = $props();
 </script>
+
+{#snippet content()}
+	{@render children()}
+	{#if icon}<span class="icon"><Icon {icon} /></span>{/if}
+{/snippet}
 
 {#if rest.href !== undefined}
 	<a class="button {kind} {size}" class:fill {...rest as HTMLAnchorAttributes}
-		>{@render children()}</a
+		>{@render content()}</a
 	>
 {:else}
 	<button class="button {kind} {size}" class:fill type="button" {...rest as HTMLButtonAttributes}>
-		{@render children()}
+		{@render content()}
 	</button>
 {/if}
 
 <style>
 	.button {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: space-between;
@@ -56,6 +65,17 @@
 	.fill {
 		width: 100%;
 		max-width: none;
+	}
+
+	.icon {
+		position: absolute;
+		inset-inline-end: calc(var(--cds-spacing-05) - 1px);
+		display: flex;
+	}
+
+	/* Ghost buttons have no room on the right: the icon follows the label. */
+	.ghost .icon {
+		position: static;
 	}
 
 	.md {
