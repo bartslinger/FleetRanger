@@ -4,7 +4,23 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
-		<!-- The page's only script. The theme choice (system, light or dark)
+		<!-- Visitor counts with Plausible, which sets no cookies; the snippet
+		     from fleetranger.org's settings on plausible.io. -->
+		<script async src="https://plausible.io/js/pa-45btRz-Vw9dVgL89CJ0Vt.js"></script>
+		<script>
+			window.plausible =
+				window.plausible ||
+				function () {
+					(plausible.q = plausible.q || []).push(arguments);
+				};
+			plausible.init =
+				plausible.init ||
+				function (i) {
+					plausible.o = i || {};
+				};
+			plausible.init();
+		</script>
+		<!-- The page's own script. The theme choice (system, light or dark)
 		     applies before the page is drawn, and a new one is remembered in this
 		     browser; with system, or without a choice, the system setting applies.
 		     Steps that scroll past a picture show theirs when they reach it. -->
