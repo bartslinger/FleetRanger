@@ -132,6 +132,9 @@ struct ListQuery {
     from: Option<DateTime<Utc>>,
     /// Only flights taking off before this instant.
     to: Option<DateTime<Utc>>,
+    /// Only the flights of these team ids, comma-separated; `none` for the
+    /// flights without a team.
+    team: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -182,12 +185,29 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
                 .collect()
         })
     };
+    let mut queue = false;
+    let team_ids = match &query.team {
+        None => None,
+        Some(value) => {
+            let mut ids = Vec::new();
+            for part in value.split(',').filter(|part| !part.is_empty()) {
+                if part == "none" {
+                    queue = true;
+                } else {
+                    ids.push(part.parse().map_err(|_| "team must be team ids or none")?);
+                }
+            }
+            Some(ids)
+        }
+    };
     let filter = Filter {
         aircraft_serials: serials(&query.aircraft),
         rc_serials: serials(&query.controller),
         without_session,
         from: query.from,
         to: query.to,
+        team_ids,
+        queue,
     };
     Ok((filter, sort))
 }

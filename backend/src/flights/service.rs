@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use super::db::{
     self, Device, Filter, FlightDetail, FlightSummary, Neighbours, PilotChoice, Sort, TeamChoice,
+    TeamOption,
 };
 use crate::{
     auth::Actor,
@@ -54,6 +55,7 @@ pub async fn neighbours(
 pub struct Devices {
     pub aircraft: Vec<Device>,
     pub controllers: Vec<Device>,
+    pub teams: Vec<TeamOption>,
 }
 
 pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<Devices> {
@@ -61,6 +63,7 @@ pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<D
     Ok(Devices {
         aircraft: db::aircraft_of(db, &scope, filter).await?,
         controllers: db::controllers_of(db, &scope, filter).await?,
+        teams: db::teams_in(db, &scope, filter).await?,
     })
 }
 
