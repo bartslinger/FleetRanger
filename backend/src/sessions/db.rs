@@ -6,7 +6,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{LATE_UPLOAD_HOURS, SessionGap};
-use crate::policy::FlightScope;
+use crate::{flights::db::Neighbours, policy::FlightScope};
 
 // A session is visible when one of its flights is, and only the visible
 // flights count. The visibility condition is the one in the flight queries
@@ -96,6 +96,45 @@ pub async fn count(db: &PgPool, scope: &FlightScope, window: Option<Window>) -> 
         window.map(|w| w.to),
     )
     .fetch_one(db)
+    .await
+}
+
+/// Where a session is in the scope's list, newest first as `list` orders it:
+/// the sessions before and after it, its position (from 1) and the list's
+/// length. None if the scope doesn't see the session.
+pub async fn neighbours(
+    db: &PgPool,
+    scope: &FlightScope,
+    id: Uuid,
+) -> sqlx::Result<Option<Neighbours>> {
+    sqlx::query_as!(
+        Neighbours,
+        r#"with listed as (
+               select f.session_id as id, min(f.takeoff_at) as start
+               from flights f
+               where f.session_id is not null
+                 and ($1
+                      or f.pilot_id = $2
+                      or f.team_id in (select team_id from team_members where user_id = $2))
+               group by f.session_id
+           ),
+           placed as (
+               select id,
+                      lag(id) over listing as previous,
+                      lead(id) over listing as next,
+                      row_number() over listing as position,
+                      count(*) over () as total
+               from listed
+               window listing as (order by start desc, id)
+           )
+           select previous, next, position as "position!", total as "total!"
+           from placed
+           where id = $3"#,
+        scope.all,
+        scope.user_id,
+        id,
+    )
+    .fetch_optional(db)
     .await
 }
 
@@ -478,6 +517,35 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    /// Stepping through sessions follows the list: newest first.
+    #[sqlx::test]
+    async fn neighbours_follow_the_list(db: PgPool) {
+        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
+        let morning = upload(&db, a, "08:00", "08:20", "21:30").await;
+        let noon = upload(&db, a, "12:00", "12:20", "21:30").await;
+        let evening = upload(&db, a, "16:00", "16:20", "21:30").await;
+        let everything = FlightScope {
+            all: true,
+            user_id: a,
+        };
+        let (morning, noon, evening) = (
+            session_of(&db, morning).await.unwrap(),
+            session_of(&db, noon).await.unwrap(),
+            session_of(&db, evening).await.unwrap(),
+        );
+        let place = neighbours(&db, &everything, noon).await.unwrap().unwrap();
+        assert_eq!(place.previous, Some(evening), "newer first");
+        assert_eq!(place.next, Some(morning));
+        assert_eq!((place.position, place.total), (2, 3));
+        let listed: Vec<Uuid> = list(&db, &everything, None, 10, 0)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|session| session.id)
+            .collect();
+        assert_eq!(listed, [evening, noon, morning]);
     }
 
     /// A session merged across teams shows each team only its own flights,

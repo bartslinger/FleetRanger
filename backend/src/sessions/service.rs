@@ -6,7 +6,10 @@ use super::db::{self, SessionSummary, Window};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    flights::{self, db::FlightDetail},
+    flights::{
+        self,
+        db::{FlightDetail, Neighbours},
+    },
     policy,
 };
 
@@ -23,6 +26,15 @@ pub async fn list(
     let sessions = db::list(db, &scope, window, limit, offset).await?;
     let total = db::count(db, &scope, window).await?;
     Ok((sessions, total))
+}
+
+/// A session's place in the list of those the actor may see. Not found if
+/// the actor sees none of its flights.
+pub async fn neighbours(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<Neighbours> {
+    let scope = policy::flight_scope(actor);
+    db::neighbours(db, &scope, id)
+        .await?
+        .ok_or(ApiError::NotFound)
 }
 
 /// Puts these flights into a new session, and returns it. They leave the

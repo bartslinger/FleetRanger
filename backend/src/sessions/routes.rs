@@ -17,6 +17,7 @@ use super::service::{self, Session};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
+    flights::db::Neighbours,
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -30,6 +31,7 @@ where
     Router::new()
         .route("/api/sessions", get(list).post(create))
         .route("/api/sessions/{id}", get(show))
+        .route("/api/sessions/{id}/neighbours", get(neighbours))
         .route("/api/sessions/{id}/flights", post(add))
         .route("/api/sessions/merge", post(merge))
         .route("/api/sessions/split", post(split))
@@ -155,4 +157,14 @@ async fn show(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Session>> {
     Ok(Json(service::get(&db, &actor, id).await?))
+}
+
+/// The session's place in the list, newest first: the sessions before and
+/// after it, its position and the list's length.
+async fn neighbours(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Neighbours>> {
+    Ok(Json(service::neighbours(&db, &actor, id).await?))
 }
