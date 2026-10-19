@@ -32,8 +32,9 @@ pub struct Filter {
     pub aircraft_serials: Option<Vec<String>>,
     /// Only the flights of these controllers, if given.
     pub rc_serials: Option<Vec<String>>,
-    /// Only flights in no session: the ones still to be grouped.
-    pub without_session: bool,
+    /// Only flights in a session (true), or in none (false): the ones still
+    /// to be grouped.
+    pub in_session: Option<bool>,
     /// Only flights taking off at or after this instant.
     pub from: Option<DateTime<Utc>>,
     /// Only flights taking off before this instant.
@@ -116,7 +117,7 @@ pub async fn list(
                 or team_id in (select team_id from team_members where user_id = $6))
            and ($7::text[] is null or aircraft_serial = any($7))
            and ($8::text[] is null or rc_serial = any($8))
-           and (not $9 or session_id is null)
+           and ($9::bool is null or (session_id is not null) = $9)
            and ($10::timestamptz is null or takeoff_at >= $10)
            and ($11::timestamptz is null or takeoff_at < $11)
            and ($12::uuid[] is null or team_id = any($12) or ($13 and team_id is null))
@@ -149,7 +150,7 @@ pub async fn list(
         scope.user_id,
         filter.aircraft_serials.as_deref(),
         filter.rc_serials.as_deref(),
-        filter.without_session,
+        filter.in_session,
         filter.from,
         filter.to,
         filter.team_ids.as_deref(),
@@ -297,7 +298,7 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
                   or team_id in (select team_id from team_members where user_id = $2))
              and ($3::text[] is null or aircraft_serial = any($3))
              and ($4::text[] is null or rc_serial = any($4))
-             and (not $5 or session_id is null)
+             and ($5::bool is null or (session_id is not null) = $5)
              and ($6::timestamptz is null or takeoff_at >= $6)
              and ($7::timestamptz is null or takeoff_at < $7)
              and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))"#,
@@ -305,7 +306,7 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
         scope.user_id,
         filter.aircraft_serials.as_deref(),
         filter.rc_serials.as_deref(),
-        filter.without_session,
+        filter.in_session,
         filter.from,
         filter.to,
         filter.team_ids.as_deref(),
@@ -326,7 +327,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
                   or team_id in (select team_id from team_members where user_id = $2))
              and ($3::text[] is null or aircraft_serial = any($3))
              and ($4::text[] is null or rc_serial = any($4))
-             and (not $5 or session_id is null)
+             and ($5::bool is null or (session_id is not null) = $5)
              and ($6::timestamptz is null or takeoff_at >= $6)
              and ($7::timestamptz is null or takeoff_at < $7)
              and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))
@@ -335,7 +336,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
         scope.user_id,
         filter.aircraft_serials.as_deref(),
         filter.rc_serials.as_deref(),
-        filter.without_session,
+        filter.in_session,
         filter.from,
         filter.to,
         filter.team_ids.as_deref(),
@@ -379,7 +380,7 @@ pub async fn neighbours(
                       or team_id in (select team_id from team_members where user_id = $4))
                  and ($5::text[] is null or aircraft_serial = any($5))
                  and ($6::text[] is null or rc_serial = any($6))
-                 and (not $7 or session_id is null)
+                 and ($7::bool is null or (session_id is not null) = $7)
                  and ($9::timestamptz is null or takeoff_at >= $9)
                  and ($10::timestamptz is null or takeoff_at < $10)
                  and ($11::uuid[] is null or team_id = any($11) or ($12 and team_id is null))
@@ -412,7 +413,7 @@ pub async fn neighbours(
         scope.user_id,
         filter.aircraft_serials.as_deref(),
         filter.rc_serials.as_deref(),
-        filter.without_session,
+        filter.in_session,
         id,
         filter.from,
         filter.to,
@@ -450,7 +451,7 @@ pub async fn aircraft_of(
                   or f.team_id in (select team_id from team_members where user_id = $2))
              and (f.aircraft_serial = any(coalesce($3::text[], '{}'))
                   or (($4::text[] is null or f.rc_serial = any($4))
-                      and (not $5 or f.session_id is null)
+                      and ($5::bool is null or (f.session_id is not null) = $5)
                       and ($6::timestamptz is null or f.takeoff_at >= $6)
                       and ($7::timestamptz is null or f.takeoff_at < $7)
                       and ($8::uuid[] is null or f.team_id = any($8)
@@ -461,7 +462,7 @@ pub async fn aircraft_of(
         scope.user_id,
         filter.aircraft_serials.as_deref(),
         filter.rc_serials.as_deref(),
-        filter.without_session,
+        filter.in_session,
         filter.from,
         filter.to,
         filter.team_ids.as_deref(),
@@ -489,7 +490,7 @@ pub async fn controllers_of(
                   or f.team_id in (select team_id from team_members where user_id = $2))
              and (f.rc_serial = any(coalesce($3::text[], '{}'))
                   or (($4::text[] is null or f.aircraft_serial = any($4))
-                      and (not $5 or f.session_id is null)
+                      and ($5::bool is null or (f.session_id is not null) = $5)
                       and ($6::timestamptz is null or f.takeoff_at >= $6)
                       and ($7::timestamptz is null or f.takeoff_at < $7)
                       and ($8::uuid[] is null or f.team_id = any($8)
@@ -500,7 +501,7 @@ pub async fn controllers_of(
         scope.user_id,
         filter.rc_serials.as_deref(),
         filter.aircraft_serials.as_deref(),
-        filter.without_session,
+        filter.in_session,
         filter.from,
         filter.to,
         filter.team_ids.as_deref(),
@@ -537,7 +538,7 @@ pub async fn teams_in(
                   or ($4 and f.team_id is null)
                   or (($5::text[] is null or f.aircraft_serial = any($5))
                       and ($6::text[] is null or f.rc_serial = any($6))
-                      and (not $7 or f.session_id is null)
+                      and ($7::bool is null or (f.session_id is not null) = $7)
                       and ($8::timestamptz is null or f.takeoff_at >= $8)
                       and ($9::timestamptz is null or f.takeoff_at < $9)))
            group by f.team_id, t.name
@@ -548,7 +549,7 @@ pub async fn teams_in(
         filter.queue,
         filter.aircraft_serials.as_deref(),
         filter.rc_serials.as_deref(),
-        filter.without_session,
+        filter.in_session,
         filter.from,
         filter.to,
     )
@@ -846,7 +847,7 @@ mod tests {
             [
                 Filter::default(),
                 Filter {
-                    without_session: true,
+                    in_session: Some(false),
                     ..Filter::default()
                 },
                 Filter {
@@ -938,7 +939,7 @@ mod tests {
             }
         }
         let filter = Filter {
-            without_session: true,
+            in_session: Some(false),
             ..Filter::default()
         };
         let sort = Sort {

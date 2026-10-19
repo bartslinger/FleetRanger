@@ -17,7 +17,10 @@ use super::service::{self, Session};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    flights::db::Neighbours,
+    flights::{
+        self,
+        db::{Filter, Neighbours},
+    },
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -118,9 +121,39 @@ struct ListQuery {
     /// 1-based.
     page: Option<u32>,
     size: Option<u32>,
-    /// With `to`: only sessions with a flight in this span.
+    /// With `span_to`: only sessions with a flight in this span, e.g. the
+    /// ones near flights to be added to a session.
+    span_from: Option<DateTime<Utc>>,
+    span_to: Option<DateTime<Utc>>,
+}
+
+/// The Flights list's filters, from the same query string: only sessions
+/// with a flight that passes them.
+#[derive(Deserialize)]
+struct FilterQuery {
+    /// Drone serials, comma-separated.
+    aircraft: Option<String>,
+    /// Controller serials, comma-separated.
+    controller: Option<String>,
+    /// Team ids, comma-separated; `none` for flights without a team.
+    team: Option<String>,
+    /// Takeoff at or after this instant.
     from: Option<DateTime<Utc>>,
+    /// Takeoff before this instant.
     to: Option<DateTime<Utc>>,
+}
+
+impl FilterQuery {
+    fn parse(&self) -> ApiResult<Filter> {
+        flights::routes::filter(
+            &self.aircraft,
+            &self.controller,
+            &self.team,
+            self.from,
+            self.to,
+        )
+        .map_err(ApiError::Invalid)
+    }
 }
 
 #[derive(Serialize)]
@@ -133,6 +166,7 @@ async fn list(
     actor: Actor,
     State(db): State<PgPool>,
     Query(query): Query<ListQuery>,
+    Query(filter): Query<FilterQuery>,
 ) -> ApiResult<Json<SessionPage>> {
     let page = query.page.unwrap_or(1).max(1);
     let size = query.size.unwrap_or(DEFAULT_PAGE_SIZE);
@@ -141,13 +175,25 @@ async fn list(
             "size must be between 1 and {MAX_PAGE_SIZE}"
         )));
     }
-    let window = match (query.from, query.to) {
+    let window = match (query.span_from, query.span_to) {
         (Some(from), Some(to)) => Some(Window { from, to }),
         (None, None) => None,
-        _ => return Err(ApiError::Invalid("give both from and to".to_owned())),
+        _ => {
+            return Err(ApiError::Invalid(
+                "give both span_from and span_to".to_owned(),
+            ));
+        }
     };
     let offset = i64::from(page - 1) * i64::from(size);
-    let (sessions, total) = service::list(&db, &actor, window, i64::from(size), offset).await?;
+    let (sessions, total) = service::list(
+        &db,
+        &actor,
+        &filter.parse()?,
+        window,
+        i64::from(size),
+        offset,
+    )
+    .await?;
     Ok(Json(SessionPage { sessions, total }))
 }
 
@@ -159,12 +205,15 @@ async fn show(
     Ok(Json(service::get(&db, &actor, id).await?))
 }
 
-/// The session's place in the list, newest first: the sessions before and
-/// after it, its position and the list's length.
+/// The session's place in the list with these filters, newest first: the
+/// sessions before and after it, its position and the list's length.
 async fn neighbours(
     actor: Actor,
     State(db): State<PgPool>,
     Path(id): Path<Uuid>,
+    Query(filter): Query<FilterQuery>,
 ) -> ApiResult<Json<Neighbours>> {
-    Ok(Json(service::neighbours(&db, &actor, id).await?))
+    Ok(Json(
+        service::neighbours(&db, &actor, &filter.parse()?, id).await?,
+    ))
 }

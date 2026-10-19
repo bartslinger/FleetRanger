@@ -8,31 +8,37 @@ use crate::{
     error::{ApiError, ApiResult},
     flights::{
         self,
-        db::{FlightDetail, Neighbours},
+        db::{Filter, FlightDetail, Neighbours},
     },
     policy,
 };
 
-/// One page of the sessions the actor may see, if given only those with a
-/// flight in the window, and how many there are in all.
+/// One page of the sessions the actor may see that pass the filter, if given
+/// only those with a flight in the window, and how many there are in all.
 pub async fn list(
     db: &PgPool,
     actor: &Actor,
+    filter: &Filter,
     window: Option<Window>,
     limit: i64,
     offset: i64,
 ) -> ApiResult<(Vec<SessionSummary>, i64)> {
     let scope = policy::flight_scope(actor);
-    let sessions = db::list(db, &scope, window, limit, offset).await?;
-    let total = db::count(db, &scope, window).await?;
+    let sessions = db::list(db, &scope, filter, window, limit, offset).await?;
+    let total = db::count(db, &scope, filter, window).await?;
     Ok((sessions, total))
 }
 
-/// A session's place in the list of those the actor may see. Not found if
-/// the actor sees none of its flights.
-pub async fn neighbours(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<Neighbours> {
+/// A session's place in the list of those the actor may see that pass the
+/// filter. Not found if it isn't in that list.
+pub async fn neighbours(
+    db: &PgPool,
+    actor: &Actor,
+    filter: &Filter,
+    id: Uuid,
+) -> ApiResult<Neighbours> {
     let scope = policy::flight_scope(actor);
-    db::neighbours(db, &scope, id)
+    db::neighbours(db, &scope, filter, id)
         .await?
         .ok_or(ApiError::NotFound)
 }

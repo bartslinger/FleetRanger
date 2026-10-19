@@ -6,7 +6,10 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{LATE_UPLOAD_HOURS, SessionGap};
-use crate::{flights::db::Neighbours, policy::FlightScope};
+use crate::{
+    flights::db::{Filter, Neighbours},
+    policy::FlightScope,
+};
 
 // A session is visible when one of its flights is, and only the visible
 // flights count. The visibility condition is the one in the flight queries
@@ -36,10 +39,15 @@ pub struct Window {
     pub to: DateTime<Utc>,
 }
 
-/// One page of the sessions in the scope (in the window, if given), newest first.
+// The Sessions list's filters are the logbook's: a session passes when one of
+// its visible flights does. Its numbers stay those of all its visible flights.
+
+/// One page of the sessions in the scope that pass the filter (and have a
+/// flight in the window, if given), newest first.
 pub async fn list(
     db: &PgPool,
     scope: &FlightScope,
+    filter: &Filter,
     window: Option<Window>,
     limit: i64,
     offset: i64,
@@ -65,6 +73,18 @@ pub async fn list(
            and ($5::timestamptz is null
                 or f.session_id in (select session_id from flights
                                     where takeoff_at < $6 and landed_at > $5))
+           and f.session_id in (
+               select g.session_id from flights g
+               where g.session_id is not null
+                 and ($1
+                      or g.pilot_id = $2
+                      or g.team_id in (select team_id from team_members where user_id = $2))
+                 and ($7::text[] is null or g.aircraft_serial = any($7))
+                 and ($8::text[] is null or g.rc_serial = any($8))
+                 and ($9::timestamptz is null or g.takeoff_at >= $9)
+                 and ($10::timestamptz is null or g.takeoff_at < $10)
+                 and ($11::uuid[] is null or g.team_id = any($11)
+                      or ($12 and g.team_id is null)))
          group by f.session_id
          order by min(f.takeoff_at) desc, f.session_id
          limit $3 offset $4"#,
@@ -74,13 +94,24 @@ pub async fn list(
         offset,
         window.map(|w| w.from),
         window.map(|w| w.to),
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.from,
+        filter.to,
+        filter.team_ids.as_deref(),
+        filter.queue,
     )
     .fetch_all(db)
     .await
 }
 
-/// The number of sessions in the scope.
-pub async fn count(db: &PgPool, scope: &FlightScope, window: Option<Window>) -> sqlx::Result<i64> {
+/// The number of sessions `list` lists in all.
+pub async fn count(
+    db: &PgPool,
+    scope: &FlightScope,
+    filter: &Filter,
+    window: Option<Window>,
+) -> sqlx::Result<i64> {
     sqlx::query_scalar!(
         r#"select count(distinct session_id) as "count!"
            from flights
@@ -89,22 +120,41 @@ pub async fn count(db: &PgPool, scope: &FlightScope, window: Option<Window>) -> 
                   or team_id in (select team_id from team_members where user_id = $2))
              and ($3::timestamptz is null
                   or session_id in (select session_id from flights
-                                    where takeoff_at < $4 and landed_at > $3))"#,
+                                    where takeoff_at < $4 and landed_at > $3))
+             and session_id in (
+                 select g.session_id from flights g
+                 where g.session_id is not null
+                   and ($1
+                        or g.pilot_id = $2
+                        or g.team_id in (select team_id from team_members where user_id = $2))
+                   and ($5::text[] is null or g.aircraft_serial = any($5))
+                   and ($6::text[] is null or g.rc_serial = any($6))
+                   and ($7::timestamptz is null or g.takeoff_at >= $7)
+                   and ($8::timestamptz is null or g.takeoff_at < $8)
+                   and ($9::uuid[] is null or g.team_id = any($9)
+                        or ($10 and g.team_id is null)))"#,
         scope.all,
         scope.user_id,
         window.map(|w| w.from),
         window.map(|w| w.to),
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.from,
+        filter.to,
+        filter.team_ids.as_deref(),
+        filter.queue,
     )
     .fetch_one(db)
     .await
 }
 
-/// Where a session is in the scope's list, newest first as `list` orders it:
-/// the sessions before and after it, its position (from 1) and the list's
-/// length. None if the scope doesn't see the session.
+/// Where a session is in the scope's list with this filter, newest first as
+/// `list` orders it: the sessions before and after it, its position (from 1)
+/// and the list's length. None if the session isn't in that list.
 pub async fn neighbours(
     db: &PgPool,
     scope: &FlightScope,
+    filter: &Filter,
     id: Uuid,
 ) -> sqlx::Result<Option<Neighbours>> {
     sqlx::query_as!(
@@ -116,6 +166,18 @@ pub async fn neighbours(
                  and ($1
                       or f.pilot_id = $2
                       or f.team_id in (select team_id from team_members where user_id = $2))
+                 and f.session_id in (
+                     select g.session_id from flights g
+                     where g.session_id is not null
+                       and ($1
+                            or g.pilot_id = $2
+                            or g.team_id in (select team_id from team_members where user_id = $2))
+                       and ($4::text[] is null or g.aircraft_serial = any($4))
+                       and ($5::text[] is null or g.rc_serial = any($5))
+                       and ($6::timestamptz is null or g.takeoff_at >= $6)
+                       and ($7::timestamptz is null or g.takeoff_at < $7)
+                       and ($8::uuid[] is null or g.team_id = any($8)
+                            or ($9 and g.team_id is null)))
                group by f.session_id
            ),
            placed as (
@@ -133,6 +195,12 @@ pub async fn neighbours(
         scope.all,
         scope.user_id,
         id,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.from,
+        filter.to,
+        filter.team_ids.as_deref(),
+        filter.queue,
     )
     .fetch_optional(db)
     .await
@@ -480,10 +548,10 @@ mod tests {
         assert_eq!(session_of(&db, first).await, Some(merged));
     }
 
-    /// A window picks sessions with a flight in it, and they still add up all
-    /// their flights, not only the ones in the window.
+    /// A window or a filter picks sessions with a flight in it, and they
+    /// still add up all their flights, not only the ones that matched.
     #[sqlx::test]
-    async fn window_picks_whole_sessions(db: PgPool) {
+    async fn window_and_filter_pick_whole_sessions(db: PgPool) {
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         let morning = upload(&db, a, "08:00", "08:20", "21:30").await;
         let evening = upload(&db, a, "09:30", "09:50", "21:30").await;
@@ -502,24 +570,48 @@ mod tests {
             from: at("07:00"),
             to: at("08:10"),
         });
-        let listed = list(&db, &everything, around_morning, 10, 0).await.unwrap();
+        let all = Filter::default();
+        let listed = list(&db, &everything, &all, around_morning, 10, 0)
+            .await
+            .unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].flights, 2);
-        assert_eq!(count(&db, &everything, around_morning).await.unwrap(), 1);
+        assert_eq!(
+            count(&db, &everything, &all, around_morning).await.unwrap(),
+            1
+        );
 
         let afternoon = Some(Window {
             from: at("12:00"),
             to: at("13:00"),
         });
         assert!(
-            list(&db, &everything, afternoon, 10, 0)
+            list(&db, &everything, &all, afternoon, 10, 0)
                 .await
                 .unwrap()
                 .is_empty()
         );
+
+        // Only the morning flight was with drone A.
+        sqlx::query("update flights set aircraft_serial = 'A' where id = $1")
+            .bind(morning)
+            .execute(&db)
+            .await
+            .unwrap();
+        let drone = |serial: &str| Filter {
+            aircraft_serials: Some(vec![serial.to_owned()]),
+            ..Filter::default()
+        };
+        let listed = list(&db, &everything, &drone("A"), None, 10, 0)
+            .await
+            .unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].flights, 2);
+        assert_eq!(count(&db, &everything, &drone("B"), None).await.unwrap(), 0);
     }
 
-    /// Stepping through sessions follows the list: newest first.
+    /// Stepping through sessions follows the list: newest first, and only
+    /// the sessions that pass its filter.
     #[sqlx::test]
     async fn neighbours_follow_the_list(db: PgPool) {
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
@@ -535,17 +627,44 @@ mod tests {
             session_of(&db, noon).await.unwrap(),
             session_of(&db, evening).await.unwrap(),
         );
-        let place = neighbours(&db, &everything, noon).await.unwrap().unwrap();
+        let all = Filter::default();
+        let place = neighbours(&db, &everything, &all, noon)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(place.previous, Some(evening), "newer first");
         assert_eq!(place.next, Some(morning));
         assert_eq!((place.position, place.total), (2, 3));
-        let listed: Vec<Uuid> = list(&db, &everything, None, 10, 0)
+        let listed: Vec<Uuid> = list(&db, &everything, &all, None, 10, 0)
             .await
             .unwrap()
             .into_iter()
             .map(|session| session.id)
             .collect();
         assert_eq!(listed, [evening, noon, morning]);
+
+        // Drone A flew in the morning and the evening, not at noon.
+        sqlx::query("update flights set aircraft_serial = 'A' where session_id = any($1)")
+            .bind([morning, evening])
+            .execute(&db)
+            .await
+            .unwrap();
+        let drone_a = Filter {
+            aircraft_serials: Some(vec!["A".to_owned()]),
+            ..Filter::default()
+        };
+        let place = neighbours(&db, &everything, &drone_a, evening)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(place.next, Some(morning), "noon is left out");
+        assert_eq!((place.position, place.total), (1, 2));
+        assert!(
+            neighbours(&db, &everything, &drone_a, noon)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     /// A session merged across teams shows each team only its own flights,
@@ -585,17 +704,18 @@ mod tests {
                 .unwrap();
         }
 
+        let all = Filter::default();
         let member = FlightScope {
             all: false,
             user_id: a,
         };
-        let listed = list(&db, &member, None, 10, 0).await.unwrap();
+        let listed = list(&db, &member, &all, None, 10, 0).await.unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(
             (listed[0].flights, listed[0].pilots.clone()),
             (1, vec!["A".to_owned()])
         );
-        assert_eq!(count(&db, &member, None).await.unwrap(), 1);
+        assert_eq!(count(&db, &member, &all, None).await.unwrap(), 1);
         let flights = crate::flights::db::of_session(&db, &member, session)
             .await
             .unwrap();
@@ -605,8 +725,13 @@ mod tests {
             all: false,
             user_id: outsider,
         };
-        assert!(list(&db, &stranger, None, 10, 0).await.unwrap().is_empty());
-        assert_eq!(count(&db, &stranger, None).await.unwrap(), 0);
+        assert!(
+            list(&db, &stranger, &all, None, 10, 0)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(count(&db, &stranger, &all, None).await.unwrap(), 0);
         let flights = crate::flights::db::of_session(&db, &stranger, session)
             .await
             .unwrap();
@@ -617,7 +742,7 @@ mod tests {
             user_id: outsider,
         };
         assert_eq!(
-            list(&db, &everything, None, 10, 0).await.unwrap()[0].flights,
+            list(&db, &everything, &all, None, 10, 0).await.unwrap()[0].flights,
             2
         );
     }

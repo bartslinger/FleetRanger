@@ -141,7 +141,7 @@ async fn all(
     mut filter: Filter,
     gap: SessionGap,
 ) -> sqlx::Result<Vec<Vec<FlightSummary>>> {
-    filter.without_session = true;
+    filter.in_session = Some(false);
     let oldest_first = Sort {
         key: SortKey::TakeoffAt,
         descending: false,

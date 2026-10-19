@@ -143,7 +143,8 @@ struct ListQuery {
     aircraft: Option<String>,
     /// Only the flights of these controller serials, comma-separated.
     controller: Option<String>,
-    /// `none`: only flights in no session.
+    /// `none`: only flights in no session; `any`: only those in one (the
+    /// Sessions list's filter options).
     session: Option<String>,
     /// Only flights taking off at or after this instant.
     from: Option<DateTime<Utc>>,
@@ -236,11 +237,34 @@ async fn suggestion(
 fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
     let sort = parse_sort(query.sort.as_deref().unwrap_or("-takeoff_at"))
         .ok_or_else(|| "unknown sort column".to_owned())?;
-    let without_session = match query.session.as_deref() {
-        None => false,
-        Some("none") => true,
-        Some(_) => return Err("session must be none".to_owned()),
+    let in_session = match query.session.as_deref() {
+        None => None,
+        Some("none") => Some(false),
+        Some("any") => Some(true),
+        Some(_) => return Err("session must be none or any".to_owned()),
     };
+    let filter = Filter {
+        in_session,
+        ..filter(
+            &query.aircraft,
+            &query.controller,
+            &query.team,
+            query.from,
+            query.to,
+        )?
+    };
+    Ok((filter, sort))
+}
+
+/// The filters the flights and sessions lists share, from their query
+/// parameters: drones, controllers, teams and takeoff times.
+pub fn filter(
+    aircraft: &Option<String>,
+    controller: &Option<String>,
+    team: &Option<String>,
+    from: Option<DateTime<Utc>>,
+    to: Option<DateTime<Utc>>,
+) -> Result<Filter, String> {
     // Serials have no commas; empty parts are left out.
     let serials = |value: &Option<String>| {
         value.as_ref().map(|value| {
@@ -252,7 +276,7 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
         })
     };
     let mut queue = false;
-    let team_ids = match &query.team {
+    let team_ids = match team {
         None => None,
         Some(value) => {
             let mut ids = Vec::new();
@@ -266,16 +290,15 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
             Some(ids)
         }
     };
-    let filter = Filter {
-        aircraft_serials: serials(&query.aircraft),
-        rc_serials: serials(&query.controller),
-        without_session,
-        from: query.from,
-        to: query.to,
+    Ok(Filter {
+        aircraft_serials: serials(aircraft),
+        rc_serials: serials(controller),
+        in_session: None,
+        from,
+        to,
         team_ids,
         queue,
-    };
-    Ok((filter, sort))
+    })
 }
 
 /// The flight's place in the list with the same query as `list` (its page and
@@ -290,7 +313,7 @@ async fn neighbours(
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<Neighbours>> {
     let (filter, sort) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
-    if filter.without_session && query.view.as_deref() == Some("suggestions") {
+    if filter.in_session == Some(false) && query.view.as_deref() == Some("suggestions") {
         let place = suggest::neighbours(&db, &actor, filter, gap, id).await?;
         return place.map(Json).ok_or(ApiError::NotFound);
     }
