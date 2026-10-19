@@ -1,0 +1,24 @@
+# Dev server for the website on 127.0.0.1:5174, separate from the app's
+# stack: `docker compose -f website/compose.dev.yaml up`.
+
+name: fleetranger-website-dev
+
+services:
+  website:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    network_mode: host
+    environment:
+      VITE_POLL: ${VITE_POLL:-}
+    command: sh -c "pnpm install --frozen-lockfile && pnpm dev --host 127.0.0.1"
+    volumes:
+      - .:/repo/website
+      # The web app's components and tokens, which the website uses.
+      - ../web/src/lib/ui:/repo/web/src/lib/ui:ro
+      - ../web/src/lib/assets:/repo/web/src/lib/assets:ro
+      # Kept out of the shared folder: faster, and no host-specific binaries in the repo.
+      - node-modules:/repo/website/node_modules
+
+volumes:
+  node-modules:

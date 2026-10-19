@@ -1,0 +1,14 @@
+{
+	"extends": "$app/tsconfig",
+	"compilerOptions": {
+		"strict": true,
+		"types": ["$app/types", "node"],
+		"paths": {
+			"$ui/*": ["../web/src/lib/ui/*"],
+			"$assets/*": ["../web/src/lib/assets/*"],
+			// For the web app's components, which would look in web/node_modules.
+			"svelte/elements": ["./node_modules/svelte/elements.d.ts"]
+		}
+	},
+	"include": ["src", "vite.config.ts", "../web/src/lib/ui/carbon-icons.d.ts"]
+}

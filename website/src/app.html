@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" class="theme-white">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="text-scale" content="scale" />
+		<!-- Visitor counts with Plausible, which sets no cookies; the snippet
+		     from fleetranger.org's settings on plausible.io. -->
+		<script async src="https://plausible.io/js/pa-45btRz-Vw9dVgL89CJ0Vt.js"></script>
+		<script>
+			window.plausible =
+				window.plausible ||
+				function () {
+					(plausible.q = plausible.q || []).push(arguments);
+				};
+			plausible.init =
+				plausible.init ||
+				function (i) {
+					plausible.o = i || {};
+				};
+			plausible.init();
+		</script>
+		<!-- The page's own script. The theme choice (system, light or dark)
+		     applies before the page is drawn, and a new one is remembered in this
+		     browser; with system, or without a choice, the system setting applies.
+		     Steps that scroll past a picture show theirs when they reach it. -->
+		<script>
+			(function () {
+				var root = document.documentElement;
+				try {
+					var theme = localStorage.getItem('theme');
+					if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+				} catch (e) {}
+				root.classList.add('js');
+				document.addEventListener('change', function (event) {
+					if (event.target.name !== 'theme') return;
+					var theme = event.target.value;
+					try {
+						if (theme === 'system') {
+							delete root.dataset.theme;
+							localStorage.removeItem('theme');
+						} else {
+							root.dataset.theme = theme;
+							localStorage.setItem('theme', theme);
+						}
+					} catch (e) {}
+				});
+				// The page is rendered with system checked; check the visitor's choice.
+				document.addEventListener('DOMContentLoaded', function () {
+					var chosen = document.querySelector(
+						'input[name="theme"][value="' + (root.dataset.theme || 'system') + '"]'
+					);
+					if (chosen) chosen.checked = true;
+				});
+				// The current step is the last one whose top has passed 40% of the
+				// window when the picture is beside the steps, a little above the
+				// picture's middle, or the picture's bottom when it is above them (on
+				// phones).
+				var pending = false;
+				function showSteps() {
+					pending = false;
+					document.querySelectorAll('[data-steps]').forEach(function (group) {
+						var picture = group.querySelector('[data-picture]').getBoundingClientRect();
+						var beside = picture.left > group.getBoundingClientRect().left;
+						var line = beside ? innerHeight * 0.4 : picture.bottom;
+						var current = '0';
+						group.querySelectorAll('[data-step]').forEach(function (step) {
+							if (step.getBoundingClientRect().top < line) current = step.dataset.step;
+						});
+						group.querySelectorAll('[data-shown]').forEach(function (shown) {
+							shown.classList.toggle('active', shown.dataset.shown === current);
+						});
+					});
+				}
+				addEventListener(
+					'scroll',
+					function () {
+						if (!pending) requestAnimationFrame(showSteps);
+						pending = true;
+					},
+					{ passive: true }
+				);
+				document.addEventListener('DOMContentLoaded', showSteps);
+			})();
+		</script>
+		%sveltekit.head%
+	</head>
+	<body>
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
