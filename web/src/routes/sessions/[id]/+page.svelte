@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { day, distance, duration, timeSpan } from '#lib/format.js';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
@@ -11,6 +12,7 @@
 	import Button from '#lib/ui/Button.svelte';
 	import IconButton from '#lib/ui/IconButton.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
+	import Stepper from '#lib/ui/Stepper.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import type { PageProps } from './$types';
@@ -24,6 +26,13 @@
 
 	// Splitting: admins change any session, members those of their own team.
 	let selected: string[] = $state([]);
+	// Stepping to another session starts without a selection.
+	let selectedFor = untrack(() => data.session.id);
+	$effect(() => {
+		if (data.session.id === selectedFor) return;
+		selectedFor = data.session.id;
+		selected = [];
+	});
 	// The flight pointed at in the table, brought out on the map.
 	let pointed: number | null = $state(null);
 	const canChange = $derived(
@@ -91,7 +100,19 @@
 	description={`${facts.span} · ${flights.length} ${flights.length === 1 ? 'flight' : 'flights'} · ${duration(facts.airTime)} in the air`}
 	phoneDescription={`${facts.span} · ${facts.pilots} · ${facts.teams}`}
 	breadcrumb={[{ href: resolve('/sessions'), label: 'Sessions' }]}
-/>
+>
+	{#snippet actions()}
+		<Stepper
+			label="Sessions"
+			previous={data.place.previous ? resolve('/sessions/[id]', { id: data.place.previous }) : null}
+			next={data.place.next ? resolve('/sessions/[id]', { id: data.place.next }) : null}
+			previousLabel="Previous session (newer)"
+			nextLabel="Next session (older)"
+			position={data.place.position}
+			total={data.place.total}
+		/>
+	{/snippet}
+</PageHeader>
 
 <Grid rowGap>
 	<Column narrow lg={11}>

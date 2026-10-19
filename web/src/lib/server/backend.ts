@@ -114,6 +114,15 @@ export interface Session {
 	flights: FlightDetail[];
 }
 
+/** An item's place in a list: the ones before and after it, its position
+ * (from 1) and the list's length, e.g. `GET /api/sessions/{id}/neighbours`. */
+export interface Neighbours {
+	previous: string | null;
+	next: string | null;
+	position: number;
+	total: number;
+}
+
 /** What the logged-in account can change in the logbook, from `GET /api/flights/choices`. */
 export interface FlightChoices {
 	/** The team whose flights a member can change. */
