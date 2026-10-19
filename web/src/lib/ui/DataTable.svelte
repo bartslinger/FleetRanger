@@ -14,6 +14,8 @@
 		numeric?: boolean;
 		/** Serial numbers and other codes: tabular figures with a slashed zero. */
 		identifier?: boolean;
+		/** Lists, e.g. names: may wrap onto more lines rather than widen the table. */
+		wrap?: boolean;
 		sortable?: boolean;
 		format?: (row: T) => string | null | undefined;
 	}
@@ -29,6 +31,7 @@
 	import ArrowDown from '@carbon/icons/es/arrow--down/16.js';
 	import ArrowUp from '@carbon/icons/es/arrow--up/16.js';
 	import ArrowsVertical from '@carbon/icons/es/arrows--vertical/16.js';
+	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
 	import Checkbox from './Checkbox.svelte';
 	import Icon from './Icon.svelte';
 
@@ -68,6 +71,13 @@
 		allMatching?: boolean;
 		/** The offer, e.g. "Select all 340 flights". */
 		selectAllLabel?: (total: number) => string;
+		/** Carbon's expandable rows: which rows open, and what they show. */
+		expandable?: (row: T) => boolean;
+		expansion?: Snippet<[row: T]>;
+		/** The expand button's name, e.g. "Flights of this suggestion". */
+		expandLabel?: (row: T) => string;
+		/** An inline action at the end of each row. */
+		rowAction?: Snippet<[row: T]>;
 	}
 
 	let {
@@ -89,8 +99,25 @@
 		selectedLabel = (count, all) => (all ? `All ${count} selected` : `${count} selected`),
 		total,
 		allMatching = $bindable(false),
-		selectAllLabel = (total) => `Select all ${total}`
+		selectAllLabel = (total) => `Select all ${total}`,
+		expandable,
+		expansion,
+		expandLabel = () => 'Expand row',
+		rowAction
 	}: Props = $props();
+
+	// Keys of the open rows.
+	let expanded: string[] = $state([]);
+	const expands = $derived(!!expandable && !!expansion);
+	const width = $derived(
+		columns.length + (selectable ? 1 : 0) + (expands ? 1 : 0) + (rowAction ? 1 : 0)
+	);
+
+	function toggleOpen(key: string) {
+		expanded = expanded.includes(key)
+			? expanded.filter((other) => other !== key)
+			: [...expanded, key];
+	}
 
 	const selectableKeys = $derived(selectable ? rows.filter(selectable).map(rowKey) : []);
 	const allSelected = $derived(
@@ -192,6 +219,9 @@
 		<caption class="visually-hidden">{label}</caption>
 		<thead>
 			<tr>
+				{#if expands}
+					<th scope="col" class="expand"><span class="visually-hidden">Expand</span></th>
+				{/if}
 				{#if selectable}
 					<th scope="col" class="select">
 						<Checkbox
@@ -222,13 +252,32 @@
 						{/if}
 					</th>
 				{/each}
+				{#if rowAction}
+					<th scope="col"><span class="visually-hidden">Actions</span></th>
+				{/if}
 			</tr>
 		</thead>
 		<tbody>
 			{#each rows as row (rowKey(row))}
 				{@const key = rowKey(row)}
 				{@const chosen = allMatching ? !!selectable?.(row) : selected.includes(key)}
-				<tr class:linked={rowHref} class:selected={chosen}>
+				{@const open = expands && expanded.includes(key)}
+				<tr class:linked={rowHref} class:selected={chosen} class:open>
+					{#if expands}
+						<td class="expand">
+							{#if expandable?.(row)}
+								<button
+									type="button"
+									class="chevron"
+									aria-expanded={open}
+									aria-label={expandLabel(row)}
+									onclick={() => toggleOpen(key)}
+								>
+									<Icon icon={ChevronRight} />
+								</button>
+							{/if}
+						</td>
+					{/if}
 					{#if selectable}
 						<td class="select">
 							<Checkbox
@@ -241,7 +290,11 @@
 						</td>
 					{/if}
 					{#each columns as column, index (column.key)}
-						<td class:numeric={column.numeric} class:identifier={column.identifier}>
+						<td
+							class:numeric={column.numeric}
+							class:identifier={column.identifier}
+							class:wrap={column.wrap}
+						>
 							{#if index === 0 && rowHref}
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built by the caller -->
 								<a class="row-link" href={rowHref(row)}>{@render content(row, column)}</a>
@@ -250,7 +303,15 @@
 							{/if}
 						</td>
 					{/each}
+					{#if rowAction}
+						<td class="action">{@render rowAction(row)}</td>
+					{/if}
 				</tr>
+				{#if open && expansion}
+					<tr class="expansion">
+						<td colspan={width}>{@render expansion(row)}</td>
+					</tr>
+				{/if}
 			{/each}
 		</tbody>
 	</table>
@@ -358,6 +419,12 @@
 
 	.identifier {
 		font-variant-numeric: tabular-nums slashed-zero;
+	}
+
+	/* A wrapping cell keeps the row height while it fits on one line. */
+	td.wrap {
+		padding-block: var(--cds-spacing-03);
+		white-space: normal;
 	}
 
 	/* A row that opens a page: the link in its first cell covers the whole row,
@@ -527,6 +594,71 @@
 	.select {
 		width: var(--cds-size-large);
 		padding-inline: var(--cds-spacing-05) 0;
+	}
+
+	/* Carbon's expandable rows: a chevron column first, pointing right and
+	   turning down when open. The open row and its expansion read as one. */
+	.expand {
+		width: var(--cds-size-large);
+		padding: 0;
+	}
+
+	td.expand {
+		position: relative;
+		z-index: 1;
+	}
+
+	.chevron {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: var(--cds-size-medium);
+		border: 0;
+		background: none;
+		color: var(--cds-icon-primary);
+		cursor: pointer;
+	}
+
+	.chevron :global(svg) {
+		transition: transform 110ms cubic-bezier(0.2, 0, 0.38, 0.9);
+	}
+
+	.chevron[aria-expanded='true'] :global(svg) {
+		transform: rotate(90deg);
+	}
+
+	.chevron:focus-visible {
+		outline: 2px solid var(--cds-focus);
+		outline-offset: -2px;
+	}
+
+	tr.open td {
+		background: var(--cds-layer-hover-01);
+		color: var(--cds-text-primary);
+	}
+
+	/* The expansion lines up with the first column after the chevron. */
+	tr.expansion td {
+		height: auto;
+		padding: var(--cds-spacing-03) var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-size-large);
+		border-top: 0;
+		background: var(--cds-layer-hover-01);
+		color: var(--cds-text-primary);
+		white-space: normal;
+	}
+
+	tbody tr.expansion:hover td {
+		background: var(--cds-layer-hover-01);
+	}
+
+	/* An inline action: flush with the row's end, above the row link. */
+	td.action {
+		position: relative;
+		z-index: 1;
+		width: 1%;
+		padding: 0;
+		text-align: right;
 	}
 
 	/* Above the row link, which covers the row, and the whole cell is the
