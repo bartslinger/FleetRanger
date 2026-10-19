@@ -4,6 +4,7 @@
 	import Column from '$ui/Column.svelte';
 	import Grid from '$ui/Grid.svelte';
 	import Controller from '#lib/Controller.svelte';
+	import Laptop from '#lib/Laptop.svelte';
 	import pilot640 from '#lib/images/pilot-640.webp';
 	import pilot1280 from '#lib/images/pilot-1280.webp';
 	import session800 from '#lib/images/session-800.webp';
@@ -175,14 +176,10 @@
 							{#if moment.screen}
 								<Controller {...moment.screen} />
 							{:else}
-								<img
-									class="screenshot"
+								<Laptop
 									src={session1600}
 									srcset="{session800} 800w, {session1600} 1600w"
-									sizes="(min-width: 42rem) 50vw, 20rem"
-									alt="The session in the web app."
-									width="3600"
-									height="2032"
+									alt="The session in the web app on a laptop."
 								/>
 							{/if}
 						</div>
