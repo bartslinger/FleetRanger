@@ -110,6 +110,10 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **Only tagged commits become app releases** (`android-vX.Y.Z`); the version name is the tag's version and the version code is derived from it, so it grows with every release. `android/release.sh` refuses anything else. Releases are signed with one release key, kept in the password manager and never in the repository; R8 shrinks them.
 - **The APK is built with Gradle in a pinned x86_64 Docker image.** Google's Android build tools don't run on arm64 Linux, so on an arm64 machine the image runs under QEMU emulation; CI can run it natively.
 
+## Public website
+
+- **fleetranger.org is a static site in `website/`** (user's decision, 2026-10-19, on my suggestion). It lives in this repository so pages, screenshots and install notes change together with the product. It is a small SvelteKit project prerendered to static files (`adapter-static`), so it needs no server-side code. It uses the web app's components and tokens from `web/src/lib/ui` directly rather than copies, so the site looks like the app and component fixes apply to both. Components the site uses must not depend on app-only code (API, login). It is served by nginx through the Ansible repo. It starts as a single landing page.
+
 ## Customer-specific needs
 
 FleetRanger stays generic. Needs specific to one organisation are left out until they are actually built, and are then implemented in the simplest form. They are generalised only when a second organisation needs them. No customer data goes in this repository: no real logs, locations or names. Tests use synthetic or anonymised logs.

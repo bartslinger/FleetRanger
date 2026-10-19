@@ -60,6 +60,12 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Uploading only the logs the server lacks (asked by hash before uploading)
 - [x] Pairing: linking a (new) controller to the organisation, which any user can do, with unpairing and the download page
 
+## Public website (fleetranger.org)
+
+- [~] Landing page: what FleetRanger does, for whom, self-hosted, source and contact
+- [ ] Static build reusing the web app's components
+- [ ] Hosting through the Ansible repo
+
 ## Before production use
 
 - [ ] Backups: PostgreSQL dumps and raw logs
