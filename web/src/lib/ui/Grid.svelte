@@ -2,6 +2,7 @@
 	@component
 	Carbon's 2x Grid in the product model: 4, 8 or 16 columns, Carbon's margins,
 	left-aligned and at most 1584px wide. Place content in Columns.
+	`centered` gives the editorial model, for the website: centred in wider windows.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -9,13 +10,14 @@
 	interface Props {
 		/** Space rows of columns by the gutter, e.g. for form fields. */
 		rowGap?: boolean;
+		centered?: boolean;
 		children: Snippet;
 	}
 
-	let { rowGap = false, children }: Props = $props();
+	let { rowGap = false, centered = false, children }: Props = $props();
 </script>
 
-<div class="grid" class:row-gap={rowGap}>
+<div class="grid" class:row-gap={rowGap} class:centered>
 	{@render children()}
 </div>
 
@@ -34,6 +36,10 @@
 
 	.row-gap {
 		row-gap: var(--grid-gutter);
+	}
+
+	.centered {
+		margin-inline: auto;
 	}
 
 	/* Carbon's md, lg and max breakpoints (42, 66 and 99rem). Custom properties
