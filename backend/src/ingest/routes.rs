@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::{get, post},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -40,6 +40,30 @@ where
             "/api/controller/logs",
             post(receive).layer(DefaultBodyLimit::max(MAX_LOG_BYTES)),
         )
+        .route("/api/controller/logs/missing", post(missing))
+}
+
+#[derive(Deserialize)]
+struct Hashes {
+    sha256: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct Missing {
+    missing: Vec<String>,
+}
+
+/// Which logs, by SHA-256 in hex, the server doesn't have: a paired controller
+/// asks before uploading, so a log already stored (also after a reinstall, or
+/// when another install's logs were moved here) isn't sent again.
+async fn missing(
+    _controller: Controller,
+    State(db): State<PgPool>,
+    Json(hashes): Json<Hashes>,
+) -> ApiResult<Json<Missing>> {
+    Ok(Json(Missing {
+        missing: upload::missing(&db, hashes.sha256).await?,
+    }))
 }
 
 async fn status(

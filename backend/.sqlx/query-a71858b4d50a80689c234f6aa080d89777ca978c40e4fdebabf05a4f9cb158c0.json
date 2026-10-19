@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, pilot_id as \"pilot_id!\", takeoff_at, landed_at\n           from flights\n           where pilot_id is not null and session_id is null\n           order by takeoff_at, id",
+  "query": "select f.id, f.pilot_id as \"pilot_id!\", f.takeoff_at, f.landed_at, l.received_at\n           from flights f\n           join raw_logs l on l.id = f.raw_log_id\n           where f.raw_log_id = $1 and f.session_id is null\n             and f.pilot_id is not null and l.pilot_id is not null",
   "describe": {
     "columns": [
       {
@@ -46,17 +46,31 @@
             "name": "landed_at"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "received_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "received_at"
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "206e2bab9f8313ad18a42f9ba731a112cea162267b077c4842bf18bd9df61aef"
+  "hash": "a71858b4d50a80689c234f6aa080d89777ca978c40e4fdebabf05a4f9cb158c0"
 }

@@ -57,6 +57,32 @@ pub async fn receive(
     Ok(db::save_upload(db, &sha256, &relative, size, pilot_id).await?)
 }
 
+/// At most this many hashes per question; the controller asks in parts.
+pub const MAX_HASHES: usize = 1000;
+
+/// Which of these logs, by SHA-256 in hex, aren't stored yet: the controller
+/// asks before uploading, so it only sends what's missing. Answers in the
+/// controller's own spelling of each hash.
+pub async fn missing(db: &PgPool, sha256s_hex: Vec<String>) -> ApiResult<Vec<String>> {
+    if sha256s_hex.len() > MAX_HASHES {
+        return Err(ApiError::Invalid(format!(
+            "Ask about at most {MAX_HASHES} logs at a time."
+        )));
+    }
+    let sha256s = sha256s_hex
+        .iter()
+        .map(|hex| parse_sha256(hex))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| ApiError::Invalid("Send each log's SHA-256 in hex.".to_owned()))?;
+    let stored = db::stored_contents(db, &sha256s).await?;
+    Ok(sha256s_hex
+        .into_iter()
+        .zip(sha256s)
+        .filter(|(_, sha256)| !stored.contains(sha256))
+        .map(|(hex, _)| hex)
+        .collect())
+}
+
 /// A file name as DJI Pilot 2 writes them, with nothing that could leave the
 /// controller's directory.
 fn is_log_name(name: &str) -> bool {

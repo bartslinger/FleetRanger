@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select max(l.received_at) > $2::timestamptz - make_interval(hours => $3)\n                       as \"same_sync!\"\n                   from flights f\n                   join raw_logs l on l.id = f.raw_log_id\n                   where f.session_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "same_sync!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fc6401cd761be0e39d8fa2303757cad55ed5c3bf71cb0e1c0be0f1c09a25e404"
+}

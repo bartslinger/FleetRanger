@@ -62,6 +62,17 @@ pub async fn has_content(db: &PgPool, sha256: &[u8]) -> sqlx::Result<bool> {
     .await
 }
 
+/// Which of these contents are already stored, at any path.
+pub async fn stored_contents(db: &PgPool, sha256s: &[Vec<u8>]) -> sqlx::Result<HashSet<Vec<u8>>> {
+    let stored = sqlx::query_scalar!(
+        "select sha256 from raw_logs where sha256 = any($1)",
+        sha256s
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(stored.into_iter().collect())
+}
+
 /// Registers an uploaded log at its path, with the pilot chosen on the
 /// controller (ignored if there's no such user). A log already at that path is
 /// a previous version: it's replaced and processed again.
@@ -372,5 +383,13 @@ mod tests {
         assert_eq!(again.id, log.id, "the same log, to be processed again");
         assert!(has_content(&db, &[2; 32]).await.unwrap());
         assert!(!has_content(&db, &[1; 32]).await.unwrap());
+        let stored = stored_contents(&db, &[vec![1; 32], vec![2; 32]])
+            .await
+            .unwrap();
+        assert_eq!(
+            stored,
+            HashSet::from([vec![2; 32]]),
+            "only the latest version"
+        );
     }
 }

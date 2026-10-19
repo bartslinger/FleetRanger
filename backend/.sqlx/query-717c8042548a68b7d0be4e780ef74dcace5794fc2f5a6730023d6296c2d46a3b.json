@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select f.session_id as \"id!\",\n                min(f.takeoff_at) as \"first_takeoff_at!\",\n                max(f.landed_at) as \"last_landed_at!\",\n                count(*) as \"flights!\",\n                sum(f.air_time_s)::bigint as \"air_time_s!\",\n                sum(f.distance_m) as \"distance_m!\",\n                array_remove(array_agg(distinct u.name), null) as \"pilots!\",\n                array_remove(array_agg(distinct t.name), null) as \"teams!\",\n                array_remove(array_agg(distinct f.team_id), null) as \"team_ids!\"\n         from flights f\n         left join users u on u.id = f.pilot_id\n         left join teams t on t.id = f.team_id\n         where f.session_id is not null\n           and ($1\n                or f.pilot_id = $2\n                or f.team_id in (select team_id from team_members where user_id = $2))\n         group by f.session_id\n         order by min(f.takeoff_at) desc, f.session_id\n         limit $3 offset $4",
+  "query": "select f.session_id as \"id!\",\n                min(f.takeoff_at) as \"first_takeoff_at!\",\n                max(f.landed_at) as \"last_landed_at!\",\n                count(*) as \"flights!\",\n                sum(f.air_time_s)::bigint as \"air_time_s!\",\n                sum(f.distance_m) as \"distance_m!\",\n                array_remove(array_agg(distinct u.name), null) as \"pilots!\",\n                array_remove(array_agg(distinct t.name), null) as \"teams!\",\n                array_remove(array_agg(distinct f.team_id), null) as \"team_ids!\"\n         from flights f\n         left join users u on u.id = f.pilot_id\n         left join teams t on t.id = f.team_id\n         where f.session_id is not null\n           and ($1\n                or f.pilot_id = $2\n                or f.team_id in (select team_id from team_members where user_id = $2))\n           and ($5::timestamptz is null\n                or f.session_id in (select session_id from flights\n                                    where takeoff_at < $6 and landed_at > $5))\n         group by f.session_id\n         order by min(f.takeoff_at) desc, f.session_id\n         limit $3 offset $4",
   "describe": {
     "columns": [
       {
@@ -68,7 +68,9 @@
         "Bool",
         "Uuid",
         "Int8",
-        "Int8"
+        "Int8",
+        "Timestamptz",
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -83,5 +85,5 @@
       null
     ]
   },
-  "hash": "cd8bf7ba564279e2b78ae577e91ea867a644bfd9fd7af08444ec9fc477107997"
+  "hash": "717c8042548a68b7d0be4e780ef74dcace5794fc2f5a6730023d6296c2d46a3b"
 }

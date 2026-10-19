@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select session_id as \"session_id!\"\n           from flights\n           where pilot_id = $1 and session_id is not null\n             and takeoff_at < $3::timestamptz + make_interval(mins => $4)\n             and landed_at > $2::timestamptz - make_interval(mins => $4)\n           order by greatest(takeoff_at - $3::timestamptz, $2::timestamptz - landed_at), id\n           limit 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "session_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ca8ea6265263f7db3bbfdd845b111023f058f6e976fd9669a2c003aba6e506a5"
+}
