@@ -257,6 +257,77 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
     .await
 }
 
+/// Where a flight is in the list that `list` pages through: its neighbours,
+/// its position (from 1) and the list's length.
+#[derive(Serialize)]
+pub struct Neighbours {
+    pub previous: Option<Uuid>,
+    pub next: Option<Uuid>,
+    pub position: i64,
+    pub total: i64,
+}
+
+/// The flight's place in the scope's flights that pass the filter, in the
+/// given order; None if it isn't in that list. The order must stay the one
+/// `list` uses.
+pub async fn neighbours(
+    db: &PgPool,
+    scope: &FlightScope,
+    filter: &Filter,
+    sort: &Sort,
+    id: Uuid,
+) -> sqlx::Result<Option<Neighbours>> {
+    sqlx::query_as!(
+        Neighbours,
+        r#"with listed as (
+               select id,
+                      lag(id) over w as previous,
+                      lead(id) over w as next,
+                      row_number() over w as position,
+                      count(*) over () as total
+               from flights
+               where ($3
+                      or pilot_id = $4
+                      or team_id in (select team_id from team_members where user_id = $4))
+                 and ($5::text is null or aircraft_serial = $5)
+                 and ($6::text is null or rc_serial = $6)
+                 and (not $7 or session_id is null)
+               window w as (order by
+                   case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
+                   case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
+                   case when $1 = 'air_time_s' and not $2 then air_time_s end asc,
+                   case when $1 = 'air_time_s' and $2 then air_time_s end desc,
+                   case when $1 = 'distance_m' and not $2 then distance_m end asc,
+                   case when $1 = 'distance_m' and $2 then distance_m end desc,
+                   case when $1 = 'aircraft_serial' and not $2 then lower(coalesce(
+                       (select a.name from aircraft a where a.serial = flights.aircraft_serial),
+                       aircraft_serial)) end asc nulls last,
+                   case when $1 = 'aircraft_serial' and $2 then lower(coalesce(
+                       (select a.name from aircraft a where a.serial = flights.aircraft_serial),
+                       aircraft_serial)) end desc nulls last,
+                   case when $1 = 'rc_serial' and not $2 then lower(coalesce(
+                       (select r.name from remote_controllers r where r.serial = flights.rc_serial),
+                       rc_serial)) end asc nulls last,
+                   case when $1 = 'rc_serial' and $2 then lower(coalesce(
+                       (select r.name from remote_controllers r where r.serial = flights.rc_serial),
+                       rc_serial)) end desc nulls last,
+                   id)
+           )
+           select previous, next, position as "position!", total as "total!"
+           from listed where id = $8"#,
+        sort.key.as_str(),
+        sort.descending,
+        scope.all,
+        scope.user_id,
+        filter.aircraft_serial,
+        filter.rc_serial,
+        filter.without_session,
+        id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
 /// A drone or controller to filter the logbook by.
 #[derive(Serialize)]
 pub struct Device {
@@ -529,6 +600,88 @@ mod tests {
             user_id: me,
         };
         assert_eq!(visible(&db, &everything).await.len(), 7);
+    }
+
+    /// A flight's neighbours and position agree with the list, for every
+    /// order (ties and missing drones included) and with a filter; a flight
+    /// the filter leaves out has none.
+    #[sqlx::test]
+    async fn neighbours_follow_the_list(db: PgPool) {
+        let session = insert_id(&db, "insert into sessions default values returning id").await;
+        let mut grouped = None;
+        for (air_time, serial, in_session) in [
+            (60, Some("B"), false),
+            (60, None, true),
+            (30, Some("A"), false),
+            (90, Some("B"), false),
+            (30, None, false),
+        ] {
+            let id = flight(&db, None, None).await;
+            sqlx::query(
+                "update flights set air_time_s = $2, distance_m = $2 * 10, aircraft_serial = $3,
+                     session_id = $4, takeoff_at = now() - make_interval(mins => $2)
+                 where id = $1",
+            )
+            .bind(id)
+            .bind(air_time)
+            .bind(serial)
+            .bind(in_session.then_some(session))
+            .execute(&db)
+            .await
+            .unwrap();
+            if in_session {
+                grouped = Some(id);
+            }
+        }
+        let scope = FlightScope {
+            all: true,
+            user_id: Uuid::nil(),
+        };
+        let keys = [
+            SortKey::TakeoffAt,
+            SortKey::AirTime,
+            SortKey::Distance,
+            SortKey::AircraftSerial,
+            SortKey::RcSerial,
+        ];
+        for without_session in [false, true] {
+            let filter = Filter {
+                without_session,
+                ..Filter::default()
+            };
+            for key in keys {
+                for descending in [false, true] {
+                    let sort = Sort { key, descending };
+                    let ids: Vec<Uuid> = list(&db, &scope, &filter, &sort, 100, 0)
+                        .await
+                        .unwrap()
+                        .into_iter()
+                        .map(|flight| flight.id)
+                        .collect();
+                    for (index, id) in ids.iter().enumerate() {
+                        let place = neighbours(&db, &scope, &filter, &sort, *id)
+                            .await
+                            .unwrap()
+                            .unwrap();
+                        let at = |i: Option<usize>| i.and_then(|i| ids.get(i)).copied();
+                        assert_eq!(place.previous, at(index.checked_sub(1)));
+                        assert_eq!(place.next, at(Some(index + 1)));
+                        assert_eq!(place.position, index as i64 + 1);
+                        assert_eq!(place.total, ids.len() as i64);
+                    }
+                }
+            }
+        }
+        let filter = Filter {
+            without_session: true,
+            ..Filter::default()
+        };
+        let sort = Sort {
+            key: SortKey::TakeoffAt,
+            descending: true,
+        };
+        let left_out = neighbours(&db, &scope, &filter, &sort, grouped.unwrap()).await;
+        assert!(left_out.unwrap().is_none());
     }
 
     /// A user without a team or flights sees nothing unless they see all.

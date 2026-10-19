@@ -2,7 +2,9 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, Device, Filter, FlightDetail, FlightSummary, PilotChoice, Sort, TeamChoice};
+use super::db::{
+    self, Device, Filter, FlightDetail, FlightSummary, Neighbours, PilotChoice, Sort, TeamChoice,
+};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -23,6 +25,21 @@ pub async fn list(
     let flights = db::list(db, &scope, filter, sort, limit, offset).await?;
     let total = db::count(db, &scope, filter).await?;
     Ok((flights, total))
+}
+
+/// A flight's neighbours in the list the actor pages through with this filter
+/// and order. Not found if the flight isn't in that list.
+pub async fn neighbours(
+    db: &PgPool,
+    actor: &Actor,
+    filter: &Filter,
+    sort: &Sort,
+    id: Uuid,
+) -> ApiResult<Neighbours> {
+    let scope = policy::flight_scope(actor);
+    db::neighbours(db, &scope, filter, sort, id)
+        .await?
+        .ok_or(ApiError::NotFound)
 }
 
 /// The drones and controllers of the flights the actor may see, for the
