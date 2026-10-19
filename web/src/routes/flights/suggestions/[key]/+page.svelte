@@ -28,23 +28,39 @@
 	const flights = $derived(data.suggestion.flights);
 	type Row = (typeof flights)[number];
 
-	// The flights to make the session of; all of them until some are left out.
-	let selected: string[] = $state(untrack(() => flights.map((flight) => flight.id)));
-	let selectedFor = untrack(() => data.suggestion.key);
+	// The flights left out of the session, and those selected in either table
+	// to leave out or put back. Another suggestion starts afresh.
+	let excluded: string[] = $state([]);
+	let selectedIn: string[] = $state([]);
+	let selectedOut: string[] = $state([]);
+	let stateFor = untrack(() => data.suggestion.key);
 	$effect(() => {
-		if (data.suggestion.key === selectedFor) return;
-		selectedFor = data.suggestion.key;
-		selected = flights.map((flight) => flight.id);
+		if (data.suggestion.key === stateFor) return;
+		stateFor = data.suggestion.key;
+		excluded = [];
+		selectedIn = [];
+		selectedOut = [];
 	});
-	// Back from a flight's page finds the same flights ticked.
-	export const snapshot: Snapshot<{ key: string; selected: string[] }> = {
-		capture: () => ({ key: data.suggestion.key, selected }),
+	// Back from a flight's page finds the same flights left out.
+	export const snapshot: Snapshot<{ key: string; excluded: string[] }> = {
+		capture: () => ({ key: data.suggestion.key, excluded }),
 		restore: (value) => {
-			if (value.key === data.suggestion.key) selected = value.selected;
+			if (value.key === data.suggestion.key) excluded = value.excluded;
 		}
 	};
 
-	const chosen = $derived(flights.filter((flight) => selected.includes(flight.id)));
+	function leaveOut(ids: string[]) {
+		excluded = [...excluded, ...ids];
+		selectedIn = [];
+	}
+
+	function putBack(ids: string[]) {
+		excluded = excluded.filter((id) => !ids.includes(id));
+		selectedOut = [];
+	}
+
+	const chosen = $derived(flights.filter((flight) => !excluded.includes(flight.id)));
+	const leftOut = $derived(flights.filter((flight) => excluded.includes(flight.id)));
 	// The facts of the session it would become.
 	const shown = $derived(chosen.length > 0 ? chosen : flights);
 	const facts = $derived(summary(shown, data.timeZone));
@@ -57,12 +73,7 @@
 
 	// After creating: the flights left out are a suggestion to look at next,
 	// otherwise the next one in the list.
-	const then = $derived(
-		flights.find((flight) => !selected.includes(flight.id))?.id ??
-			data.suggestion.next ??
-			data.suggestion.previous ??
-			''
-	);
+	const then = $derived(leftOut[0]?.id ?? data.suggestion.next ?? data.suggestion.previous ?? '');
 
 	const list = $derived(query(data.state));
 	const suggestionHref = (key: string) =>
@@ -183,7 +194,7 @@
 	{/if}
 	<Column narrow lg={11}>
 		<TrackMap
-			tracks={flights.map((flight) => flight.track)}
+			tracks={shown.map((flight) => flight.track)}
 			token={data.mapboxToken}
 			label="Map of the suggested session’s tracks"
 		/>
@@ -195,14 +206,39 @@
 		<DataTable
 			label="Flights of the suggested session"
 			{columns}
-			rows={flights}
+			rows={chosen}
 			rowKey={(flight) => flight.id}
 			rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
 			selectable={() => true}
-			bind:selected
-			summary="{chosen.length} of {flightsLabel(flights.length)} in the session"
-		/>
+			bind:selected={selectedIn}
+			summary={flightsLabel(chosen.length)}
+			selectedLabel={(count) => `${flightsLabel(count)} selected`}
+		>
+			{#snippet batchActions(ids)}
+				<Button onclick={() => leaveOut(ids)}>Leave out</Button>
+			{/snippet}
+		</DataTable>
 	</Column>
+	{#if leftOut.length > 0}
+		<!-- They become a suggestion of their own once the session is made. -->
+		<Column narrow>
+			<DataTable
+				label="Flights left out"
+				{columns}
+				rows={leftOut}
+				rowKey={(flight) => flight.id}
+				rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+				selectable={() => true}
+				bind:selected={selectedOut}
+				summary="{flightsLabel(leftOut.length)} left out"
+				selectedLabel={(count) => `${flightsLabel(count)} selected`}
+			>
+				{#snippet batchActions(ids)}
+					<Button onclick={() => putBack(ids)}>Put back</Button>
+				{/snippet}
+			</DataTable>
+		</Column>
+	{/if}
 </Grid>
 
 <style>
