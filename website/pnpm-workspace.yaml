@@ -2,5 +2,6 @@
 # IBM's install telemetry, so they are denied.
 allowBuilds:
   '@carbon/icons': false
+  '@carbon/pictograms': false
   '@ibm/plex-mono': false
   '@ibm/plex-sans': false
