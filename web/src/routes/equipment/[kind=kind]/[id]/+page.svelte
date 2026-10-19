@@ -15,7 +15,7 @@
 	import Select from '#lib/ui/Select.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
-	import { filtered } from '../../../logbook.js';
+	import { filtered } from '../../../flights/logbook.js';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -48,7 +48,7 @@
 			: [])
 	]);
 	const flights = $derived(
-		`${resolve('/')}${filtered(data.kind === 'drones' ? { drone: item.serial } : { controller: item.serial })}`
+		`${resolve('/flights')}${filtered(data.kind === 'drones' ? { drone: item.serial } : { controller: item.serial })}`
 	);
 </script>
 

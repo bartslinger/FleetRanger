@@ -131,8 +131,8 @@
 	// Admin pages only for admins; the backend refuses everyone else anyway.
 	// Equipment for everyone: members see their team's.
 	const nav: NavItem[] = $derived([
-		{ href: resolve('/'), label: 'Logbook', icon: Notebook },
 		{ href: resolve('/sessions'), label: 'Sessions', icon: FlightRoster },
+		{ href: resolve('/flights'), label: 'Flights', icon: Notebook },
 		...(data.account?.role === 'admin'
 			? [
 					{ href: resolve('/users'), label: 'Users', icon: UserMultiple },

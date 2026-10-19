@@ -94,7 +94,7 @@
 
 <PageHeader
 	title={dateTime(flight.takeoff_at, data.timeZone)}
-	breadcrumb={[{ href: resolve('/'), label: 'Logbook' }]}
+	breadcrumb={[{ href: resolve('/flights'), label: 'Flights' }]}
 />
 
 <Grid rowGap>

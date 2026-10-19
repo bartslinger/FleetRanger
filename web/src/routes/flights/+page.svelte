@@ -115,11 +115,11 @@
 	}
 
 	function href(state: LogbookState) {
-		return `${resolve('/')}${query(state)}`;
+		return `${resolve('/flights')}${query(state)}`;
 	}
 </script>
 
-<PageHeader title="Logbook" />
+<PageHeader title="Flights" />
 
 <Grid>
 	<Column narrow>

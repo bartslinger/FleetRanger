@@ -169,7 +169,7 @@
 		<Column narrow>
 			<EmptyState
 				title="No sessions yet"
-				body="A pilot’s flights are grouped into sessions once the flights have a pilot. Set pilots in the logbook."
+				body="A pilot’s flights are grouped into sessions once the flights have a pilot. Set pilots on the Flights page."
 			/>
 		</Column>
 	{:else if data.view === 'cards'}
