@@ -12,6 +12,7 @@
 	import { DateRangePicker } from 'bits-ui';
 	import { parseDate, type DateValue } from '@internationalized/date';
 	import Calendar from '@carbon/icons/es/calendar/16.js';
+	import Close from '@carbon/icons/es/close/16.js';
 	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
 	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
 	import Icon from './Icon.svelte';
@@ -56,7 +57,7 @@
 	// Closing hands focus back to the field; that focus mustn't reopen it.
 	let closedAt = 0;
 	function focusedField(event: FocusEvent) {
-		if (open || (event.target as HTMLElement).closest('.date-trigger')) return;
+		if (open || (event.target as HTMLElement).closest('.date-trigger, .date-clear')) return;
 		if (performance.now() - closedAt < 300) return;
 		open = true;
 	}
@@ -98,6 +99,18 @@
 						</DateRangePicker.Input>
 					</div>
 				{/each}
+				<!-- Clears only the dates, as a combo box's clear button. -->
+				{#if from}
+					<button
+						type="button"
+						class="date-clear"
+						aria-label="Clear dates"
+						title="Clear dates"
+						onclick={() => onchange(null, null)}
+					>
+						<Icon icon={Close} />
+					</button>
+				{/if}
 				<DateRangePicker.Trigger class="date-trigger" aria-label="Open the calendar">
 					<Icon icon={Calendar} />
 				</DateRangePicker.Trigger>
@@ -238,9 +251,38 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* The calendar icon in the To field's end. */
+	/* The calendar icon in the To field's end, and the clear button before it. */
 	:global(.date-input) {
 		padding-right: var(--cds-spacing-09);
+	}
+
+	.field:nth-child(2) :global(.date-input) {
+		padding-right: calc(2 * var(--cds-spacing-09));
+	}
+
+	.date-clear {
+		position: absolute;
+		right: var(--cds-size-medium);
+		bottom: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: var(--cds-size-medium);
+		height: var(--cds-size-medium);
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: var(--cds-icon-primary);
+		cursor: pointer;
+	}
+
+	.date-clear:hover {
+		background: var(--cds-field-hover);
+	}
+
+	.date-clear:focus-visible {
+		outline: 2px solid var(--cds-focus);
+		outline-offset: -2px;
 	}
 
 	:global(.date-input:focus-within),
