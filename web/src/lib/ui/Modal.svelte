@@ -14,6 +14,7 @@
 	import { Dialog } from 'bits-ui';
 	import Close from '@carbon/icons/es/close/20.js';
 	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
 	import Button from './Button.svelte';
 	import Icon, { type IconDescriptor } from './Icon.svelte';
 	import IconButton from './IconButton.svelte';
@@ -52,6 +53,13 @@
 		children
 	}: Props = $props();
 
+	// "?/create" alone would replace the page's query, and SvelteKit lands on
+	// the page without it after the action: a filtered list lost its filters.
+	// The action goes after the query instead: "?session=none&/create".
+	const target = $derived(
+		action.startsWith('?/') && page.url.search ? `${page.url.search}&${action.slice(1)}` : action
+	);
+
 	let open = $state(false);
 	let busy = $state(false);
 	let body: HTMLElement | undefined = $state();
@@ -82,7 +90,7 @@
 		>
 			<form
 				method="POST"
-				{action}
+				action={target}
 				use:enhance={() => {
 					busy = true;
 					return async ({ result, update }) => {
