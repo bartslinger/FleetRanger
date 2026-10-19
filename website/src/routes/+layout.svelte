@@ -1,6 +1,8 @@
 <script lang="ts">
 	import '$ui/base.css';
+	import Asleep from '@carbon/icons/es/asleep/20.js';
 	import Launch from '@carbon/icons/es/launch/16.js';
+	import Light from '@carbon/icons/es/light/20.js';
 	import logo from '$assets/favicon.svg';
 	import Column from '$ui/Column.svelte';
 	import Grid from '$ui/Grid.svelte';
@@ -25,6 +27,15 @@
 		<a href="/#how-it-works">How it works</a>
 		<a href="/#features">Features</a>
 	</nav>
+	<!-- Carbon's header actions; the one for the other theme shows (app.html). -->
+	<div class="actions">
+		<button type="button" class="to-light" data-set-theme="light" aria-label="Light theme">
+			<Icon icon={Light} />
+		</button>
+		<button type="button" class="to-dark" data-set-theme="dark" aria-label="Dark theme">
+			<Icon icon={Asleep} />
+		</button>
+	</div>
 </header>
 
 <main id="main">
@@ -105,10 +116,16 @@
 		align-items: center;
 	}
 
-	/* Tighter on phones so the links fit beside the name; they scroll if not. */
+	/* Tighter on phones so the links fit beside the name, and left out where
+	   they don't: the sections follow each other on the one page. */
 	nav {
-		display: flex;
-		overflow-x: auto;
+		display: none;
+	}
+
+	@media (min-width: 30rem) {
+		nav {
+			display: flex;
+		}
 	}
 
 	nav a {
@@ -120,6 +137,56 @@
 		nav a {
 			padding-inline: var(--cds-spacing-05);
 		}
+	}
+
+	.actions {
+		display: flex;
+		margin-inline-start: auto;
+	}
+
+	/* Shown only with the script that makes them work. */
+	.actions button {
+		display: none;
+		align-items: center;
+		justify-content: center;
+		width: var(--cds-size-large);
+		height: var(--cds-size-large);
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--cds-icon-primary);
+		cursor: pointer;
+	}
+
+	.actions button:hover {
+		background: var(--cds-background-hover);
+	}
+
+	.actions button:focus-visible {
+		outline: 2px solid var(--cds-focus);
+		outline-offset: -2px;
+	}
+
+	:global(.js) .to-dark {
+		display: flex;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.js:not([data-theme='light'])) .to-dark {
+			display: none;
+		}
+
+		:global(.js:not([data-theme='light'])) .to-light {
+			display: flex;
+		}
+	}
+
+	:global(.js[data-theme='dark']) .to-dark {
+		display: none;
+	}
+
+	:global(.js[data-theme='dark']) .to-light {
+		display: flex;
 	}
 
 	/* The website's one colour outside Carbon's tokens: the app's track colour
@@ -134,9 +201,13 @@
 
 	/* On a dark page the footer has the page's colour: a line sets it apart. */
 	@media (prefers-color-scheme: dark) {
-		footer {
+		:global(:root:not([data-theme='light'])) footer {
 			border-top: 1px solid var(--cds-border-subtle-01);
 		}
+	}
+
+	:global(:root[data-theme='dark']) footer {
+		border-top: 1px solid var(--cds-border-subtle-01);
 	}
 
 	footer .name {

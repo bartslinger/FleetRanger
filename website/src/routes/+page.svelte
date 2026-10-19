@@ -109,13 +109,13 @@
 				<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
 			</div>
 		</Column>
-		<Column>
+		<Column md={8} lg={12}>
 			<!-- The app at laptop width, and on phones as it is on a phone. -->
 			<picture>
 				<source
 					media="(min-width: 42rem)"
 					srcset="{session800} 800w, {session1600} 1600w, {session2400} 2400w"
-					sizes="(min-width: 99rem) 97rem, calc(100vw - 2rem)"
+					sizes="(min-width: 99rem) 72rem, (min-width: 66rem) 75vw, calc(100vw - 2rem)"
 					width="3600"
 					height="2032"
 				/>
@@ -166,17 +166,37 @@
 			<h2 id="how-it-works-title">How it works</h2>
 		</Column>
 		<Column>
-			<ol class="timeline">
-				{#each moments as moment, i (moment.when)}
-					<li class:last={i === moments.length - 1}>
-						<h3>{moment.when}</h3>
-						<p>{moment.text}</p>
-						{#if moment.screen}
-							<div class="screen"><Controller {...moment.screen} /></div>
-						{/if}
-					</li>
-				{/each}
-			</ol>
+			<!-- The steps scroll past the picture, which stays in place and shows the
+			     step in the middle of the window (the script in app.html). -->
+			<div class="steps" data-steps>
+				<div class="picture">
+					{#each moments as moment, i (moment.when)}
+						<div class="shown" class:active={i === 0} data-shown={i}>
+							{#if moment.screen}
+								<Controller {...moment.screen} />
+							{:else}
+								<img
+									class="screenshot"
+									src={session1600}
+									srcset="{session800} 800w, {session1600} 1600w"
+									sizes="(min-width: 42rem) 50vw, 20rem"
+									alt="The session in the web app."
+									width="3600"
+									height="2032"
+								/>
+							{/if}
+						</div>
+					{/each}
+				</div>
+				<ol class="timeline">
+					{#each moments as moment, i (moment.when)}
+						<li class:last={i === moments.length - 1} data-step={i}>
+							<h3>{moment.when}</h3>
+							<p>{moment.text}</p>
+						</li>
+					{/each}
+				</ol>
+			</div>
 		</Column>
 	</Grid>
 </section>
@@ -281,17 +301,84 @@
 		margin-top: var(--cds-spacing-08);
 	}
 
+	/* The picture stays in place while the steps scroll past it: at the top on
+	   phones, beside them from md. */
+	.steps {
+		display: grid;
+		margin-top: var(--cds-spacing-09);
+	}
+
+	.picture {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		display: grid;
+		align-items: center;
+		padding-block: var(--cds-spacing-05);
+		background: var(--cds-background);
+	}
+
+	/* The pictures on top of each other; the one for the current step shows. */
+	.shown {
+		grid-area: 1 / 1;
+		max-width: 20rem;
+		opacity: 0;
+		transition: opacity 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
+	}
+
+	.shown.active {
+		opacity: 1;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.shown {
+			transition: none;
+		}
+	}
+
+	@media (min-width: 42rem) {
+		.steps {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			gap: var(--cds-spacing-07);
+		}
+
+		.picture {
+			grid-column: 2;
+			grid-row: 1;
+			align-self: start;
+			top: calc(50vh - 12rem);
+			padding-block: 0;
+			background: none;
+		}
+
+		.shown {
+			max-width: 32rem;
+		}
+	}
+
 	/* Three moments along a line, marked like a track: a ring at take-off,
-	   dots after it. Down the left edge on phones, across from md. */
+	   dots after it. Each is tall enough to be read while its picture shows. */
 	.timeline {
 		display: grid;
 		gap: var(--cds-spacing-07);
-		margin-top: var(--cds-spacing-09);
 	}
 
 	.timeline li {
 		position: relative;
+		min-height: 50vh;
 		padding-inline-start: var(--cds-spacing-08);
+	}
+
+	@media (min-width: 42rem) {
+		.timeline {
+			grid-column: 1;
+			grid-row: 1;
+			padding-top: calc(50vh - 12rem);
+		}
+
+		.timeline li {
+			min-height: 24rem;
+		}
 	}
 
 	.timeline li::before {
@@ -330,43 +417,16 @@
 		color: var(--cds-text-secondary);
 	}
 
-	.screen {
-		max-width: 30rem;
-		margin-top: var(--cds-spacing-07);
-	}
-
 	/* The app as it is: the whole screenshot, set apart from the page by a line. */
 	.screenshot {
 		display: block;
 		width: 100%;
 		height: auto;
-		margin-top: var(--cds-spacing-10);
 		border: 1px solid var(--cds-border-subtle-01);
 	}
 
-	@media (min-width: 42rem) {
-		.timeline {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-			gap: var(--cds-spacing-07);
-		}
-
-		.timeline li {
-			padding-inline-start: 0;
-			padding-top: var(--cds-spacing-08);
-		}
-
-		.timeline li::before {
-			top: 0;
-		}
-
-		.timeline li::after {
-			top: calc(0.4375rem - 1px);
-			bottom: auto;
-			left: 1.25rem;
-			right: calc(-1 * var(--cds-spacing-07) + 0.25rem);
-			border-left: 0;
-			border-top: 2px solid var(--cds-border-subtle-01);
-		}
+	picture .screenshot {
+		margin-top: var(--cds-spacing-10);
 	}
 
 	/* Carbon's content blocks: a title and a short text, separated by space. */
