@@ -1,8 +1,14 @@
 <script lang="ts">
+	import Email from '@carbon/icons/es/email/16.js';
 	import Launch from '@carbon/icons/es/launch/16.js';
+	import DataPrivacy from '@carbon/pictograms/es/data--privacy/index.js';
+	import Drone from '@carbon/pictograms/es/drone/index.js';
+	import OpenSource from '@carbon/pictograms/es/open-source/index.js';
+	import Servers from '@carbon/pictograms/es/servers/index.js';
 	import Button from '$ui/Button.svelte';
 	import Column from '$ui/Column.svelte';
 	import Grid from '$ui/Grid.svelte';
+	import Icon from '$ui/Icon.svelte';
 	import Controller from '#lib/Controller.svelte';
 	import Laptop from '#lib/Laptop.svelte';
 	import pilot640 from '#lib/images/pilot-640.webp';
@@ -22,6 +28,29 @@
 		light: { src: light1600, srcset: `${light800} 800w, ${light1600} 1600w, ${light2400} 2400w` },
 		dark: { src: dark1600, srcset: `${dark800} 800w, ${dark1600} 1600w, ${dark2400} 2400w` }
 	};
+
+	const points = [
+		{
+			pictogram: Servers,
+			title: 'One install per organisation',
+			text: 'FleetRanger runs on a server you control, and your flight logs are stored there only.'
+		},
+		{
+			pictogram: DataPrivacy,
+			title: 'Pilots see their own flights',
+			text: 'Unless you give them more access. Raw logs and full telemetry are never shown to users.'
+		},
+		{
+			pictogram: OpenSource,
+			title: 'Open source',
+			text: 'Licensed under the AGPL-3.0, so you can check what it does with your data.'
+		},
+		{
+			pictogram: Drone,
+			title: 'Made for DJI Enterprise',
+			text: 'For drones flown with DJI Pilot 2, on controllers such as the DJI RC Pro.'
+		}
+	];
 
 	const moments = [
 		{
@@ -76,21 +105,28 @@
 	/>
 </svelte:head>
 
+<!-- The text on the page, the picture on a band that runs to the window's
+     edge: the right half from lg, below the text before that. -->
 <section class="hero" aria-labelledby="title">
-	<Grid centered rowGap>
-		<Column md={8} lg={7}>
-			<h1 id="title">Own your flight logs</h1>
-			<p class="intro">
-				FleetRanger collects the logs from your DJI Enterprise controllers on your own server, and
-				turns them into a logbook: every flight with its pilot and track, grouped into sessions. It
-				is open source.
-			</p>
-			<div class="actions">
-				<Button href="mailto:{CONTACT}">Get in touch</Button>
-				<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
+	<div class="band" aria-hidden="true"></div>
+	<Grid centered>
+		<Column md={8} lg={8}>
+			<div class="lead">
+				<h1 id="title">Own your flight logs</h1>
+				<div>
+					<p class="intro">
+						FleetRanger collects the logs from your DJI Enterprise controllers on your own server,
+						and turns them into a logbook: every flight with its pilot and track, grouped into
+						sessions. It is open source.
+					</p>
+					<div class="actions">
+						<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
+						<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
+					</div>
+				</div>
 			</div>
 		</Column>
-		<Column md={8} lg={9}>
+		<Column md={8} lg={8}>
 			<div class="hero-laptop">
 				<Laptop
 					{...session}
@@ -98,6 +134,31 @@
 					alt="A session in FleetRanger: a flight's track on a satellite map, with its pilot, team, times and distance, and the list of its flights."
 				/>
 			</div>
+		</Column>
+	</Grid>
+</section>
+
+<section aria-labelledby="points-title">
+	<Grid centered rowGap>
+		<Column md={8} lg={8}>
+			<h2 id="points-title">Your data stays with you</h2>
+		</Column>
+		<Column md={8} lg={8}>
+			<p class="body">
+				Each organisation has its own install. Flight logs and tracks never leave it; to unlock a
+				log, your server only sends DJI the log's encrypted key records.
+			</p>
+		</Column>
+		<Column>
+			<ul class="points">
+				{#each points as point (point.title)}
+					<li>
+						<span class="pictogram"><Icon icon={point.pictogram} /></span>
+						<h3>{point.title}</h3>
+						<p>{point.text}</p>
+					</li>
+				{/each}
+			</ul>
 		</Column>
 	</Grid>
 </section>
@@ -141,7 +202,7 @@
 			<h2 id="features-title">Features</h2>
 		</Column>
 		<Column md={8} lg={12}>
-			<ul class="blocks">
+			<ul class="tiles">
 				{#each features as feature (feature.title)}
 					<li>
 						<h3>{feature.title}</h3>
@@ -153,18 +214,17 @@
 	</Grid>
 </section>
 
-<section aria-labelledby="start-title">
-	<Grid centered rowGap>
-		<Column md={8} lg={4}>
-			<h2 id="start-title">Set it up for your fleet</h2>
-		</Column>
+<section class="next" aria-labelledby="start-title">
+	<Grid centered>
 		<Column md={8} lg={8}>
+			<h2 id="start-title">Set it up for your fleet</h2>
 			<p class="body">
-				FleetRanger works with DJI Enterprise drones flown with DJI Pilot 2. To run it for your
-				organisation, write to {CONTACT}.
+				To run FleetRanger for your organisation, write to {CONTACT}. We help you install it on your
+				own server.
 			</p>
 			<div class="actions">
-				<Button href="mailto:{CONTACT}" kind="tertiary">Email us</Button>
+				<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
+				<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
 			</div>
 		</Column>
 	</Grid>
@@ -215,7 +275,6 @@
 
 	.intro {
 		max-width: 36rem;
-		margin-top: var(--cds-spacing-07);
 		color: var(--cds-text-secondary);
 	}
 
@@ -228,6 +287,108 @@
 		flex-wrap: wrap;
 		gap: var(--cds-spacing-05);
 		margin-top: var(--cds-spacing-08);
+	}
+
+	/* The hero: the headline at the top and the intro at the bottom of the text
+	   column, the laptop on a Gray 10 band. Below lg the band is behind the
+	   laptop only, and reaches the window's edges. */
+	.hero {
+		position: relative;
+		padding-bottom: 0;
+	}
+
+	.lead {
+		display: flex;
+		flex-direction: column;
+		gap: var(--cds-spacing-07);
+		height: 100%;
+	}
+
+	.hero-laptop {
+		margin-top: var(--cds-spacing-09);
+		padding-block: var(--cds-spacing-09);
+		background: var(--cds-layer-01);
+		box-shadow: 0 0 0 100vmax var(--cds-layer-01);
+		clip-path: inset(0 -100vmax);
+	}
+
+	.hero-laptop :global(.laptop) {
+		max-width: 40rem;
+		margin-inline: auto;
+	}
+
+	.band {
+		display: none;
+	}
+
+	@media (min-width: 66rem) {
+		.hero {
+			padding-bottom: var(--cds-spacing-11);
+		}
+
+		.lead {
+			justify-content: space-between;
+			min-height: 26rem;
+		}
+
+		.band {
+			display: block;
+			position: absolute;
+			inset: 0 0 0 50%;
+			background: var(--cds-layer-01);
+		}
+
+		.hero-laptop {
+			display: flex;
+			align-items: center;
+			height: 100%;
+			margin: 0;
+			padding: 0 0 0 var(--cds-spacing-07);
+			background: none;
+			box-shadow: none;
+			clip-path: none;
+		}
+	}
+
+	/* Four points with Carbon pictograms, as on IBM's product pages. */
+	.points {
+		display: grid;
+		gap: var(--cds-spacing-09) var(--cds-spacing-07);
+		margin-top: var(--cds-spacing-09);
+	}
+
+	@media (min-width: 42rem) {
+		.points {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
+	@media (min-width: 66rem) {
+		.points {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+	}
+
+	.pictogram {
+		display: block;
+		margin-bottom: var(--cds-spacing-07);
+		color: var(--cds-icon-interactive);
+	}
+
+	.pictogram :global(svg) {
+		width: 4rem;
+		height: 4rem;
+	}
+
+	.points h3 {
+		font-size: var(--cds-heading-02-font-size);
+		font-weight: var(--cds-heading-02-font-weight);
+		line-height: var(--cds-heading-02-line-height);
+	}
+
+	.points p {
+		margin-top: var(--cds-spacing-03);
+		color: var(--cds-text-secondary);
 	}
 
 	/* The picture stays in place while the steps scroll past it: at the top on
@@ -346,32 +507,35 @@
 		color: var(--cds-text-secondary);
 	}
 
-	/* Beside the headline from lg, below the buttons before that. */
-	.hero-laptop {
-		max-width: 40rem;
-		margin-top: var(--cds-spacing-07);
-	}
-
-	@media (min-width: 66rem) {
-		.hero-laptop {
-			margin-top: 0;
-		}
-	}
-
-	/* Carbon's content blocks: a title and a short text, separated by space. */
-	.blocks {
+	/* Carbon tiles on the page, with the narrow grid's 16px gutter. */
+	.tiles {
 		display: grid;
-		gap: var(--cds-spacing-08) var(--cds-spacing-07);
+		gap: var(--cds-spacing-05);
 	}
 
 	@media (min-width: 42rem) {
-		.blocks {
+		.tiles {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
 
-	.blocks p {
+	.tiles li {
+		min-height: 11rem;
+		padding: var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-spacing-07);
+		background: var(--cds-layer-01);
+	}
+
+	.tiles p {
 		margin-top: var(--cds-spacing-03);
 		color: var(--cds-text-secondary);
+	}
+
+	/* The next step: a Gray 10 band before the footer. */
+	.next {
+		background: var(--cds-layer-01);
+	}
+
+	.next .body {
+		margin-top: var(--cds-spacing-06);
 	}
 </style>
