@@ -30,6 +30,8 @@ pub struct FlightSummary {
 pub struct Filter {
     pub aircraft_serial: Option<String>,
     pub rc_serial: Option<String>,
+    /// Only flights in no session: the ones still to be grouped.
+    pub without_session: bool,
 }
 
 /// Columns the logbook can be sorted by.
@@ -104,6 +106,7 @@ pub async fn list(
                 or team_id in (select team_id from team_members where user_id = $6))
            and ($7::text is null or aircraft_serial = $7)
            and ($8::text is null or rc_serial = $8)
+           and (not $9 or session_id is null)
          order by
              case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
              case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -133,6 +136,7 @@ pub async fn list(
         scope.user_id,
         filter.aircraft_serial,
         filter.rc_serial,
+        filter.without_session,
     )
     .fetch_all(db)
     .await
@@ -241,11 +245,13 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
                   or pilot_id = $2
                   or team_id in (select team_id from team_members where user_id = $2))
              and ($3::text is null or aircraft_serial = $3)
-             and ($4::text is null or rc_serial = $4)"#,
+             and ($4::text is null or rc_serial = $4)
+             and (not $5 or session_id is null)"#,
         scope.all,
         scope.user_id,
         filter.aircraft_serial,
         filter.rc_serial,
+        filter.without_session,
     )
     .fetch_one(db)
     .await

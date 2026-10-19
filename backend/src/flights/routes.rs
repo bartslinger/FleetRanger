@@ -95,6 +95,8 @@ struct ListQuery {
     aircraft: Option<String>,
     /// Only the flights of this controller serial.
     controller: Option<String>,
+    /// `none`: only flights in no session.
+    session: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -118,9 +120,15 @@ async fn list(
     let sort = parse_sort(query.sort.as_deref().unwrap_or("-takeoff_at"))
         .ok_or_else(|| bad_request("unknown sort column".to_owned()))?;
 
+    let without_session = match query.session.as_deref() {
+        None => false,
+        Some("none") => true,
+        Some(_) => return Err(bad_request("session must be none".to_owned())),
+    };
     let filter = Filter {
         aircraft_serial: query.aircraft,
         rc_serial: query.controller,
+        without_session,
     };
     let offset = i64::from(page - 1) * i64::from(size);
     match service::list(&db, &actor, &filter, &sort, i64::from(size), offset).await {

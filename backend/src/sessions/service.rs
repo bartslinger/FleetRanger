@@ -2,7 +2,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, SessionSummary};
+use super::db::{self, SessionSummary, Window};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -10,17 +10,53 @@ use crate::{
     policy,
 };
 
-/// One page of the sessions the actor may see, and how many there are in all.
+/// One page of the sessions the actor may see, if given only those with a
+/// flight in the window, and how many there are in all.
 pub async fn list(
     db: &PgPool,
     actor: &Actor,
+    window: Option<Window>,
     limit: i64,
     offset: i64,
 ) -> ApiResult<(Vec<SessionSummary>, i64)> {
     let scope = policy::flight_scope(actor);
-    let sessions = db::list(db, &scope, limit, offset).await?;
-    let total = db::count(db, &scope).await?;
+    let sessions = db::list(db, &scope, window, limit, offset).await?;
+    let total = db::count(db, &scope, window).await?;
     Ok((sessions, total))
+}
+
+/// Puts these flights into a new session, and returns it. They leave the
+/// sessions they were in.
+pub async fn create(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResult<Uuid> {
+    let flight_ids = distinct(flight_ids);
+    if flight_ids.is_empty() {
+        return Err(ApiError::Invalid("Select flights.".to_owned()));
+    }
+    let teams = flights::db::teams_of(db, &flight_ids)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let own_team = flights::db::own_team(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, own_team, &teams)?;
+    Ok(db::split(db, &flight_ids).await?)
+}
+
+/// Adds these flights to a session. They leave the sessions they were in.
+pub async fn add(db: &PgPool, actor: &Actor, session: Uuid, flight_ids: &[Uuid]) -> ApiResult<()> {
+    let flight_ids = distinct(flight_ids);
+    if flight_ids.is_empty() {
+        return Err(ApiError::Invalid("Select flights.".to_owned()));
+    }
+    let mut teams = flights::db::teams_of(db, &flight_ids)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    teams.extend(
+        db::flight_teams(db, &[session])
+            .await?
+            .ok_or(ApiError::NotFound)?,
+    );
+    let own_team = flights::db::own_team(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, own_team, &teams)?;
+    Ok(db::add(db, session, &flight_ids).await?)
 }
 
 /// A session with the flights of it the actor may see.

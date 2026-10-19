@@ -28,10 +28,19 @@ pub struct SessionSummary {
     pub team_ids: Vec<Uuid>,
 }
 
-/// One page of the sessions in the scope, newest first.
+/// A time span: sessions with a flight in it, e.g. the ones near flights to be
+/// added to a session.
+#[derive(Clone, Copy)]
+pub struct Window {
+    pub from: DateTime<Utc>,
+    pub to: DateTime<Utc>,
+}
+
+/// One page of the sessions in the scope (in the window, if given), newest first.
 pub async fn list(
     db: &PgPool,
     scope: &FlightScope,
+    window: Option<Window>,
     limit: i64,
     offset: i64,
 ) -> sqlx::Result<Vec<SessionSummary>> {
@@ -53,6 +62,9 @@ pub async fn list(
            and ($1
                 or f.pilot_id = $2
                 or f.team_id in (select team_id from team_members where user_id = $2))
+           and ($5::timestamptz is null
+                or f.session_id in (select session_id from flights
+                                    where takeoff_at < $6 and landed_at > $5))
          group by f.session_id
          order by min(f.takeoff_at) desc, f.session_id
          limit $3 offset $4"#,
@@ -60,21 +72,28 @@ pub async fn list(
         scope.user_id,
         limit,
         offset,
+        window.map(|w| w.from),
+        window.map(|w| w.to),
     )
     .fetch_all(db)
     .await
 }
 
 /// The number of sessions in the scope.
-pub async fn count(db: &PgPool, scope: &FlightScope) -> sqlx::Result<i64> {
+pub async fn count(db: &PgPool, scope: &FlightScope, window: Option<Window>) -> sqlx::Result<i64> {
     sqlx::query_scalar!(
         r#"select count(distinct session_id) as "count!"
            from flights
-           where $1
-              or pilot_id = $2
-              or team_id in (select team_id from team_members where user_id = $2)"#,
+           where ($1
+                  or pilot_id = $2
+                  or team_id in (select team_id from team_members where user_id = $2))
+             and ($3::timestamptz is null
+                  or session_id in (select session_id from flights
+                                    where takeoff_at < $4 and landed_at > $3))"#,
         scope.all,
         scope.user_id,
+        window.map(|w| w.from),
+        window.map(|w| w.to),
     )
     .fetch_one(db)
     .await
@@ -167,6 +186,20 @@ pub async fn split(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Uuid> {
     delete_empty(&mut tx).await?;
     tx.commit().await?;
     Ok(session)
+}
+
+/// Moves these flights into the session. Deletes a session left without flights.
+pub async fn add(db: &PgPool, session: Uuid, flight_ids: &[Uuid]) -> sqlx::Result<()> {
+    let mut tx = locked(db).await?;
+    sqlx::query!(
+        "update flights set session_id = $2 where id = any($1)",
+        flight_ids,
+        session
+    )
+    .execute(&mut *tx)
+    .await?;
+    delete_empty(&mut tx).await?;
+    tx.commit().await
 }
 
 async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
@@ -392,6 +425,45 @@ mod tests {
         assert_eq!(session_of(&db, first).await, Some(merged));
     }
 
+    /// A window picks sessions with a flight in it, and they still add up all
+    /// their flights, not only the ones in the window.
+    #[sqlx::test]
+    async fn window_picks_whole_sessions(db: PgPool) {
+        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
+        let morning = upload(&db, a, "08:00", "08:20", "21:30").await;
+        let evening = upload(&db, a, "09:30", "09:50", "21:30").await;
+        assert_eq!(
+            session_of(&db, morning).await,
+            session_of(&db, evening).await
+        );
+
+        let everything = FlightScope {
+            all: true,
+            user_id: a,
+        };
+        let at =
+            |time: &str| -> DateTime<Utc> { format!("2026-10-12T{time}:00Z").parse().unwrap() };
+        let around_morning = Some(Window {
+            from: at("07:00"),
+            to: at("08:10"),
+        });
+        let listed = list(&db, &everything, around_morning, 10, 0).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].flights, 2);
+        assert_eq!(count(&db, &everything, around_morning).await.unwrap(), 1);
+
+        let afternoon = Some(Window {
+            from: at("12:00"),
+            to: at("13:00"),
+        });
+        assert!(
+            list(&db, &everything, afternoon, 10, 0)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
     /// A session merged across teams shows each team only its own flights,
     /// in the list and the session's flights alike; outsiders see nothing.
     #[sqlx::test]
@@ -433,13 +505,13 @@ mod tests {
             all: false,
             user_id: a,
         };
-        let listed = list(&db, &member, 10, 0).await.unwrap();
+        let listed = list(&db, &member, None, 10, 0).await.unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(
             (listed[0].flights, listed[0].pilots.clone()),
             (1, vec!["A".to_owned()])
         );
-        assert_eq!(count(&db, &member).await.unwrap(), 1);
+        assert_eq!(count(&db, &member, None).await.unwrap(), 1);
         let flights = crate::flights::db::of_session(&db, &member, session)
             .await
             .unwrap();
@@ -449,8 +521,8 @@ mod tests {
             all: false,
             user_id: outsider,
         };
-        assert!(list(&db, &stranger, 10, 0).await.unwrap().is_empty());
-        assert_eq!(count(&db, &stranger).await.unwrap(), 0);
+        assert!(list(&db, &stranger, None, 10, 0).await.unwrap().is_empty());
+        assert_eq!(count(&db, &stranger, None).await.unwrap(), 0);
         let flights = crate::flights::db::of_session(&db, &stranger, session)
             .await
             .unwrap();
@@ -460,6 +532,9 @@ mod tests {
             all: true,
             user_id: outsider,
         };
-        assert_eq!(list(&db, &everything, 10, 0).await.unwrap()[0].flights, 2);
+        assert_eq!(
+            list(&db, &everything, None, 10, 0).await.unwrap()[0].flights,
+            2
+        );
     }
 }
