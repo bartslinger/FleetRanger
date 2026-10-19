@@ -7,6 +7,7 @@
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
+	import Link from '#lib/ui/Link.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
@@ -194,8 +195,12 @@
 		<Column narrow>
 			<EmptyState
 				title="No sessions yet"
-				body="A pilot’s flights are grouped into sessions once the flights have a pilot. Set pilots on the Flights page."
-			/>
+				body="A pilot’s flights are grouped into sessions once the flights have a pilot."
+			>
+				{#snippet action()}
+					<Link href={resolve('/flights')}>Set pilots on the Flights page</Link>
+				{/snippet}
+			</EmptyState>
 		</Column>
 	{:else if data.view === 'cards'}
 		<Column narrow>
