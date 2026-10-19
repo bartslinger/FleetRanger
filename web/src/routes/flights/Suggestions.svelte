@@ -25,9 +25,20 @@
 		timeZone: string;
 		/** Whether the user may group this flight. */
 		canChange: (flight: FlightSummary) => boolean;
+		/** The open suggestions and the flights left out, by suggestion key;
+		 * bound, so the page keeps them for Back. */
+		expanded?: string[];
+		excluded?: Record<string, string[]>;
 	}
 
-	let { suggestions, total, timeZone, canChange }: Props = $props();
+	let {
+		suggestions,
+		total,
+		timeZone,
+		canChange,
+		expanded = $bindable([]),
+		excluded = $bindable({})
+	}: Props = $props();
 
 	interface Row extends Suggestion {
 		span: string;
@@ -80,9 +91,8 @@
 			: [{ key: 'span', header: 'When' }]
 	);
 
-	// Flights left out, by suggestion. A suggestion keeps its key while its
-	// first flight stays, so this survives reloading the list.
-	let excluded: Record<string, string[]> = $state({});
+	// A suggestion keeps its key while its first flight stays, so the flights
+	// left out survive reloading the list.
 	const included = (row: Suggestion) =>
 		row.flights.filter((flight) => !excluded[row.key]?.includes(flight.id));
 
@@ -114,6 +124,7 @@
 		summary="{total} {total === 1 ? 'suggestion' : 'suggestions'}"
 		expandable={(row) => row.count > 1}
 		expandLabel={(row) => `Flights of ${row.span}`}
+		bind:expanded
 	>
 		{#snippet expansion(row)}
 			<ul class="flights">

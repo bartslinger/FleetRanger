@@ -85,6 +85,8 @@ export function apiQuery(state: LogbookState, timeZone: string): URLSearchParams
 	if (state.controllers.length > 0) api.set('controller', state.controllers.join(','));
 	if (state.teams.length > 0) api.set('team', state.teams.join(','));
 	if (state.withoutSession) api.set('session', 'none');
+	// A flight's neighbours are then those of its suggestion.
+	if (state.withoutSession && state.suggestions) api.set('view', 'suggestions');
 	if (state.from) {
 		api.set('from', startOfDay(state.from, timeZone).toISOString());
 		api.set('to', startOfDay(nextDay(state.to ?? state.from), timeZone).toISOString());

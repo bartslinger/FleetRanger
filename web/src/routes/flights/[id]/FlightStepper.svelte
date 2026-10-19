@@ -55,13 +55,16 @@
 		};
 	});
 
-	// In takeoff order, say which way in time the list goes.
+	// In takeoff order, say which way in time the list goes. A suggestion's
+	// flights are in takeoff order.
 	const direction = $derived(
-		list?.sort.key === 'takeoff_at'
-			? list.sort.descending
-				? ['newer', 'older']
-				: ['older', 'newer']
-			: null
+		list?.suggestions
+			? ['older', 'newer']
+			: list?.sort.key === 'takeoff_at'
+				? list.sort.descending
+					? ['newer', 'older']
+					: ['older', 'newer']
+				: null
 	);
 	const previousLabel = $derived(
 		direction ? `Previous flight (${direction[0]})` : 'Previous flight'

@@ -78,6 +78,8 @@
 		expandLabel?: (row: T) => string;
 		/** An inline action at the end of each row. */
 		rowAction?: Snippet<[row: T]>;
+		/** Keys of the open rows; bound, so a page can keep them for Back. */
+		expanded?: string[];
 	}
 
 	let {
@@ -103,11 +105,10 @@
 		expandable,
 		expansion,
 		expandLabel = () => 'Expand row',
-		rowAction
+		rowAction,
+		expanded = $bindable([])
 	}: Props = $props();
 
-	// Keys of the open rows.
-	let expanded: string[] = $state([]);
 	const expands = $derived(!!expandable && !!expansion);
 	const width = $derived(
 		columns.length + (selectable ? 1 : 0) + (expands ? 1 : 0) + (rowAction ? 1 : 0)
