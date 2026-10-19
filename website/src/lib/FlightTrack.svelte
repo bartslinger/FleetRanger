@@ -42,7 +42,7 @@
 		</g>
 	</svg>
 	<figcaption>
-		<span class="visually-hidden">An example flight:</span>
+		<span class="caption">Example flight</span>
 		<dl>
 			{#each facts as fact (fact.term)}
 				<div>
@@ -56,7 +56,21 @@
 
 <style>
 	figure {
+		position: relative;
 		background: var(--cds-layer-01);
+	}
+
+	/* On the drawing's top left, like a map's label. */
+	.caption {
+		position: absolute;
+		top: var(--cds-spacing-05);
+		left: var(--cds-spacing-05);
+		padding-inline: var(--cds-spacing-02);
+		background: var(--cds-layer-01);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-label-01-font-size);
+		line-height: var(--cds-label-01-line-height);
+		letter-spacing: var(--cds-label-01-letter-spacing);
 	}
 
 	svg {
@@ -86,20 +100,19 @@
 		stroke-width: 9;
 	}
 
-	/* The app's track colour (Carbon magenta 50), the same in both themes. */
 	.track {
-		stroke: #ee5396;
+		stroke: var(--track);
 		stroke-width: 4;
 	}
 
 	.takeoff {
 		fill: var(--cds-layer-01);
-		stroke: #ee5396;
+		stroke: var(--track);
 		stroke-width: 3;
 	}
 
 	.landing {
-		fill: #ee5396;
+		fill: var(--track);
 		stroke: var(--cds-layer-01);
 		stroke-width: 2;
 		opacity: 0;
@@ -117,6 +130,14 @@
 		font-size: 20px;
 		font-family: var(--cds-font-family-sans);
 		text-anchor: middle;
+	}
+
+	/* base.css shortens animations to nothing; drop the waits too. */
+	@media (prefers-reduced-motion: reduce) {
+		path,
+		.landing {
+			animation-delay: 0ms;
+		}
 	}
 
 	@keyframes draw {

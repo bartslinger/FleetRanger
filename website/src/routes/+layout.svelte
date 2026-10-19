@@ -19,9 +19,9 @@
 <header class="theme-dark">
 	<a class="name" href="/">FleetRanger</a>
 	<nav aria-label="Sections">
+		<a href="/#privacy">Privacy</a>
 		<a href="/#how-it-works">How it works</a>
 		<a href="/#features">Features</a>
-		<a href="/#privacy">Privacy</a>
 	</nav>
 </header>
 
@@ -35,15 +35,15 @@
 			<p class="name">FleetRanger</p>
 		</Column>
 		<Column md={4} lg={4}>
-			<h2>Source code</h2>
-			<a href={SOURCE}>Repository <Icon icon={Launch} /></a>
+			<p class="label">Source code</p>
+			<a href={SOURCE}>FleetRanger repository <Icon icon={Launch} /></a>
 		</Column>
 		<Column md={4} lg={4}>
-			<h2>License</h2>
+			<p class="label">License</p>
 			<a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0 <Icon icon={Launch} /></a>
 		</Column>
 		<Column md={4} lg={4}>
-			<h2>Contact</h2>
+			<p class="label">Contact</p>
 			<a href="mailto:{CONTACT}">{CONTACT}</a>
 		</Column>
 	</Grid>
@@ -93,14 +93,27 @@
 		font-weight: 600;
 	}
 
+	/* Tighter on phones so the links fit beside the name; they scroll if not. */
 	nav {
-		display: none;
+		display: flex;
+		overflow-x: auto;
+	}
+
+	nav a {
+		padding-inline: var(--cds-spacing-03);
+		white-space: nowrap;
 	}
 
 	@media (min-width: 42rem) {
-		nav {
-			display: flex;
+		nav a {
+			padding-inline: var(--cds-spacing-05);
 		}
+	}
+
+	/* The website's one colour outside Carbon's tokens: the app's track colour
+	   (Carbon magenta 50, as in TrackMap.svelte), the same in both themes. */
+	:global(:root) {
+		--track: #ee5396;
 	}
 
 	footer {
@@ -120,7 +133,7 @@
 		line-height: var(--cds-heading-02-line-height);
 	}
 
-	footer h2 {
+	footer .label {
 		margin-bottom: var(--cds-spacing-03);
 		color: var(--cds-text-secondary);
 		font-size: var(--cds-label-01-font-size);

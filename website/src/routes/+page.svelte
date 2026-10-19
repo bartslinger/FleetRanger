@@ -9,15 +9,15 @@
 	const moments = [
 		{
 			when: 'Before take-off',
-			text: 'The pilot picks their name on the controller, also without a connection, and FleetRanger opens DJI Pilot 2.'
+			text: 'The pilot picks their name on the controller, even without a connection, and FleetRanger opens DJI Pilot 2.'
 		},
 		{
 			when: 'After landing',
-			text: 'The controller uploads the new flight logs to your server, over the networks you allow.'
+			text: 'The controller uploads the new flight logs to your server, over Wi-Fi networks you approve.'
 		},
 		{
 			when: 'At your desk',
-			text: 'Flights are grouped into sessions, with their times, pilots, drones and tracks on a map.'
+			text: 'Flights that follow each other are grouped into sessions, with their times, pilots, drones and tracks on a map.'
 		}
 	];
 
@@ -43,15 +43,26 @@
 	const privacy = [
 		{
 			title: 'One install per organisation',
-			text: 'FleetRanger runs on your own server. Nothing is shared with other organisations.'
+			text: 'FleetRanger runs on your own server, and your flight logs are stored there only.'
 		},
 		{
 			title: 'Pilots see their own flights',
-			text: 'Unless you give them more access. Raw logs and full telemetry are never shown to anyone.'
+			text: 'Pilots see only their own flights, unless you give them more access. Raw logs and full telemetry are never shown to users.'
 		},
 		{
 			title: 'Open source',
 			text: 'Licensed under the AGPL-3.0, so you can check what it does with your data.'
+		}
+	];
+
+	const services = [
+		{
+			title: 'DJI, to read a log',
+			text: "DJI encrypts flight logs. To read one, your server asks DJI for its keys, sending only the log's encrypted key records, not the flight."
+		},
+		{
+			title: 'Mapbox, for the maps',
+			text: "Map images come from Mapbox, which sees the area being viewed and the viewer's IP address. Flight tracks are drawn in the browser and are never sent."
 		}
 	];
 </script>
@@ -70,7 +81,8 @@
 			<h1 id="title">Your flight logs stay on your own server</h1>
 			<p class="intro">
 				FleetRanger collects the logs from your DJI Enterprise controllers and turns them into a
-				logbook of sessions, pilots and tracks. It is self-hosted and open source.
+				logbook: every flight with its pilot and track, grouped into sessions. It is self-hosted and
+				open source.
 			</p>
 			<div class="actions">
 				<Button href="mailto:{CONTACT}">Get in touch</Button>
@@ -79,6 +91,33 @@
 		</Column>
 		<Column md={8} lg={10}>
 			<FlightTrack />
+		</Column>
+	</Grid>
+</section>
+
+<section id="privacy" class="layer" aria-labelledby="privacy-title">
+	<Grid centered rowGap>
+		<Column md={8} lg={4}>
+			<h2 id="privacy-title">Privacy</h2>
+		</Column>
+		<Column md={8} lg={12}>
+			<ul class="blocks three">
+				{#each privacy as point (point.title)}
+					<li>
+						<h3>{point.title}</h3>
+						<p>{point.text}</p>
+					</li>
+				{/each}
+			</ul>
+			<h3 class="group">Two outside services</h3>
+			<ul class="blocks">
+				{#each services as service (service.title)}
+					<li>
+						<h4>{service.title}</h4>
+						<p>{service.text}</p>
+					</li>
+				{/each}
+			</ul>
 		</Column>
 	</Grid>
 </section>
@@ -119,40 +158,18 @@
 	</Grid>
 </section>
 
-<section id="privacy" class="layer" aria-labelledby="privacy-title">
-	<Grid centered rowGap>
-		<Column md={8} lg={4}>
-			<h2 id="privacy-title">Privacy</h2>
-		</Column>
-		<Column md={8} lg={12}>
-			<ul class="blocks three">
-				{#each privacy as point (point.title)}
-					<li>
-						<h3>{point.title}</h3>
-						<p>{point.text}</p>
-					</li>
-				{/each}
-			</ul>
-			<p class="note">
-				Maps load their images from Mapbox. Flight tracks are drawn in the browser and are never
-				sent to Mapbox.
-			</p>
-		</Column>
-	</Grid>
-</section>
-
 <section aria-labelledby="start-title">
 	<Grid centered rowGap>
 		<Column md={8} lg={4}>
-			<h2 id="start-title">Run it for your fleet</h2>
+			<h2 id="start-title">Set it up for your fleet</h2>
 		</Column>
 		<Column md={8} lg={8}>
 			<p class="body">
-				FleetRanger works with DJI Enterprise drones flown with DJI Pilot 2. Tell us about your
-				fleet and we'll help you set it up.
+				FleetRanger works with DJI Enterprise drones flown with DJI Pilot 2. To run it for your
+				organisation, write to {CONTACT}.
 			</p>
 			<div class="actions">
-				<Button href="mailto:{CONTACT}" kind="tertiary">Email {CONTACT}</Button>
+				<Button href="mailto:{CONTACT}" kind="tertiary">Email us</Button>
 			</div>
 		</Column>
 	</Grid>
@@ -165,13 +182,8 @@
 
 	@media (min-width: 66rem) {
 		section {
-			padding-block: var(--cds-spacing-12);
+			padding-block: var(--cds-spacing-11);
 		}
-	}
-
-	/* The hero's figure already carries space below it. */
-	.hero {
-		padding-bottom: 0;
 	}
 
 	section[id] {
@@ -197,7 +209,8 @@
 		letter-spacing: var(--cds-fluid-heading-04-letter-spacing);
 	}
 
-	h3 {
+	h3,
+	h4 {
 		font-size: var(--cds-heading-03-font-size);
 		font-weight: var(--cds-heading-03-font-weight);
 		line-height: var(--cds-heading-03-line-height);
@@ -247,9 +260,9 @@
 		left: 0;
 		width: 0.875rem;
 		height: 0.875rem;
-		border: 3px solid #ee5396;
+		border: 3px solid var(--track);
 		border-radius: 50%;
-		background: #ee5396;
+		background: var(--track);
 		box-sizing: border-box;
 	}
 
@@ -324,11 +337,12 @@
 		color: var(--cds-text-secondary);
 	}
 
-	.note {
-		max-width: 36rem;
-		margin-top: var(--cds-spacing-09);
-		color: var(--cds-text-helper);
-		font-size: var(--cds-body-01-font-size);
-		line-height: var(--cds-body-01-line-height);
+	/* A group of blocks within the section: a smaller heading above them. */
+	.group {
+		margin-block: var(--cds-spacing-10) var(--cds-spacing-06);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-heading-02-font-size);
+		font-weight: var(--cds-heading-02-font-weight);
+		line-height: var(--cds-heading-02-line-height);
 	}
 </style>
