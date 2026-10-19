@@ -242,12 +242,12 @@
 		background: var(--cds-layer-01);
 	}
 
-	/* The headline is the page's voice: Carbon's light display style. */
+	/* The headline: Carbon's largest expressive heading, semibold. */
 	h1 {
-		font-size: var(--cds-fluid-display-01-font-size);
-		font-weight: var(--cds-fluid-display-01-font-weight);
-		line-height: var(--cds-fluid-display-01-line-height);
-		letter-spacing: var(--cds-fluid-display-01-letter-spacing);
+		font-size: var(--cds-fluid-heading-06-font-size);
+		font-weight: var(--cds-fluid-heading-06-font-weight);
+		line-height: var(--cds-fluid-heading-06-line-height);
+		letter-spacing: var(--cds-fluid-heading-06-letter-spacing);
 	}
 
 	h2 {
