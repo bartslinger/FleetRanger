@@ -396,9 +396,9 @@
 		text-decoration: none;
 	}
 
-	/* The logo 8px before the name, at the size of a header icon. */
+	/* The logo 12px before the name, at the size of a header icon. */
 	.name img {
-		margin-right: var(--cds-spacing-03);
+		margin-right: var(--cds-spacing-04);
 	}
 
 	/* Header utilities: Carbon's header global actions, at the right edge. */
