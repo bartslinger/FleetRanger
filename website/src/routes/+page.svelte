@@ -133,6 +133,7 @@
 
 <section aria-labelledby="points-title">
 	<Grid centered rowGap>
+		<Column><div class="rule"></div></Column>
 		<Column>
 			<h2 id="points-title">Your data stays with you</h2>
 		</Column>
@@ -168,6 +169,7 @@
 
 <section id="how-it-works" aria-labelledby="how-it-works-title">
 	<Grid centered>
+		<Column><div class="rule"></div></Column>
 		<Column>
 			<h2 id="how-it-works-title">How it works</h2>
 		</Column>
@@ -201,6 +203,7 @@
 
 <section id="features" aria-labelledby="features-title">
 	<Grid centered rowGap>
+		<Column><div class="rule"></div></Column>
 		<Column md={8} lg={4}>
 			<h2 id="features-title">Features</h2>
 		</Column>
@@ -246,6 +249,39 @@
 
 	section[id] {
 		scroll-margin-top: var(--cds-spacing-05);
+	}
+
+	/* Content sections start at a thin rule above their heading, as on IBM's
+	   pages, as wide as the grid's content. The heading follows a gutter
+	   (spacing-07) below it: the grid's row gap, or this margin without one. */
+	.rule {
+		border-top: 1px solid var(--cds-border-subtle-00);
+	}
+
+	#how-it-works .rule {
+		margin-bottom: var(--cds-spacing-07);
+	}
+
+	/* The quote breaks the rhythm: more space around it, and no rule. */
+	.quote {
+		padding-block: var(--cds-spacing-11);
+	}
+
+	@media (min-width: 66rem) {
+		.quote {
+			padding-block: var(--cds-spacing-12);
+		}
+	}
+
+	/* A full gap before the closing band, whose Gray 10 the tiles share. */
+	#features {
+		padding-bottom: var(--cds-spacing-10);
+	}
+
+	@media (min-width: 66rem) {
+		#features {
+			padding-bottom: var(--cds-spacing-11);
+		}
 	}
 
 	/* The headline: Carbon's largest expressive heading, semibold. */
