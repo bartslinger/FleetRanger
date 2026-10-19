@@ -11,6 +11,7 @@
 	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
 	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { trail } from '#lib/trail.svelte.js';
 	import IconButton from '#lib/ui/IconButton.svelte';
 	import { apiQuery, parse, type LogbookState } from '../logbook.js';
@@ -39,7 +40,7 @@
 			place = null;
 			return;
 		}
-		const query = apiQuery(list);
+		const query = apiQuery(list, page.data.timeZone);
 		let cancelled = false;
 		fetch(`/api/flights/${id}/neighbours?${query}`)
 			.then((response) => (response.ok ? (response.json() as Promise<Neighbours>) : null))

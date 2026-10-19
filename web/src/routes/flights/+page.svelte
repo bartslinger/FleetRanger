@@ -8,6 +8,7 @@
 	import Grid from '#lib/ui/Grid.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
+	import MultiSelect from '#lib/ui/MultiSelect.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
@@ -59,27 +60,30 @@
 		}
 	]);
 
-	// Filters: a drone and/or controller, by name with the serial.
+	// Filters: drones and controllers, by name with the serial.
 	type Device = (typeof data.devices.aircraft)[number];
-	function deviceOptions(devices: Device[], all: string, current: string | null) {
+	function deviceOptions(devices: Device[], chosen: string[]) {
 		const known = devices.map((device) => ({
 			value: device.serial,
 			label: device.name ? `${device.name} (${device.serial})` : device.serial
 		}));
 		// From a link, e.g. a drone none of whose flights this user sees.
-		if (current && !devices.some((device) => device.serial === current)) {
-			known.push({ value: current, label: current });
+		for (const serial of chosen) {
+			if (!devices.some((device) => device.serial === serial)) {
+				known.push({ value: serial, label: serial });
+			}
 		}
-		return [{ value: '', label: all }, ...known];
+		return known;
 	}
-	const droneOptions = $derived(
-		deviceOptions(data.devices.aircraft, 'All drones', data.state.drone)
-	);
+	const droneOptions = $derived(deviceOptions(data.devices.aircraft, data.state.drones));
 	const controllerOptions = $derived(
-		deviceOptions(data.devices.controllers, 'All controllers', data.state.controller)
+		deviceOptions(data.devices.controllers, data.state.controllers)
 	);
 	const filtering = $derived(
-		data.state.drone !== null || data.state.controller !== null || data.state.withoutSession
+		data.state.drones.length > 0 ||
+			data.state.controllers.length > 0 ||
+			data.state.withoutSession ||
+			data.state.from !== null
 	);
 	const sessionOptions = [
 		{ value: '', label: 'All' },
@@ -87,19 +91,32 @@
 	];
 
 	// In a later page's breadcrumb, a filtered list names its filters:
-	// "Flights · Drone-2".
-	const name = (devices: Device[], serial: string) =>
-		devices.find((device) => device.serial === serial)?.name ?? serial;
+	// "Flights · Drone-1, Drone-2".
+	const names = (devices: Device[], serials: string[]) =>
+		serials
+			.map((serial) => devices.find((device) => device.serial === serial)?.name ?? serial)
+			.join(', ');
 	const crumb = $derived(
 		[
 			'Flights',
-			...(data.state.drone ? [name(data.devices.aircraft, data.state.drone)] : []),
-			...(data.state.controller ? [name(data.devices.controllers, data.state.controller)] : []),
+			...(data.state.drones.length > 0 ? [names(data.devices.aircraft, data.state.drones)] : []),
+			...(data.state.controllers.length > 0
+				? [names(data.devices.controllers, data.state.controllers)]
+				: []),
 			...(data.state.withoutSession ? ['without session'] : [])
 		].join(' · ')
 	);
 
-	function filter(change: Partial<Pick<LogbookState, 'drone' | 'controller' | 'withoutSession'>>) {
+	type Filters = Pick<LogbookState, 'drones' | 'controllers' | 'withoutSession' | 'from' | 'to'>;
+	const none: Filters = {
+		drones: [],
+		controllers: [],
+		withoutSession: false,
+		from: null,
+		to: null
+	};
+
+	function filter(change: Partial<Filters>) {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves.
 		goto(href({ ...data.state, ...change, page: 1 }), { reset: false });
 	}
@@ -150,17 +167,19 @@
 	<Column narrow>
 		{#if data.total > 0 || filtering}
 			<div class="filters">
-				<Select
-					label="Drone"
+				<MultiSelect
+					label="Drones"
+					placeholder="All drones"
 					options={droneOptions}
-					value={data.state.drone ?? ''}
-					onchange={(event) => filter({ drone: event.currentTarget.value || null })}
+					value={data.state.drones}
+					onchange={(drones) => filter({ drones })}
 				/>
-				<Select
-					label="Controller"
+				<MultiSelect
+					label="Controllers"
+					placeholder="All controllers"
 					options={controllerOptions}
-					value={data.state.controller ?? ''}
-					onchange={(event) => filter({ controller: event.currentTarget.value || null })}
+					value={data.state.controllers}
+					onchange={(controllers) => filter({ controllers })}
 				/>
 				<Select
 					label="Session"
@@ -169,13 +188,7 @@
 					onchange={(event) => filter({ withoutSession: event.currentTarget.value === 'none' })}
 				/>
 				{#if filtering}
-					<Button
-						kind="ghost"
-						size="md"
-						onclick={() => filter({ drone: null, controller: null, withoutSession: false })}
-					>
-						Clear filters
-					</Button>
+					<Button kind="ghost" size="md" onclick={() => filter(none)}>Clear filters</Button>
 				{/if}
 			</div>
 		{/if}

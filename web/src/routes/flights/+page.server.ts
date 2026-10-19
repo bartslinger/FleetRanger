@@ -1,3 +1,4 @@
+import { TIME_ZONE } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
@@ -10,7 +11,7 @@ import { apiQuery, parse, query } from './logbook.js';
 
 export async function load({ fetch, url }) {
 	const state = parse(url.searchParams);
-	const api = apiQuery(state);
+	const api = apiQuery(state, TIME_ZONE);
 	const [{ flights, total }, choices, devices] = await Promise.all([
 		get<FlightPage>(fetch, `/api/flights?${api}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),

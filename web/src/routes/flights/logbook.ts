@@ -1,6 +1,8 @@
 // The logbook's state in the URL: page, page size, sort and filters. Defaults
 // are left out of the URL.
 
+import { isDay, nextDay, startOfDay } from '#lib/zone.js';
+
 export const PAGE_SIZES = [25, 50, 100];
 const DEFAULT_SIZE = 50;
 
@@ -11,34 +13,47 @@ export interface LogbookState {
 	page: number;
 	size: number;
 	sort: { key: string; descending: boolean };
-	/** Only the flights of this drone serial. */
-	drone: string | null;
-	/** Only the flights of this controller serial. */
-	controller: string | null;
+	/** Only the flights of these drone serials; all if empty. */
+	drones: string[];
+	/** Only the flights of these controller serials; all if empty. */
+	controllers: string[];
 	/** Only the flights in no session, the ones still to be grouped. */
 	withoutSession: boolean;
+	/** Only flights taking off on this day ("2026-10-12"), or from it to `to`. */
+	from: string | null;
+	/** The last day, with `from`. */
+	to: string | null;
 }
+
+/** Serials, comma-separated in the URL. */
+const list = (value: string | null) => (value ?? '').split(',').filter(Boolean);
 
 export function parse(params: URLSearchParams): LogbookState {
 	const page = Number.parseInt(params.get('page') ?? '', 10);
 	const size = Number.parseInt(params.get('size') ?? '', 10);
 	const sort = params.get('sort') ?? '';
 	const key = sort.replace(/^-/, '');
+	const from = params.get('from');
+	const to = params.get('to');
 	return {
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		sort: SORTABLE.includes(key) ? { key, descending: sort.startsWith('-') } : DEFAULT_SORT,
-		drone: params.get('drone') || null,
-		controller: params.get('controller') || null,
-		withoutSession: params.get('session') === 'none'
+		drones: list(params.get('drone')),
+		controllers: list(params.get('controller')),
+		withoutSession: params.get('session') === 'none',
+		from: isDay(from) ? from : null,
+		to: isDay(from) && isDay(to) && to > from ? to : null
 	};
 }
 
 /** The query string for a state, e.g. "?page=2&sort=air_time_s". */
 export function query(state: LogbookState): string {
 	const params = new URLSearchParams();
-	if (state.drone) params.set('drone', state.drone);
-	if (state.controller) params.set('controller', state.controller);
+	if (state.from) params.set('from', state.from);
+	if (state.from && state.to) params.set('to', state.to);
+	if (state.drones.length > 0) params.set('drone', state.drones.join(','));
+	if (state.controllers.length > 0) params.set('controller', state.controllers.join(','));
 	if (state.withoutSession) params.set('session', 'none');
 	if (state.page > 1) params.set('page', String(state.page));
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
@@ -50,16 +65,21 @@ export function query(state: LogbookState): string {
 	return text ? `?${text}` : '';
 }
 
-/** The backend's query for the list: its page, filters and order. */
-export function apiQuery(state: LogbookState): URLSearchParams {
+/** The backend's query for the list: its page, filters and order. Days are
+ * turned into instants in the organisation's time zone. */
+export function apiQuery(state: LogbookState, timeZone: string): URLSearchParams {
 	const api = new URLSearchParams({
 		page: String(state.page),
 		size: String(state.size),
 		sort: `${state.sort.descending ? '-' : ''}${state.sort.key}`
 	});
-	if (state.drone) api.set('aircraft', state.drone);
-	if (state.controller) api.set('controller', state.controller);
+	if (state.drones.length > 0) api.set('aircraft', state.drones.join(','));
+	if (state.controllers.length > 0) api.set('controller', state.controllers.join(','));
 	if (state.withoutSession) api.set('session', 'none');
+	if (state.from) {
+		api.set('from', startOfDay(state.from, timeZone).toISOString());
+		api.set('to', startOfDay(nextDay(state.to ?? state.from), timeZone).toISOString());
+	}
 	return api;
 }
 
@@ -69,9 +89,11 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 		page: 1,
 		size: DEFAULT_SIZE,
 		sort: DEFAULT_SORT,
-		drone: filters.drone ?? null,
-		controller: filters.controller ?? null,
-		withoutSession: false
+		drones: filters.drone ? [filters.drone] : [],
+		controllers: filters.controller ? [filters.controller] : [],
+		withoutSession: false,
+		from: null,
+		to: null
 	});
 }
 
