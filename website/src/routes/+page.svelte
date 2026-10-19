@@ -3,17 +3,34 @@
 	import Button from '$ui/Button.svelte';
 	import Column from '$ui/Column.svelte';
 	import Grid from '$ui/Grid.svelte';
-	import FlightTrack from '#lib/FlightTrack.svelte';
+	import Controller from '#lib/Controller.svelte';
+	import pilot640 from '#lib/images/pilot-640.webp';
+	import pilot1280 from '#lib/images/pilot-1280.webp';
+	import session800 from '#lib/images/session-800.webp';
+	import session1600 from '#lib/images/session-1600.webp';
+	import session2400 from '#lib/images/session-2400.webp';
+	import sync640 from '#lib/images/sync-640.webp';
+	import sync1280 from '#lib/images/sync-1280.webp';
 	import { CONTACT, SOURCE } from '#lib/site.js';
 
 	const moments = [
 		{
 			when: 'Before take-off',
-			text: 'The pilot picks their name on the controller, even without a connection, and FleetRanger opens DJI Pilot 2.'
+			text: 'The pilot picks their name on the controller, even without a connection, and FleetRanger opens DJI Pilot 2.',
+			screen: {
+				src: pilot1280,
+				srcset: `${pilot640} 640w, ${pilot1280} 1280w`,
+				alt: 'The FleetRanger app on a DJI RC Pro, asking who’s flying, with the last pilot first.'
+			}
 		},
 		{
 			when: 'After landing',
-			text: 'The controller uploads the new flight logs to your server, over Wi-Fi networks you approve.'
+			text: 'The controller uploads the new flight logs to your server, over Wi-Fi networks you approve.',
+			screen: {
+				src: sync1280,
+				srcset: `${sync640} 640w, ${sync1280} 1280w`,
+				alt: 'The app’s sync settings on a DJI RC Pro: all logs uploaded.'
+			}
 		},
 		{
 			when: 'At your desk',
@@ -77,7 +94,7 @@
 
 <section class="hero" aria-labelledby="title">
 	<Grid centered rowGap>
-		<Column md={8} lg={7}>
+		<Column md={8} lg={10}>
 			<h1 id="title">Own your flight logs</h1>
 			<p class="intro">
 				FleetRanger collects the logs from your DJI Enterprise controllers on your own server, and
@@ -89,8 +106,16 @@
 				<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
 			</div>
 		</Column>
-		<Column md={8} lg={9}>
-			<FlightTrack />
+		<Column>
+			<img
+				class="screenshot"
+				src={session1600}
+				srcset="{session800} 800w, {session1600} 1600w, {session2400} 2400w"
+				sizes="(min-width: 99rem) 97rem, calc(100vw - 2rem)"
+				alt="A session in FleetRanger: a flight's track on a satellite map, with its pilot, team, times and distance, and the list of its flights."
+				width="3600"
+				height="2032"
+			/>
 		</Column>
 	</Grid>
 </section>
@@ -133,6 +158,9 @@
 					<li class:last={i === moments.length - 1}>
 						<h3>{moment.when}</h3>
 						<p>{moment.text}</p>
+						{#if moment.screen}
+							<div class="screen"><Controller {...moment.screen} /></div>
+						{/if}
 					</li>
 				{/each}
 			</ol>
@@ -287,6 +315,20 @@
 		max-width: 26rem;
 		margin-top: var(--cds-spacing-03);
 		color: var(--cds-text-secondary);
+	}
+
+	.screen {
+		max-width: 30rem;
+		margin-top: var(--cds-spacing-07);
+	}
+
+	/* The app as it is: the whole screenshot, set apart from the page by a line. */
+	.screenshot {
+		display: block;
+		width: 100%;
+		height: auto;
+		margin-top: var(--cds-spacing-10);
+		border: 1px solid var(--cds-border-subtle-01);
 	}
 
 	@media (min-width: 42rem) {
