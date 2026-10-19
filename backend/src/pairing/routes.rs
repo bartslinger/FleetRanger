@@ -20,6 +20,7 @@ use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
     events::Changes,
+    flights::db::TeamChoice,
 };
 
 pub fn router<S>() -> Router<S>
@@ -30,6 +31,7 @@ where
 {
     Router::new()
         .route("/api/pairing", get(waiting).post(start))
+        .route("/api/pairing/teams", get(teams))
         .route("/api/pairing/{code}/approve", post(approve))
         .route("/api/controller", get(me).delete(unpair_self))
         .route("/api/controller/pilots", get(pilots))
@@ -57,6 +59,11 @@ async fn start(
 
 async fn waiting(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<Waiting>>> {
     Ok(Json(service::waiting(&db, &actor).await?))
+}
+
+/// The teams a controller the actor approves can join.
+async fn teams(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<TeamChoice>>> {
+    Ok(Json(service::teams(&db, &actor).await?))
 }
 
 #[derive(Deserialize)]
