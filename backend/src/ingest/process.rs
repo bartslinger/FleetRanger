@@ -16,6 +16,7 @@ use tokio::time::Instant;
 use super::activity::{Activity, Stage};
 use super::flight::{self, Flight, Serials};
 use super::{db, dji};
+use crate::sessions::{self, SessionGap};
 
 /// How long to wait before looking for new logs when none are pending.
 const IDLE_PAUSE: Duration = Duration::from_secs(10);
@@ -67,7 +68,13 @@ struct Decoded {
     dji_total_distance_m: f32,
 }
 
-pub async fn run(db: PgPool, log_dir: PathBuf, dji_app_key: Option<String>, activity: Activity) {
+pub async fn run(
+    db: PgPool,
+    log_dir: PathBuf,
+    dji_app_key: Option<String>,
+    activity: Activity,
+    session_gap: SessionGap,
+) {
     let mut dji_limit = RateLimit::new(DJI_REQUEST_INTERVAL);
     loop {
         let result = process_next(
@@ -76,6 +83,7 @@ pub async fn run(db: PgPool, log_dir: PathBuf, dji_app_key: Option<String>, acti
             dji_app_key.as_deref(),
             &activity,
             &mut dji_limit,
+            session_gap,
         )
         .await;
         let pause = match result {
@@ -101,6 +109,7 @@ async fn process_next(
     dji_app_key: Option<&str>,
     activity: &Activity,
     dji_limit: &mut RateLimit,
+    session_gap: SessionGap,
 ) -> Result<bool> {
     let Some(log) = db::next_pending(db).await? else {
         return Ok(false);
@@ -115,6 +124,9 @@ async fn process_next(
     match processed {
         Ok(decoded) => {
             db::save_result(db, log.id, decoded.flight.as_ref()).await?;
+            if decoded.flight.is_some() {
+                sessions::db::place_upload(db, log.id, session_gap).await?;
+            }
             match &decoded.flight {
                 Some(flight) => tracing::info!(
                     path = log.path,

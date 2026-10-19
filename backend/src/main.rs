@@ -132,6 +132,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         config.log_dir.clone(),
         config.dji_app_key.clone(),
         activity.clone(),
+        session_gap,
     ));
 
     let provider = match &config.oidc {

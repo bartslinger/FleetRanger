@@ -5,7 +5,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::SessionGap;
+use super::{LATE_UPLOAD_HOURS, SessionGap};
 use crate::policy::FlightScope;
 
 // A session is visible when one of its flights is, and only the visible
@@ -178,65 +178,77 @@ async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// Places every flight that has a pilot but no session, in takeoff order: it
-/// joins the nearest session holding a flight of the same pilot less than the
-/// gap apart, or else starts a new session. Flights already in a session stay
-/// where they are, so this never undoes a user's changes. Deletes sessions
-/// that have no flights left.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "flights join sessions only by hand for now; uploads will group \
-                  again once the rule for late flights is decided"
-    )
-)]
-pub async fn group(db: &PgPool, gap: SessionGap) -> sqlx::Result<()> {
+/// Places the flight of a log uploaded with its pilot, the one case where a
+/// flight joins a session by itself. It joins the nearest session holding a
+/// flight of the same pilot less than the gap apart, if that session's flights
+/// came in less than [`LATE_UPLOAD_HOURS`] before it; a later one stays
+/// without a session, for someone to add. With no such session, it starts a
+/// new one. Imported logs have no pilot and flights already in a session stay
+/// where they are, so this never undoes a user's changes.
+pub async fn place_upload(db: &PgPool, raw_log_id: Uuid, gap: SessionGap) -> sqlx::Result<()> {
     let mut tx = locked(db).await?;
-    let unplaced = sqlx::query!(
-        r#"select id, pilot_id as "pilot_id!", takeoff_at, landed_at
-           from flights
-           where pilot_id is not null and session_id is null
-           order by takeoff_at, id"#
+    let Some(flight) = sqlx::query!(
+        r#"select f.id, f.pilot_id as "pilot_id!", f.takeoff_at, f.landed_at, l.received_at
+           from flights f
+           join raw_logs l on l.id = f.raw_log_id
+           where f.raw_log_id = $1 and f.session_id is null
+             and f.pilot_id is not null and l.pilot_id is not null"#,
+        raw_log_id
     )
-    .fetch_all(&mut *tx)
+    .fetch_optional(&mut *tx)
+    .await?
+    else {
+        return tx.commit().await;
+    };
+
+    // The break between two flights; negative when they overlap.
+    let nearest = sqlx::query_scalar!(
+        r#"select session_id as "session_id!"
+           from flights
+           where pilot_id = $1 and session_id is not null
+             and takeoff_at < $3::timestamptz + make_interval(mins => $4)
+             and landed_at > $2::timestamptz - make_interval(mins => $4)
+           order by greatest(takeoff_at - $3::timestamptz, $2::timestamptz - landed_at), id
+           limit 1"#,
+        flight.pilot_id,
+        flight.takeoff_at,
+        flight.landed_at,
+        gap.0,
+    )
+    .fetch_optional(&mut *tx)
     .await?;
-
-    for flight in unplaced {
-        // The break between two flights; negative when they overlap.
-        let joined = sqlx::query_scalar!(
-            r#"select session_id as "session_id!"
-               from flights
-               where pilot_id = $1 and session_id is not null
-                 and takeoff_at < $3::timestamptz + make_interval(mins => $4)
-                 and landed_at > $2::timestamptz - make_interval(mins => $4)
-               order by greatest(takeoff_at - $3::timestamptz, $2::timestamptz - landed_at), id
-               limit 1"#,
-            flight.pilot_id,
-            flight.takeoff_at,
-            flight.landed_at,
-            gap.0,
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-        let session = match joined {
-            Some(session) => session,
-            None => {
-                sqlx::query_scalar!("insert into sessions default values returning id")
-                    .fetch_one(&mut *tx)
-                    .await?
+    let session = match nearest {
+        Some(session) => {
+            let same_sync = sqlx::query_scalar!(
+                r#"select max(l.received_at) > $2::timestamptz - make_interval(hours => $3)
+                       as "same_sync!"
+                   from flights f
+                   join raw_logs l on l.id = f.raw_log_id
+                   where f.session_id = $1"#,
+                session,
+                flight.received_at,
+                LATE_UPLOAD_HOURS,
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            if !same_sync {
+                return tx.commit().await;
             }
-        };
-        sqlx::query!(
-            "update flights set session_id = $2 where id = $1",
-            flight.id,
-            session,
-        )
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    delete_empty(&mut tx).await?;
+            session
+        }
+        None => {
+            sqlx::query_scalar!("insert into sessions default values returning id")
+                .fetch_one(&mut *tx)
+                .await?
+        }
+    };
+    sqlx::query!(
+        "update flights set session_id = $2 where id = $1",
+        flight.id,
+        session,
+    )
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await
 }
 
@@ -274,6 +286,32 @@ mod tests {
         .unwrap()
     }
 
+    /// Adds a flight of this pilot as a controller uploads it (its log carries
+    /// the pilot), received on 12 Oct at `received` or on a later day's
+    /// `"+1 12:00"`, and places it as the processing loop does.
+    async fn upload(db: &PgPool, pilot: Uuid, takeoff: &str, landed: &str, received: &str) -> Uuid {
+        let flight = flight(db, pilot, takeoff, landed).await;
+        let received: DateTime<Utc> = match received.strip_prefix("+1 ") {
+            Some(time) => format!("2026-10-13T{time}:00Z"),
+            None => format!("2026-10-12T{received}:00Z"),
+        }
+        .parse()
+        .unwrap();
+        let raw_log: Uuid = sqlx::query_scalar(
+            "update raw_logs set pilot_id = $2, received_at = $3
+             where id = (select raw_log_id from flights where id = $1)
+             returning id",
+        )
+        .bind(flight)
+        .bind(pilot)
+        .bind(received)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        place_upload(db, raw_log, SessionGap(120)).await.unwrap();
+        flight
+    }
+
     async fn session_of(db: &PgPool, flight: Uuid) -> Option<Uuid> {
         sqlx::query_scalar("select session_id from flights where id = $1")
             .bind(flight)
@@ -282,18 +320,17 @@ mod tests {
             .unwrap()
     }
 
-    /// A pilot's flights less than the gap apart share a session, also when
-    /// processed out of order; a longer break or another pilot starts a new one.
+    /// Uploaded flights of a pilot less than the gap apart share a session,
+    /// also when processed out of order; a longer break or another pilot
+    /// starts a new one.
     #[sqlx::test]
-    async fn groups_by_pilot_and_gap(db: PgPool) {
+    async fn uploads_group_by_pilot_and_gap(db: PgPool) {
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
-        let gap = SessionGap(120);
 
-        let first = flight(&db, a, "18:12", "18:40").await;
-        let last = flight(&db, a, "20:30", "21:21").await;
-        let other_pilot = flight(&db, b, "18:20", "18:50").await;
-        group(&db, gap).await.unwrap();
+        let first = upload(&db, a, "18:12", "18:40", "21:30").await;
+        let last = upload(&db, a, "20:30", "21:21", "21:30").await;
+        let other_pilot = upload(&db, b, "18:20", "18:50", "21:30").await;
         assert_eq!(session_of(&db, first).await, session_of(&db, last).await);
         assert_ne!(
             session_of(&db, first).await,
@@ -301,59 +338,45 @@ mod tests {
         );
 
         // Processed later, in between: it joins, and doesn't move the others.
-        let middle = flight(&db, a, "19:30", "19:50").await;
-        // More than two hours after the last landing.
-        let next_day = flight(&db, a, "23:22", "23:40").await;
-        group(&db, gap).await.unwrap();
+        let middle = upload(&db, a, "19:30", "19:50", "21:31").await;
         assert_eq!(session_of(&db, middle).await, session_of(&db, first).await);
-        assert_ne!(
-            session_of(&db, next_day).await,
-            session_of(&db, first).await
-        );
+        // More than two hours after the last landing.
+        let later = upload(&db, a, "23:22", "23:40", "23:50").await;
+        assert!(session_of(&db, later).await.is_some());
+        assert_ne!(session_of(&db, later).await, session_of(&db, first).await);
     }
 
-    /// A flight taken out of its session is placed again, and a session left
-    /// without flights is deleted.
+    /// A flight that comes in long after its session's flights doesn't join
+    /// it by itself, and neither do imported flights, which have no pilot from
+    /// a controller: someone adds them.
     #[sqlx::test]
-    async fn regroups_and_deletes_empty_sessions(db: PgPool) {
+    async fn late_uploads_and_imports_stay_out(db: PgPool) {
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
-        let gap = SessionGap(120);
-        let flown_by_b = flight(&db, b, "08:00", "08:20").await;
-        let wrongly_a = flight(&db, a, "08:30", "08:50").await;
-        group(&db, gap).await.unwrap();
-        let old_session = session_of(&db, wrongly_a).await;
+        let synced = upload(&db, a, "18:12", "18:40", "21:30").await;
+        assert!(session_of(&db, synced).await.is_some());
 
-        sqlx::query("update flights set pilot_id = $2, session_id = null where id = $1")
-            .bind(wrongly_a)
-            .bind(b)
-            .execute(&db)
-            .await
-            .unwrap();
-        group(&db, gap).await.unwrap();
-        assert_eq!(
-            session_of(&db, wrongly_a).await,
-            session_of(&db, flown_by_b).await
-        );
-        let left: i64 = sqlx::query_scalar("select count(*) from sessions where id = $1")
-            .bind(old_session)
+        let late = upload(&db, a, "19:00", "19:20", "+1 12:00").await;
+        assert_eq!(session_of(&db, late).await, None);
+
+        let imported = flight(&db, a, "19:30", "19:50").await;
+        let raw_log: Uuid = sqlx::query_scalar("select raw_log_id from flights where id = $1")
+            .bind(imported)
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(left, 0);
+        place_upload(&db, raw_log, SessionGap(120)).await.unwrap();
+        assert_eq!(session_of(&db, imported).await, None);
     }
 
-    /// Merging keeps the session that starts first; a split survives the next
-    /// grouping, so automatic grouping never undoes it.
+    /// Merging keeps the session that starts first, and a later upload
+    /// doesn't undo a split.
     #[sqlx::test]
     async fn merges_and_splits_stay(db: PgPool) {
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
-        let gap = SessionGap(120);
-        let first = flight(&db, a, "08:00", "08:20").await;
-        let second = flight(&db, a, "08:30", "08:50").await;
-        let other_pilot = flight(&db, b, "07:30", "07:50").await;
-        group(&db, gap).await.unwrap();
+        let first = upload(&db, a, "08:00", "08:20", "10:00").await;
+        let second = upload(&db, a, "08:30", "08:50", "10:00").await;
+        let other_pilot = upload(&db, b, "07:30", "07:50", "10:00").await;
 
         let a_session = session_of(&db, first).await.unwrap();
         let b_session = session_of(&db, other_pilot).await.unwrap();
@@ -364,8 +387,7 @@ mod tests {
         let split_off = split(&db, &[second]).await.unwrap();
         // A new flight of A right after `second` joins one of the sessions
         // without moving the split flight back.
-        flight(&db, a, "09:00", "09:20").await;
-        group(&db, gap).await.unwrap();
+        upload(&db, a, "09:00", "09:20", "10:01").await;
         assert_eq!(session_of(&db, second).await, Some(split_off));
         assert_eq!(session_of(&db, first).await, Some(merged));
     }
