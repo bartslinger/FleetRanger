@@ -15,20 +15,24 @@
 
 	interface Props extends HTMLAttributes<HTMLElement> {
 		icon: IconDescriptor;
-		/** What it does, e.g. "Change pilot". */
+		/** What it does, e.g. "Change pilot": its tooltip. */
 		label: string;
+		/** A longer accessible name where buttons repeat, e.g. one per table
+		 * row: "Leave out flight 9 Oct, 18:01". It starts with `label`, so
+		 * voice control can say what the tooltip shows. */
+		name?: string;
 		/** Already passed through `resolve()`. */
 		href?: string;
 		size?: 'xs' | 'md';
 		disabled?: boolean;
 	}
 
-	let { icon, label, href, size = 'xs', disabled = false, ...rest }: Props = $props();
+	let { icon, label, name, href, size = 'xs', disabled = false, ...rest }: Props = $props();
 </script>
 
 {#if disabled}
 	<span class="icon-button {size} disabled" role={href ? 'link' : 'button'} aria-disabled="true">
-		<Icon {icon} {label} />
+		<Icon {icon} label={name ?? label} />
 	</span>
 {:else}
 	<Tooltip.Provider delayDuration={100}>
@@ -36,16 +40,22 @@
 			<Tooltip.Trigger>
 				{#snippet child({ props })}
 					{#if href}
-						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
-						<a {...mergeProps(rest, props)} {href} class="icon-button {size}" aria-label={label}>
+						<!-- eslint-disable svelte/no-navigation-without-resolve -- resolved by the caller -->
+						<a
+							{...mergeProps(rest, props)}
+							{href}
+							class="icon-button {size}"
+							aria-label={name ?? label}
+						>
 							<Icon {icon} />
 						</a>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
 					{:else}
 						<button
 							{...mergeProps(rest, props)}
 							type="button"
 							class="icon-button {size}"
-							aria-label={label}
+							aria-label={name ?? label}
 						>
 							<Icon {icon} />
 						</button>

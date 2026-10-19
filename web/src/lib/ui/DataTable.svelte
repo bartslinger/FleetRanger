@@ -16,6 +16,8 @@
 		identifier?: boolean;
 		/** Lists, e.g. names: may wrap onto more lines rather than widen the table. */
 		wrap?: boolean;
+		/** A control after the value, e.g. a button to change it. */
+		after?: Snippet<[row: T]>;
 		sortable?: boolean;
 		format?: (row: T) => string | null | undefined;
 	}
@@ -271,6 +273,7 @@
 							class:numeric={column.numeric}
 							class:identifier={column.identifier}
 							class:wrap={column.wrap}
+							class:with-control={column.after}
 						>
 							{#if index === 0 && rowHref}
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built by the caller -->
@@ -278,6 +281,7 @@
 							{:else}
 								{@render content(row, column)}
 							{/if}
+							{#if column.after}{@render column.after(row)}{/if}
 							{#if index === 0 && state}
 								<span class="state"><Tag size="sm">{state}</Tag></span>
 							{/if}
@@ -581,6 +585,12 @@
 
 	.state {
 		margin-left: var(--cds-spacing-03);
+	}
+
+	/* A cell with a control: above the row link, which covers the row. */
+	td.with-control {
+		position: relative;
+		z-index: 1;
 	}
 
 	/* An inline action: flush with the row's end, above the row link. */
