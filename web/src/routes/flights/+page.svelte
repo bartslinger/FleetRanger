@@ -9,14 +9,18 @@
 	import Grid from '#lib/ui/Grid.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
-	import MultiSelect from '#lib/ui/MultiSelect.svelte';
+	import ListFilters, {
+		NO_FILTERS,
+		filterNames,
+		filtering as listFiltering,
+		type Filters as ListFilterState
+	} from '#lib/ListFilters.svelte';
 	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import DateRange from '#lib/ui/DateRange.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
-	import { dateTime, dayMonth, distance, duration } from '#lib/format.js';
+	import { dateTime, distance, duration } from '#lib/format.js';
 	import { pilotOptions } from '#lib/pilots.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
@@ -67,43 +71,7 @@
 		}
 	]);
 
-	// Filters: drones and controllers, by name with the serial.
-	type Device = (typeof data.devices.aircraft)[number];
-	function deviceOptions(devices: Device[], chosen: string[]) {
-		const known = devices.map((device) => ({
-			value: device.serial,
-			label: device.name ? `${device.name} (${device.serial})` : device.serial
-		}));
-		// From a link, e.g. a drone none of whose flights this user sees.
-		for (const serial of chosen) {
-			if (!devices.some((device) => device.serial === serial)) {
-				known.push({ value: serial, label: serial });
-			}
-		}
-		return known;
-	}
-	const droneOptions = $derived(deviceOptions(data.devices.aircraft, data.state.drones));
-	const controllerOptions = $derived(
-		deviceOptions(data.devices.controllers, data.state.controllers)
-	);
-	const filtering = $derived(
-		data.state.drones.length > 0 ||
-			data.state.controllers.length > 0 ||
-			data.state.teams.length > 0 ||
-			data.state.withoutSession ||
-			data.state.from !== null
-	);
-	// Teams, for admins: members see their own team's flights anyway.
-	const teamName = (id: string) =>
-		id === 'none'
-			? 'No team (queue)'
-			: (data.devices.teams.find((team) => team.id === id)?.name ?? 'Unknown team');
-	const teamFilterOptions = $derived(
-		data.devices.teams.map((team) => ({
-			value: team.id ?? 'none',
-			label: team.name ?? 'No team (queue)'
-		}))
-	);
+	const filtering = $derived(listFiltering(data.state) || data.state.withoutSession);
 	const sessionOptions = [
 		{ value: '', label: 'All' },
 		{ value: 'none', label: 'Without session' }
@@ -111,45 +79,18 @@
 
 	// In a later page's breadcrumb, a filtered list names its filters:
 	// "Flights · Drone-1, Drone-2".
-	const names = (devices: Device[], serials: string[]) =>
-		serials
-			.map((serial) => devices.find((device) => device.serial === serial)?.name ?? serial)
-			.join(', ');
-	// A day of the URL ("2026-10-12") as "12 Oct": noon UTC lands on that day.
-	const short = (day: string) => dayMonth(`${day}T12:00:00Z`, 'UTC');
 	const crumb = $derived(
 		[
 			'Flights',
-			...(data.state.from
-				? [
-						data.state.to
-							? `${short(data.state.from)}–${short(data.state.to)}`
-							: short(data.state.from)
-					]
-				: []),
-			...(data.state.drones.length > 0 ? [names(data.devices.aircraft, data.state.drones)] : []),
-			...(data.state.controllers.length > 0
-				? [names(data.devices.controllers, data.state.controllers)]
-				: []),
-			...(data.state.teams.length > 0 ? [data.state.teams.map(teamName).join(', ')] : []),
+			...filterNames(data.state, data.devices),
 			...(data.state.withoutSession
 				? [data.state.suggestions ? 'suggested sessions' : 'without session']
 				: [])
 		].join(' · ')
 	);
 
-	type Filters = Pick<
-		LogbookState,
-		'drones' | 'controllers' | 'teams' | 'withoutSession' | 'from' | 'to'
-	>;
-	const none: Filters = {
-		drones: [],
-		controllers: [],
-		teams: [],
-		withoutSession: false,
-		from: null,
-		to: null
-	};
+	type Filters = ListFilterState & Pick<LogbookState, 'withoutSession'>;
+	const none: Filters = { ...NO_FILTERS, withoutSession: false };
 
 	function filter(change: Partial<Filters>) {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves.
@@ -255,44 +196,19 @@
 <Grid>
 	<Column narrow>
 		{#if data.total > 0 || filtering}
-			<div class="filters">
-				<div class="dates">
-					<DateRange
-						from={data.state.from}
-						to={data.state.to}
-						onchange={(from, to) => filter({ from, to })}
-					/>
-				</div>
-				<MultiSelect
-					label="Drones"
-					placeholder="All drones"
-					options={droneOptions}
-					value={data.state.drones}
-					onchange={(drones) => filter({ drones })}
-				/>
-				<MultiSelect
-					label="Controllers"
-					placeholder="All controllers"
-					options={controllerOptions}
-					value={data.state.controllers}
-					onchange={(controllers) => filter({ controllers })}
-				/>
-				{#if data.choices.admin}
-					<MultiSelect
-						label="Teams"
-						placeholder="All teams"
-						options={teamFilterOptions}
-						value={data.state.teams}
-						onchange={(teams) => filter({ teams })}
-					/>
-				{/if}
+			<ListFilters
+				filters={data.state}
+				devices={data.devices}
+				admin={data.choices.admin}
+				onchange={filter}
+			>
 				<Select
 					label="Session"
 					options={sessionOptions}
 					value={data.state.withoutSession ? 'none' : ''}
 					onchange={(event) => filter({ withoutSession: event.currentTarget.value === 'none' })}
 				/>
-			</div>
+			</ListFilters>
 		{/if}
 		{#if data.total === 0 && filtering}
 			<EmptyState title="No flights match" body="No flights you can see pass these filters.">
@@ -463,46 +379,6 @@
 </Grid>
 
 <style>
-	/* Filters above the table: side by side from md, 16px apart, with 16px
-	   before the table. Clear filters is in the table's toolbar. */
-	.filters {
-		display: grid;
-		gap: var(--cds-spacing-05);
-		align-items: end;
-		margin-bottom: var(--cds-spacing-05);
-		/* The column is edge to edge on phones; the fields keep the gutter. */
-		padding-inline: var(--cds-spacing-05);
-	}
-
-	/* From md two columns, the dates across both; from lg one row. */
-	@media (min-width: 42rem) {
-		.filters {
-			padding-inline: 0;
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-
-		.dates {
-			grid-column: 1 / -1;
-		}
-	}
-
-	/* From lg a row of fixed widths that wraps onto a second line when the
-	   filters don't fit, rather than squeezing them. */
-	@media (min-width: 66rem) {
-		.filters {
-			display: flex;
-			flex-wrap: wrap;
-		}
-
-		.filters > :global(*) {
-			flex: 0 0 13rem;
-		}
-
-		.filters > .dates {
-			flex-basis: 20rem;
-		}
-	}
-
 	/* Add to session is a button from md; on phones it's in the overflow menu. */
 	@media (max-width: 41.99rem) {
 		.wide-only {

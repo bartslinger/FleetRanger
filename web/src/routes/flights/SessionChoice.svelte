@@ -33,8 +33,8 @@
 		const from = Math.min(...flights.map((flight) => Date.parse(flight.takeoff_at))) - MARGIN_MS;
 		const to = Math.max(...flights.map((flight) => Date.parse(flight.landed_at))) + MARGIN_MS;
 		const query = new URLSearchParams({
-			from: new Date(from).toISOString(),
-			to: new Date(to).toISOString(),
+			span_from: new Date(from).toISOString(),
+			span_to: new Date(to).toISOString(),
 			size: '100'
 		});
 		let cancelled = false;

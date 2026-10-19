@@ -12,7 +12,7 @@
 	import Button from '#lib/ui/Button.svelte';
 	import IconButton from '#lib/ui/IconButton.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
-	import Stepper from '#lib/ui/Stepper.svelte';
+	import SessionStepper from './SessionStepper.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import type { PageProps } from './$types';
@@ -103,15 +103,7 @@
 	breadcrumb={[{ href: resolve('/sessions'), label: 'Sessions' }]}
 >
 	{#snippet actions()}
-		<Stepper
-			label="Sessions"
-			previous={data.place.previous ? resolve('/sessions/[id]', { id: data.place.previous }) : null}
-			next={data.place.next ? resolve('/sessions/[id]', { id: data.place.next }) : null}
-			previousLabel="Previous session (newer)"
-			nextLabel="Next session (older)"
-			position={data.place.position}
-			total={data.place.total}
-		/>
+		<SessionStepper id={data.session.id} />
 	{/snippet}
 </PageHeader>
 

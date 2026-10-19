@@ -1,6 +1,16 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import ListFilters, {
+		NO_FILTERS,
+		filterNames,
+		filtering as listFiltering,
+		type Filters
+	} from '#lib/ListFilters.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { PAGE_SIZES, query, type SessionListState } from './list.js';
 	import { clock, day, daySpan, distance, duration, month } from '#lib/format.js';
 	import type { Session } from '#lib/server/backend.js';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
@@ -21,7 +31,6 @@
 	let { data, form }: PageProps = $props();
 
 	type Row = (typeof data.sessions)[number];
-	type View = 'table' | 'cards';
 
 	/** From the first takeoff to the last landing. */
 	const span = (session: Row) =>
@@ -65,16 +74,25 @@
 	}
 
 	/** The list's URL; defaults are left out. */
-	function href(page: number, size: number, view: View = data.view) {
-		const query = [
-			page > 1 ? `page=${page}` : '',
-			size !== data.defaultSize ? `size=${size}` : '',
-			view !== 'cards' ? `view=${view}` : ''
-		]
-			.filter(Boolean)
-			.join('&');
-		return `${resolve('/sessions')}${query ? `?${query}` : ''}`;
+	const href = (state: SessionListState) => `${resolve('/sessions')}${query(state)}`;
+
+	const filtering = $derived(listFiltering(data.state));
+	function filter(change: Partial<Filters>) {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves.
+		goto(href({ ...data.state, ...change, page: 1 }), { reset: false });
 	}
+	// Other filters, another list: the selection no longer means anything.
+	const filters = $derived(query({ ...data.state, page: 1, size: PAGE_SIZES[0], view: 'cards' }));
+	let selectedFor = untrack(() => filters);
+	$effect(() => {
+		if (filters === selectedFor) return;
+		selectedFor = filters;
+		selected = [];
+	});
+
+	// In a later page's breadcrumb, a filtered list names its filters.
+	const crumb = $derived(['Sessions', ...filterNames(data.state, data.devices)].join(' · '));
+	const sessions = (count: number) => `${count} ${count === 1 ? 'session' : 'sessions'}`;
 
 	// Cards, grouped by month; the list comes newest first.
 	const months = $derived.by(() => {
@@ -128,7 +146,7 @@
 	let tracksFailed = $state(false);
 
 	$effect(() => {
-		if (data.view !== 'cards' || !shown || !wide.current) return;
+		if (data.state.view !== 'cards' || !shown || !wide.current) return;
 		const id = shown.id;
 		if (cacheOf !== data.sessions) {
 			cache = new Map();
@@ -171,29 +189,46 @@
 	const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 </script>
 
-<PageHeader title="Sessions">
+<PageHeader title="Sessions" {crumb}>
 	{#snippet actions()}
 		<ViewSwitcher
 			label="View"
 			options={[
 				{
 					label: 'Cards',
-					href: href(data.page, data.size, 'cards'),
-					selected: data.view === 'cards'
+					href: href({ ...data.state, view: 'cards' }),
+					selected: data.state.view === 'cards'
 				},
 				{
 					label: 'Table',
-					href: href(data.page, data.size, 'table'),
-					selected: data.view === 'table'
+					href: href({ ...data.state, view: 'table' }),
+					selected: data.state.view === 'table'
 				}
 			]}
 		/>
 	{/snippet}
 </PageHeader>
 
-<Grid rowGap>
-	{#if data.total === 0}
-		<Column narrow>
+<Grid>
+	<Column narrow>
+		{#if data.total > 0 || filtering}
+			<ListFilters
+				filters={data.state}
+				devices={data.devices}
+				admin={data.choices.admin}
+				onchange={filter}
+			/>
+		{/if}
+		{#if data.total === 0 && filtering}
+			<EmptyState
+				title="No sessions match"
+				body="No sessions you can see have a flight that passes these filters."
+			>
+				{#snippet action()}
+					<Button kind="tertiary" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
+				{/snippet}
+			</EmptyState>
+		{:else if data.total === 0}
 			<EmptyState
 				title="No sessions yet"
 				body="A pilot’s flights are grouped into sessions once the flights have a pilot."
@@ -202,9 +237,14 @@
 					<Link href={resolve('/flights')}>Set pilots on the Flights page</Link>
 				{/snippet}
 			</EmptyState>
-		</Column>
-	{:else if data.view === 'cards'}
-		<Column narrow>
+		{:else if data.state.view === 'cards'}
+			<!-- As the table's toolbar: how many, and Clear filters. -->
+			{#if filtering}
+				<div class="cards-toolbar">
+					<p>{sessions(data.total)}</p>
+					<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
+				</div>
+			{/if}
 			<div class="cards-view">
 				<div class="cards">
 					{#each months as group (group.name)}
@@ -256,19 +296,17 @@
 					</div>
 				{/if}
 			</div>
-		</Column>
-		<Column narrow>
-			<Pagination
-				page={data.page}
-				size={data.size}
-				total={data.total}
-				sizes={data.sizes}
-				noun="sessions"
-				href={(page, size) => href(page, size)}
-			/>
-		</Column>
-	{:else}
-		<Column narrow>
+			<div class="cards-pagination">
+				<Pagination
+					page={data.state.page}
+					size={data.state.size}
+					total={data.total}
+					sizes={PAGE_SIZES}
+					noun="sessions"
+					href={(page, size) => href({ ...data.state, page, size })}
+				/>
+			</div>
+		{:else}
 			<DataTable
 				label="Sessions"
 				{columns}
@@ -277,9 +315,14 @@
 				rowHref={(session) => resolve('/sessions/[id]', { id: session.id })}
 				selectable={canChange ? changeable : undefined}
 				bind:selected
-				selectedLabel={(count) => `${count} ${count === 1 ? 'session' : 'sessions'} selected`}
-				summary="{data.total} {data.total === 1 ? 'session' : 'sessions'}"
+				selectedLabel={(count) => `${sessions(count)} selected`}
+				summary={sessions(data.total)}
 			>
+				{#snippet toolbar()}
+					{#if filtering}
+						<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
+					{/if}
+				{/snippet}
 				{#snippet batchActions(ids)}
 					{#if ids.length > 1}
 						<Modal
@@ -299,18 +342,23 @@
 				{/snippet}
 			</DataTable>
 			<Pagination
-				page={data.page}
-				size={data.size}
+				page={data.state.page}
+				size={data.state.size}
 				total={data.total}
-				sizes={data.sizes}
+				sizes={PAGE_SIZES}
 				noun="sessions"
-				href={(page, size) => href(page, size)}
+				href={(page, size) => href({ ...data.state, page, size })}
 			/>
-		</Column>
-	{/if}
+		{/if}
+	</Column>
 </Grid>
 
 <style>
+	/* 32px below the cards, as between the page's rows before. */
+	.cards-pagination {
+		margin-top: var(--cds-spacing-07);
+	}
+
 	/* Each month under its heading, which stays in view while its cards
 	   scroll; tiles 2px apart, as in Carbon's tile groups. */
 	.cards {
@@ -360,6 +408,25 @@
 	.card-numbers {
 		color: var(--cds-text-secondary);
 		font-variant-numeric: tabular-nums;
+	}
+
+	/* The number of sessions and Clear filters, in one row like a table's
+	   toolbar: 48px high, the count in the 16px gutter. */
+	.cards-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		min-height: var(--cds-spacing-09);
+		margin-bottom: var(--cds-spacing-05);
+		padding-inline-start: var(--cds-spacing-05);
+	}
+
+	.cards-toolbar p {
+		margin: 0;
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 	}
 
 	/* Only the cards below lg; from lg, 5 of 16 columns of cards and the map

@@ -1,36 +1,34 @@
-import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
+import { MAPBOX_ACCESS_TOKEN, TIME_ZONE } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
-import { get, send, type FlightChoices, type SessionPage } from '#lib/server/backend.js';
-
-const PAGE_SIZES = [25, 50, 100];
-const DEFAULT_SIZE = 50;
+import {
+	get,
+	send,
+	type Devices,
+	type FlightChoices,
+	type SessionPage
+} from '#lib/server/backend.js';
+import { apiFilters, parse, query } from './list.js';
 
 export async function load({ fetch, url }) {
-	const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '', 10) || 1);
-	const asked = Number.parseInt(url.searchParams.get('size') ?? '', 10);
-	const size = PAGE_SIZES.includes(asked) ? asked : DEFAULT_SIZE;
-	const view: 'table' | 'cards' = url.searchParams.get('view') === 'table' ? 'table' : 'cards';
-	const api = new URLSearchParams({ page: String(page), size: String(size) });
-	const [{ sessions, total }, choices] = await Promise.all([
+	const state = parse(url.searchParams);
+	const filters = apiFilters(state, TIME_ZONE);
+	const api = new URLSearchParams(filters);
+	api.set('page', String(state.page));
+	api.set('size', String(state.size));
+	// The filters' options: the equipment and teams of flights in a session.
+	const options = new URLSearchParams(filters);
+	options.set('session', 'any');
+	const [{ sessions, total }, choices, devices] = await Promise.all([
 		get<SessionPage>(fetch, `/api/sessions?${api}`),
-		get<FlightChoices>(fetch, '/api/flights/choices')
+		get<FlightChoices>(fetch, '/api/flights/choices'),
+		get<Devices>(fetch, `/api/flights/devices?${options}`)
 	]);
 
 	// Past the last page, e.g. after sessions were merged: go to the last one.
-	const pages = Math.max(1, Math.ceil(total / size));
-	if (page > pages) redirect(307, `${url.pathname}?page=${pages}&size=${size}&view=${view}`);
+	const pages = Math.max(1, Math.ceil(total / state.size));
+	if (state.page > pages) redirect(307, `${url.pathname}${query({ ...state, page: pages })}`);
 
-	return {
-		sessions,
-		total,
-		page,
-		size,
-		sizes: PAGE_SIZES,
-		defaultSize: DEFAULT_SIZE,
-		view,
-		choices,
-		mapboxToken: MAPBOX_ACCESS_TOKEN
-	};
+	return { sessions, total, state, choices, devices, mapboxToken: MAPBOX_ACCESS_TOKEN };
 }
 
 export const actions = {
