@@ -1,14 +1,16 @@
 <!--
 	A suggested session, looking like the session it would become: its
 	flights on the map, what they add up to, and the flights to leave out.
+	Their pilot can be set here already, for all of them or one flight.
 	Create session makes it and moves on to the next suggestion, which says
-	so until the next step; Create and edit opens the new session.
+	so until the next step.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import Add from '@carbon/icons/es/add/16.js';
-	import Subtract from '@carbon/icons/es/subtract/16.js';
+	import AddAlt from '@carbon/icons/es/add--alt/16.js';
+	import Edit from '@carbon/icons/es/edit/16.js';
+	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -18,12 +20,14 @@
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
-	import Icon from '#lib/ui/Icon.svelte';
 	import IconButton from '#lib/ui/IconButton.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Link from '#lib/ui/Link.svelte';
+	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
+	import Select from '#lib/ui/Select.svelte';
 	import Stepper from '#lib/ui/Stepper.svelte';
+	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import { query } from '../../logbook.js';
 	import type { PageProps, Snapshot } from './$types';
@@ -68,11 +72,11 @@
 	const shown = $derived(chosen.length > 0 ? chosen : flights);
 	const facts = $derived(summary(shown, data.timeZone));
 
-	const canChange = $derived(
+	// Admins change any flight, members those of their own team.
+	const mayChange = (flight: Row) =>
 		data.choices.admin ||
-			(data.choices.own_team_id !== null &&
-				chosen.every((flight) => flight.team_id === data.choices.own_team_id))
-	);
+		(data.choices.own_team_id !== null && flight.team_id === data.choices.own_team_id);
+	const canChange = $derived(chosen.every(mayChange));
 
 	// After creating: the flights left out are a suggestion to look at next,
 	// otherwise the next one in the list.
@@ -83,6 +87,36 @@
 		`${resolve('/flights/suggestions/[key]', { key })}${list}`;
 
 	const flightsLabel = (count: number) => `${count} ${count === 1 ? 'flight' : 'flights'}`;
+	const when = (flight: Row) => dateTime(flight.takeoff_at, data.timeZone);
+
+	// The pilot, of the flights in the session or of one flight; one dialog
+	// for both, opened by their pencils.
+	let pilotOpen = $state(false);
+	let pilotFor: Row[] = $state([]);
+	let pilotOpener: HTMLElement | undefined;
+	function changePilot(of: Row[], event: Event) {
+		pilotFor = of;
+		pilotOpener = event.currentTarget as HTMLElement;
+		pilotOpen = true;
+	}
+	const pilotOptions = $derived([
+		{ value: '', label: 'Unknown' },
+		...data.choices.pilots.map((pilot) => ({
+			value: pilot.id,
+			label: data.choices.admin ? `${pilot.name} (${pilot.team_name})` : pilot.name
+		}))
+	]);
+	// Their pilot if they share one.
+	const pilotChoice = $derived(
+		new Set(pilotFor.map((flight) => flight.pilot_id)).size === 1
+			? (pilotFor[0]?.pilot_id ?? '')
+			: ''
+	);
+	function pilotSet(result: Record<string, unknown> | undefined) {
+		const id = result?.pilotId as string | null;
+		const name = data.choices.pilots.find((pilot) => pilot.id === id)?.name ?? 'Unknown';
+		toast(`Pilot set to ${name} for ${flightsLabel(Number(result?.changed ?? 0))}.`);
+	}
 
 	// On phones the row's button stays in view: only takeoff and air time beside it.
 	const wide = new MediaQuery('min-width: 42rem');
@@ -90,7 +124,7 @@
 		{
 			key: 'takeoff_at',
 			header: `Takeoff (${data.timeZoneName})`,
-			format: (flight) => dateTime(flight.takeoff_at, data.timeZone)
+			format: when
 		},
 		{
 			key: 'air_time_s',
@@ -106,7 +140,7 @@
 						numeric: true,
 						format: (flight) => distance(flight.distance_m)
 					},
-					{ key: 'pilot_name', header: 'Pilot' },
+					{ key: 'pilot_name', header: 'Pilot', after: pilotPencil },
 					{
 						key: 'aircraft_serial',
 						header: 'Drone',
@@ -127,6 +161,17 @@
 	const action = $derived(`${list || '?'}&/create`);
 	let busy = $state(false);
 </script>
+
+{#snippet pilotPencil(flight: Row)}
+	{#if mayChange(flight)}
+		<IconButton
+			icon={Edit}
+			label="Change pilot"
+			name="Change pilot of flight {when(flight)}"
+			onclick={(event) => changePilot([flight], event)}
+		/>
+	{/if}
+{/snippet}
 
 <PageHeader
 	title={`Suggested session ${day(facts.start, data.timeZone, true)}`}
@@ -168,42 +213,65 @@
 					<input type="hidden" name="flight_id" value={flight.id} />
 				{/each}
 				<input type="hidden" name="then" value={then} />
-				<div class="buttons">
-					<Button
-						type="submit"
-						kind="secondary"
-						name="edit"
-						value="true"
-						disabled={busy || chosen.length === 0 || !canChange}>Create and edit</Button
-					>
-					<Button
-						type="submit"
-						name="edit"
-						value="false"
-						disabled={busy || chosen.length === 0 || !canChange}>Create session</Button
-					>
-				</div>
+				<Button type="submit" disabled={busy || chosen.length === 0 || !canChange}
+					>Create session</Button
+				>
 			</form>
 		</div>
 	{/snippet}
 </PageHeader>
 
+<Modal
+	title="Change pilot"
+	submitLabel="Save"
+	action="?/setPilot"
+	error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
+	onsuccess={pilotSet}
+	trigger={false}
+	bind:open={pilotOpen}
+	returnFocus={() => pilotOpener}
+>
+	{#each pilotFor as flight (flight.id)}
+		<input type="hidden" name="flight_id" value={flight.id} />
+	{/each}
+	<Select label="Pilot" name="pilot_id" options={pilotOptions} value={pilotChoice} />
+	<p class="help">
+		{pilotFor.length === 1
+			? `Flight ${when(pilotFor[0])}.`
+			: `All ${pilotFor.length} flights in the session.`}
+		{data.choices.admin
+			? 'A pilot of another team moves the flights to that team. With Unknown, they keep theirs.'
+			: 'Choose Unknown for flights not flown by someone in your team.'}
+	</p>
+</Modal>
+
 <Grid rowGap>
-	{#if form?.message}
+	{#if form && 'message' in form}
 		<Column narrow>
-			<InlineNotification kind="error" title={form.message} />
+			<InlineNotification kind="error" title="Session not created"
+				>{form.message}</InlineNotification
+			>
 		</Column>
 	{:else if data.created}
 		<!-- Until the next step: stepping on drops it from the address. -->
 		<Column narrow>
-			<InlineNotification kind="success" title="Session created.">
+			<InlineNotification kind="success" title="Session created">
 				<Link href={resolve('/sessions/[id]', { id: data.created })}>Open session</Link>
 			</InlineNotification>
 		</Column>
-	{:else if chosen.length === 0}
-		<!-- Why Create session can't be pressed. -->
+	{/if}
+	<!-- Why Create session can't be pressed. -->
+	{#if chosen.length === 0}
 		<Column narrow>
-			<InlineNotification kind="info" title="Put back at least one flight to create the session." />
+			<InlineNotification kind="info" title="No flights in the session">
+				Put back at least one flight to create it.
+			</InlineNotification>
+		</Column>
+	{:else if !canChange}
+		<Column narrow>
+			<InlineNotification kind="info" title="You can’t create this session">
+				It has flights of another team. Leave them out, or ask an admin.
+			</InlineNotification>
 		</Column>
 	{/if}
 	<!-- Left-out flights aren't on the map. -->
@@ -215,12 +283,24 @@
 			label="Map of the suggested session’s tracks"
 		/>
 	</Column>
-	<Column lg={5}>
-		<SessionFacts flights={shown} timeZone={data.timeZone} timeZoneName={data.timeZoneName} />
+	<!-- On phones below the table, which then follows the map. -->
+	<Column lg={5} smOrder={1}>
+		<SessionFacts flights={shown} timeZone={data.timeZone} timeZoneName={data.timeZoneName}>
+			{#snippet pilotAction()}
+				{#if canChange && chosen.length > 0}
+					<IconButton
+						icon={Edit}
+						label="Change pilot"
+						name="Change pilot of the session’s flights"
+						onclick={(event) => changePilot(chosen, event)}
+					/>
+				{/if}
+			{/snippet}
+		</SessionFacts>
 	</Column>
-	<!-- Carbon's inline row actions, Remove (subtract) and Add, labelled from
-	     md; a left-out flight stays in its place, marked. They become a
-	     suggestion of their own once the session is made. -->
+	<!-- Carbon's inline row actions: Remove and Add, circled, as the bare
+	     minus read as a dash; a left-out flight stays in its place, marked.
+	     They become a suggestion of their own once the session is made. -->
 	<Column narrow>
 		<DataTable
 			label="Flights of the suggested session"
@@ -234,18 +314,13 @@
 		>
 			{#snippet rowAction(flight)}
 				{@const out = excluded.includes(flight.id)}
-				{#if wide.current}
-					<Button kind="ghost" size="md" onclick={() => toggle(flight.id)}>
-						{out ? 'Put back' : 'Leave out'}<Icon icon={out ? Add : Subtract} />
-					</Button>
-				{:else}
-					<IconButton
-						icon={out ? Add : Subtract}
-						label={out ? 'Put back' : 'Leave out'}
-						size="md"
-						onclick={() => toggle(flight.id)}
-					/>
-				{/if}
+				<IconButton
+					icon={out ? AddAlt : SubtractAlt}
+					label={out ? 'Put back' : 'Leave out'}
+					name="{out ? 'Put back' : 'Leave out'} flight {when(flight)}"
+					size="md"
+					onclick={() => toggle(flight.id)}
+				/>
 			{/snippet}
 		</DataTable>
 	</Column>
@@ -259,7 +334,11 @@
 		gap: var(--cds-spacing-05);
 	}
 
-	.buttons {
-		display: flex;
+	.help {
+		margin-top: calc(-1 * var(--cds-spacing-03));
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-helper-text-01-font-size);
+		line-height: var(--cds-helper-text-01-line-height);
+		letter-spacing: var(--cds-helper-text-01-letter-spacing);
 	}
 </style>

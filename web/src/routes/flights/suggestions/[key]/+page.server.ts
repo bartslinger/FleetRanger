@@ -25,10 +25,18 @@ export async function load({ fetch, params, url }) {
 }
 
 export const actions = {
+	/** Sets the pilot of these flights, as the logbook's batch action does. */
+	setPilot: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const pilotId = String(form.get('pilot_id') ?? '') || null;
+		const body = { flight_ids: form.getAll('flight_id').map(String), pilot_id: pilotId };
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
+		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
+		return { pilotId, changed: result.data.changed };
+	},
 	/**
-	 * Makes the ticked flights a session. With `edit`, on to that session's
-	 * page; otherwise on to the suggestion `then` (the flights left out, or the
-	 * next one), which says the session was made.
+	 * Makes the flights a session, then on to the suggestion `then` (the
+	 * flights left out, or the next one), which says the session was made.
 	 */
 	create: async ({ fetch, request, url }) => {
 		const form = await request.formData();
@@ -36,7 +44,6 @@ export const actions = {
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions', body);
 		if (!result.ok) return fail(result.status, { message: result.message });
 		const session = result.data.id;
-		if (form.get('edit') === 'true') redirect(303, `/sessions/${session}`);
 
 		const list = query(parse(url.searchParams));
 		const then = String(form.get('then') ?? '');

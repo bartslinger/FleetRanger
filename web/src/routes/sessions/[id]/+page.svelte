@@ -105,7 +105,8 @@
 			label="Map of the session’s tracks"
 		/>
 	</Column>
-	<Column lg={5}>
+	<!-- On phones below the table, which then follows the map. -->
+	<Column lg={5} smOrder={1}>
 		<SessionFacts {flights} timeZone={data.timeZone} timeZoneName={data.timeZoneName}>
 			{#snippet pilotAction()}
 				{#if canChange}
