@@ -141,6 +141,9 @@ struct ListQuery {
     /// Only the flights of these team ids, comma-separated; `none` for the
     /// flights without a team.
     team: Option<String>,
+    /// `suggestions`: a flight's neighbours are those of its suggested
+    /// session (with `session=none`).
+    view: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -249,14 +252,20 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
 
 /// The flight's place in the list with the same query as `list` (its page and
 /// size don't matter): the flights before and after it, its position and the
-/// list's length. Not found if the flight isn't in that list.
+/// list's length. Not found if the flight isn't in that list. With
+/// `view=suggestions`, its place in its suggested session instead.
 async fn neighbours(
     actor: Actor,
     State(db): State<PgPool>,
+    State(gap): State<SessionGap>,
     Path(id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<Neighbours>> {
     let (filter, sort) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
+    if filter.without_session && query.view.as_deref() == Some("suggestions") {
+        let place = suggest::neighbours(&db, &actor, filter, gap, id).await?;
+        return place.map(Json).ok_or(ApiError::NotFound);
+    }
     Ok(Json(
         service::neighbours(&db, &actor, &filter, &sort, id).await?,
     ))

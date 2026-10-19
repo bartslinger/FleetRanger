@@ -10,7 +10,7 @@ use uuid::Uuid;
 use super::SessionGap;
 use crate::{
     auth::Actor,
-    flights::db::{self as flights, Filter, FlightSummary, Sort, SortKey},
+    flights::db::{self as flights, Filter, FlightSummary, Neighbours, Sort, SortKey},
     policy,
 };
 
@@ -29,19 +29,12 @@ pub struct Suggestion {
 pub async fn list(
     db: &PgPool,
     actor: &Actor,
-    mut filter: Filter,
+    filter: Filter,
     gap: SessionGap,
     limit: usize,
     offset: usize,
 ) -> sqlx::Result<(Vec<Suggestion>, usize)> {
-    filter.without_session = true;
-    let oldest_first = Sort {
-        key: SortKey::TakeoffAt,
-        descending: false,
-    };
-    let scope = policy::flight_scope(actor);
-    let flights = flights::list(db, &scope, &filter, &oldest_first, i64::MAX, 0).await?;
-    let mut groups = group(flights, Duration::minutes(gap.0.into()));
+    let mut groups = all(db, actor, filter, gap).await?;
     let total = groups.len();
     groups.reverse();
     let page = groups
@@ -54,6 +47,53 @@ pub async fn list(
         })
         .collect();
     Ok((page, total))
+}
+
+/// A flight's place in its suggestion, for stepping through that suggestion's
+/// flights in takeoff order; None if the flight isn't in one.
+pub async fn neighbours(
+    db: &PgPool,
+    actor: &Actor,
+    filter: Filter,
+    gap: SessionGap,
+    id: Uuid,
+) -> sqlx::Result<Option<Neighbours>> {
+    let groups = all(db, actor, filter, gap).await?;
+    let Some(flights) = groups
+        .into_iter()
+        .find(|flights| flights.iter().any(|flight| flight.id == id))
+    else {
+        return Ok(None);
+    };
+    let index = flights
+        .iter()
+        .position(|flight| flight.id == id)
+        .expect("the flight is in its suggestion");
+    let id_at = |index: Option<usize>| index.and_then(|index| flights.get(index)).map(|f| f.id);
+    Ok(Some(Neighbours {
+        previous: id_at(index.checked_sub(1)),
+        next: id_at(Some(index + 1)),
+        position: i64::try_from(index + 1).unwrap_or(i64::MAX),
+        total: i64::try_from(flights.len()).unwrap_or(i64::MAX),
+    }))
+}
+
+/// Every suggestion for the flights without a session that the actor may see
+/// and that pass the filter, oldest first.
+async fn all(
+    db: &PgPool,
+    actor: &Actor,
+    mut filter: Filter,
+    gap: SessionGap,
+) -> sqlx::Result<Vec<Vec<FlightSummary>>> {
+    filter.without_session = true;
+    let oldest_first = Sort {
+        key: SortKey::TakeoffAt,
+        descending: false,
+    };
+    let scope = policy::flight_scope(actor);
+    let flights = flights::list(db, &scope, &filter, &oldest_first, i64::MAX, 0).await?;
+    Ok(group(flights, Duration::minutes(gap.0.into())))
 }
 
 /// A suggestion as it's being formed: what a flight must fit.
