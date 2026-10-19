@@ -164,6 +164,7 @@
 	let pilotOpen = $state(false);
 	let teamOpen = $state(false);
 	let addOpen = $state(false);
+	let removeOpen = $state(false);
 	let overflow: HTMLElement | null = $state(null);
 	const wide = new MediaQuery('min-width: 42rem');
 
@@ -275,12 +276,37 @@
 						bind:trigger={overflow}
 						items={[
 							{ label: 'Add to session', onselect: () => (addOpen = true), phoneOnly: true },
+							{ label: 'Remove from session', onselect: () => (removeOpen = true) },
 							{ label: 'Set pilot', onselect: () => (pilotOpen = true) },
 							...(data.choices.admin
 								? [{ label: 'Move to team', onselect: () => (teamOpen = true) }]
 								: [])
 						]}
 					/>
+					<Modal
+						title="Remove from session"
+						submitLabel="Remove"
+						action="?/removeFromSession"
+						error={form && 'removeMessage' in form ? form.removeMessage : undefined}
+						onsuccess={(result) => {
+							const count = Number(result?.removed ?? 0);
+							done(
+								count === 0
+									? 'None of these flights were in a session.'
+									: `${flights(count)} removed from ${count === 1 ? 'its session' : 'their sessions'}.`
+							);
+						}}
+						trigger={false}
+						bind:open={removeOpen}
+						returnFocus={() => overflow ?? undefined}
+					>
+						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+						<p>
+							{ids.length === 1
+								? 'The flight leaves its session. It stays in Flights, without a session.'
+								: `The ${ids.length} flights leave the sessions they are in. They stay in Flights, without a session.`}
+						</p>
+					</Modal>
 					<Modal
 						title="Set pilot"
 						submitLabel="Set pilot"

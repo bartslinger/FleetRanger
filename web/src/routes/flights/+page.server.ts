@@ -59,6 +59,13 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { newSessionMessage: result.message });
 		return { session: result.data.id };
 	},
+	removeFromSession: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const body = { flight_ids: flightIds(form) };
+		const result = await send<{ removed: number }>(fetch, 'POST', '/api/sessions/remove', body);
+		if (!result.ok) return fail(result.status, { removeMessage: result.message });
+		return { removed: result.data.removed };
+	},
 	addToSession: async ({ fetch, request }) => {
 		const form = await request.formData();
 		const session = String(form.get('session_id') ?? '');

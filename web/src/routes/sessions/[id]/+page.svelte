@@ -72,6 +72,11 @@
 		toast(`${count} ${count === 1 ? 'flight' : 'flights'} moved to a new session.`);
 	}
 
+	function removed(count: number) {
+		selected = [];
+		toast(`${count} ${count === 1 ? 'flight' : 'flights'} removed from the session.`);
+	}
+
 	const columns: TableColumn<Row>[] = $derived([
 		{
 			key: 'takeoff_at',
@@ -150,6 +155,25 @@
 						</p>
 					</Modal>
 				{/if}
+				<Modal
+					title="Remove from session"
+					submitLabel="Remove"
+					action="?/remove"
+					error={form?.removeMessage}
+					onsuccess={() => removed(ids.length)}
+				>
+					{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+					<input type="hidden" name="all" value={String(ids.length === flights.length)} />
+					<p>
+						{#if ids.length === flights.length}
+							The session ends. Its {ids.length === 1 ? 'flight stays' : 'flights stay'} in Flights, without
+							a session.
+						{:else}
+							The {ids.length === 1 ? 'flight leaves' : `${ids.length} flights leave`} the session.
+							{ids.length === 1 ? 'It stays' : 'They stay'} in Flights, without a session.
+						{/if}
+					</p>
+				</Modal>
 			{/snippet}
 		</DataTable>
 	</Column>

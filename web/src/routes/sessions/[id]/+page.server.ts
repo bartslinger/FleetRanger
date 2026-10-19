@@ -1,5 +1,5 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
-import { fail } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import { get, send, type FlightChoices, type Session } from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
@@ -18,5 +18,14 @@ export const actions = {
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions/split', body);
 		if (!result.ok) return fail(result.status, { splitMessage: result.message });
 		return { split: result.data.id };
+	},
+	remove: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const body = { flight_ids: form.getAll('flight_id').map(String) };
+		const result = await send<{ removed: number }>(fetch, 'POST', '/api/sessions/remove', body);
+		if (!result.ok) return fail(result.status, { removeMessage: result.message });
+		// All its flights gone, the session is too: back to the list.
+		if (form.get('all') === 'true') redirect(303, '/sessions');
+		return { removed: result.data.removed };
 	}
 };
