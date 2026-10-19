@@ -124,13 +124,7 @@ impl FromRef<AppState> for Arc<Auth> {
 }
 
 async fn serve(config: &Config, db: PgPool) -> Result<()> {
-    // Places flights that were given a pilot while grouping wasn't possible,
-    // e.g. before sessions existed or when grouping failed.
     let session_gap = SessionGap(config.session_gap_minutes);
-    sessions::db::group(&db, session_gap)
-        .await
-        .context("failed to group flights into sessions")?;
-
     let changes = Changes::default();
     let activity = Activity::new(changes.clone());
     tokio::spawn(ingest::process::run(
@@ -138,7 +132,6 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         config.log_dir.clone(),
         config.dji_app_key.clone(),
         activity.clone(),
-        session_gap,
     ));
 
     let provider = match &config.oidc {

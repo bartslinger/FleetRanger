@@ -7,7 +7,6 @@ use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
     policy::{self, Role, TeamChange},
-    sessions::{self, SessionGap},
 };
 
 /// One page of the flights the actor may see that pass the filter, and how
@@ -117,7 +116,6 @@ impl Choices {
 /// Sets the pilot of a batch of flights, all or none. Returns how many changed.
 pub async fn set_pilot(
     db: &PgPool,
-    gap: SessionGap,
     actor: &Actor,
     ids: &[Uuid],
     pilot_id: Option<Uuid>,
@@ -137,15 +135,12 @@ pub async fn set_pilot(
         TeamChange::Keep => None,
         TeamChange::Follow(team) => Some(team),
     };
-    let changed = db::set_pilot(db, &ids, pilot_id, team).await?;
-    sessions::db::group(db, gap).await?;
-    Ok(changed)
+    Ok(db::set_pilot(db, &ids, pilot_id, team).await?)
 }
 
 /// Moves a batch of flights to a team, or to the queue with None. Admins only.
 pub async fn set_team(
     db: &PgPool,
-    gap: SessionGap,
     actor: &Actor,
     ids: &[Uuid],
     team_id: Option<Uuid>,
@@ -160,9 +155,7 @@ pub async fn set_team(
     {
         return Err(ApiError::Invalid("Choose an active team.".to_owned()));
     }
-    let changed = db::set_team(db, &ids, team_id).await?;
-    sessions::db::group(db, gap).await?;
-    Ok(changed)
+    Ok(db::set_team(db, &ids, team_id).await?)
 }
 
 fn distinct(ids: &[Uuid]) -> ApiResult<Vec<Uuid>> {

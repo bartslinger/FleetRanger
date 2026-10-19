@@ -338,8 +338,8 @@ pub async fn team_is_active(db: &PgPool, team_id: Uuid) -> sqlx::Result<bool> {
     .await
 }
 
-/// Sets the pilot of these flights, and their team if given. A flight whose
-/// pilot changes leaves its session, to be grouped again.
+/// Sets the pilot of these flights, and their team if given. A flight stays in
+/// its session: sessions change only when someone changes them.
 pub async fn set_pilot(
     db: &PgPool,
     ids: &[Uuid],
@@ -347,8 +347,7 @@ pub async fn set_pilot(
     team_id: Option<Uuid>,
 ) -> sqlx::Result<u64> {
     let result = sqlx::query!(
-        "update flights set pilot_id = $2, team_id = coalesce($3, team_id),
-             session_id = case when pilot_id is not distinct from $2 then session_id end
+        "update flights set pilot_id = $2, team_id = coalesce($3, team_id)
          where id = any($1)",
         ids,
         pilot_id,

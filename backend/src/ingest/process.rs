@@ -16,7 +16,6 @@ use tokio::time::Instant;
 use super::activity::{Activity, Stage};
 use super::flight::{self, Flight, Serials};
 use super::{db, dji};
-use crate::sessions::{self, SessionGap};
 
 /// How long to wait before looking for new logs when none are pending.
 const IDLE_PAUSE: Duration = Duration::from_secs(10);
@@ -68,13 +67,7 @@ struct Decoded {
     dji_total_distance_m: f32,
 }
 
-pub async fn run(
-    db: PgPool,
-    log_dir: PathBuf,
-    dji_app_key: Option<String>,
-    activity: Activity,
-    session_gap: SessionGap,
-) {
+pub async fn run(db: PgPool, log_dir: PathBuf, dji_app_key: Option<String>, activity: Activity) {
     let mut dji_limit = RateLimit::new(DJI_REQUEST_INTERVAL);
     loop {
         let result = process_next(
@@ -89,11 +82,6 @@ pub async fn run(
             Ok(true) => continue,
             Ok(false) => {
                 activity.idle();
-                // Flights from controllers come with their pilot, so they can
-                // join sessions now; flights already in one stay where they are.
-                if let Err(error) = sessions::db::group(&db, session_gap).await {
-                    tracing::warn!("grouping flights into sessions failed: {error:#}");
-                }
                 IDLE_PAUSE
             }
             Err(error) => {

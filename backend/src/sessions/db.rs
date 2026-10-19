@@ -183,6 +183,14 @@ async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
 /// gap apart, or else starts a new session. Flights already in a session stay
 /// where they are, so this never undoes a user's changes. Deletes sessions
 /// that have no flights left.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "flights join sessions only by hand for now; uploads will group \
+                  again once the rule for late flights is decided"
+    )
+)]
 pub async fn group(db: &PgPool, gap: SessionGap) -> sqlx::Result<()> {
     let mut tx = locked(db).await?;
     let unplaced = sqlx::query!(
