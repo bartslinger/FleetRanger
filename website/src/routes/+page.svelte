@@ -136,14 +136,8 @@
 
 <section aria-labelledby="points-title">
 	<Grid centered rowGap>
-		<Column md={8} lg={8}>
+		<Column>
 			<h2 id="points-title">Your data stays with you</h2>
-		</Column>
-		<Column md={8} lg={8}>
-			<p class="body">
-				Each organisation has its own install. Flight logs and tracks never leave it; to unlock a
-				log, your server only sends DJI the log's encrypted key records.
-			</p>
 		</Column>
 		<Column>
 			<ul class="points">
@@ -285,8 +279,7 @@
 		margin-top: var(--cds-spacing-08);
 	}
 
-	/* The hero: the headline at the top and the intro at the bottom of the text
-	   column, the laptop on a Gray 10 band. Below lg the band is behind the
+	/* The hero: the text beside the laptop, which is on a Gray 10 band. Below lg the band is behind the
 	   laptop only, and reaches the window's edges. */
 	.hero {
 		position: relative;
@@ -323,7 +316,7 @@
 		}
 
 		.lead {
-			justify-content: space-between;
+			justify-content: center;
 			min-height: 26rem;
 		}
 
