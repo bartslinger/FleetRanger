@@ -18,16 +18,19 @@
 		 * when the page was opened directly. Otherwise it shows the pages the
 		 * user came through (see trail.svelte.ts). */
 		breadcrumb?: Crumb[];
+		/** The page's name in a later page's breadcrumb, when the title alone
+		 * wouldn't say what it is, e.g. "Flight 12 Oct, 18:53". */
+		crumb?: string;
 		/** A state shown as a gray tag after the title, e.g. "Archived". */
 		status?: string;
 		description?: string;
 		actions?: Snippet;
 	}
 
-	let { title, breadcrumb, status, description, actions }: Props = $props();
+	let { title, breadcrumb, crumb, status, description, actions }: Props = $props();
 
 	$effect(() => {
-		trail.title = title;
+		trail.title = crumb ?? title;
 	});
 
 	const crumbs: Crumb[] | undefined = $derived(

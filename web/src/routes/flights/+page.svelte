@@ -79,6 +79,18 @@
 	);
 	const filtering = $derived(data.state.drone !== null || data.state.controller !== null);
 
+	// In a later page's breadcrumb, a filtered list names its filters:
+	// "Flights · Drone-2".
+	const name = (devices: Device[], serial: string) =>
+		devices.find((device) => device.serial === serial)?.name ?? serial;
+	const crumb = $derived(
+		[
+			'Flights',
+			...(data.state.drone ? [name(data.devices.aircraft, data.state.drone)] : []),
+			...(data.state.controller ? [name(data.devices.controllers, data.state.controller)] : [])
+		].join(' · ')
+	);
+
 	function filter(change: Partial<Pick<LogbookState, 'drone' | 'controller'>>) {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves.
 		goto(href({ ...data.state, ...change, page: 1 }), { reset: false });
@@ -119,7 +131,7 @@
 	}
 </script>
 
-<PageHeader title="Flights" />
+<PageHeader title="Flights" {crumb} />
 
 <Grid>
 	<Column narrow>

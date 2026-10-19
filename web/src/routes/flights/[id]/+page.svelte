@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { dateTime, distance, duration } from '#lib/format.js';
+	import { clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
@@ -94,6 +94,7 @@
 
 <PageHeader
 	title={dateTime(flight.takeoff_at, data.timeZone)}
+	crumb={`Flight ${dayMonth(flight.takeoff_at, data.timeZone)}, ${clock(flight.takeoff_at, data.timeZone)}`}
 	breadcrumb={[{ href: resolve('/flights'), label: 'Flights' }]}
 />
 

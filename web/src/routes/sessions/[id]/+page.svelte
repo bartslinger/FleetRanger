@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { dateTime, daySpan, distance, duration } from '#lib/format.js';
+	import { dateTime, day, daySpan, distance, duration } from '#lib/format.js';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -95,6 +95,7 @@
 
 <PageHeader
 	title={daySpan(start, end, data.timeZone, true)}
+	crumb={`Session ${day(start, data.timeZone)}`}
 	breadcrumb={[{ href: resolve('/sessions'), label: 'Sessions' }]}
 />
 

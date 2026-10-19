@@ -67,6 +67,12 @@ export function day(iso: string, timeZone: string, withYear = false): string {
 	return `${weekday} ${day} ${MONTHS[month - 1]}${withYear ? ` ${year}` : ''}`;
 }
 
+/** For example "12 Oct": short, where the year is clear from the context. */
+export function dayMonth(iso: string, timeZone: string): string {
+	const { month, day } = parts(iso, timeZone);
+	return `${day} ${MONTHS[month - 1]}`;
+}
+
 /** For example "18:32". */
 export function clock(iso: string, timeZone: string): string {
 	const { hour, minute } = parts(iso, timeZone);
