@@ -3,7 +3,13 @@
 	import laptop800 from '#lib/images/laptop-800.webp';
 	import laptop1600 from '#lib/images/laptop-1600.webp';
 
-	let { src, srcset, alt }: { src: string; srcset: string; alt: string } = $props();
+	// width: how wide it is shown at most, in rem, for picking the image sizes.
+	let {
+		src,
+		srcset,
+		alt,
+		width = 32
+	}: { src: string; srcset: string; alt: string; width?: number } = $props();
 </script>
 
 <div class="laptop">
@@ -11,12 +17,12 @@
 		class="picture"
 		src={laptop1600}
 		srcset="{laptop800} 800w, {laptop1600} 1600w"
-		sizes="32rem"
+		sizes="{width}rem"
 		alt=""
 		width="3571"
 		height="2087"
 	/>
-	<img class="screen" {src} {srcset} sizes="24rem" {alt} />
+	<img class="screen" {src} {srcset} sizes="{Math.ceil(width * 0.76)}rem" {alt} />
 </div>
 
 <style>

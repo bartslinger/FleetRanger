@@ -10,9 +10,6 @@
 	import session800 from '#lib/images/session-800.webp';
 	import session1600 from '#lib/images/session-1600.webp';
 	import session2400 from '#lib/images/session-2400.webp';
-	import sessionPhone480 from '#lib/images/session-phone-480.webp';
-	import sessionPhone960 from '#lib/images/session-phone-960.webp';
-	import sessionPhone1320 from '#lib/images/session-phone-1320.webp';
 	import sync640 from '#lib/images/sync-640.webp';
 	import sync1280 from '#lib/images/sync-1280.webp';
 	import { CONTACT, SOURCE } from '#lib/site.js';
@@ -98,7 +95,7 @@
 
 <section class="hero" aria-labelledby="title">
 	<Grid centered rowGap>
-		<Column md={8} lg={10}>
+		<Column md={8} lg={7}>
 			<h1 id="title">Own your flight logs</h1>
 			<p class="intro">
 				FleetRanger collects the logs from your DJI Enterprise controllers on your own server, and
@@ -110,26 +107,15 @@
 				<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
 			</div>
 		</Column>
-		<Column md={8} lg={12}>
-			<!-- The app at laptop width, and on phones as it is on a phone. -->
-			<picture>
-				<source
-					media="(min-width: 42rem)"
+		<Column md={8} lg={9}>
+			<div class="hero-laptop">
+				<Laptop
+					src={session1600}
 					srcset="{session800} 800w, {session1600} 1600w, {session2400} 2400w"
-					sizes="(min-width: 99rem) 72rem, (min-width: 66rem) 75vw, calc(100vw - 2rem)"
-					width="3600"
-					height="2032"
-				/>
-				<img
-					class="screenshot"
-					src={sessionPhone960}
-					srcset="{sessionPhone480} 480w, {sessionPhone960} 960w, {sessionPhone1320} 1320w"
-					sizes="calc(100vw - 2rem)"
+					width={40}
 					alt="A session in FleetRanger: a flight's track on a satellite map, with its pilot, team, times and distance, and the list of its flights."
-					width="1321"
-					height="3130"
 				/>
-			</picture>
+			</div>
 		</Column>
 	</Grid>
 </section>
@@ -414,16 +400,16 @@
 		color: var(--cds-text-secondary);
 	}
 
-	/* The app as it is: the whole screenshot, set apart from the page by a line. */
-	.screenshot {
-		display: block;
-		width: 100%;
-		height: auto;
-		border: 1px solid var(--cds-border-subtle-01);
+	/* Beside the headline from lg, below the buttons before that. */
+	.hero-laptop {
+		max-width: 40rem;
+		margin-top: var(--cds-spacing-07);
 	}
 
-	picture .screenshot {
-		margin-top: var(--cds-spacing-10);
+	@media (min-width: 66rem) {
+		.hero-laptop {
+			margin-top: 0;
+		}
 	}
 
 	/* Carbon's content blocks: a title and a short text, separated by space. */
