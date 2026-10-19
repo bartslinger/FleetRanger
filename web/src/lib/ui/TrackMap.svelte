@@ -143,6 +143,14 @@
 		];
 	}
 
+	/** Puts the tracks into the sources and fits them. Before `style.load` there
+	 * are no sources yet; it adds them with the tracks of that moment. */
+	function draw(map: MapboxMap, tracks: Track[]) {
+		(map.getSource('tracks') as GeoJSONSource | undefined)?.setData(lines(tracks));
+		(map.getSource('ends') as GeoJSONSource | undefined)?.setData(ends(tracks));
+		fit(map, tracks, false);
+	}
+
 	function fit(map: MapboxMap, tracks: Track[], animate: boolean) {
 		const extent = bounds(tracks);
 		if (!extent) return;
@@ -193,8 +201,8 @@
 				const status = (event.error as { status?: number } | undefined)?.status;
 				if (status === 401 || status === 403 || !instance.isStyleLoaded()) failed = true;
 			});
-			// Tracks that arrived while the style was loading weren't fitted yet.
-			instance.once('load', () => fit(instance, tracks, false));
+			// Tracks that arrived while the style was loading weren't drawn yet.
+			instance.once('load', () => draw(instance, tracks));
 			map = instance;
 		});
 		return () => {
@@ -204,13 +212,13 @@
 		};
 	});
 
-	// Another flight on the same page component: new data and view.
+	// New tracks (another flight or session): new data and view. Not gated on
+	// isStyleLoaded(): that stays false a while after `style.load` added the
+	// sources, and tracks arriving then were never drawn.
 	$effect(() => {
 		const current = tracks;
-		if (!map?.isStyleLoaded()) return;
-		(map.getSource('tracks') as GeoJSONSource | undefined)?.setData(lines(current));
-		(map.getSource('ends') as GeoJSONSource | undefined)?.setData(ends(current));
-		fit(map, current, false);
+		if (!map?.getSource('tracks')) return;
+		draw(map, current);
 	});
 
 	function show(next: View) {
