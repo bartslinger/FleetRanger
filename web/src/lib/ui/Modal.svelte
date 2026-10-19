@@ -38,6 +38,11 @@
 		error?: string;
 		/** After a successful submit, e.g. to show a toast. */
 		onsuccess?: (data: Record<string, unknown> | undefined) => void;
+		/** Without its own trigger, e.g. opened from an overflow menu's item:
+		 * the opener sets `open`, and focus returns to `returnFocus`. */
+		trigger?: boolean;
+		open?: boolean;
+		returnFocus?: () => HTMLElement | undefined;
 		children: Snippet;
 	}
 
@@ -50,6 +55,9 @@
 		action,
 		error,
 		onsuccess,
+		trigger = true,
+		open = $bindable(false),
+		returnFocus,
 		children
 	}: Props = $props();
 
@@ -60,7 +68,6 @@
 		action.startsWith('?/') && page.url.search ? `${page.url.search}&${action.slice(1)}` : action
 	);
 
-	let open = $state(false);
 	let busy = $state(false);
 	let body: HTMLElement | undefined = $state();
 	let footer: HTMLElement | undefined = $state();
@@ -68,19 +75,27 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Trigger>
-		{#snippet child({ props })}
-			{#if triggerIcon}
-				<IconButton {...props} icon={triggerIcon} label={title} />
-			{:else}
-				<Button {...props} kind={triggerKind}>{title}</Button>
-			{/if}
-		{/snippet}
-	</Dialog.Trigger>
+	{#if trigger}
+		<Dialog.Trigger>
+			{#snippet child({ props })}
+				{#if triggerIcon}
+					<IconButton {...props} icon={triggerIcon} label={title} />
+				{:else}
+					<Button {...props} kind={triggerKind}>{title}</Button>
+				{/if}
+			{/snippet}
+		</Dialog.Trigger>
+	{/if}
 	<Dialog.Portal>
 		<Dialog.Overlay class="modal-overlay" />
 		<Dialog.Content
 			class="modal layer-01"
+			onCloseAutoFocus={(event) => {
+				const to = returnFocus?.();
+				if (!to) return;
+				event.preventDefault();
+				to.focus();
+			}}
 			onOpenAutoFocus={(event) => {
 				// The first field, or for a confirmation the primary button.
 				event.preventDefault();
@@ -106,7 +121,8 @@
 			>
 				<div class="header">
 					<Dialog.Title class="modal-title">{title}</Dialog.Title>
-					<Dialog.Close class="modal-close" aria-label="Close">
+					<!-- type="button": a button in a form submits it by default. -->
+					<Dialog.Close class="modal-close" aria-label="Close" type="button">
 						<Icon icon={Close} />
 					</Dialog.Close>
 				</div>
