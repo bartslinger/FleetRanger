@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -95,12 +96,16 @@ struct ListQuery {
     size: Option<u32>,
     /// A column name, prefixed with `-` for descending order.
     sort: Option<String>,
-    /// Only the flights of this drone serial.
+    /// Only the flights of these drone serials, comma-separated.
     aircraft: Option<String>,
-    /// Only the flights of this controller serial.
+    /// Only the flights of these controller serials, comma-separated.
     controller: Option<String>,
     /// `none`: only flights in no session.
     session: Option<String>,
+    /// Only flights taking off at or after this instant.
+    from: Option<DateTime<Utc>>,
+    /// Only flights taking off before this instant.
+    to: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize)]
@@ -141,10 +146,22 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
         Some("none") => true,
         Some(_) => return Err("session must be none".to_owned()),
     };
+    // Serials have no commas; empty parts are left out.
+    let serials = |value: &Option<String>| {
+        value.as_ref().map(|value| {
+            value
+                .split(',')
+                .filter(|serial| !serial.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+    };
     let filter = Filter {
-        aircraft_serial: query.aircraft.clone(),
-        rc_serial: query.controller.clone(),
+        aircraft_serials: serials(&query.aircraft),
+        rc_serials: serials(&query.controller),
         without_session,
+        from: query.from,
+        to: query.to,
     };
     Ok((filter, sort))
 }

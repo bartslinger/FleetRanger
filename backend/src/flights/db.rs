@@ -28,10 +28,16 @@ pub struct FlightSummary {
 /// The logbook's filters: only the flights of this drone and/or controller.
 #[derive(Default)]
 pub struct Filter {
-    pub aircraft_serial: Option<String>,
-    pub rc_serial: Option<String>,
+    /// Only the flights of these drones, if given.
+    pub aircraft_serials: Option<Vec<String>>,
+    /// Only the flights of these controllers, if given.
+    pub rc_serials: Option<Vec<String>>,
     /// Only flights in no session: the ones still to be grouped.
     pub without_session: bool,
+    /// Only flights taking off at or after this instant.
+    pub from: Option<DateTime<Utc>>,
+    /// Only flights taking off before this instant.
+    pub to: Option<DateTime<Utc>>,
 }
 
 /// Columns the logbook can be sorted by.
@@ -104,9 +110,11 @@ pub async fn list(
          where ($5
                 or pilot_id = $6
                 or team_id in (select team_id from team_members where user_id = $6))
-           and ($7::text is null or aircraft_serial = $7)
-           and ($8::text is null or rc_serial = $8)
+           and ($7::text[] is null or aircraft_serial = any($7))
+           and ($8::text[] is null or rc_serial = any($8))
            and (not $9 or session_id is null)
+           and ($10::timestamptz is null or takeoff_at >= $10)
+           and ($11::timestamptz is null or takeoff_at < $11)
          order by
              case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
              case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -134,9 +142,11 @@ pub async fn list(
         offset,
         scope.all,
         scope.user_id,
-        filter.aircraft_serial,
-        filter.rc_serial,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
         filter.without_session,
+        filter.from,
+        filter.to,
     )
     .fetch_all(db)
     .await
@@ -244,14 +254,18 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
            where ($1
                   or pilot_id = $2
                   or team_id in (select team_id from team_members where user_id = $2))
-             and ($3::text is null or aircraft_serial = $3)
-             and ($4::text is null or rc_serial = $4)
-             and (not $5 or session_id is null)"#,
+             and ($3::text[] is null or aircraft_serial = any($3))
+             and ($4::text[] is null or rc_serial = any($4))
+             and (not $5 or session_id is null)
+             and ($6::timestamptz is null or takeoff_at >= $6)
+             and ($7::timestamptz is null or takeoff_at < $7)"#,
         scope.all,
         scope.user_id,
-        filter.aircraft_serial,
-        filter.rc_serial,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
         filter.without_session,
+        filter.from,
+        filter.to,
     )
     .fetch_one(db)
     .await
@@ -289,9 +303,11 @@ pub async fn neighbours(
                where ($3
                       or pilot_id = $4
                       or team_id in (select team_id from team_members where user_id = $4))
-                 and ($5::text is null or aircraft_serial = $5)
-                 and ($6::text is null or rc_serial = $6)
+                 and ($5::text[] is null or aircraft_serial = any($5))
+                 and ($6::text[] is null or rc_serial = any($6))
                  and (not $7 or session_id is null)
+                 and ($9::timestamptz is null or takeoff_at >= $9)
+                 and ($10::timestamptz is null or takeoff_at < $10)
                window w as (order by
                    case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
                    case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -319,10 +335,12 @@ pub async fn neighbours(
         sort.descending,
         scope.all,
         scope.user_id,
-        filter.aircraft_serial,
-        filter.rc_serial,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
         filter.without_session,
         id,
+        filter.from,
+        filter.to,
     )
     .fetch_optional(db)
     .await
@@ -644,11 +662,47 @@ mod tests {
             SortKey::AircraftSerial,
             SortKey::RcSerial,
         ];
-        for without_session in [false, true] {
-            let filter = Filter {
-                without_session,
-                ..Filter::default()
+        let filters = || {
+            [
+                Filter::default(),
+                Filter {
+                    without_session: true,
+                    ..Filter::default()
+                },
+                Filter {
+                    aircraft_serials: Some(vec!["A".to_owned(), "B".to_owned()]),
+                    ..Filter::default()
+                },
+                // Takeoffs 30 to 90 minutes ago: the 60-minute ones and the 90.
+                Filter {
+                    from: Some(Utc::now() - chrono::Duration::minutes(100)),
+                    to: Some(Utc::now() - chrono::Duration::minutes(45)),
+                    ..Filter::default()
+                },
+            ]
+        };
+        let [_, _, by_drone, by_time] = filters();
+        let all = || Sort {
+            key: SortKey::TakeoffAt,
+            descending: true,
+        };
+        let drones = list(&db, &scope, &by_drone, &all(), 100, 0).await.unwrap();
+        assert_eq!(drones.len(), 3, "the flights of drones A and B");
+        let window = list(&db, &scope, &by_time, &all(), 100, 0).await.unwrap();
+        let mut air_times: Vec<i32> = window.iter().map(|flight| flight.air_time_s).collect();
+        air_times.sort_unstable();
+        assert_eq!(air_times, [60, 60, 90]);
+
+        for filter in filters() {
+            let newest_first = Sort {
+                key: SortKey::TakeoffAt,
+                descending: true,
             };
+            let listed = list(&db, &scope, &filter, &newest_first, 100, 0)
+                .await
+                .unwrap()
+                .len() as i64;
+            assert_eq!(count(&db, &scope, &filter).await.unwrap(), listed);
             for key in keys {
                 for descending in [false, true] {
                     let sort = Sort { key, descending };
