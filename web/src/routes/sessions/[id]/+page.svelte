@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { dateTime, day, distance, duration } from '#lib/format.js';
+	import { day, distance, duration, timeSpan } from '#lib/format.js';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -68,8 +68,8 @@
 	const columns: TableColumn<Row>[] = $derived([
 		{
 			key: 'takeoff_at',
-			header: `Takeoff (${data.timeZoneName})`,
-			format: (flight) => dateTime(flight.takeoff_at, data.timeZone)
+			header: `Time (${data.timeZoneName})`,
+			format: (flight) => timeSpan(flight.takeoff_at, flight.landed_at, data.timeZone)
 		},
 		{
 			key: 'air_time_s',

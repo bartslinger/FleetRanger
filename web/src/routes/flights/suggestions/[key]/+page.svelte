@@ -14,7 +14,7 @@
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { dateTime, day, distance, duration } from '#lib/format.js';
+	import { dateTime, day, distance, duration, timeSpan } from '#lib/format.js';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -123,8 +123,8 @@
 	const columns: TableColumn<Row>[] = $derived([
 		{
 			key: 'takeoff_at',
-			header: `Takeoff (${data.timeZoneName})`,
-			format: when
+			header: `Time (${data.timeZoneName})`,
+			format: (flight) => timeSpan(flight.takeoff_at, flight.landed_at, data.timeZone)
 		},
 		{
 			key: 'air_time_s',

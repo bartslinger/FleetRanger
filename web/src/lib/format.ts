@@ -91,6 +91,11 @@ export function daySpan(start: string, end: string, timeZone: string, withYear =
 	return `${day(start, timeZone, withYear)}, ${clock(start, timeZone)}–${clock(end, timeZone)}`;
 }
 
+/** A flight from takeoff to landing, for example "7 Oct 2026, 17:20–17:45". */
+export function timeSpan(start: string, end: string, timeZone: string): string {
+	return `${dateTime(start, timeZone)}–${clock(end, timeZone)}`;
+}
+
 /** The time zone's abbreviation, e.g. "UTC" or "GMT+2", as it is now. */
 export function timeZoneName(timeZone: string): string {
 	return (
