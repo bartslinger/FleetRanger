@@ -113,6 +113,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 ## Public website
 
 - **fleetranger.org is a static site in `website/`** (user's decision, 2026-10-19, on my suggestion). It lives in this repository so pages, screenshots and install notes change together with the product. It is a small SvelteKit project prerendered to static files (`adapter-static`), so it needs no server-side code. It uses the web app's components and tokens from `web/src/lib/ui` directly rather than copies, so the site looks like the app and component fixes apply to both. Components the site uses must not depend on app-only code (API, login). It is served by nginx through the Ansible repo. It starts as a single landing page.
+- **The site speaks to DJI Enterprise operators with strict data privacy requirements** (user's decisions, 2026-10-19): FleetRanger gives them a logging platform on their own premises. It names no customers, the contact is info@mapture.ai, and it claims support for DJI Enterprise only. A hosted offering comes later and isn't on the site until it exists.
 
 ## Customer-specific needs
 
