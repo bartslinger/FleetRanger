@@ -5,25 +5,31 @@ import {
 	send,
 	type Devices,
 	type FlightChoices,
-	type FlightPage
+	type FlightPage,
+	type SuggestionPage
 } from '#lib/server/backend.js';
 import { apiQuery, parse, query } from './logbook.js';
 
 export async function load({ fetch, url }) {
 	const state = parse(url.searchParams);
 	const api = apiQuery(state, TIME_ZONE);
-	const [{ flights, total }, choices, devices] = await Promise.all([
-		get<FlightPage>(fetch, `/api/flights?${api}`),
+	// The suggestions page through suggestions; the list's first page still
+	// counts the flights.
+	const listApi = new URLSearchParams(api);
+	if (state.suggestions) listApi.set('page', '1');
+	const [{ flights, total }, suggestions, choices, devices] = await Promise.all([
+		get<FlightPage>(fetch, `/api/flights?${listApi}`),
+		state.suggestions ? get<SuggestionPage>(fetch, `/api/flights/suggestions?${api}`) : null,
 		get<FlightChoices>(fetch, '/api/flights/choices'),
 		// The filters' options, narrowed by the other filters.
 		get<Devices>(fetch, `/api/flights/devices?${api}`)
 	]);
 
 	// Past the last page, e.g. after flights were removed: go to the last one.
-	const pages = Math.max(1, Math.ceil(total / state.size));
+	const pages = Math.max(1, Math.ceil((suggestions?.total ?? total) / state.size));
 	if (state.page > pages) redirect(307, `${url.pathname}${query({ ...state, page: pages })}`);
 
-	return { flights, total, state, choices, devices };
+	return { flights, total, suggestions, state, choices, devices };
 }
 
 /**

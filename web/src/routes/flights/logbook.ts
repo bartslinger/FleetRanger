@@ -21,6 +21,8 @@ export interface LogbookState {
 	teams: string[];
 	/** Only the flights in no session, the ones still to be grouped. */
 	withoutSession: boolean;
+	/** With `withoutSession`: those flights as suggested sessions, not a list. */
+	suggestions: boolean;
 	/** Only flights taking off on this day ("2026-10-12"), or from it to `to`. */
 	from: string | null;
 	/** The last day, with `from`. */
@@ -45,6 +47,7 @@ export function parse(params: URLSearchParams): LogbookState {
 		controllers: list(params.get('controller')),
 		teams: list(params.get('team')),
 		withoutSession: params.get('session') === 'none',
+		suggestions: params.get('session') === 'none' && params.get('view') === 'suggestions',
 		from: isDay(from) ? from : null,
 		to: isDay(from) && isDay(to) && to > from ? to : null
 	};
@@ -59,6 +62,7 @@ export function query(state: LogbookState): string {
 	if (state.controllers.length > 0) params.set('controller', state.controllers.join(','));
 	if (state.teams.length > 0) params.set('team', state.teams.join(','));
 	if (state.withoutSession) params.set('session', 'none');
+	if (state.withoutSession && state.suggestions) params.set('view', 'suggestions');
 	if (state.page > 1) params.set('page', String(state.page));
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
 	const { key, descending } = state.sort;
@@ -98,6 +102,7 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 		controllers: filters.controller ? [filters.controller] : [],
 		teams: [],
 		withoutSession: false,
+		suggestions: false,
 		from: null,
 		to: null
 	});

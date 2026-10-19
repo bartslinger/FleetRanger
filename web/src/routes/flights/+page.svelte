@@ -19,6 +19,8 @@
 	import { dateTime, dayMonth, distance, duration } from '#lib/format.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
+	import Suggestions from './Suggestions.svelte';
+	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
 	import type { PageProps, Snapshot } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -129,7 +131,9 @@
 				? [names(data.devices.controllers, data.state.controllers)]
 				: []),
 			...(data.state.teams.length > 0 ? [data.state.teams.map(teamName).join(', ')] : []),
-			...(data.state.withoutSession ? ['without session'] : [])
+			...(data.state.withoutSession
+				? [data.state.suggestions ? 'suggested sessions' : 'without session']
+				: [])
 		].join(' · ')
 	);
 
@@ -229,7 +233,28 @@
 	{/if}
 {/snippet}
 
-<PageHeader title="Flights" {crumb} />
+<PageHeader title="Flights" {crumb}>
+	{#snippet actions()}
+		<!-- The flights without a session, as a list or grouped into suggestions. -->
+		{#if data.state.withoutSession}
+			<ViewSwitcher
+				label="View"
+				options={[
+					{
+						label: 'List',
+						href: href({ ...data.state, suggestions: false, page: 1 }),
+						selected: !data.state.suggestions
+					},
+					{
+						label: 'Suggestions',
+						href: href({ ...data.state, suggestions: true, page: 1 }),
+						selected: data.state.suggestions
+					}
+				]}
+			/>
+		{/if}
+	{/snippet}
+</PageHeader>
 
 <Grid>
 	<Column narrow>
@@ -283,6 +308,21 @@
 			<EmptyState
 				title="No flights yet"
 				body="Flights appear here when flight logs from your remote controllers are imported."
+			/>
+		{:else if data.suggestions}
+			<Suggestions
+				suggestions={data.suggestions.suggestions}
+				total={data.suggestions.total}
+				timeZone={data.timeZone}
+				canChange={changeable}
+			/>
+			<Pagination
+				page={data.state.page}
+				size={data.state.size}
+				total={data.suggestions.total}
+				sizes={PAGE_SIZES}
+				noun="suggestions"
+				href={(page, size) => href({ ...data.state, page, size })}
 			/>
 		{:else}
 			<DataTable

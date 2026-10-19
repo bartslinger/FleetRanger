@@ -20,6 +20,20 @@ export interface FlightSummary {
 	team_name: string | null;
 }
 
+/** Flights without a session that look like one, from `GET /api/flights/suggestions`. */
+export interface Suggestion {
+	/** The first flight's id. */
+	key: string;
+	/** In takeoff order. */
+	flights: FlightSummary[];
+}
+
+/** One page of suggestions, newest first. */
+export interface SuggestionPage {
+	suggestions: Suggestion[];
+	total: number;
+}
+
 /** A drone or controller to filter the logbook by. */
 export interface Device {
 	serial: string;
