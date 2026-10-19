@@ -7,9 +7,7 @@
 	import CheckmarkFilled from '@carbon/icons/es/checkmark--filled/20.js';
 	import NotificationNew from '@carbon/icons/es/notification--new/20.js';
 	import WarningFilled from '@carbon/icons/es/warning--filled/20.js';
-	import Template from '@carbon/icons/es/template/16.js';
 	import UserMultiple from '@carbon/icons/es/user--multiple/16.js';
-	import { dev } from '$app/env';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import favicon from '#lib/assets/favicon.svg';
@@ -117,8 +115,7 @@
 					{ href: resolve('/teams'), label: 'Teams', icon: Events }
 				]
 			: []),
-		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone },
-		...(dev ? [{ href: resolve('/design'), label: 'Components', icon: Template }] : [])
+		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone }
 	]);
 </script>
 

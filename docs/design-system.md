@@ -31,7 +31,7 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 - **Icons:** from `@carbon/icons` (Apache-2.0), imported one at a time and rendered by `Icon.svelte`.
 - **Spec:** each component follows the matching Carbon component's usage and style guidelines. Where we deviate, the component's file says why.
 - **Rule for pages:** pages compose components and use CSS only for layout (grid, flex, gap). Colour, type and spacing decisions belong in components and tokens.
-- **Overview:** `/design` on the dev server shows every component in its states.
+- **Overview:** `/design` on the dev server shows every component in its states. It isn't in the navigation (user's decision, 2026-10-19); open it by its address.
 
 ## Carbon rules
 
