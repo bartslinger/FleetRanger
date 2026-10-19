@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { MediaQuery } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
-	import { dateTime, daySpan, distance, duration, month } from '#lib/format.js';
+	import { clock, day, daySpan, distance, duration, month } from '#lib/format.js';
 	import type { Session } from '#lib/server/backend.js';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -30,7 +30,8 @@
 		{
 			key: 'first_takeoff_at',
 			header: `Start (${data.timeZoneName})`,
-			format: (session) => dateTime(session.first_takeoff_at, data.timeZone)
+			format: (session) =>
+				`${day(session.first_takeoff_at, data.timeZone, true)}, ${clock(session.first_takeoff_at, data.timeZone)}`
 		},
 		{ key: 'last_landed_at', header: 'Duration', numeric: true, format: (s) => duration(span(s)) },
 		{ key: 'flights', header: 'Flights', numeric: true },

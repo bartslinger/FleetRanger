@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { dateTime, distance, duration } from '#lib/format.js';
+	import { dateTime, daySpan, distance, duration } from '#lib/format.js';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -15,7 +15,6 @@
 	const flights = $derived(data.session.flights);
 	type Row = (typeof flights)[number];
 
-	const time = (iso: string) => `${dateTime(iso, data.timeZone)} (${data.timeZoneName})`;
 	/** Distinct names in order of first appearance. */
 	const names = (values: (string | null)[], none: string) =>
 		[...new Set(values.map((value) => value ?? none))].join(', ');
@@ -45,8 +44,8 @@
 			}
 		],
 		[
-			{ label: 'First takeoff', value: time(start) },
-			{ label: 'Last landing', value: time(end) },
+			{ label: `First takeoff (${data.timeZoneName})`, value: dateTime(start, data.timeZone) },
+			{ label: `Last landing (${data.timeZoneName})`, value: dateTime(end, data.timeZone) },
 			{
 				label: 'Duration',
 				value: duration((Date.parse(end) - Date.parse(start)) / 1000),
@@ -95,7 +94,7 @@
 </script>
 
 <PageHeader
-	title={dateTime(start, data.timeZone)}
+	title={daySpan(start, end, data.timeZone, true)}
 	breadcrumb={[{ href: resolve('/sessions'), label: 'Sessions' }]}
 />
 

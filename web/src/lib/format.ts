@@ -60,15 +60,25 @@ export function month(iso: string, timeZone: string): string {
 	return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
+/** For example "Mon 12 Oct", or "Mon 12 Oct 2026" with the year. */
+export function day(iso: string, timeZone: string, withYear = false): string {
+	const { year, month, day } = parts(iso, timeZone);
+	const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+	return `${weekday} ${day} ${MONTHS[month - 1]}${withYear ? ` ${year}` : ''}`;
+}
+
+/** For example "18:32". */
+export function clock(iso: string, timeZone: string): string {
+	const { hour, minute } = parts(iso, timeZone);
+	return `${pad(hour)}:${pad(minute)}`;
+}
+
 /**
  * The day and times of a span, for example "Mon 12 Oct, 18:32–21:01". Night
  * work can end after midnight; the end is then the next morning's time.
  */
-export function daySpan(start: string, end: string, timeZone: string): string {
-	const from = parts(start, timeZone);
-	const to = parts(end, timeZone);
-	const weekday = WEEKDAYS[new Date(Date.UTC(from.year, from.month - 1, from.day)).getUTCDay()];
-	return `${weekday} ${from.day} ${MONTHS[from.month - 1]}, ${pad(from.hour)}:${pad(from.minute)}–${pad(to.hour)}:${pad(to.minute)}`;
+export function daySpan(start: string, end: string, timeZone: string, withYear = false): string {
+	return `${day(start, timeZone, withYear)}, ${clock(start, timeZone)}–${clock(end, timeZone)}`;
 }
 
 /** The time zone's abbreviation, e.g. "UTC" or "GMT+2", as it is now. */
