@@ -365,12 +365,31 @@
 		color: var(--cds-text-on-color);
 	}
 
+	/* The count always shows, on one line, cut short if it must; the
+	   buttons never wrap (Carbon). */
 	.count {
 		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
 		padding-inline: var(--cds-spacing-05);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+	}
+
+	.batch :global(.button),
+	.cancel {
+		flex: none;
+		white-space: nowrap;
+	}
+
+	/* On phones the buttons' room for an icon goes to the count. */
+	@media (max-width: 41.99rem) {
+		.batch :global(.button) {
+			padding-inline: var(--cds-spacing-05);
+		}
 	}
 
 	.cancel {

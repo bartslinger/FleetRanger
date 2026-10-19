@@ -9,6 +9,8 @@
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import MultiSelect from '#lib/ui/MultiSelect.svelte';
+	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import DateRange from '#lib/ui/DateRange.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import Select from '#lib/ui/Select.svelte';
@@ -158,6 +160,13 @@
 
 	const flights = (count: number) => `${count} ${count === 1 ? 'flight' : 'flights'}`;
 
+	// Dialogs opened from the batch bar's overflow menu, which gets focus back.
+	let pilotOpen = $state(false);
+	let teamOpen = $state(false);
+	let addOpen = $state(false);
+	let overflow: HTMLElement | null = $state(null);
+	const wide = new MediaQuery('min-width: 42rem');
+
 	function done(message: string) {
 		selected = [];
 		toast(message);
@@ -231,12 +240,56 @@
 				selectedLabel={(count) => `${count} ${count === 1 ? 'flight' : 'flights'} selected`}
 			>
 				{#snippet batchActions(ids)}
+					<!-- The frequent actions as buttons (on phones only the first); the
+					     rest in the overflow menu, as the bar holds two or three. -->
+					<Modal
+						title="New session"
+						submitLabel="Create"
+						action="?/newSession"
+						error={form && 'newSessionMessage' in form ? form.newSessionMessage : undefined}
+						onsuccess={() => done(`New session with ${flights(ids.length)}.`)}
+					>
+						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+						<p>
+							The {flights(ids.length)} become one new session. Flights that are in a session leave it.
+						</p>
+					</Modal>
+					<span class="wide-only">
+						<Modal
+							title="Add to session"
+							submitLabel="Add"
+							action="?/addToSession"
+							error={form && 'addMessage' in form ? form.addMessage : undefined}
+							onsuccess={() => done(`${flights(ids.length)} added to the session.`)}
+							bind:open={addOpen}
+							returnFocus={() => (wide.current ? undefined : (overflow ?? undefined))}
+						>
+							{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+							<SessionChoice flights={selectedRows(ids)} timeZone={data.timeZone} />
+							<p class="help">Flights that are in another session leave it.</p>
+						</Modal>
+					</span>
+					<OverflowMenu
+						label="More actions"
+						variant="batch"
+						bind:trigger={overflow}
+						items={[
+							{ label: 'Add to session', onselect: () => (addOpen = true), phoneOnly: true },
+							{ label: 'Set pilot', onselect: () => (pilotOpen = true) },
+							...(data.choices.admin
+								? [{ label: 'Move to team', onselect: () => (teamOpen = true) }]
+								: [])
+						]}
+					/>
 					<Modal
 						title="Set pilot"
 						submitLabel="Set pilot"
 						action="?/setPilot"
 						error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
 						onsuccess={() => done(`${flights(ids.length)} changed.`)}
+						trigger={false}
+						bind:open={pilotOpen}
+						returnFocus={() => overflow ?? undefined}
 					>
 						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
 						<Select label="Pilot" name="pilot_id" options={pilotOptions} />
@@ -253,35 +306,15 @@
 							action="?/setTeam"
 							error={form && 'teamMessage' in form ? form.teamMessage : undefined}
 							onsuccess={() => done(`${flights(ids.length)} changed.`)}
+							trigger={false}
+							bind:open={teamOpen}
+							returnFocus={() => overflow ?? undefined}
 						>
 							{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
 							<Select label="Team" name="team_id" options={teamOptions} />
 							<p class="help">A pilot who isn’t in the new team is cleared.</p>
 						</Modal>
 					{/if}
-					<Modal
-						title="New session"
-						submitLabel="Create"
-						action="?/newSession"
-						error={form && 'newSessionMessage' in form ? form.newSessionMessage : undefined}
-						onsuccess={() => done(`New session with ${flights(ids.length)}.`)}
-					>
-						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
-						<p>
-							The {flights(ids.length)} become one new session. Flights that are in a session leave it.
-						</p>
-					</Modal>
-					<Modal
-						title="Add to session"
-						submitLabel="Add"
-						action="?/addToSession"
-						error={form && 'addMessage' in form ? form.addMessage : undefined}
-						onsuccess={() => done(`${flights(ids.length)} added to the session.`)}
-					>
-						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
-						<SessionChoice flights={selectedRows(ids)} timeZone={data.timeZone} />
-						<p class="help">Flights that are in another session leave it.</p>
-					</Modal>
 				{/snippet}
 			</DataTable>
 			<Pagination
@@ -328,6 +361,13 @@
 
 		.dates {
 			grid-column: auto;
+		}
+	}
+
+	/* Add to session is a button from md; on phones it's in the overflow menu. */
+	@media (max-width: 41.99rem) {
+		.wide-only {
+			display: none;
 		}
 	}
 
