@@ -34,6 +34,7 @@ where
     Router::new()
         .route("/api/flights", get(list))
         .route("/api/flights/suggestions", get(suggestions))
+        .route("/api/flights/suggestions/{key}", get(suggestion))
         .route("/api/flights/choices", get(choices))
         .route("/api/flights/devices", get(devices))
         .route("/api/flights/ids", get(ids))
@@ -202,6 +203,23 @@ async fn suggestions(
     let (suggestions, total) =
         suggest::list(&db, &actor, filter, gap, size as usize, offset).await?;
     Ok(Json(SuggestionPage { suggestions, total }))
+}
+
+/// The suggested session with this flight in it, with its tracks and its
+/// neighbours in the list with the same query as `suggestions`. Not found if
+/// the flight is in none.
+async fn suggestion(
+    actor: Actor,
+    State(db): State<PgPool>,
+    State(gap): State<SessionGap>,
+    Path(key): Path<Uuid>,
+    Query(query): Query<ListQuery>,
+) -> ApiResult<Json<suggest::SuggestionPage>> {
+    let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
+    suggest::get(&db, &actor, filter, gap, key)
+        .await?
+        .map(Json)
+        .ok_or(ApiError::NotFound)
 }
 
 /// The list's filter and order from the query; the same for a flight's neighbours.

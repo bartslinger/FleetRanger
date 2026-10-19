@@ -10,7 +10,10 @@ use uuid::Uuid;
 use super::SessionGap;
 use crate::{
     auth::Actor,
-    flights::db::{self as flights, Filter, FlightSummary, Neighbours, Sort, SortKey},
+    flights::{
+        db::{self as flights, Filter, FlightDetail, FlightSummary, Neighbours, Sort, SortKey},
+        service::link_equipment,
+    },
     policy,
 };
 
@@ -47,6 +50,58 @@ pub async fn list(
         })
         .collect();
     Ok((page, total))
+}
+
+/// One suggestion with its flights' tracks, for its own page, and its place
+/// in the list (newest first), for stepping from one to the next.
+#[derive(Serialize)]
+pub struct SuggestionPage {
+    pub key: Uuid,
+    /// In takeoff order.
+    pub flights: Vec<FlightDetail>,
+    /// The newer and older suggestions' keys.
+    pub previous: Option<Uuid>,
+    pub next: Option<Uuid>,
+    /// From 1, newest first.
+    pub position: usize,
+    pub total: usize,
+}
+
+/// The suggestion with the flight `key` in it, or None if that flight is in
+/// none (it's in a session by now, or doesn't pass the filter). A suggestion
+/// is found by any of its flights, as it may have changed since the link was
+/// made.
+pub async fn get(
+    db: &PgPool,
+    actor: &Actor,
+    filter: Filter,
+    gap: SessionGap,
+    key: Uuid,
+) -> sqlx::Result<Option<SuggestionPage>> {
+    let mut groups = all(db, actor, filter, gap).await?;
+    groups.reverse();
+    let Some(index) = groups
+        .iter()
+        .position(|flights| flights.iter().any(|flight| flight.id == key))
+    else {
+        return Ok(None);
+    };
+    let key_at = |index: Option<usize>| {
+        index
+            .and_then(|index| groups.get(index))
+            .map(|flights| flights[0].id)
+    };
+    let ids: Vec<Uuid> = groups[index].iter().map(|flight| flight.id).collect();
+    let mut flights = flights::details(db, &policy::flight_scope(actor), &ids).await?;
+    link_equipment(db, actor, &mut flights).await?;
+    Ok(Some(SuggestionPage {
+        key: ids[0],
+        flights,
+        previous: key_at(index.checked_sub(1)),
+        next: key_at(Some(index + 1)),
+        position: index + 1,
+        total: groups.len(),
+    }))
 }
 
 /// A flight's place in its suggestion, for stepping through that suggestion's
