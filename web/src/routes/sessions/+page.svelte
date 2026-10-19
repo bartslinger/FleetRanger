@@ -277,6 +277,7 @@
 				selectable={canChange ? changeable : undefined}
 				bind:selected
 				selectedLabel={(count) => `${count} ${count === 1 ? 'session' : 'sessions'} selected`}
+				summary="{data.total} {data.total === 1 ? 'session' : 'sessions'}"
 			>
 				{#snippet batchActions(ids)}
 					{#if ids.length > 1}

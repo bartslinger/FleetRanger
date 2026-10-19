@@ -51,6 +51,8 @@
 		rowHref?: (row: T) => string;
 		/** Carbon's table toolbar: filters, then the primary action at the right. */
 		toolbar?: Snippet;
+		/** What the table shows, e.g. "37 flights", at the toolbar's left. */
+		summary?: string;
 		/** Rows that can be selected for batch actions; none if not given. */
 		selectable?: (row: T) => boolean;
 		/** Keys of the selected rows. */
@@ -80,6 +82,7 @@
 		sortHref,
 		rowHref,
 		toolbar,
+		summary,
 		selectable,
 		selected = $bindable([]),
 		batchActions,
@@ -160,8 +163,11 @@
 		{@render batchActions(selected)}
 		<button class="cancel" type="button" onclick={cancel}>Cancel</button>
 	</div>
-{:else if toolbar || selectable}
+{:else if toolbar || selectable || summary}
+	<!-- Without its own items, the toolbar keeps the batch bar's place, so the
+	     table doesn't move when the first row is selected. -->
 	<div class="toolbar">
+		{#if summary}<p class="summary" aria-live="polite">{summary}</p>{/if}
 		{#if toolbar}{@render toolbar()}{/if}
 	</div>
 {/if}
@@ -402,6 +408,21 @@
 	.batch {
 		background: var(--cds-background-brand);
 		color: var(--cds-text-on-color);
+	}
+
+	/* What the table shows (not Carbon: it leaves a result count open), at
+	   the left like the batch bar's count. */
+	.summary {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		padding-inline: var(--cds-spacing-05);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 	}
 
 	/* The count always shows, on one line, cut short if it must; the

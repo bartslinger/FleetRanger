@@ -271,13 +271,14 @@
 					value={data.state.withoutSession ? 'none' : ''}
 					onchange={(event) => filter({ withoutSession: event.currentTarget.value === 'none' })}
 				/>
-				{#if filtering}
-					<Button kind="ghost" size="md" onclick={() => filter(none)}>Clear filters</Button>
-				{/if}
 			</div>
 		{/if}
 		{#if data.total === 0 && filtering}
-			<EmptyState title="No flights match" body="No flights you can see pass these filters." />
+			<EmptyState title="No flights match" body="No flights you can see pass these filters.">
+				{#snippet action()}
+					<Button kind="tertiary" onclick={() => filter(none)}>Clear filters</Button>
+				{/snippet}
+			</EmptyState>
 		{:else if data.total === 0}
 			<EmptyState
 				title="No flights yet"
@@ -302,7 +303,13 @@
 						? `All ${count} ${count === 1 ? 'flight' : 'flights'} selected`
 						: `${count} ${count === 1 ? 'flight' : 'flights'} selected`}
 				selectAllLabel={(total) => `Select all ${total}`}
+				summary={flights(data.total)}
 			>
+				{#snippet toolbar()}
+					{#if filtering}
+						<Button kind="ghost" onclick={() => filter(none)}>Clear filters</Button>
+					{/if}
+				{/snippet}
 				{#snippet batchActions(ids)}
 					<!-- The frequent actions as buttons (on phones only the first); the
 					     rest in the overflow menu, as the bar holds two or three. -->
@@ -420,7 +427,7 @@
 
 <style>
 	/* Filters above the table: side by side from md, 16px apart, with 16px
-	   before the table; Clear filters in line with the fields. */
+	   before the table. Clear filters is in the table's toolbar. */
 	.filters {
 		display: grid;
 		gap: var(--cds-spacing-05);
@@ -456,10 +463,6 @@
 
 		.filters > .dates {
 			flex-basis: 20rem;
-		}
-
-		.filters > :global(.button) {
-			flex: none;
 		}
 	}
 

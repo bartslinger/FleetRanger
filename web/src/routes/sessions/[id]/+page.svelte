@@ -138,6 +138,7 @@
 			selectable={canChange ? () => true : undefined}
 			bind:selected
 			selectedLabel={(count) => `${count} ${count === 1 ? 'flight' : 'flights'} selected`}
+			summary="{flights.length} {flights.length === 1 ? 'flight' : 'flights'}"
 		>
 			{#snippet batchActions(ids)}
 				{#if ids.length < flights.length}
