@@ -11,7 +11,7 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import RadioButtonGroup from '#lib/ui/RadioButtonGroup.svelte';
-	import Select from '#lib/ui/Select.svelte';
+	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
@@ -32,13 +32,12 @@
 	// svelte-ignore state_referenced_locally
 	let role: Role = $state(data.user.role);
 
-	// Active teams, plus the user's own if it has been archived since.
+	// Active teams, plus the user's own that have been archived since.
 	const teamOptions = $derived([
-		{ value: '', label: 'None' },
 		...data.teams.map((team) => ({ value: team.id, label: team.name })),
-		...(user.team_id && !data.teams.some((team) => team.id === user.team_id)
-			? [{ value: user.team_id, label: `${user.team_name} (archived)` }]
-			: [])
+		...user.team_ids
+			.map((id, index) => ({ value: id, label: `${user.team_names[index]} (archived)` }))
+			.filter((option) => !data.teams.some((team) => team.id === option.value))
 	]);
 </script>
 
@@ -137,12 +136,12 @@
 			}}
 		>
 			<TextInput label="Name" name="name" value={user.name} required autocomplete="off" />
-			<Select
-				label="Team"
+			<CheckboxGroup
+				legend="Teams"
 				name="team_id"
 				options={teamOptions}
-				value={user.team_id ?? ''}
-				helper="New flights go to this team; past flights keep theirs. None for someone who doesn't fly."
+				value={user.team_ids}
+				helper="The teams they fly for; none for someone who doesn't fly. Past flights keep their team."
 			/>
 			<TextInput
 				label={self ? 'Email' : 'Email (optional)'}

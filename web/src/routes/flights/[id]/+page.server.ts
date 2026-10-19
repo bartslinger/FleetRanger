@@ -1,5 +1,6 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { fail } from '@sveltejs/kit';
+import { parsePilot } from '#lib/pilots.js';
 import { get, send, type FlightChoices, type FlightDetail } from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
@@ -15,7 +16,7 @@ export const actions = {
 	/** Sets the pilot, as the logbook's batch action does for one flight. */
 	setPilot: async ({ fetch, params, request }) => {
 		const form = await request.formData();
-		const body = { flight_ids: [params.id], pilot_id: String(form.get('pilot_id') ?? '') || null };
+		const body = { flight_ids: [params.id], ...parsePilot(String(form.get('pilot') ?? '')) };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
 		// For the toast: an admin's change can move the flight to another team.

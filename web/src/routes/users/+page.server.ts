@@ -16,7 +16,7 @@ export const actions = {
 		const body = {
 			name: String(form.get('name') ?? ''),
 			role: String(form.get('role') ?? 'member'),
-			team_id: String(form.get('team_id') ?? '') || null,
+			team_ids: form.getAll('team_id').map(String),
 			email: String(form.get('email') ?? '') || null
 		};
 		const result = await send<User>(fetch, 'POST', '/api/users', body);

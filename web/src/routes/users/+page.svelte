@@ -9,7 +9,7 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import RadioButtonGroup from '#lib/ui/RadioButtonGroup.svelte';
-	import Select from '#lib/ui/Select.svelte';
+	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
@@ -23,7 +23,12 @@
 	// The status column only while archived users are shown.
 	const columns: TableColumn<Row>[] = $derived([
 		{ key: 'name', header: 'Name' },
-		{ key: 'team_name', header: 'Team' },
+		{
+			key: 'team_names',
+			header: 'Teams',
+			wrap: true,
+			format: (user) => user.team_names.join(', ')
+		},
 		{ key: 'email', header: 'Login' },
 		{ key: 'role', header: 'Role', format: (user) => ROLE_LABELS[user.role] },
 		...(data.archived
@@ -37,10 +42,7 @@
 			: [])
 	]);
 
-	const teamOptions = $derived([
-		{ value: '', label: 'None' },
-		...data.teams.map((team) => ({ value: team.id, label: team.name }))
-	]);
+	const teamOptions = $derived(data.teams.map((team) => ({ value: team.id, label: team.name })));
 
 	function showArchived(event: Event) {
 		const checked = (event.currentTarget as HTMLInputElement).checked;
@@ -75,11 +77,12 @@
 					onsuccess={(created) => toast(`${created?.created} created.`)}
 				>
 					<TextInput label="Name" name="name" required autocomplete="off" />
-					<Select
-						label="Team"
+					<CheckboxGroup
+						legend="Teams"
 						name="team_id"
 						options={teamOptions}
-						helper="The team they fly for. None for someone who doesn't fly."
+						value={[]}
+						helper="The teams they fly for; none for someone who doesn't fly."
 					/>
 					<TextInput
 						label="Email (optional)"

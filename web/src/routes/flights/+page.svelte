@@ -17,6 +17,7 @@
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import { dateTime, dayMonth, distance, duration } from '#lib/format.js';
+	import { pilotOptions } from '#lib/pilots.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
 	import Suggestions from './Suggestions.svelte';
@@ -182,17 +183,12 @@
 		selected = [];
 		allMatching = false;
 	});
-	const canChange = $derived(data.choices.admin || data.choices.own_team_id !== null);
+	const canChange = $derived(data.choices.admin || data.choices.own_team_ids.length > 0);
 	const changeable = (flight: Row) =>
-		data.choices.admin || flight.team_id === data.choices.own_team_id;
+		data.choices.admin ||
+		(flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id));
 
-	const pilotOptions = $derived([
-		{ value: '', label: 'Unknown' },
-		...data.choices.pilots.map((pilot) => ({
-			value: pilot.id,
-			label: data.choices.admin ? `${pilot.name} (${pilot.team_name})` : pilot.name
-		}))
-	]);
+	const pilotChoices = $derived(pilotOptions(data.choices));
 	const teamOptions = $derived([
 		...data.choices.teams.map((team) => ({ value: team.id, label: team.name })),
 		{ value: '', label: 'No team (organisation queue)' }
@@ -429,7 +425,7 @@
 						returnFocus={() => overflow ?? undefined}
 					>
 						{@render chosenFields(ids)}
-						<Select label="Pilot" name="pilot_id" options={pilotOptions} />
+						<Select label="Pilot" name="pilot" options={pilotChoices} />
 						<p class="help">
 							{data.choices.admin
 								? 'The flights move to the pilot’s team. With Unknown, they keep their team.'

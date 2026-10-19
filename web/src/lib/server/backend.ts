@@ -125,10 +125,11 @@ export interface Neighbours {
 
 /** What the logged-in account can change in the logbook, from `GET /api/flights/choices`. */
 export interface FlightChoices {
-	/** The team whose flights a member can change. */
-	own_team_id: string | null;
+	/** The teams whose flights a member can change. */
+	own_team_ids: string[];
 	/** Admins change any flight and move flights between teams. */
 	admin: boolean;
+	/** A pilot in several teams is a choice per team: the flights move to it. */
 	pilots: { id: string; name: string; team_id: string; team_name: string }[];
 	teams: { id: string; name: string }[];
 }
@@ -153,9 +154,9 @@ export interface User {
 	id: string;
 	name: string;
 	role: 'member' | 'all_flights' | 'admin';
-	/** The team the user flies for. */
-	team_id: string | null;
-	team_name: string | null;
+	/** The teams the user flies for, by name. */
+	team_ids: string[];
+	team_names: string[];
 	/** The login's email; null if the user can't log in. */
 	email: string | null;
 	last_login_at: string | null;

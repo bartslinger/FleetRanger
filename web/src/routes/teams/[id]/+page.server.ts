@@ -6,7 +6,7 @@ export async function load({ fetch, params }) {
 		get<Team>(fetch, `/api/teams/${params.id}`),
 		get<User[]>(fetch, '/api/users')
 	]);
-	return { team, members: users.filter((user) => user.team_id === team.id) };
+	return { team, members: users.filter((user) => user.team_ids.includes(team.id)) };
 }
 
 export const actions = {

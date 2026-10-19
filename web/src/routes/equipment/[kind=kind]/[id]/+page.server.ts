@@ -21,9 +21,10 @@ export async function load({ fetch, locals, params }) {
 		return { kind: params.kind, item, edit: 'all' as const, teams, holders: users };
 	}
 	if (role === 'member') {
-		// Members choose a holder from their own team: the logbook's pilots.
+		// Members choose a holder from the item's team: its pilots in the logbook.
 		const choices = await get<FlightChoices>(fetch, '/api/flights/choices');
-		return { kind: params.kind, item, edit: 'name' as const, teams: [], holders: choices.pilots };
+		const holders = choices.pilots.filter((pilot) => pilot.team_id === item.team_id);
+		return { kind: params.kind, item, edit: 'name' as const, teams: [], holders };
 	}
 	return { kind: params.kind, item, edit: 'none' as const, teams: [], holders: [] };
 }

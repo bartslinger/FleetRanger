@@ -1,4 +1,5 @@
 import { TIME_ZONE } from '$app/env/private';
+import { parsePilot } from '#lib/pilots.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
@@ -63,10 +64,7 @@ export const actions = {
 		const form = await request.formData();
 		const flights = await flightIds(fetch, url, form);
 		if ('message' in flights) return fail(409, { pilotMessage: flights.message });
-		const body = {
-			flight_ids: flights.ids,
-			pilot_id: String(form.get('pilot_id') ?? '') || null
-		};
+		const body = { flight_ids: flights.ids, ...parsePilot(String(form.get('pilot') ?? '')) };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
 		return { changed: result.data.changed };

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
+	import { pilotOptions as pilotOptions_, pilotValue } from '#lib/pilots.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
@@ -20,22 +21,18 @@
 	// Setting the pilot: admins on any flight, members on their team's.
 	const canSetPilot = $derived(
 		data.choices.admin ||
-			(data.choices.own_team_id !== null && flight.team_id === data.choices.own_team_id)
+			(flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id))
 	);
-	const pilotOptions = $derived([
-		{ value: '', label: 'Unknown' },
-		...data.choices.pilots.map((pilot) => ({
-			value: pilot.id,
-			label: data.choices.admin ? `${pilot.name} (${pilot.team_name})` : pilot.name
-		}))
-	]);
-	// "That was me": an unknown pilot starts as the viewer, if they can be chosen.
-	const pilotChoice = $derived(
-		flight.pilot_id ??
-			(data.choices.pilots.some((pilot) => pilot.id === data.account?.id)
-				? (data.account?.id ?? '')
-				: '')
-	);
+	const pilotOptions = $derived(pilotOptions_(data.choices));
+	// The pilot with the flight's team; "that was me": an unknown pilot starts
+	// as the viewer, with the flight's team if they're in it.
+	const pilotChoice = $derived.by(() => {
+		const user = flight.pilot_id ?? data.account?.id;
+		const own = pilotOptions.filter((option) => option.value.startsWith(`${user}:`));
+		const value = pilotValue(user ?? null, flight.team_id);
+		if (own.some((option) => option.value === value)) return value;
+		return flight.pilot_id ? (own[0]?.value ?? '') : '';
+	});
 
 	function pilotSet(result: Record<string, unknown> | undefined) {
 		const name = (result?.pilotName as string | null) ?? 'Unknown';
@@ -129,12 +126,7 @@
 									onsuccess={pilotSet}
 								>
 									<input type="hidden" name="team_before" value={flight.team_id ?? ''} />
-									<Select
-										label="Pilot"
-										name="pilot_id"
-										options={pilotOptions}
-										value={pilotChoice}
-									/>
+									<Select label="Pilot" name="pilot" options={pilotOptions} value={pilotChoice} />
 									<p class="help">
 										{data.choices.admin
 											? 'The flight moves to the pilot’s team. With Unknown, it keeps its team.'

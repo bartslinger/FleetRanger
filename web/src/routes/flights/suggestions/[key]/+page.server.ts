@@ -1,5 +1,6 @@
 import { MAPBOX_ACCESS_TOKEN, TIME_ZONE } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
+import { parsePilot } from '#lib/pilots.js';
 import { get, send, type FlightChoices, type SuggestionDetail } from '#lib/server/backend.js';
 import { apiQuery, parse, query } from '../../logbook.js';
 
@@ -28,11 +29,11 @@ export const actions = {
 	/** Sets the pilot of these flights, as the logbook's batch action does. */
 	setPilot: async ({ fetch, request }) => {
 		const form = await request.formData();
-		const pilotId = String(form.get('pilot_id') ?? '') || null;
-		const body = { flight_ids: form.getAll('flight_id').map(String), pilot_id: pilotId };
+		const pilot = parsePilot(String(form.get('pilot') ?? ''));
+		const body = { flight_ids: form.getAll('flight_id').map(String), ...pilot };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
-		return { pilotId, changed: result.data.changed };
+		return { pilotId: pilot.pilot_id, changed: result.data.changed };
 	},
 	/**
 	 * Makes the flights a session, then on to the suggestion `then` (the

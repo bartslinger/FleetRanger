@@ -54,9 +54,10 @@
 
 	// Merging: admins change any session, members those of their own team.
 	let selected: string[] = $state([]);
-	const canChange = $derived(data.choices.admin || data.choices.own_team_id !== null);
+	const canChange = $derived(data.choices.admin || data.choices.own_team_ids.length > 0);
 	const changeable = (session: Row) =>
-		data.choices.admin || session.team_ids.every((team) => team === data.choices.own_team_id);
+		data.choices.admin ||
+		session.team_ids.every((team) => data.choices.own_team_ids.includes(team));
 
 	function merged(count: number) {
 		selected = [];

@@ -6,18 +6,16 @@
 	batch bar; the same rules as the flight page's.
 -->
 <script lang="ts">
+	import { pilotOptions, pilotValue } from '#lib/pilots.js';
 	import Modal from '#lib/ui/Modal.svelte';
 	import Select from '#lib/ui/Select.svelte';
 
 	interface Props {
 		/** The flights to change. */
-		flights: { id: string; pilot_id: string | null }[];
+		flights: { id: string; pilot_id: string | null; team_id: string | null }[];
 		/** Which flights those are, e.g. "All 3 flights in the session." */
 		which: string;
-		choices: {
-			admin: boolean;
-			pilots: { id: string; name: string; team_name: string }[];
-		};
+		choices: Parameters<typeof pilotOptions>[0];
 		open: boolean;
 		returnFocus?: () => HTMLElement | undefined;
 		error?: string;
@@ -34,17 +32,13 @@
 		onsuccess
 	}: Props = $props();
 
-	const options = $derived([
-		{ value: '', label: 'Unknown' },
-		...choices.pilots.map((pilot) => ({
-			value: pilot.id,
-			label: choices.admin ? `${pilot.name} (${pilot.team_name})` : pilot.name
-		}))
-	]);
-	// Their pilot if they share one.
-	const choice = $derived(
-		new Set(flights.map((flight) => flight.pilot_id)).size === 1 ? (flights[0]?.pilot_id ?? '') : ''
-	);
+	const options = $derived(pilotOptions(choices));
+	// Their pilot, with their team, if they share them.
+	const choice = $derived.by(() => {
+		const values = new Set(flights.map((flight) => pilotValue(flight.pilot_id, flight.team_id)));
+		const [shared] = values;
+		return values.size === 1 && options.some((option) => option.value === shared) ? shared : '';
+	});
 </script>
 
 <Modal
@@ -60,7 +54,7 @@
 	{#each flights as flight (flight.id)}
 		<input type="hidden" name="flight_id" value={flight.id} />
 	{/each}
-	<Select label="Pilot" name="pilot_id" {options} value={choice} />
+	<Select label="Pilot" name="pilot" {options} value={choice} />
 	<p class="help">
 		{which}
 		{choices.admin

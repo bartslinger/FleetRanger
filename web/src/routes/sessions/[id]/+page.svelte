@@ -37,8 +37,9 @@
 	let pointed: number | null = $state(null);
 	const canChange = $derived(
 		data.choices.admin ||
-			(data.choices.own_team_id !== null &&
-				flights.every((flight) => flight.team_id === data.choices.own_team_id))
+			flights.every(
+				(flight) => flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id)
+			)
 	);
 
 	function moved(count: number) {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import Button from '#lib/ui/Button.svelte';
+	import Select from '#lib/ui/Select.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
@@ -65,6 +66,15 @@
 					spellcheck="false"
 					required
 				/>
+				<!-- The controller joins the approver's team: which one, if they're in several. -->
+				{#if data.teams.length > 1}
+					<Select
+						label="Team"
+						name="team_id"
+						options={data.teams.map((team) => ({ value: team.id, label: team.name }))}
+						helper="The controller joins this team. Its flights without a chosen team go to it."
+					/>
+				{/if}
 				<div class="buttons">
 					<Button type="submit" disabled={busy}>Pair controller</Button>
 				</div>

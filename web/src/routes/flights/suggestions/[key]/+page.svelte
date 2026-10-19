@@ -75,7 +75,7 @@
 	// Admins change any flight, members those of their own team.
 	const mayChange = (flight: Row) =>
 		data.choices.admin ||
-		(data.choices.own_team_id !== null && flight.team_id === data.choices.own_team_id);
+		(flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id));
 	const canChange = $derived(chosen.every(mayChange));
 
 	// After creating: the flights left out are a suggestion to look at next,
