@@ -9,12 +9,13 @@ use crate::{auth::Actor, error::ApiResult, policy};
 /// How many processed logs the status lists.
 const LATEST: i64 = 5;
 
-/// Progress through the current batch of logs, for admins. Everything is empty
-/// when no log is pending.
+/// Progress through the current batch of logs, for admins. When no log is
+/// pending, the counts and latest logs are the last batch's result (empty if
+/// none ran since the backend started).
 #[derive(Serialize)]
 pub struct Status {
     pub pending: i64,
-    /// Processed so far in this batch, failed ones included.
+    /// Processed in this batch, failed ones included.
     pub processed: i64,
     pub failed: i64,
     /// The log being processed now.
@@ -27,25 +28,29 @@ pub struct Status {
 pub async fn status(db: &PgPool, actor: &Actor, activity: &Activity) -> ApiResult<Status> {
     policy::require_admin(actor)?;
     let now = activity.snapshot();
-    // Before the loop picks up the first log, nothing is processed yet.
-    let since = now.batch_started_at.unwrap_or_else(Utc::now);
+    let empty = |pending| Status {
+        pending,
+        processed: 0,
+        failed: 0,
+        current: None,
+        paused: None,
+        latest: Vec::new(),
+    };
+    let Some(since) = now.batch_started_at.or(now.finished_batch_started_at) else {
+        return Ok(empty(db::batch_counts(db, Utc::now()).await?.pending));
+    };
     let counts = db::batch_counts(db, since).await?;
-    if counts.pending == 0 {
-        return Ok(Status {
-            pending: 0,
-            processed: 0,
-            failed: 0,
-            current: None,
-            paused: None,
-            latest: Vec::new(),
-        });
+    // New logs before the loop picks up the first: nothing of them is processed yet.
+    if now.batch_started_at.is_none() && counts.pending > 0 {
+        return Ok(empty(counts.pending));
     }
     Ok(Status {
         pending: counts.pending,
         processed: counts.processed,
         failed: counts.failed,
-        current: now.current,
-        paused: now.paused,
+        // A finished batch: the last log may still show as current for a moment.
+        current: now.current.filter(|_| counts.pending > 0),
+        paused: now.paused.filter(|_| counts.pending > 0),
         latest: db::latest_processed(db, since, LATEST).await?,
     })
 }

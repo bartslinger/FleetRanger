@@ -38,6 +38,9 @@ pub struct Snapshot {
     /// When the loop started on the current batch: the logs it has processed
     /// since it last found none pending. Progress counts from here.
     pub batch_started_at: Option<DateTime<Utc>>,
+    /// The start of the batch finished last, so the status can show its
+    /// result once nothing is pending.
+    pub finished_batch_started_at: Option<DateTime<Utc>>,
     pub current: Option<Current>,
     pub paused: Option<Paused>,
 }
@@ -69,7 +72,11 @@ impl Activity {
     }
 
     pub fn idle(&self) {
-        *self.lock() = Snapshot::default();
+        let mut now = self.lock();
+        *now = Snapshot {
+            finished_batch_started_at: now.batch_started_at.or(now.finished_batch_started_at),
+            ..Snapshot::default()
+        };
     }
 
     /// A pause keeps the batch: the logs it waits for are still pending.
