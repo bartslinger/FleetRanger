@@ -150,6 +150,22 @@
 	</Grid>
 </section>
 
+<section class="quote" aria-label="What a customer says">
+	<Grid centered>
+		<Column md={8} lg={12}>
+			<figure>
+				<blockquote>
+					<p>
+						Our flight logs are highly sensitive, so a cloud service was never an option for us.
+						With FleetRanger on our own server, our operations have become much simpler.
+					</p>
+				</blockquote>
+				<figcaption>A FleetRanger customer</figcaption>
+			</figure>
+		</Column>
+	</Grid>
+</section>
+
 <section id="how-it-works" aria-labelledby="how-it-works-title">
 	<Grid centered>
 		<Column>
@@ -351,6 +367,40 @@
 		color: var(--cds-text-secondary);
 	}
 
+	/* A customer's words in Carbon's large light heading style, the opening
+	   quotation mark hanging in the margin so the text lines up. */
+	.quote blockquote p {
+		position: relative;
+		font-size: var(--cds-fluid-heading-05-font-size);
+		font-weight: var(--cds-fluid-heading-05-font-weight);
+		line-height: var(--cds-fluid-heading-05-line-height);
+		letter-spacing: var(--cds-fluid-heading-05-letter-spacing);
+	}
+
+	.quote blockquote p::before {
+		content: '“';
+	}
+
+	/* On phones the margin is too narrow to hang it in. */
+	@media (min-width: 42rem) {
+		.quote blockquote p::before {
+			position: absolute;
+			right: 100%;
+			padding-inline-end: 0.1em;
+		}
+	}
+
+	.quote blockquote p::after {
+		content: '”';
+	}
+
+	.quote figcaption {
+		margin-top: var(--cds-spacing-07);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-02-font-size);
+		line-height: var(--cds-body-02-line-height);
+	}
+
 	/* The picture stays in place while the steps scroll past it: at the top on
 	   phones, beside them near the top of the window from md. */
 	.steps {
@@ -485,7 +535,6 @@
 	}
 
 	.tiles li {
-		min-height: 11rem;
 		padding: var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-spacing-07);
 		background: var(--cds-layer-01);
 	}
