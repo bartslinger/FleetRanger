@@ -9,10 +9,11 @@
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import MultiSelect from '#lib/ui/MultiSelect.svelte';
+	import DateRange from '#lib/ui/DateRange.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
-	import { dateTime, distance, duration } from '#lib/format.js';
+	import { dateTime, dayMonth, distance, duration } from '#lib/format.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
 	import type { PageProps, Snapshot } from './$types';
@@ -96,9 +97,18 @@
 		serials
 			.map((serial) => devices.find((device) => device.serial === serial)?.name ?? serial)
 			.join(', ');
+	// A day of the URL ("2026-10-12") as "12 Oct": noon UTC lands on that day.
+	const short = (day: string) => dayMonth(`${day}T12:00:00Z`, 'UTC');
 	const crumb = $derived(
 		[
 			'Flights',
+			...(data.state.from
+				? [
+						data.state.to
+							? `${short(data.state.from)}–${short(data.state.to)}`
+							: short(data.state.from)
+					]
+				: []),
 			...(data.state.drones.length > 0 ? [names(data.devices.aircraft, data.state.drones)] : []),
 			...(data.state.controllers.length > 0
 				? [names(data.devices.controllers, data.state.controllers)]
@@ -167,6 +177,13 @@
 	<Column narrow>
 		{#if data.total > 0 || filtering}
 			<div class="filters">
+				<div class="dates">
+					<DateRange
+						from={data.state.from}
+						to={data.state.to}
+						onchange={(from, to) => filter({ from, to })}
+					/>
+				</div>
 				<MultiSelect
 					label="Drones"
 					placeholder="All drones"
@@ -291,11 +308,26 @@
 		padding-inline: var(--cds-spacing-05);
 	}
 
+	/* From md two columns, the dates across both; from lg one row. */
 	@media (min-width: 42rem) {
 		.filters {
 			padding-inline: 0;
-			grid-template-columns: repeat(3, minmax(0, 16rem)) auto;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.dates {
+			grid-column: 1 / -1;
+		}
+	}
+
+	@media (min-width: 66rem) {
+		.filters {
+			grid-template-columns: minmax(0, 20rem) repeat(3, minmax(0, 14rem)) auto;
 			justify-content: start;
+		}
+
+		.dates {
+			grid-column: auto;
 		}
 	}
 
