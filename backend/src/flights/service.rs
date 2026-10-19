@@ -50,11 +50,11 @@ pub struct Devices {
     pub controllers: Vec<Device>,
 }
 
-pub async fn devices(db: &PgPool, actor: &Actor) -> ApiResult<Devices> {
+pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<Devices> {
     let scope = policy::flight_scope(actor);
     Ok(Devices {
-        aircraft: db::aircraft_of(db, &scope).await?,
-        controllers: db::controllers_of(db, &scope).await?,
+        aircraft: db::aircraft_of(db, &scope, filter).await?,
+        controllers: db::controllers_of(db, &scope, filter).await?,
     })
 }
 

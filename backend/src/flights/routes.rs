@@ -67,8 +67,15 @@ async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<servi
     Ok(Json(service::choices(&db, &actor).await?))
 }
 
-async fn devices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Devices>> {
-    Ok(Json(service::devices(&db, &actor).await?))
+/// The drones and controllers to offer in the filters, narrowed by the list's
+/// other filters (same query as `list`).
+async fn devices(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Query(query): Query<ListQuery>,
+) -> ApiResult<Json<service::Devices>> {
+    let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
+    Ok(Json(service::devices(&db, &actor, &filter).await?))
 }
 
 async fn set_pilot(

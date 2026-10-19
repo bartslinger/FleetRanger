@@ -353,8 +353,15 @@ pub struct Device {
     pub name: Option<String>,
 }
 
-/// The drones that flew flights in the scope, by name or else serial.
-pub async fn aircraft_of(db: &PgPool, scope: &FlightScope) -> sqlx::Result<Vec<Device>> {
+/// The drones to offer in the logbook's filter, by name or else serial: those
+/// with flights in the scope that pass the other filters (not the drone filter
+/// itself, so more can be added), and the chosen ones, also when they have no
+/// such flights, so a choice never disappears.
+pub async fn aircraft_of(
+    db: &PgPool,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Vec<Device>> {
     sqlx::query_as!(
         Device,
         r#"select f.aircraft_serial as "serial!", a.name as "name?"
@@ -364,17 +371,32 @@ pub async fn aircraft_of(db: &PgPool, scope: &FlightScope) -> sqlx::Result<Vec<D
              and ($1
                   or f.pilot_id = $2
                   or f.team_id in (select team_id from team_members where user_id = $2))
+             and (f.aircraft_serial = any(coalesce($3::text[], '{}'))
+                  or (($4::text[] is null or f.rc_serial = any($4))
+                      and (not $5 or f.session_id is null)
+                      and ($6::timestamptz is null or f.takeoff_at >= $6)
+                      and ($7::timestamptz is null or f.takeoff_at < $7)))
            group by f.aircraft_serial, a.name
            order by lower(coalesce(a.name, f.aircraft_serial))"#,
         scope.all,
         scope.user_id,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.without_session,
+        filter.from,
+        filter.to,
     )
     .fetch_all(db)
     .await
 }
 
-/// The controllers that flew flights in the scope, by name or else serial.
-pub async fn controllers_of(db: &PgPool, scope: &FlightScope) -> sqlx::Result<Vec<Device>> {
+/// The controllers to offer in the logbook's filter, as `aircraft_of` does
+/// for drones.
+pub async fn controllers_of(
+    db: &PgPool,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Vec<Device>> {
     sqlx::query_as!(
         Device,
         r#"select f.rc_serial as "serial!", r.name as "name?"
@@ -384,10 +406,20 @@ pub async fn controllers_of(db: &PgPool, scope: &FlightScope) -> sqlx::Result<Ve
              and ($1
                   or f.pilot_id = $2
                   or f.team_id in (select team_id from team_members where user_id = $2))
+             and (f.rc_serial = any(coalesce($3::text[], '{}'))
+                  or (($4::text[] is null or f.aircraft_serial = any($4))
+                      and (not $5 or f.session_id is null)
+                      and ($6::timestamptz is null or f.takeoff_at >= $6)
+                      and ($7::timestamptz is null or f.takeoff_at < $7)))
            group by f.rc_serial, r.name
            order by lower(coalesce(r.name, f.rc_serial))"#,
         scope.all,
         scope.user_id,
+        filter.rc_serials.as_deref(),
+        filter.aircraft_serials.as_deref(),
+        filter.without_session,
+        filter.from,
+        filter.to,
     )
     .fetch_all(db)
     .await
@@ -736,6 +768,57 @@ mod tests {
         };
         let left_out = neighbours(&db, &scope, &filter, &sort, grouped.unwrap()).await;
         assert!(left_out.unwrap().is_none());
+    }
+
+    /// The filters' options narrow by the other filters, not by their own
+    /// choice, and keep what was chosen even without flights left.
+    #[sqlx::test]
+    async fn filter_options_narrow_by_the_other_filters(db: PgPool) {
+        for (drone, controller) in [("A", "X"), ("B", "Y")] {
+            let id = flight(&db, None, None).await;
+            sqlx::query("update flights set aircraft_serial = $2, rc_serial = $3 where id = $1")
+                .bind(id)
+                .bind(drone)
+                .bind(controller)
+                .execute(&db)
+                .await
+                .unwrap();
+        }
+        let scope = FlightScope {
+            all: true,
+            user_id: Uuid::nil(),
+        };
+        let serials = |devices: Vec<Device>| -> Vec<String> {
+            devices.into_iter().map(|device| device.serial).collect()
+        };
+        let list = |values: &[&str]| Some(values.iter().map(|v| (*v).to_owned()).collect());
+
+        // Controller X chosen: only its drone is offered; its own list stays whole.
+        let x = Filter {
+            rc_serials: list(&["X"]),
+            ..Filter::default()
+        };
+        assert_eq!(serials(aircraft_of(&db, &scope, &x).await.unwrap()), ["A"]);
+        assert_eq!(
+            serials(controllers_of(&db, &scope, &x).await.unwrap()),
+            ["X", "Y"]
+        );
+
+        // Drone B chosen as well, though X never flew it: B stays offered,
+        // and the controllers are X (chosen) and B's controller Y.
+        let x_and_b = Filter {
+            rc_serials: list(&["X"]),
+            aircraft_serials: list(&["B"]),
+            ..Filter::default()
+        };
+        assert_eq!(
+            serials(aircraft_of(&db, &scope, &x_and_b).await.unwrap()),
+            ["A", "B"]
+        );
+        assert_eq!(
+            serials(controllers_of(&db, &scope, &x_and_b).await.unwrap()),
+            ["X", "Y"]
+        );
     }
 
     /// A user without a team or flights sees nothing unless they see all.
