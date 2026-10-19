@@ -25,7 +25,8 @@ import java.security.MessageDigest
  * a few minutes, over an approved Wi-Fi network that isn't metered. Each log
  * goes with the pilot chosen before it was written. A log that changes after
  * its upload (it was still being written) is uploaded again, and replaces the
- * earlier version on the server.
+ * earlier version on the server. It first asks the server which logs it
+ * doesn't have, so a log already there isn't sent again.
  */
 class UploadService : Service() {
     private lateinit var worker: Handler
@@ -117,14 +118,28 @@ class UploadService : Service() {
         if (!sync.mayUploadNow()) {
             return report(SyncStatus.State.WaitingForNetwork, waiting = waiting.size)
         }
-        for (entry in waiting.toList()) {
-            if (entry.state == FlightLogs.State.BeingWritten) continue
+        report(SyncStatus.State.Uploading, waiting = waiting.size)
+        // Keys are taken before reading, so a write while hashing or uploading counts as a change.
+        val settled = waiting
+            .filter { it.state == FlightLogs.State.Waiting }
+            .map { Settled(it, FlightLogs.key(it.file), sha256(it.file)) }
+        // The server may have logs already, e.g. after pairing again: those aren't sent.
+        val missing = try {
+            missing(settled.map { it.sha256 })
+        } catch (error: IOException) {
+            Log.w(TAG, "asking which logs are missing failed: $error")
+            return report(SyncStatus.State.Unreachable, waiting = waiting.size)
+        }
+        for ((entry, key, sha256) in settled) {
+            if (missing != null && sha256 !in missing) {
+                logs.markUploaded(key)
+                waiting.remove(entry)
+                continue
+            }
             val log = entry.file
-            // Taken before reading, so a write during the upload counts as a change.
-            val key = FlightLogs.key(log)
             report(SyncStatus.State.Uploading, waiting = waiting.size, current = log.name)
             val result = try {
-                server.upload(log, sha256(log), pilots.at(log.lastModified()))
+                server.upload(log, sha256, pilots.at(log.lastModified()))
             } catch (error: IOException) {
                 Log.w(TAG, "upload of ${log.name} failed: $error")
                 return report(SyncStatus.State.Unreachable, waiting = waiting.size)
@@ -146,6 +161,18 @@ class UploadService : Service() {
         // Logs still being written, or refused: they're tried again next time.
         report(if (waiting.isEmpty()) SyncStatus.State.Done else SyncStatus.State.Uploading, waiting.size)
     }
+
+    /** The hashes the server doesn't have, asked in parts; null if it can't tell. */
+    private fun missing(sha256s: List<String>): Set<String>? {
+        val missing = mutableSetOf<String>()
+        for (part in sha256s.chunked(Server.MAX_HASHES)) {
+            missing += server.missing(part) ?: return null
+        }
+        return missing
+    }
+
+    /** A log ready to upload, with its key as it was before reading it and its SHA-256 in hex. */
+    private data class Settled(val log: FlightLogs.Log, val key: String, val sha256: String)
 
     /**
      * A sync is a scan that could upload: paired, the logs readable, and on a

@@ -10,6 +10,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.security.SecureRandom
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -18,7 +19,7 @@ import org.json.JSONObject
  * token the controller uses once a user has approved pairing. See "Clients" in
  * docs/architecture.md. Calls block, so run them off the main thread.
  */
-class Server(context: Context) {
+class Server(private val context: Context) {
     private val prefs = context.getSharedPreferences("server", Context.MODE_PRIVATE)
 
     /**
@@ -51,6 +52,8 @@ class Server(context: Context) {
     fun startPairing(): String {
         val token = newToken()
         prefs.edit().putString("token", token).putBoolean("paired", false).apply()
+        // Perhaps another install, or this one after its logs moved.
+        FlightLogs(context).forgetUploaded()
         val body = JSONObject()
             .put("serial", serial())
             .put("model", Build.MODEL.replace('_', ' '))
@@ -84,6 +87,18 @@ class Server(context: Context) {
         val answer = call("GET", "/api/controller/pilots")
         if (answer == null) paired = false
         return answer?.let(PilotList::fromJson)
+    }
+
+    /**
+     * Which of these logs, by SHA-256 in hex, the server doesn't have yet; at
+     * most [MAX_HASHES] at a time. Null if the server can't tell (unpaired, or
+     * a version without the question): then upload them all, as before.
+     */
+    fun missing(sha256s: List<String>): Set<String>? {
+        val answer = call("POST", "/api/controller/logs/missing", JSONObject().put("sha256", JSONArray(sha256s)))
+            ?: return null
+        val missing = answer.optJSONArray("missing") ?: throw IOException("the server's answer isn't FleetRanger's")
+        return (0 until missing.length()).map { missing.getString(it) }.toSet()
     }
 
     /** What became of an upload. */
@@ -205,17 +220,20 @@ class Server(context: Context) {
         }
     }
 
-    private companion object {
-        fun newToken(): String {
+    companion object {
+        /** The most logs [missing] may ask about at once; the server's limit. */
+        const val MAX_HASHES = 1000
+
+        private fun newToken(): String {
             val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
             return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
         }
 
-        fun sha256Hex(text: String): String =
+        private fun sha256Hex(text: String): String =
             MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
                 .joinToString("") { "%02x".format(it) }
 
-        fun serial(): String =
+        private fun serial(): String =
             Serial.read().ifEmpty { throw IOException("the controller's serial number can't be read") }
     }
 }

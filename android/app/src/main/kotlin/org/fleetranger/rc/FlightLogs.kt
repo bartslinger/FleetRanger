@@ -10,7 +10,10 @@ import java.io.File
  */
 class FlightLogs(context: Context) {
     private val sync = SyncSettings(context)
-    /** Logs already uploaded, by name, size and modification time. */
+    /**
+     * Logs the server has, by name, size and modification time: uploaded, or
+     * found there already. Only for the install the controller is paired with.
+     */
     private val uploaded = context.getSharedPreferences("uploaded", Context.MODE_PRIVATE)
 
     enum class State { Uploaded, Waiting, BeingWritten, BeforeSyncDate }
@@ -33,6 +36,9 @@ class FlightLogs(context: Context) {
             }
 
     fun markUploaded(key: String) = uploaded.edit().putBoolean(key, true).apply()
+
+    /** Pairing (again) asks the server about every log: it may have some, all or none. */
+    fun forgetUploaded() = uploaded.edit().clear().apply()
 
     companion object {
         /** A log must be unchanged this long: DJI Pilot 2 may still be writing it. */
