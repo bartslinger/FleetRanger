@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
@@ -138,10 +139,28 @@
 
 	// Kept in the browser's history, so going back from a flight's page
 	// restores the selection.
-	export const snapshot: Snapshot<string[]> = {
-		capture: () => selected,
-		restore: (value) => (selected = value)
+	export const snapshot: Snapshot<{ selected: string[]; allMatching: boolean }> = {
+		capture: () => ({ selected, allMatching }),
+		restore: (value) => ({ selected, allMatching } = value)
 	};
+
+	// All flights that match the filters, across pages, instead of `selected`.
+	let allMatching = $state(false);
+	/** How many flights a batch action takes. */
+	const count = (ids: string[]) => (allMatching ? data.total : ids.length);
+
+	// Other filters, another list: the selection no longer means anything.
+	// Paging and sorting keep it.
+	const filters = $derived(
+		query({ ...data.state, page: 1, size: PAGE_SIZES[0], sort: DEFAULT_SORT })
+	);
+	let selectedFor = untrack(() => filters);
+	$effect(() => {
+		if (filters === selectedFor) return;
+		selectedFor = filters;
+		selected = [];
+		allMatching = false;
+	});
 	const canChange = $derived(data.choices.admin || data.choices.own_team_id !== null);
 	const changeable = (flight: Row) =>
 		data.choices.admin || flight.team_id === data.choices.own_team_id;
@@ -170,6 +189,7 @@
 
 	function done(message: string) {
 		selected = [];
+		allMatching = false;
 		toast(message);
 	}
 
@@ -180,6 +200,17 @@
 		return `${resolve('/flights')}${query(state)}`;
 	}
 </script>
+
+<!-- A batch action's flights: the selected ones, or all that match the
+     filters with the number the user saw (the server checks it). -->
+{#snippet chosenFields(ids: string[])}
+	{#if allMatching}
+		<input type="hidden" name="all" value="true" />
+		<input type="hidden" name="expected" value={data.total} />
+	{:else}
+		{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+	{/if}
+{/snippet}
 
 <PageHeader title="Flights" {crumb} />
 
@@ -238,7 +269,13 @@
 				sortHref={(sort) => href({ ...data.state, page: 1, sort: sort ?? DEFAULT_SORT })}
 				selectable={canChange ? changeable : undefined}
 				bind:selected
-				selectedLabel={(count) => `${count} ${count === 1 ? 'flight' : 'flights'} selected`}
+				bind:allMatching
+				total={data.total}
+				selectedLabel={(count, all) =>
+					all
+						? `All ${count} ${count === 1 ? 'flight' : 'flights'} selected`
+						: `${count} ${count === 1 ? 'flight' : 'flights'} selected`}
+				selectAllLabel={(total) => `Select all ${total}`}
 			>
 				{#snippet batchActions(ids)}
 					<!-- The frequent actions as buttons (on phones only the first); the
@@ -248,11 +285,11 @@
 						submitLabel="Create"
 						action="?/newSession"
 						error={form && 'newSessionMessage' in form ? form.newSessionMessage : undefined}
-						onsuccess={() => done(`New session with ${flights(ids.length)}.`)}
+						onsuccess={() => done(`New session with ${flights(count(ids))}.`)}
 					>
-						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+						{@render chosenFields(ids)}
 						<p>
-							The {flights(ids.length)} become one new session. Flights that are in a session leave it.
+							The {flights(count(ids))} become one new session. Flights that are in a session leave it.
 						</p>
 					</Modal>
 					<span class="wide-only">
@@ -261,11 +298,11 @@
 							submitLabel="Add"
 							action="?/addToSession"
 							error={form && 'addMessage' in form ? form.addMessage : undefined}
-							onsuccess={() => done(`${flights(ids.length)} added to the session.`)}
+							onsuccess={() => done(`${flights(count(ids))} added to the session.`)}
 							bind:open={addOpen}
 							returnFocus={() => (wide.current ? undefined : (overflow ?? undefined))}
 						>
-							{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+							{@render chosenFields(ids)}
 							<SessionChoice flights={selectedRows(ids)} timeZone={data.timeZone} />
 							<p class="help">Flights that are in another session leave it.</p>
 						</Modal>
@@ -300,11 +337,11 @@
 						bind:open={removeOpen}
 						returnFocus={() => overflow ?? undefined}
 					>
-						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+						{@render chosenFields(ids)}
 						<p>
-							{ids.length === 1
+							{count(ids) === 1
 								? 'The flight leaves its session. It stays in Flights, without a session.'
-								: `The ${ids.length} flights leave the sessions they are in. They stay in Flights, without a session.`}
+								: `The ${count(ids)} flights leave the sessions they are in. They stay in Flights, without a session.`}
 						</p>
 					</Modal>
 					<Modal
@@ -312,12 +349,12 @@
 						submitLabel="Set pilot"
 						action="?/setPilot"
 						error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
-						onsuccess={() => done(`${flights(ids.length)} changed.`)}
+						onsuccess={() => done(`${flights(count(ids))} changed.`)}
 						trigger={false}
 						bind:open={pilotOpen}
 						returnFocus={() => overflow ?? undefined}
 					>
-						{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+						{@render chosenFields(ids)}
 						<Select label="Pilot" name="pilot_id" options={pilotOptions} />
 						<p class="help">
 							{data.choices.admin
@@ -331,12 +368,12 @@
 							submitLabel="Move"
 							action="?/setTeam"
 							error={form && 'teamMessage' in form ? form.teamMessage : undefined}
-							onsuccess={() => done(`${flights(ids.length)} changed.`)}
+							onsuccess={() => done(`${flights(count(ids))} changed.`)}
 							trigger={false}
 							bind:open={teamOpen}
 							returnFocus={() => overflow ?? undefined}
 						>
-							{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+							{@render chosenFields(ids)}
 							<Select label="Team" name="team_id" options={teamOptions} />
 							<p class="help">A pilot who isn’t in the new team is cleared.</p>
 						</Modal>

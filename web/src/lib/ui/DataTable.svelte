@@ -57,8 +57,15 @@
 		selected?: string[];
 		/** Carbon's batch actions, shown over the toolbar while rows are selected. */
 		batchActions?: Snippet<[selected: string[]]>;
-		/** E.g. "3 flights selected". */
-		selectedLabel?: (count: number) => string;
+		/** E.g. "3 flights selected"; with `all`, all that match ("All 340 flights selected"). */
+		selectedLabel?: (count: number, all: boolean) => string;
+		/** How many rows match across all pages. With more than this page
+		 * shows, a fully selected page offers selecting all of them. */
+		total?: number;
+		/** All matching rows are selected, not only `selected`. */
+		allMatching?: boolean;
+		/** The offer, e.g. "Select all 340 flights". */
+		selectAllLabel?: (total: number) => string;
 	}
 
 	let {
@@ -76,7 +83,10 @@
 		selectable,
 		selected = $bindable([]),
 		batchActions,
-		selectedLabel = (count) => `${count} selected`
+		selectedLabel = (count, all) => (all ? `All ${count} selected` : `${count} selected`),
+		total,
+		allMatching = $bindable(false),
+		selectAllLabel = (total) => `Select all ${total}`
 	}: Props = $props();
 
 	const selectableKeys = $derived(selectable ? rows.filter(selectable).map(rowKey) : []);
@@ -85,12 +95,29 @@
 	);
 
 	function toggle(key: string, on: boolean) {
+		if (allMatching && !on) {
+			// Out of "all matching": this page's rows, but for this one.
+			allMatching = false;
+			selected = selectableKeys.filter((other) => other !== key);
+			return;
+		}
 		selected = on ? [...selected, key] : selected.filter((other) => other !== key);
 	}
 
 	function toggleAll(on: boolean) {
+		allMatching = false;
 		selected = on ? selectableKeys : [];
 	}
+
+	function cancel() {
+		allMatching = false;
+		selected = [];
+	}
+
+	// The whole page is selected and more rows match: offer them all.
+	const offerAll = $derived(
+		!allMatching && total !== undefined && allSelected && total > selectableKeys.length
+	);
 
 	/**
 	 * Carbon's cycle: unsorted, ascending, descending, back to the default order.
@@ -115,12 +142,23 @@
 	}
 </script>
 
-{#if selected.length > 0 && batchActions}
-	<!-- Carbon's batch actions: the count, the actions, and Cancel to deselect. -->
+{#if (selected.length > 0 || allMatching) && batchActions}
+	<!-- Carbon's batch actions: the count, the actions, and Cancel to deselect.
+	     A fully selected page offers all matching rows (not Carbon: it doesn't
+	     cover selecting across pages). -->
 	<div class="toolbar batch" role="region" aria-label="Batch actions">
-		<p class="count" aria-live="polite">{selectedLabel(selected.length)}</p>
+		<p class="count" aria-live="polite">
+			{allMatching && total !== undefined
+				? selectedLabel(total, true)
+				: selectedLabel(selected.length, false)}
+		</p>
+		{#if offerAll && total !== undefined}
+			<button class="select-all" type="button" onclick={() => (allMatching = true)}>
+				{selectAllLabel(total)}
+			</button>
+		{/if}
 		{@render batchActions(selected)}
-		<button class="cancel" type="button" onclick={() => (selected = [])}>Cancel</button>
+		<button class="cancel" type="button" onclick={cancel}>Cancel</button>
 	</div>
 {:else if toolbar || selectable}
 	<div class="toolbar">
@@ -153,8 +191,8 @@
 						<Checkbox
 							label="Select all"
 							hideLabel
-							checked={allSelected}
-							indeterminate={selected.length > 0 && !allSelected}
+							checked={allMatching || allSelected}
+							indeterminate={!allMatching && selected.length > 0 && !allSelected}
 							disabled={selectableKeys.length === 0}
 							onchange={(event) => toggleAll(event.currentTarget.checked)}
 						/>
@@ -183,13 +221,14 @@
 		<tbody>
 			{#each rows as row (rowKey(row))}
 				{@const key = rowKey(row)}
-				<tr class:linked={rowHref} class:selected={selected.includes(key)}>
+				{@const chosen = allMatching ? !!selectable?.(row) : selected.includes(key)}
+				<tr class:linked={rowHref} class:selected={chosen}>
 					{#if selectable}
 						<td class="select">
 							<Checkbox
 								label="Select row"
 								hideLabel
-								checked={selected.includes(key)}
+								checked={chosen}
 								disabled={!selectable(row)}
 								onchange={(event) => toggle(key, event.currentTarget.checked)}
 							/>
@@ -377,6 +416,46 @@
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+	}
+
+	/* "Select all 340 flights": a text button after the count, underlined as
+	   a link on the blue bar. */
+	.select-all {
+		flex: none;
+		min-height: var(--cds-size-large);
+		padding: 0 var(--cds-spacing-05);
+		border: 0;
+		background: transparent;
+		color: var(--cds-text-on-color);
+		font: inherit;
+		font-size: var(--cds-body-compact-01-font-size);
+		text-decoration: underline;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+
+	.select-all:hover {
+		background: var(--cds-button-primary-hover);
+	}
+
+	/* On phones the offer takes a line of its own under the bar's, so the
+	   count keeps its room. */
+	@media (max-width: 41.99rem) {
+		.batch {
+			flex-wrap: wrap;
+		}
+
+		.select-all {
+			order: 1;
+			flex-basis: 100%;
+			min-height: var(--cds-size-medium);
+			text-align: left;
+		}
+	}
+
+	.select-all:focus-visible {
+		outline: 2px solid var(--cds-text-on-color);
+		outline-offset: -2px;
 	}
 
 	.batch :global(.button),

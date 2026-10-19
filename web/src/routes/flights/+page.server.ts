@@ -26,51 +26,82 @@ export async function load({ fetch, url }) {
 	return { flights, total, state, choices, devices };
 }
 
-/** The flights of a batch action, sent as one hidden field per flight. */
-function flightIds(form: FormData) {
-	return form.getAll('flight_id').map(String);
+/**
+ * The flights of a batch action: one hidden field per selected flight, or
+ * `all` with the number the user saw, for all flights matching the list's
+ * filters (the page's URL). Those are looked up now; if their number changed
+ * meanwhile, the action is refused, so it never touches flights the user
+ * didn't see counted.
+ */
+async function flightIds(
+	fetch: typeof globalThis.fetch,
+	url: URL,
+	form: FormData
+): Promise<{ ids: string[] } | { message: string }> {
+	if (form.get('all') !== 'true') return { ids: form.getAll('flight_id').map(String) };
+	const { ids } = await get<{ ids: string[] }>(
+		fetch,
+		`/api/flights/ids?${apiQuery(parse(url.searchParams), TIME_ZONE)}`
+	);
+	const expected = Number(form.get('expected'));
+	if (ids.length !== expected) {
+		return {
+			message: `The list changed: ${ids.length} flights match now, not ${expected}. Check them and try again.`
+		};
+	}
+	return { ids };
 }
 
 export const actions = {
-	setPilot: async ({ fetch, request }) => {
+	setPilot: async ({ fetch, request, url }) => {
 		const form = await request.formData();
+		const flights = await flightIds(fetch, url, form);
+		if ('message' in flights) return fail(409, { pilotMessage: flights.message });
 		const body = {
-			flight_ids: flightIds(form),
+			flight_ids: flights.ids,
 			pilot_id: String(form.get('pilot_id') ?? '') || null
 		};
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
 		return { changed: result.data.changed };
 	},
-	setTeam: async ({ fetch, request }) => {
+	setTeam: async ({ fetch, request, url }) => {
 		const form = await request.formData();
+		const flights = await flightIds(fetch, url, form);
+		if ('message' in flights) return fail(409, { teamMessage: flights.message });
 		const body = {
-			flight_ids: flightIds(form),
+			flight_ids: flights.ids,
 			team_id: String(form.get('team_id') ?? '') || null
 		};
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/team', body);
 		if (!result.ok) return fail(result.status, { teamMessage: result.message });
 		return { changed: result.data.changed };
 	},
-	newSession: async ({ fetch, request }) => {
+	newSession: async ({ fetch, request, url }) => {
 		const form = await request.formData();
-		const body = { flight_ids: flightIds(form) };
+		const flights = await flightIds(fetch, url, form);
+		if ('message' in flights) return fail(409, { newSessionMessage: flights.message });
+		const body = { flight_ids: flights.ids };
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions', body);
 		if (!result.ok) return fail(result.status, { newSessionMessage: result.message });
 		return { session: result.data.id };
 	},
-	removeFromSession: async ({ fetch, request }) => {
+	removeFromSession: async ({ fetch, request, url }) => {
 		const form = await request.formData();
-		const body = { flight_ids: flightIds(form) };
+		const flights = await flightIds(fetch, url, form);
+		if ('message' in flights) return fail(409, { removeMessage: flights.message });
+		const body = { flight_ids: flights.ids };
 		const result = await send<{ removed: number }>(fetch, 'POST', '/api/sessions/remove', body);
 		if (!result.ok) return fail(result.status, { removeMessage: result.message });
 		return { removed: result.data.removed };
 	},
-	addToSession: async ({ fetch, request }) => {
+	addToSession: async ({ fetch, request, url }) => {
 		const form = await request.formData();
 		const session = String(form.get('session_id') ?? '');
 		if (!session) return fail(400, { addMessage: 'Choose a session.' });
-		const body = { flight_ids: flightIds(form) };
+		const flights = await flightIds(fetch, url, form);
+		if ('message' in flights) return fail(409, { addMessage: flights.message });
+		const body = { flight_ids: flights.ids };
 		const path = `/api/sessions/${encodeURIComponent(session)}/flights`;
 		const result = await send<{ id: string }>(fetch, 'POST', path, body);
 		if (!result.ok) return fail(result.status, { addMessage: result.message });
