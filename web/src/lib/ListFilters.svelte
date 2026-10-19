@@ -1,13 +1,15 @@
 <!--
 	@component
-	The filters above the Flights and Sessions lists: takeoff days, drones,
-	controllers and, for admins, teams. A list adds its own after them.
+	The filters above the Flights and Sessions lists: takeoff days, pilots,
+	drones, controllers and, for admins, teams. A list adds its own after them.
 -->
 <script lang="ts" module>
 	import { dayMonth } from '#lib/format.js';
 	import type { Device, Devices } from '#lib/server/backend.js';
 
 	export interface Filters {
+		/** Pilots' user ids, "none" for flights without a pilot; all if empty. */
+		pilots: string[];
 		/** Drone serials; all if empty. */
 		drones: string[];
 		/** Controller serials; all if empty. */
@@ -20,6 +22,7 @@
 	}
 
 	export const NO_FILTERS: Filters = {
+		pilots: [],
 		drones: [],
 		controllers: [],
 		teams: [],
@@ -28,6 +31,7 @@
 	};
 
 	export const filtering = (filters: Filters) =>
+		filters.pilots.length > 0 ||
 		filters.drones.length > 0 ||
 		filters.controllers.length > 0 ||
 		filters.teams.length > 0 ||
@@ -48,6 +52,9 @@
 			...(filters.from
 				? [filters.to ? `${short(filters.from)}–${short(filters.to)}` : short(filters.from)]
 				: []),
+			...(filters.pilots.length > 0
+				? [filters.pilots.map((id) => pilotName(devices, id)).join(', ')]
+				: []),
 			...(filters.drones.length > 0 ? [names(devices.aircraft, filters.drones)] : []),
 			...(filters.controllers.length > 0 ? [names(devices.controllers, filters.controllers)] : []),
 			...(filters.teams.length > 0
@@ -60,6 +67,12 @@
 		return id === 'none'
 			? 'No team (queue)'
 			: (devices.teams.find((team) => team.id === id)?.name ?? 'Unknown team');
+	}
+
+	function pilotName(devices: Devices, id: string) {
+		return id === 'none'
+			? 'Unknown pilot'
+			: (devices.pilots.find((pilot) => pilot.id === id)?.name ?? 'Unknown user');
 	}
 </script>
 
@@ -101,6 +114,12 @@
 	}
 	const droneOptions = $derived(deviceOptions(devices.aircraft, filters.drones));
 	const controllerOptions = $derived(deviceOptions(devices.controllers, filters.controllers));
+	const pilotOptions = $derived(
+		devices.pilots.map((pilot) => ({
+			value: pilot.id ?? 'none',
+			label: pilot.name ?? 'Unknown pilot'
+		}))
+	);
 	const teamOptions = $derived(
 		devices.teams.map((team) => ({
 			value: team.id ?? 'none',
@@ -117,6 +136,13 @@
 			onchange={(from, to) => onchange({ from, to })}
 		/>
 	</div>
+	<MultiSelect
+		label="Pilots"
+		placeholder="All pilots"
+		options={pilotOptions}
+		value={filters.pilots}
+		onchange={(pilots) => onchange({ pilots })}
+	/>
 	<MultiSelect
 		label="Drones"
 		placeholder="All drones"

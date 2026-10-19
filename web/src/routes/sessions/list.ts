@@ -25,6 +25,7 @@ export function parse(params: URLSearchParams): SessionListState {
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		view: params.get('view') === 'table' ? 'table' : 'cards',
+		pilots: list(params.get('pilot')),
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
 		teams: list(params.get('team')),
@@ -38,6 +39,7 @@ export function query(state: SessionListState): string {
 	const params = new URLSearchParams();
 	if (state.from) params.set('from', state.from);
 	if (state.from && state.to) params.set('to', state.to);
+	if (state.pilots.length > 0) params.set('pilot', state.pilots.join(','));
 	if (state.drones.length > 0) params.set('drone', state.drones.join(','));
 	if (state.controllers.length > 0) params.set('controller', state.controllers.join(','));
 	if (state.teams.length > 0) params.set('team', state.teams.join(','));
@@ -53,6 +55,7 @@ export function query(state: SessionListState): string {
  * the list and the filters' options. */
 export function apiFilters(state: Filters, timeZone: string): URLSearchParams {
 	const api = new URLSearchParams();
+	if (state.pilots.length > 0) api.set('pilot', state.pilots.join(','));
 	if (state.drones.length > 0) api.set('aircraft', state.drones.join(','));
 	if (state.controllers.length > 0) api.set('controller', state.controllers.join(','));
 	if (state.teams.length > 0) api.set('team', state.teams.join(','));

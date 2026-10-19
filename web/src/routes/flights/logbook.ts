@@ -13,6 +13,8 @@ export interface LogbookState {
 	page: number;
 	size: number;
 	sort: { key: string; descending: boolean };
+	/** Only the flights of these pilots' ids, "none" for those without a pilot; all if empty. */
+	pilots: string[];
 	/** Only the flights of these drone serials; all if empty. */
 	drones: string[];
 	/** Only the flights of these controller serials; all if empty. */
@@ -43,6 +45,7 @@ export function parse(params: URLSearchParams): LogbookState {
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		sort: SORTABLE.includes(key) ? { key, descending: sort.startsWith('-') } : DEFAULT_SORT,
+		pilots: list(params.get('pilot')),
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
 		teams: list(params.get('team')),
@@ -58,6 +61,7 @@ export function query(state: LogbookState): string {
 	const params = new URLSearchParams();
 	if (state.from) params.set('from', state.from);
 	if (state.from && state.to) params.set('to', state.to);
+	if (state.pilots.length > 0) params.set('pilot', state.pilots.join(','));
 	if (state.drones.length > 0) params.set('drone', state.drones.join(','));
 	if (state.controllers.length > 0) params.set('controller', state.controllers.join(','));
 	if (state.teams.length > 0) params.set('team', state.teams.join(','));
@@ -81,6 +85,7 @@ export function apiQuery(state: LogbookState, timeZone: string): URLSearchParams
 		size: String(state.size),
 		sort: `${state.sort.descending ? '-' : ''}${state.sort.key}`
 	});
+	if (state.pilots.length > 0) api.set('pilot', state.pilots.join(','));
 	if (state.drones.length > 0) api.set('aircraft', state.drones.join(','));
 	if (state.controllers.length > 0) api.set('controller', state.controllers.join(','));
 	if (state.teams.length > 0) api.set('team', state.teams.join(','));
@@ -100,6 +105,7 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 		page: 1,
 		size: DEFAULT_SIZE,
 		sort: DEFAULT_SORT,
+		pilots: [],
 		drones: filters.drone ? [filters.drone] : [],
 		controllers: filters.controller ? [filters.controller] : [],
 		teams: [],
