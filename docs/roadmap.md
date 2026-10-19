@@ -62,9 +62,9 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 
 ## Public website (fleetranger.org)
 
-- [~] Landing page: what FleetRanger does, for whom, self-hosted, source and contact
-- [ ] Static build reusing the web app's components
-- [ ] Hosting through the Ansible repo
+- [x] Landing page: what FleetRanger does, for whom, self-hosted, source and contact
+- [x] Static build reusing the web app's components
+- [~] Hosting on GitHub Pages, built by a GitHub Action from main
 
 ## Before production use
 
