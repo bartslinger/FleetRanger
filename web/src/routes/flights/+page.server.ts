@@ -15,7 +15,8 @@ export async function load({ fetch, url }) {
 	const [{ flights, total }, choices, devices] = await Promise.all([
 		get<FlightPage>(fetch, `/api/flights?${api}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),
-		get<Devices>(fetch, '/api/flights/devices')
+		// The filters' options, narrowed by the other filters.
+		get<Devices>(fetch, `/api/flights/devices?${api}`)
 	]);
 
 	// Past the last page, e.g. after flights were removed: go to the last one.
