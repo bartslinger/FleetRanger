@@ -4,7 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Sessions are the start page; the logbook of all flights is under "Flights". Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches and filters them by drone and controller. Members see and name their team's equipment; a flight's page links to its drone's and controller's pages. Each flight has a page with its track on a Mapbox map, linked from the logbook. Sessions (phase 3) are in progress: only uploaded flights join a session by themselves (per pilot by a time gap, on the same night's sync); other flights are grouped by hand from the Flights list ("Without session", New session, Add to session), and suggestions to review come next. The Sessions list (cards grouped by month, with a map previewing the hovered session from laptop width; or a table) leads to a page per session with all tracks on one map and its totals. Sessions can be merged and split. Next: suggested sessions, then filters on the sessions list (date range, pilot, team). The remote controller app (phase 6) has started: it runs on a DJI RC Pro Enterprise, asks who's flying (test names for now) and opens DJI Pilot 2. Controllers pair with the install: the controller shows a code and QR code, any user enters it on /pair (announced by a notification in the header). The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
+Login works locally (phase 4). Everyone is a user, with an optional team and an optional login; admins manage users, teams and equipment in the web app. Sessions are the start page; the logbook of all flights is under "Flights". Each user sees only the flights the policy allows, and the logbook sets the pilot and team of flights in batches and filters them by drone and controller. Members see and name their team's equipment; a flight's page links to its drone's and controller's pages. Each flight has a page with its track on a Mapbox map, linked from the logbook. Sessions (phase 3) are in progress: only uploaded flights join a session by themselves (per pilot by a time gap, on the same night's sync); other flights are grouped by hand from the Flights list ("Without session", New session, Add to session), and suggestions to review come next. The Sessions list (cards grouped by month, with a map previewing the hovered session from laptop width; or a table) leads to a page per session with all tracks on one map and its totals. Sessions can be merged and split. Next: suggested sessions, then filters on the sessions list (date range, pilot, team). The remote controller app (phase 6) has started: it runs on a DJI RC Pro Enterprise, asks who's flying (the install's pilots, kept for working offline), opens DJI Pilot 2 and uploads finished logs, only those the server lacks. Controllers pair with the install: the controller shows a code and QR code, any user enters it on /pair (announced by a notification in the header). The audit log waits until there is a working version of the app. Deploying login needs the OIDC settings, `FLEETRANGER_PUBLIC_URL` and a production redirect URI through the Ansible repo. Ingest works on 44 test logs locally; deploying it to the server and importing all logs there is on hold.
 
 ## Phase 1: backend skeleton
 
@@ -52,9 +52,10 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 ## Phase 6: remote controller app
 
 - [x] App skeleton: Kotlin, Compose with our own Carbon components (light only), built in a pinned Docker image
-- [~] Pilot picker that works offline, last pilot as the default, with "Not in the list" (with test names until pairing)
+- [x] Pilot picker with the install's pilots, kept for working offline, last pilot as the default, with "Not in the list"
 - [x] Launching DJI Pilot 2
-- [ ] Syncing finished logs over approved Wi-Fi networks, any Wi-Fi or any connection
+- [x] Syncing finished logs over approved Wi-Fi networks, any Wi-Fi or any connection
+- [~] Uploading only the logs the server lacks (asked by hash before uploading)
 - [x] Pairing: linking a (new) controller to the organisation, which any user can do, with unpairing and the download page
 
 ## Before production use
@@ -74,5 +75,4 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 
 ## Open questions
 
-- Re-uploads with the same file name but different content (a log synced while still being written): how should they replace the earlier version? Decide in phase 6; until then files are only deduplicated by hash.
 - Who sees flights with no pilot and no team?
