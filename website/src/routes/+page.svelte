@@ -77,19 +77,19 @@
 
 <section class="hero" aria-labelledby="title">
 	<Grid centered rowGap>
-		<Column md={8} lg={6}>
-			<h1 id="title">Your flight logs stay on your own server</h1>
+		<Column md={8} lg={7}>
+			<h1 id="title">Own your flight logs</h1>
 			<p class="intro">
-				FleetRanger collects the logs from your DJI Enterprise controllers and turns them into a
-				logbook: every flight with its pilot and track, grouped into sessions. It is self-hosted and
-				open source.
+				FleetRanger collects the logs from your DJI Enterprise controllers on your own server, and
+				turns them into a logbook: every flight with its pilot and track, grouped into sessions. It
+				is open source.
 			</p>
 			<div class="actions">
 				<Button href="mailto:{CONTACT}">Get in touch</Button>
 				<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
 			</div>
 		</Column>
-		<Column md={8} lg={10}>
+		<Column md={8} lg={9}>
 			<FlightTrack />
 		</Column>
 	</Grid>
