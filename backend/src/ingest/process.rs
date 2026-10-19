@@ -11,6 +11,7 @@ use dji_log_parser::keychain::KeychainFeaturePoint;
 use dji_log_parser::record::Record;
 use sqlx::PgPool;
 use sqlx::types::Uuid;
+use tokio::time::Instant;
 
 use super::activity::{Activity, Stage};
 use super::flight::{self, Flight, Serials};
@@ -21,9 +22,33 @@ use crate::sessions::{self, SessionGap};
 const IDLE_PAUSE: Duration = Duration::from_secs(10);
 /// How long to wait after a problem that may go away, such as DJI being unreachable.
 const ERROR_PAUSE: Duration = Duration::from_secs(60);
-/// How long to wait after each request to DJI, so that a large import doesn't
-/// flood their API.
-const DJI_REQUEST_PAUSE: Duration = Duration::from_secs(2);
+/// At most one request to DJI per this time, start to start, so that a large
+/// import doesn't flood their API. Work between requests (decrypting, saving)
+/// counts towards it.
+const DJI_REQUEST_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Spaces requests at least `interval` apart.
+struct RateLimit {
+    interval: Duration,
+    last: Option<Instant>,
+}
+
+impl RateLimit {
+    fn new(interval: Duration) -> Self {
+        Self {
+            interval,
+            last: None,
+        }
+    }
+
+    /// Waits until the next request may start.
+    async fn wait(&mut self) {
+        if let Some(last) = self.last {
+            tokio::time::sleep_until(last + self.interval).await;
+        }
+        self.last = Some(Instant::now());
+    }
+}
 
 /// The record types the parser knows (the `magic` values in its `record/mod.rs`).
 /// A record of one of these types that comes out as `Unknown` failed to decode.
@@ -50,8 +75,16 @@ pub async fn run(
     activity: Activity,
     session_gap: SessionGap,
 ) {
+    let mut dji_limit = RateLimit::new(DJI_REQUEST_INTERVAL);
     loop {
-        let result = process_next(&db, &log_dir, dji_app_key.as_deref(), &activity).await;
+        let result = process_next(
+            &db,
+            &log_dir,
+            dji_app_key.as_deref(),
+            &activity,
+            &mut dji_limit,
+        )
+        .await;
         let pause = match result {
             Ok(true) => continue,
             Ok(false) => {
@@ -79,13 +112,15 @@ async fn process_next(
     log_dir: &Path,
     dji_app_key: Option<&str>,
     activity: &Activity,
+    dji_limit: &mut RateLimit,
 ) -> Result<bool> {
     let Some(log) = db::next_pending(db).await? else {
         return Ok(false);
     };
     activity.start(&log.path);
 
-    let processed = process(db, log.id, &log_dir.join(&log.path), dji_app_key, activity)
+    let path = log_dir.join(&log.path);
+    let processed = process(db, log.id, &path, dji_app_key, activity, dji_limit)
         .await
         .with_context(|| format!("while processing {}", log.path))?;
     activity.stage(Stage::Saving);
@@ -118,6 +153,7 @@ async fn process(
     path: &Path,
     dji_app_key: Option<&str>,
     activity: &Activity,
+    dji_limit: &mut RateLimit,
 ) -> Result<Processed> {
     let bytes = match tokio::fs::read(path).await {
         Ok(bytes) => bytes,
@@ -130,7 +166,7 @@ async fn process(
 
     // Logs from format version 13 on are encrypted.
     let keychains = if log.version >= 13 {
-        match keychains(db, raw_log_id, &log, dji_app_key, activity).await? {
+        match keychains(db, raw_log_id, &log, dji_app_key, activity, dji_limit).await? {
             Ok(keychains) => Some(keychains),
             Err(reason) => return Ok(Err(reason)),
         }
@@ -149,6 +185,7 @@ async fn keychains(
     log: &DJILog,
     dji_app_key: Option<&str>,
     activity: &Activity,
+    dji_limit: &mut RateLimit,
 ) -> Result<std::result::Result<Vec<Vec<KeychainFeaturePoint>>, String>> {
     if let Some(body) = db::stored_key_response(db, raw_log_id).await?
         && let Ok(keychains) = dji::keychains(&body)
@@ -170,12 +207,12 @@ async fn keychains(
     let request_body = serde_json::to_string(&request)?;
 
     activity.stage(Stage::RequestingKeys);
+    dji_limit.wait().await;
     let exchange = {
         let api_key = api_key.to_owned();
         let request_body = request_body.clone();
         blocking(move || dji::send(&api_key, &request_body)).await?
     };
-    tokio::time::sleep(DJI_REQUEST_PAUSE).await;
     db::insert_key_request(
         db,
         raw_log_id,
