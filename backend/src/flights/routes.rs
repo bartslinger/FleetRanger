@@ -16,6 +16,10 @@ use super::service;
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
+    sessions::{
+        SessionGap,
+        suggest::{self, Suggestion},
+    },
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -25,9 +29,11 @@ pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     PgPool: FromRef<S>,
+    SessionGap: FromRef<S>,
 {
     Router::new()
         .route("/api/flights", get(list))
+        .route("/api/flights/suggestions", get(suggestions))
         .route("/api/flights/choices", get(choices))
         .route("/api/flights/devices", get(devices))
         .route("/api/flights/ids", get(ids))
@@ -164,6 +170,35 @@ async fn list(
             Err((StatusCode::INTERNAL_SERVER_ERROR, String::new()))
         }
     }
+}
+
+#[derive(Serialize)]
+struct SuggestionPage {
+    suggestions: Vec<Suggestion>,
+    total: usize,
+}
+
+/// One page of suggested sessions for the flights without a session that
+/// pass the list's filters (same query as `list`; its order doesn't apply),
+/// newest first. The page and size count suggestions.
+async fn suggestions(
+    actor: Actor,
+    State(db): State<PgPool>,
+    State(gap): State<SessionGap>,
+    Query(query): Query<ListQuery>,
+) -> ApiResult<Json<SuggestionPage>> {
+    let page = query.page.unwrap_or(1).max(1);
+    let size = query.size.unwrap_or(DEFAULT_PAGE_SIZE);
+    if !(1..=MAX_PAGE_SIZE).contains(&size) {
+        return Err(ApiError::Invalid(format!(
+            "size must be between 1 and {MAX_PAGE_SIZE}"
+        )));
+    }
+    let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
+    let offset = (page as usize - 1) * size as usize;
+    let (suggestions, total) =
+        suggest::list(&db, &actor, filter, gap, size as usize, offset).await?;
+    Ok(Json(SuggestionPage { suggestions, total }))
 }
 
 /// The list's filter and order from the query; the same for a flight's neighbours.

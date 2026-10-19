@@ -4,6 +4,7 @@
 pub mod db;
 pub mod routes;
 mod service;
+pub mod suggest;
 
 /// The longest break within a session, in minutes.
 #[derive(Clone, Copy)]
