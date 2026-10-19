@@ -187,8 +187,8 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
   - batch actions in the logbook: select rows, then act on them from the blue bar over the toolbar
   - a track map (Mapbox, with a content switcher for satellite or map and a legend) and the flight page: the map beside read-only facts. The session page follows it, with all tracks on one map and its flights in a table below
   - views of the same data, switched with a content switcher in the page header: sessions as a table, or as radio tiles beside a map of the chosen session (above the tiles below lg)
-  - header actions beside Profile: while logs are processed, admins see Carbon's small loading indicator as a header action, with a tooltip and a panel (progress bar, the current log, the latest results)
-  - not yet reviewed by the Carbon expert: everything since the dark shell; one review is planned for the end
+  - header actions beside Profile, each opening a panel (Carbon's header utilities don't navigate): controllers waiting to be paired, with a link to the pairing page; and for admins log processing. While logs are processed it shows Carbon's small loading indicator, and the panel a small progress bar, the current log and the latest results. A finished batch keeps the action until its panel has been seen: a checkmark, or a warning when logs failed (the bar stays green: the batch completed; error is for a batch that stopped). One without failures goes by itself after 20 s. Screen readers are told when a batch finishes. Reviewed by the Carbon expert, as are the shell, the page header and the theme
+  - not yet reviewed by the Carbon expert: the rest since the dark shell, in packages (admin pages reviewed, findings pending)
   - the logbook, reviewed against Carbon
   - a theme setting (system, light or dark)
   - the login page (Carbon's login pattern for a single sign-on provider: the header shows only the product name) and the profile panel

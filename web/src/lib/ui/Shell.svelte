@@ -22,19 +22,22 @@
 		name: string | null;
 	}
 
-	/** A header global action left of Profile: an icon button opening a panel. */
-	/** A header action opens a panel, or goes to a page. */
-	export type HeaderAction = {
+	/** A header global action left of Profile: an icon button opening a panel.
+	 * Carbon's header utilities open panels; they don't go to pages. */
+	export interface HeaderAction {
 		id: string;
 		/** The button's name, shown as its tooltip. */
 		label: string;
 		/** The 20px icon. */
 		icon: Snippet;
-	} & ({ panel: Snippet; href?: never } | { href: string; panel?: never });
+		panel: Snippet;
+		/** When its panel opens or closes. */
+		ontoggle?: (open: boolean) => void;
+	}
 </script>
 
 <script lang="ts">
-	import { tick, type Snippet } from 'svelte';
+	import { tick, untrack, type Snippet } from 'svelte';
 	import UserAvatar from '@carbon/icons/es/user--avatar/20.js';
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -74,11 +77,23 @@
 	const panelButtons: Record<string, HTMLButtonElement> = $state({});
 	const panelElements: Record<string, HTMLElement> = $state({});
 
-	// An action that disappears (e.g. processing finished) closes its panel.
+	// An action that disappears (e.g. the last controller got paired) closes its panel.
 	$effect(() => {
 		if (panelOpen && panelOpen !== 'profile' && !actions.some((a) => a.id === panelOpen)) {
 			panelOpen = null;
 		}
+	});
+
+	// Tells the actions when their panel opens or closes.
+	let toggled: string | null = null;
+	$effect(() => {
+		const now = panelOpen;
+		untrack(() => {
+			if (now === toggled) return;
+			actions.find((a) => a.id === toggled)?.ontoggle?.(false);
+			actions.find((a) => a.id === now)?.ontoggle?.(true);
+			toggled = now;
+		});
 	});
 
 	afterNavigate(() => {
@@ -180,39 +195,31 @@
 	{#if account}
 		<div class="utilities">
 			{#each actions as action (action.id)}
-				{#if action.href !== undefined}
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
-					<a class="action" href={action.href} aria-label={action.label}>
-						{@render action.icon()}
-						<span class="tooltip" aria-hidden="true">{action.label}</span>
-					</a>
-				{:else}
-					<button
-						bind:this={panelButtons[action.id]}
-						class="action"
-						class:active={panelOpen === action.id}
-						type="button"
+				<button
+					bind:this={panelButtons[action.id]}
+					class="action"
+					class:active={panelOpen === action.id}
+					type="button"
+					aria-label={action.label}
+					aria-expanded={panelOpen === action.id}
+					aria-controls="{action.id}-panel"
+					onclick={() => togglePanel(action.id)}
+					{onfocusout}
+				>
+					{@render action.icon()}
+					<span class="tooltip" aria-hidden="true">{action.label}</span>
+				</button>
+				{#if panelOpen === action.id}
+					<section
+						bind:this={panelElements[action.id]}
+						id="{action.id}-panel"
+						class="panel layer-01"
 						aria-label={action.label}
-						aria-expanded={panelOpen === action.id}
-						aria-controls="{action.id}-panel"
-						onclick={() => togglePanel(action.id)}
+						tabindex="-1"
 						{onfocusout}
 					>
-						{@render action.icon()}
-						<span class="tooltip" aria-hidden="true">{action.label}</span>
-					</button>
-					{#if panelOpen === action.id}
-						<section
-							bind:this={panelElements[action.id]}
-							id="{action.id}-panel"
-							class="panel"
-							aria-label={action.label}
-							tabindex="-1"
-							{onfocusout}
-						>
-							{@render action.panel()}
-						</section>
-					{/if}
+						{@render action.panel()}
+					</section>
 				{/if}
 			{/each}
 			<button
@@ -233,7 +240,7 @@
 				<section
 					bind:this={panelElements.profile}
 					id="profile-panel"
-					class="panel"
+					class="panel layer-01"
 					aria-label="Profile"
 					{onfocusout}
 				>
@@ -263,7 +270,13 @@
 </header>
 
 {#if account}
-	<nav bind:this={navElement} id="side-nav" class="theme-dark" class:open aria-label="Main">
+	<nav
+		bind:this={navElement}
+		id="side-nav"
+		class="theme-dark"
+		class:open
+		aria-label="Side navigation"
+	>
 		<ul>
 			{#each nav as item (item.href)}
 				<li>
