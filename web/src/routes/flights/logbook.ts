@@ -50,6 +50,19 @@ export function query(state: LogbookState): string {
 	return text ? `?${text}` : '';
 }
 
+/** The backend's query for the list: its page, filters and order. */
+export function apiQuery(state: LogbookState): URLSearchParams {
+	const api = new URLSearchParams({
+		page: String(state.page),
+		size: String(state.size),
+		sort: `${state.sort.descending ? '-' : ''}${state.sort.key}`
+	});
+	if (state.drone) api.set('aircraft', state.drone);
+	if (state.controller) api.set('controller', state.controller);
+	if (state.withoutSession) api.set('session', 'none');
+	return api;
+}
+
 /** The logbook with only these filters, e.g. a drone's flights. */
 export function filtered(filters: { drone?: string; controller?: string }): string {
 	return query({

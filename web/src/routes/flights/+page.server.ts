@@ -6,18 +6,11 @@ import {
 	type FlightChoices,
 	type FlightPage
 } from '#lib/server/backend.js';
-import { parse, query } from './logbook.js';
+import { apiQuery, parse, query } from './logbook.js';
 
 export async function load({ fetch, url }) {
 	const state = parse(url.searchParams);
-	const api = new URLSearchParams({
-		page: String(state.page),
-		size: String(state.size),
-		sort: `${state.sort.descending ? '-' : ''}${state.sort.key}`
-	});
-	if (state.drone) api.set('aircraft', state.drone);
-	if (state.controller) api.set('controller', state.controller);
-	if (state.withoutSession) api.set('session', 'none');
+	const api = apiQuery(state);
 	const [{ flights, total }, choices, devices] = await Promise.all([
 		get<FlightPage>(fetch, `/api/flights?${api}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),

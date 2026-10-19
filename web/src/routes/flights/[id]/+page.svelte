@@ -7,6 +7,7 @@
 	import Link from '#lib/ui/Link.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
+	import FlightStepper from './FlightStepper.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
@@ -97,7 +98,9 @@
 	description={`${flight.aircraft_name ?? flight.aircraft_serial ?? 'Unknown drone'} · ${flight.pilot_name ?? 'Unknown pilot'}`}
 	crumb={`Flight ${dayMonth(flight.takeoff_at, data.timeZone)}, ${clock(flight.takeoff_at, data.timeZone)}`}
 	breadcrumb={[{ href: resolve('/flights'), label: 'Flights' }]}
-/>
+>
+	{#snippet actions()}<FlightStepper id={flight.id} />{/snippet}
+</PageHeader>
 
 <Grid rowGap>
 	<Column narrow lg={11}>
