@@ -174,7 +174,7 @@ private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
     ) {
         ClickableTile(
             title = last.name,
-            detail = "Flew last",
+            detail = "Flew last · ${last.teamName}",
             onClick = onFly,
             // Carbon's heading-05 is regular; semibold on purpose, to read outdoors.
             titleStyle = Type.heading05.copy(color = Colors.textPrimary, fontWeight = FontWeight.SemiBold),
@@ -202,8 +202,9 @@ private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(Spacing.s05),
         verticalArrangement = Arrangement.spacedBy(Spacing.s05),
     ) {
-        items(team, key = { it.id }) { pilot ->
-            PilotTile(pilot, detail = null, onChoose)
+        // The team shows on every tile: the flights belong to the one chosen.
+        items(team, key = { it.key }) { pilot ->
+            PilotTile(pilot, detail = pilot.teamName, onChoose)
         }
         item(key = "not-in-the-list") {
             ClickableTile(
@@ -215,7 +216,7 @@ private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit) {
         }
         if (others.isNotEmpty()) {
             sectionHeading("Other teams")
-            items(others, key = { it.id }) { pilot ->
+            items(others, key = { it.key }) { pilot ->
                 PilotTile(pilot, detail = pilot.teamName, onChoose)
             }
         }

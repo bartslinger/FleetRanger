@@ -105,11 +105,12 @@ class Server(private val context: Context) {
     enum class Upload { Stored, Refused, Unpaired }
 
     /**
-     * Uploads a flight log with its hash and the chosen pilot (null: none).
-     * Refused means the server didn't take it (e.g. it changed while being
-     * sent); try again later. No connection is an IOException.
+     * Uploads a flight log with its hash and who was chosen (null: nobody):
+     * the pilot, and the team the flights belong to. Refused means the server
+     * didn't take it (e.g. it changed while being sent); try again later. No
+     * connection is an IOException.
      */
-    fun upload(file: File, sha256: String, pilotId: String?): Upload {
+    fun upload(file: File, sha256: String, chosen: Chosen?): Upload {
         val base = url ?: throw IOException("no server set up")
         val connection = URL("$base/api/controller/logs").openConnection() as HttpURLConnection
         try {
@@ -122,7 +123,8 @@ class Server(private val context: Context) {
             token?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
             connection.setRequestProperty("X-File-Name", file.name)
             connection.setRequestProperty("X-SHA256", sha256)
-            pilotId?.let { connection.setRequestProperty("X-Pilot-Id", it) }
+            chosen?.let { connection.setRequestProperty("X-Pilot-Id", it.pilotId) }
+            chosen?.teamId?.let { connection.setRequestProperty("X-Team-Id", it) }
             file.inputStream().use { input ->
                 connection.outputStream.use { output -> input.copyTo(output) }
             }

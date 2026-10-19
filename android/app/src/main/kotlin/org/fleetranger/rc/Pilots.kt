@@ -4,8 +4,18 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Someone who can be chosen as the pilot: an active user in a team. */
-data class Pilot(val id: String, val name: String, val teamId: String, val teamName: String)
+/**
+ * Someone who can be chosen as the pilot: an active user, with one of their
+ * teams. A pilot in several teams is a choice per team, and their flights
+ * belong to the team chosen.
+ */
+data class Pilot(val id: String, val name: String, val teamId: String, val teamName: String) {
+    /** Unique in the list: the same person is there once per team. */
+    val key get() = "$id:$teamId"
+}
+
+/** Who flies, as uploaded with a log: the pilot and the team they chose. */
+data class Chosen(val pilotId: String, val teamId: String?)
 
 /** The pilots this controller offers, as last downloaded. */
 data class PilotList(
@@ -63,22 +73,25 @@ class Pilots(context: Context) {
             ?: PilotList.EMPTY
         set(value) = list.edit().putString("list", value.toJson().toString()).apply()
 
-    /** Records a choice; `null` is "Not in the list". */
+    /** Records a choice, as the pilot's id and team; `null` is "Not in the list". */
     fun choose(pilot: Pilot?, now: Long = System.currentTimeMillis()) {
-        choices.edit().putString(now.toString(), pilot?.id ?: NOT_IN_THE_LIST).apply()
+        choices.edit().putString(now.toString(), pilot?.key ?: NOT_IN_THE_LIST).apply()
     }
 
     /**
-     * The id of the pilot for a log last written at `time`: the one chosen
-     * most recently before it, unless that choice is older than [EXPIRES_MS]
-     * (yesterday's pilot isn't today's), or was "Not in the list". Null then.
+     * Who flew a log last written at `time`: the one chosen most recently
+     * before it, unless that choice is older than [EXPIRES_MS] (yesterday's
+     * pilot isn't today's), or was "Not in the list". Null then.
      */
-    fun at(time: Long): String? {
-        val (chosenAt, id) = choices.all
-            .map { (at, id) -> at.toLong() to id as String }
+    fun at(time: Long): Chosen? {
+        val (chosenAt, value) = choices.all
+            .map { (at, value) -> at.toLong() to value as String }
             .filter { (at, _) -> at <= time }
             .maxByOrNull { (at, _) -> at } ?: return null
-        return id.takeIf { it != NOT_IN_THE_LIST && time - chosenAt < EXPIRES_MS }
+        if (value == NOT_IN_THE_LIST || time - chosenAt >= EXPIRES_MS) return null
+        // Choices from before teams were part of them have the id alone.
+        val parts = value.split(':')
+        return Chosen(parts[0], parts.getOrNull(1)?.ifEmpty { null })
     }
 
     /**
@@ -94,10 +107,10 @@ class Pilots(context: Context) {
         editor.apply()
     }
 
-    /** The pilot chosen last, if they can still be chosen. */
+    /** The pilot chosen last, with the same team, if they can still be chosen. */
     fun last(): Pilot? {
-        val id = choices.all.maxByOrNull { (time, _) -> time.toLong() }?.value
-        return current.pilots.find { it.id == id }
+        val value = choices.all.maxByOrNull { (time, _) -> time.toLong() }?.value
+        return current.pilots.find { it.key == value }
     }
 
     private companion object {
