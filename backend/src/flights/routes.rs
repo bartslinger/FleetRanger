@@ -30,6 +30,7 @@ where
         .route("/api/flights", get(list))
         .route("/api/flights/choices", get(choices))
         .route("/api/flights/devices", get(devices))
+        .route("/api/flights/ids", get(ids))
         .route("/api/flights/{id}", get(show))
         .route("/api/flights/{id}/neighbours", get(neighbours))
         .route("/api/flights/pilot", post(set_pilot))
@@ -65,6 +66,24 @@ async fn show(
 
 async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Choices>> {
     Ok(Json(service::choices(&db, &actor).await?))
+}
+
+#[derive(Serialize)]
+struct Ids {
+    ids: Vec<Uuid>,
+}
+
+/// The ids of all flights that pass the list's filters (same query as
+/// `list`), for a batch action on all of them.
+async fn ids(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Query(query): Query<ListQuery>,
+) -> ApiResult<Json<Ids>> {
+    let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
+    Ok(Json(Ids {
+        ids: service::ids(&db, &actor, &filter).await?,
+    }))
 }
 
 /// The drones and controllers to offer in the filters, narrowed by the list's

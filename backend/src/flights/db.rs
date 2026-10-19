@@ -271,6 +271,33 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
     .await
 }
 
+/// The ids of all flights in the scope that pass the filter, for a batch
+/// action on everything a filtered list shows.
+pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Result<Vec<Uuid>> {
+    sqlx::query_scalar!(
+        r#"select id
+           from flights
+           where ($1
+                  or pilot_id = $2
+                  or team_id in (select team_id from team_members where user_id = $2))
+             and ($3::text[] is null or aircraft_serial = any($3))
+             and ($4::text[] is null or rc_serial = any($4))
+             and (not $5 or session_id is null)
+             and ($6::timestamptz is null or takeoff_at >= $6)
+             and ($7::timestamptz is null or takeoff_at < $7)
+           order by takeoff_at, id"#,
+        scope.all,
+        scope.user_id,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.without_session,
+        filter.from,
+        filter.to,
+    )
+    .fetch_all(db)
+    .await
+}
+
 /// Where a flight is in the list that `list` pages through: its neighbours,
 /// its position (from 1) and the list's length.
 #[derive(Serialize)]
@@ -735,6 +762,7 @@ mod tests {
                 .unwrap()
                 .len() as i64;
             assert_eq!(count(&db, &scope, &filter).await.unwrap(), listed);
+            assert_eq!(ids(&db, &scope, &filter).await.unwrap().len() as i64, listed);
             for key in keys {
                 for descending in [false, true] {
                     let sort = Sort { key, descending };

@@ -27,6 +27,12 @@ pub async fn list(
     Ok((flights, total))
 }
 
+/// The ids of all flights the actor may see that pass the filter.
+pub async fn ids(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<Vec<Uuid>> {
+    let scope = policy::flight_scope(actor);
+    Ok(db::ids(db, &scope, filter).await?)
+}
+
 /// A flight's neighbours in the list the actor pages through with this filter
 /// and order. Not found if the flight isn't in that list.
 pub async fn neighbours(
