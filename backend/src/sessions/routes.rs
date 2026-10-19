@@ -137,6 +137,8 @@ struct FilterQuery {
     controller: Option<String>,
     /// Team ids, comma-separated; `none` for flights without a team.
     team: Option<String>,
+    /// Pilots' user ids, comma-separated; `none` for flights without a pilot.
+    pilot: Option<String>,
     /// Takeoff at or after this instant.
     from: Option<DateTime<Utc>>,
     /// Takeoff before this instant.
@@ -149,6 +151,7 @@ impl FilterQuery {
             &self.aircraft,
             &self.controller,
             &self.team,
+            &self.pilot,
             self.from,
             self.to,
         )

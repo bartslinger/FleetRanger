@@ -84,7 +84,9 @@ pub async fn list(
                  and ($9::timestamptz is null or g.takeoff_at >= $9)
                  and ($10::timestamptz is null or g.takeoff_at < $10)
                  and ($11::uuid[] is null or g.team_id = any($11)
-                      or ($12 and g.team_id is null)))
+                      or ($12 and g.team_id is null))
+                 and ($13::uuid[] is null or g.pilot_id = any($13)
+                      or ($14 and g.pilot_id is null)))
          group by f.session_id
          order by min(f.takeoff_at) desc, f.session_id
          limit $3 offset $4"#,
@@ -100,6 +102,8 @@ pub async fn list(
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_all(db)
     .await
@@ -132,7 +136,9 @@ pub async fn count(
                    and ($7::timestamptz is null or g.takeoff_at >= $7)
                    and ($8::timestamptz is null or g.takeoff_at < $8)
                    and ($9::uuid[] is null or g.team_id = any($9)
-                        or ($10 and g.team_id is null)))"#,
+                        or ($10 and g.team_id is null))
+                   and ($11::uuid[] is null or g.pilot_id = any($11)
+                        or ($12 and g.pilot_id is null)))"#,
         scope.all,
         scope.user_id,
         window.map(|w| w.from),
@@ -143,6 +149,8 @@ pub async fn count(
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_one(db)
     .await
@@ -177,7 +185,9 @@ pub async fn neighbours(
                        and ($6::timestamptz is null or g.takeoff_at >= $6)
                        and ($7::timestamptz is null or g.takeoff_at < $7)
                        and ($8::uuid[] is null or g.team_id = any($8)
-                            or ($9 and g.team_id is null)))
+                            or ($9 and g.team_id is null))
+                       and ($10::uuid[] is null or g.pilot_id = any($10)
+                            or ($11 and g.pilot_id is null)))
                group by f.session_id
            ),
            placed as (
@@ -201,6 +211,8 @@ pub async fn neighbours(
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_optional(db)
     .await

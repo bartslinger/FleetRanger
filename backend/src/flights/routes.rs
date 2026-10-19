@@ -153,6 +153,9 @@ struct ListQuery {
     /// Only the flights of these team ids, comma-separated; `none` for the
     /// flights without a team.
     team: Option<String>,
+    /// Only the flights of these pilots' ids, comma-separated; `none` for the
+    /// flights without a pilot.
+    pilot: Option<String>,
     /// `suggestions`: a flight's neighbours are those of its suggested
     /// session (with `session=none`).
     view: Option<String>,
@@ -249,6 +252,7 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
             &query.aircraft,
             &query.controller,
             &query.team,
+            &query.pilot,
             query.from,
             query.to,
         )?
@@ -257,11 +261,12 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
 }
 
 /// The filters the flights and sessions lists share, from their query
-/// parameters: drones, controllers, teams and takeoff times.
+/// parameters: drones, controllers, teams, pilots and takeoff times.
 pub fn filter(
     aircraft: &Option<String>,
     controller: &Option<String>,
     team: &Option<String>,
+    pilot: &Option<String>,
     from: Option<DateTime<Utc>>,
     to: Option<DateTime<Utc>>,
 ) -> Result<Filter, String> {
@@ -275,21 +280,9 @@ pub fn filter(
                 .collect()
         })
     };
-    let mut queue = false;
-    let team_ids = match team {
-        None => None,
-        Some(value) => {
-            let mut ids = Vec::new();
-            for part in value.split(',').filter(|part| !part.is_empty()) {
-                if part == "none" {
-                    queue = true;
-                } else {
-                    ids.push(part.parse().map_err(|_| "team must be team ids or none")?);
-                }
-            }
-            Some(ids)
-        }
-    };
+    let (team_ids, queue) = id_list(team).map_err(|()| "team must be team ids or none")?;
+    let (pilot_ids, unknown_pilot) =
+        id_list(pilot).map_err(|()| "pilot must be user ids or none")?;
     Ok(Filter {
         aircraft_serials: serials(aircraft),
         rc_serials: serials(controller),
@@ -298,7 +291,26 @@ pub fn filter(
         to,
         team_ids,
         queue,
+        pilot_ids,
+        unknown_pilot,
     })
+}
+
+/// Comma-separated ids, and whether `none` was among them; nothing if not given.
+fn id_list(value: &Option<String>) -> Result<(Option<Vec<Uuid>>, bool), ()> {
+    let Some(value) = value else {
+        return Ok((None, false));
+    };
+    let mut ids = Vec::new();
+    let mut none = false;
+    for part in value.split(',').filter(|part| !part.is_empty()) {
+        if part == "none" {
+            none = true;
+        } else {
+            ids.push(part.parse().map_err(|_| ())?);
+        }
+    }
+    Ok((Some(ids), none))
 }
 
 /// The flight's place in the list with the same query as `list` (its page and

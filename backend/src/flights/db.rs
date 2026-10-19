@@ -43,6 +43,10 @@ pub struct Filter {
     /// without a team.
     pub team_ids: Option<Vec<Uuid>>,
     pub queue: bool,
+    /// Only the flights of these pilots, if given, and with `unknown_pilot`
+    /// those without a pilot.
+    pub pilot_ids: Option<Vec<Uuid>>,
+    pub unknown_pilot: bool,
 }
 
 /// Columns the logbook can be sorted by.
@@ -121,6 +125,7 @@ pub async fn list(
            and ($10::timestamptz is null or takeoff_at >= $10)
            and ($11::timestamptz is null or takeoff_at < $11)
            and ($12::uuid[] is null or team_id = any($12) or ($13 and team_id is null))
+           and ($14::uuid[] is null or pilot_id = any($14) or ($15 and pilot_id is null))
          order by
              case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
              case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -155,6 +160,8 @@ pub async fn list(
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_all(db)
     .await
@@ -301,7 +308,8 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
              and ($5::bool is null or (session_id is not null) = $5)
              and ($6::timestamptz is null or takeoff_at >= $6)
              and ($7::timestamptz is null or takeoff_at < $7)
-             and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))"#,
+             and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))
+             and ($10::uuid[] is null or pilot_id = any($10) or ($11 and pilot_id is null))"#,
         scope.all,
         scope.user_id,
         filter.aircraft_serials.as_deref(),
@@ -311,6 +319,8 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_one(db)
     .await
@@ -331,6 +341,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
              and ($6::timestamptz is null or takeoff_at >= $6)
              and ($7::timestamptz is null or takeoff_at < $7)
              and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))
+             and ($10::uuid[] is null or pilot_id = any($10) or ($11 and pilot_id is null))
            order by takeoff_at, id"#,
         scope.all,
         scope.user_id,
@@ -341,6 +352,8 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_all(db)
     .await
@@ -384,6 +397,7 @@ pub async fn neighbours(
                  and ($9::timestamptz is null or takeoff_at >= $9)
                  and ($10::timestamptz is null or takeoff_at < $10)
                  and ($11::uuid[] is null or team_id = any($11) or ($12 and team_id is null))
+                 and ($13::uuid[] is null or pilot_id = any($13) or ($14 and pilot_id is null))
                window w as (order by
                    case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
                    case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -419,6 +433,8 @@ pub async fn neighbours(
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_optional(db)
     .await
@@ -455,7 +471,9 @@ pub async fn aircraft_of(
                       and ($6::timestamptz is null or f.takeoff_at >= $6)
                       and ($7::timestamptz is null or f.takeoff_at < $7)
                       and ($8::uuid[] is null or f.team_id = any($8)
-                           or ($9 and f.team_id is null))))
+                           or ($9 and f.team_id is null))
+                      and ($10::uuid[] is null or f.pilot_id = any($10)
+                           or ($11 and f.pilot_id is null))))
            group by f.aircraft_serial, a.name
            order by lower(coalesce(a.name, f.aircraft_serial))"#,
         scope.all,
@@ -467,6 +485,8 @@ pub async fn aircraft_of(
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_all(db)
     .await
@@ -494,7 +514,9 @@ pub async fn controllers_of(
                       and ($6::timestamptz is null or f.takeoff_at >= $6)
                       and ($7::timestamptz is null or f.takeoff_at < $7)
                       and ($8::uuid[] is null or f.team_id = any($8)
-                           or ($9 and f.team_id is null))))
+                           or ($9 and f.team_id is null))
+                      and ($10::uuid[] is null or f.pilot_id = any($10)
+                           or ($11 and f.pilot_id is null))))
            group by f.rc_serial, r.name
            order by lower(coalesce(r.name, f.rc_serial))"#,
         scope.all,
@@ -506,6 +528,8 @@ pub async fn controllers_of(
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
     )
     .fetch_all(db)
     .await
@@ -540,7 +564,9 @@ pub async fn teams_in(
                       and ($6::text[] is null or f.rc_serial = any($6))
                       and ($7::bool is null or (f.session_id is not null) = $7)
                       and ($8::timestamptz is null or f.takeoff_at >= $8)
-                      and ($9::timestamptz is null or f.takeoff_at < $9)))
+                      and ($9::timestamptz is null or f.takeoff_at < $9)
+                      and ($10::uuid[] is null or f.pilot_id = any($10)
+                           or ($11 and f.pilot_id is null))))
            group by f.team_id, t.name
            order by lower(t.name) nulls last"#,
         scope.all,
@@ -552,6 +578,58 @@ pub async fn teams_in(
         filter.in_session,
         filter.from,
         filter.to,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// A pilot to offer in the lists' filter; no id for the flights without a
+/// pilot.
+#[derive(Serialize)]
+pub struct PilotOption {
+    pub id: Option<Uuid>,
+    pub name: Option<String>,
+}
+
+/// The pilots to offer in the lists' filter, as `aircraft_of` does for
+/// drones: those with flights passing the other filters, and the chosen ones.
+pub async fn pilots_in(
+    db: &PgPool,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Vec<PilotOption>> {
+    sqlx::query_as!(
+        PilotOption,
+        r#"select f.pilot_id as "id?", u.name as "name?"
+           from flights f
+           left join users u on u.id = f.pilot_id
+           where ($1
+                  or f.pilot_id = $2
+                  or f.team_id in (select team_id from team_members where user_id = $2))
+             and (f.pilot_id = any(coalesce($3::uuid[], '{}'))
+                  or ($4 and f.pilot_id is null)
+                  or (($5::text[] is null or f.aircraft_serial = any($5))
+                      and ($6::text[] is null or f.rc_serial = any($6))
+                      and ($7::bool is null or (f.session_id is not null) = $7)
+                      and ($8::timestamptz is null or f.takeoff_at >= $8)
+                      and ($9::timestamptz is null or f.takeoff_at < $9)
+                      and ($10::uuid[] is null or f.team_id = any($10)
+                           or ($11 and f.team_id is null))))
+           group by f.pilot_id, u.name
+           order by lower(u.name) nulls last"#,
+        scope.all,
+        scope.user_id,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.in_session,
+        filter.from,
+        filter.to,
+        filter.team_ids.as_deref(),
+        filter.queue,
     )
     .fetch_all(db)
     .await
@@ -870,9 +948,22 @@ mod tests {
                     team_ids: Some(vec![Uuid::nil()]),
                     ..Filter::default()
                 },
+                // Nor a pilot: "Unknown" holds them all, a pilot none.
+                Filter {
+                    pilot_ids: Some(Vec::new()),
+                    unknown_pilot: true,
+                    ..Filter::default()
+                },
+                Filter {
+                    pilot_ids: Some(vec![Uuid::nil()]),
+                    ..Filter::default()
+                },
             ]
         };
-        let [_, _, by_drone, by_time, queue, a_team] = filters();
+        let [_, _, by_drone, by_time, queue, a_team, unknown, a_pilot] = filters();
+        for (filter, expected) in [(&unknown, 5), (&a_pilot, 0)] {
+            assert_eq!(count(&db, &scope, filter).await.unwrap(), expected);
+        }
         let none = || Sort {
             key: SortKey::TakeoffAt,
             descending: true,
