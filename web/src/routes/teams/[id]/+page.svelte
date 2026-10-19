@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { back } from '#lib/back.svelte.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -14,6 +16,8 @@
 	let { data, form }: PageProps = $props();
 
 	let busy = $state(false);
+	// Save and Cancel go back to where the user came from.
+	const previous = back(() => resolve('/teams'));
 
 	const archived = $derived(data.team.archived_at !== null);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
@@ -71,15 +75,17 @@
 				busy = true;
 				return async ({ result, update }) => {
 					busy = false;
-					await update({ reset: false });
-					if (result.type === 'success') toast('Team saved.');
+					if (result.type !== 'success') return update({ reset: false });
+					// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved already
+					await goto(previous.href);
+					toast('Team saved.');
 				};
 			}}
 		>
 			<TextInput label="Name" name="name" value={data.team.name} required autocomplete="off" />
 			<div class="buttons">
 				<Button type="submit" disabled={busy}>Save</Button>
-				<Button kind="secondary" href={resolve('/teams')}>Cancel</Button>
+				<Button kind="secondary" href={previous.href}>Cancel</Button>
 			</div>
 		</form>
 	</Column>

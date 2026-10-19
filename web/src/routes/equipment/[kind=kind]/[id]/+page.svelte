@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { back } from '#lib/back.svelte.js';
 	import { KINDS } from '#lib/equipment.js';
 	import { dateTime } from '#lib/format.js';
 	import Button from '#lib/ui/Button.svelte';
@@ -26,6 +28,8 @@
 		resolve(data.kind === 'drones' ? '/equipment' : '/equipment?tab=controllers')
 	);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
+	// Save and Cancel go back to where the user came from, e.g. a flight's page.
+	const previous = back(() => list);
 
 	// Active teams and holders, plus the current ones if archived since. Members
 	// choose from their own team; admins from everyone.
@@ -143,8 +147,10 @@
 					busy = true;
 					return async ({ result, update }) => {
 						busy = false;
-						await update({ reset: false });
-						if (result.type === 'success') toast(`${kind.one} saved.`);
+						if (result.type !== 'success') return update({ reset: false });
+						// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved already
+						await goto(previous.href);
+						toast(`${kind.one} saved.`);
 					};
 				}}
 			>
@@ -178,7 +184,7 @@
 				/>
 				<div class="buttons">
 					<Button type="submit" disabled={busy}>Save</Button>
-					<Button kind="secondary" href={list}>Cancel</Button>
+					<Button kind="secondary" href={previous.href}>Cancel</Button>
 				</div>
 			</form>
 		{/if}

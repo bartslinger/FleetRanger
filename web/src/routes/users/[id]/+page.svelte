@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { back } from '#lib/back.svelte.js';
 	import { dateTime } from '#lib/format.js';
 	import { ROLE_HELP, ROLE_LABELS, ROLE_OPTIONS, type Role } from '#lib/roles.js';
 	import Button from '#lib/ui/Button.svelte';
@@ -18,6 +20,8 @@
 	let { data, form }: PageProps = $props();
 
 	let busy = $state(false);
+	// Save and Cancel go back to where the user came from.
+	const previous = back(() => resolve('/users'));
 
 	const user = $derived(data.user);
 	const archived = $derived(user.archived_at !== null);
@@ -127,8 +131,10 @@
 				busy = true;
 				return async ({ result, update }) => {
 					busy = false;
-					await update({ reset: false });
-					if (result.type === 'success') toast(`${user.name} saved.`);
+					if (result.type !== 'success') return update({ reset: false });
+					// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved already
+					await goto(previous.href);
+					toast(`${user.name} saved.`);
 				};
 			}}
 		>
@@ -161,7 +167,7 @@
 			{/if}
 			<div class="buttons">
 				<Button type="submit" disabled={busy}>Save</Button>
-				<Button kind="secondary" href={resolve('/users')}>Cancel</Button>
+				<Button kind="secondary" href={previous.href}>Cancel</Button>
 			</div>
 		</form>
 	</Column>
