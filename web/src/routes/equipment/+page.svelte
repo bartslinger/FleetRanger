@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { KINDS, type Kind } from '#lib/equipment.js';
 	import { dateTime } from '#lib/format.js';
 	import Column from '#lib/ui/Column.svelte';
@@ -15,8 +16,10 @@
 
 	type Row = (typeof data.drones)[number];
 
+	// Returning to a tab chosen here, SvelteKit loads the page for the URL it
+	// was opened with; the tab comes back with the history entry's state.
 	// svelte-ignore state_referenced_locally
-	let tab: Kind = $state(data.tab);
+	let tab: Kind = $state(page.state.equipmentTab ?? data.tab);
 
 	const columns: TableColumn<Row>[] = $derived([
 		{ key: 'serial', header: 'Serial number', identifier: true },
@@ -32,7 +35,9 @@
 
 	/** The tab is kept in the URL, so the back button and breadcrumbs return to it. */
 	function select(next: Kind) {
-		replaceState(resolve(next === 'drones' ? '/equipment' : '/equipment?tab=controllers'), {});
+		replaceState(resolve(next === 'drones' ? '/equipment' : '/equipment?tab=controllers'), {
+			equipmentTab: next
+		});
 	}
 </script>
 

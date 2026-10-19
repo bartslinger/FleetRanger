@@ -9,7 +9,10 @@ declare global {
 			account: import('#lib/server/backend.js').Account | null;
 		}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** The Equipment page's tab, switched without loading the page. */
+			equipmentTab?: import('#lib/equipment.js').Kind;
+		}
 		// interface Platform {}
 	}
 }
