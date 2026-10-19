@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { back } from '#lib/back.svelte.js';
 	import Button from '#lib/ui/Button.svelte';
@@ -76,8 +75,7 @@
 				return async ({ result, update }) => {
 					busy = false;
 					if (result.type !== 'success') return update({ reset: false });
-					// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved already
-					await goto(previous.href);
+					await previous.go();
 					toast('Team saved.');
 				};
 			}}
@@ -85,7 +83,7 @@
 			<TextInput label="Name" name="name" value={data.team.name} required autocomplete="off" />
 			<div class="buttons">
 				<Button type="submit" disabled={busy}>Save</Button>
-				<Button kind="secondary" href={previous.href}>Cancel</Button>
+				<Button kind="secondary" href={previous.href} onclick={previous.onclick}>Cancel</Button>
 			</div>
 		</form>
 	</Column>
