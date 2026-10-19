@@ -152,15 +152,15 @@
 
 <section class="quote" aria-label="What a pilot says">
 	<Grid centered>
-		<Column md={8} lg={12}>
+		<Column md={8} lg={8}>
 			<figure>
 				<blockquote>
 					<p>
-						Our flight logs are highly sensitive, so a cloud service was never an option for us.
-						With FleetRanger on our own server, our operations have become much simpler.
+						Our flight logs are too sensitive for the cloud. FleetRanger keeps them on our own
+						server, and makes our operations much simpler.
 					</p>
 				</blockquote>
-				<figcaption>Drone pilot using FleetRanger</figcaption>
+				<figcaption>Drone pilot and satisfied FleetRanger user</figcaption>
 			</figure>
 		</Column>
 	</Grid>
@@ -367,14 +367,14 @@
 		color: var(--cds-text-secondary);
 	}
 
-	/* A pilot's words in Carbon's large light heading style, the opening
+	/* A pilot's words in one of Carbon's expressive heading styles, the opening
 	   quotation mark hanging in the margin so the text lines up. */
 	.quote blockquote p {
 		position: relative;
-		font-size: var(--cds-fluid-heading-05-font-size);
-		font-weight: var(--cds-fluid-heading-05-font-weight);
-		line-height: var(--cds-fluid-heading-05-line-height);
-		letter-spacing: var(--cds-fluid-heading-05-letter-spacing);
+		font-size: var(--cds-fluid-heading-03-font-size);
+		font-weight: var(--cds-fluid-heading-03-font-weight);
+		line-height: var(--cds-fluid-heading-03-line-height);
+		letter-spacing: var(--cds-fluid-heading-03-letter-spacing);
 	}
 
 	.quote blockquote p::before {
