@@ -225,8 +225,8 @@
 		<Column md={8} lg={8}>
 			<h2 id="start-title">Set it up for your fleet</h2>
 			<p class="body">
-				To run FleetRanger for your organisation, write to {CONTACT}. Installation and support are
-				available as a paid service.
+				To run FleetRanger for your organisation, write to {CONTACT}. We offer installation, support
+				and consultation as paid services.
 			</p>
 			<div class="actions">
 				<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
