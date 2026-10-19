@@ -202,6 +202,22 @@ pub async fn add(db: &PgPool, session: Uuid, flight_ids: &[Uuid]) -> sqlx::Resul
     tx.commit().await
 }
 
+/// Takes these flights out of their sessions, and returns how many were in
+/// one. Deletes a session left without flights.
+pub async fn remove(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<u64> {
+    let mut tx = locked(db).await?;
+    let removed = sqlx::query!(
+        "update flights set session_id = null where id = any($1) and session_id is not null",
+        flight_ids
+    )
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    delete_empty(&mut tx).await?;
+    tx.commit().await?;
+    Ok(removed)
+}
+
 async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
     sqlx::query!(
         "delete from sessions s where not exists (select 1 from flights f where f.session_id = s.id)"

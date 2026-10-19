@@ -33,6 +33,7 @@ where
         .route("/api/sessions/{id}/flights", post(add))
         .route("/api/sessions/merge", post(merge))
         .route("/api/sessions/split", post(split))
+        .route("/api/sessions/remove", post(remove))
 }
 
 #[derive(Deserialize)]
@@ -82,6 +83,22 @@ async fn create(
 ) -> ApiResult<Json<Changed>> {
     let id = service::create(&db, &actor, &change.flight_ids).await?;
     Ok(Json(Changed { id }))
+}
+
+#[derive(Serialize)]
+struct Removed {
+    /// Flights that were in a session.
+    removed: u64,
+}
+
+/// Takes the flights out of their sessions.
+async fn remove(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Json(change): Json<Flights>,
+) -> ApiResult<Json<Removed>> {
+    let removed = service::remove(&db, &actor, &change.flight_ids).await?;
+    Ok(Json(Removed { removed }))
 }
 
 async fn add(

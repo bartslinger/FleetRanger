@@ -59,6 +59,22 @@ pub async fn add(db: &PgPool, actor: &Actor, session: Uuid, flight_ids: &[Uuid])
     Ok(db::add(db, session, &flight_ids).await?)
 }
 
+/// Takes these flights out of their sessions; they stay flights, without a
+/// session. A session left without flights is deleted. Returns how many were
+/// in a session.
+pub async fn remove(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResult<u64> {
+    let flight_ids = distinct(flight_ids);
+    if flight_ids.is_empty() {
+        return Err(ApiError::Invalid("Select flights.".to_owned()));
+    }
+    let teams = flights::db::teams_of(db, &flight_ids)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let own_team = flights::db::own_team(db, actor.user_id).await?;
+    policy::change_sessions(actor.role, own_team, &teams)?;
+    Ok(db::remove(db, &flight_ids).await?)
+}
+
 /// A session with the flights of it the actor may see.
 #[derive(Serialize)]
 pub struct Session {
