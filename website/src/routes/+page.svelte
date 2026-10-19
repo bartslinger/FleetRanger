@@ -105,10 +105,7 @@
 	/>
 </svelte:head>
 
-<!-- The text on the page, the picture on a band that runs to the window's
-     edge: the right half from lg, below the text before that. -->
 <section class="hero" aria-labelledby="title">
-	<div class="band" aria-hidden="true"></div>
 	<Grid centered>
 		<Column md={8} lg={8}>
 			<div class="lead">
@@ -279,13 +276,7 @@
 		margin-top: var(--cds-spacing-08);
 	}
 
-	/* The hero: the text beside the laptop, which is on a Gray 10 band. Below lg the band is behind the
-	   laptop only, and reaches the window's edges. */
-	.hero {
-		position: relative;
-		padding-bottom: 0;
-	}
-
+	/* The hero: the text beside the laptop from lg, above it before that. */
 	.lead {
 		display: flex;
 		flex-direction: column;
@@ -294,37 +285,14 @@
 	}
 
 	.hero-laptop {
-		margin-top: var(--cds-spacing-09);
-		padding-block: var(--cds-spacing-09);
-		background: var(--cds-layer-01);
-		box-shadow: 0 0 0 100vmax var(--cds-layer-01);
-		clip-path: inset(0 -100vmax);
-	}
-
-	.hero-laptop :global(.laptop) {
 		max-width: 40rem;
-		margin-inline: auto;
-	}
-
-	.band {
-		display: none;
+		margin-top: var(--cds-spacing-09);
 	}
 
 	@media (min-width: 66rem) {
-		.hero {
-			padding-bottom: var(--cds-spacing-11);
-		}
-
 		.lead {
 			justify-content: center;
 			min-height: 26rem;
-		}
-
-		.band {
-			display: block;
-			position: absolute;
-			inset: 0 0 0 50%;
-			background: var(--cds-layer-01);
 		}
 
 		.hero-laptop {
@@ -332,10 +300,7 @@
 			align-items: center;
 			height: 100%;
 			margin: 0;
-			padding: 0 0 0 var(--cds-spacing-07);
-			background: none;
-			box-shadow: none;
-			clip-path: none;
+			padding-inline-start: var(--cds-spacing-07);
 		}
 	}
 
