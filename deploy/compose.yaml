@@ -1,8 +1,10 @@
 # FleetRanger production stack. Install-specific values come from a .env
 # file next to this one; see .env.example.
 #
-# TLS is terminated by a reverse proxy on the host. The backend listens on
-# localhost only, and PostgreSQL is reachable only on the internal network.
+# TLS is terminated by a reverse proxy on the host, which sends /api/ and
+# /auth/ to the backend (port 8080) and everything else to the web app (port
+# 3000). Both listen on localhost only, and PostgreSQL is reachable only on
+# the internal network.
 
 name: fleetranger
 
@@ -33,5 +35,35 @@ services:
     environment:
       DATABASE_URL: postgres://fleetranger:${POSTGRES_PASSWORD}@postgres/fleetranger
       RUST_LOG: ${RUST_LOG:-info}
+      FLEETRANGER_PUBLIC_URL: ${FLEETRANGER_PUBLIC_URL:?}
+      DJI_APP_KEY: ${DJI_APP_KEY:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      FLEETRANGER_SESSION_GAP_MINUTES: ${FLEETRANGER_SESSION_GAP_MINUTES:-}
+    volumes:
+      # Raw flight logs: uploads are written here, and `import` registers
+      # logs copied here before. The backend runs as uid 65532 (distroless
+      # nonroot), which must be able to write to it.
+      - ${FLEETRANGER_DATA_DIR}/flightlogs:/data/flightlogs
+      # The Android app offered on the download page: FleetRanger.apk and its
+      # output-metadata.json, from android/release.sh.
+      - ${FLEETRANGER_DATA_DIR}/android:/data/android:ro
     ports:
       - 127.0.0.1:8080:8080
+
+  web:
+    image: fleetranger-web:${FLEETRANGER_VERSION:?}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Where the server reaches the backend; the browser goes through nginx.
+      BACKEND_URL: http://backend:8080
+      # The public address, for SvelteKit's check that form posts come from it.
+      ORIGIN: ${FLEETRANGER_PUBLIC_URL:?}
+      TIME_ZONE: ${TIME_ZONE:-UTC}
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+    ports:
+      - 127.0.0.1:3000:3000

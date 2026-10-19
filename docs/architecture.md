@@ -7,7 +7,9 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **One install per organisation.** Flight data is sensitive, so each organisation runs its own server. Several installs may share one DJI app key.
 - **Docker Compose** with three containers: `backend` (Rust), `web` (SvelteKit), `postgres`. TLS and certificates are handled by nginx on the host, which proxies to containers bound to `127.0.0.1`.
 - **Images are built on a developer machine** and loaded onto the server. Servers can be small, and compiling Rust on them is impractical. Images target x86_64 and are cross-compiled rather than emulated.
-- **Images ship without a registry.** `deploy/ship-image.sh` builds an image tagged with the commit hash (refusing to build from a dirty tree) and loads it on the server over SSH.
+- **Images ship without a registry.** `deploy/ship-image.sh` builds the backend and web images and loads them on the server over SSH.
+- **Releases are tags** (user's decision, 2026-10-19): only a commit tagged `vX.Y.Z` is a server release, and both images carry that tag; `ship-image.sh` refuses an untagged commit or a dirty tree. The Android app has its own `android-vX.Y.Z` tags. nginx sends `/api/` and `/auth/` to the backend and everything else to the web app.
+- **First release on the first organisation's server** (user's decision, 2026-10-19), without backups at first (user's choice: the raw logs also exist on the controllers and the earlier sync).
 - **Internal secrets are generated on the server** (database password, signing keys) and never leave it. External secrets (DJI app key, OIDC client secret) are kept in an Ansible vault.
 - **Remote controllers sync over the internet** to the install's public HTTPS endpoint.
 
