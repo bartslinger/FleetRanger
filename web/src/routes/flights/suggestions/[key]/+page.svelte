@@ -5,7 +5,7 @@
 	so until the next step; Create and edit opens the new session.
 -->
 <script lang="ts">
-	import { tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import Add from '@carbon/icons/es/add/16.js';
 	import Subtract from '@carbon/icons/es/subtract/16.js';
@@ -17,8 +17,8 @@
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
-	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
+	import Icon from '#lib/ui/Icon.svelte';
 	import IconButton from '#lib/ui/IconButton.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Link from '#lib/ui/Link.svelte';
@@ -49,27 +49,21 @@
 		}
 	};
 
-	// Each row's own button moves its flight between the two tables. Its row
-	// is gone then, so focus goes to the button that took its place in that
-	// table, or else to the other table's.
-	let tables: HTMLElement | undefined = $state();
-	async function move(id: string, out: boolean) {
-		const from = out ? 'in' : 'out';
-		const buttons = () => [
-			...(tables?.querySelectorAll<HTMLElement>(`[data-table="${from}"] td.action button`) ?? [])
-		];
-		const index = buttons().findIndex((button) => button.dataset.flight === id);
-		excluded = out ? [...excluded, id] : excluded.filter((other) => other !== id);
-		await tick();
-		const rest = buttons();
-		const next =
-			rest[Math.min(index, rest.length - 1)] ??
-			tables?.querySelector<HTMLElement>(`[data-table="${out ? 'out' : 'in'}"] td.action button`);
-		next?.focus();
+	// Each row's button leaves its flight out or puts it back; the row stays
+	// in place, and so does the button, so focus does too.
+	function toggle(id: string) {
+		excluded = excluded.includes(id) ? excluded.filter((other) => other !== id) : [...excluded, id];
 	}
 
 	const chosen = $derived(flights.filter((flight) => !excluded.includes(flight.id)));
 	const leftOut = $derived(flights.filter((flight) => excluded.includes(flight.id)));
+
+	// The flight pointed at in the table, brought out on the map.
+	let pointed: string | null = $state(null);
+	const highlight = $derived.by(() => {
+		const index = chosen.findIndex((flight) => flight.id === pointed);
+		return index >= 0 ? index : null;
+	});
 	// The facts of the session it would become.
 	const shown = $derived(chosen.length > 0 ? chosen : flights);
 	const facts = $derived(summary(shown, data.timeZone));
@@ -206,10 +200,17 @@
 				<Link href={resolve('/sessions/[id]', { id: data.created })}>Open session</Link>
 			</InlineNotification>
 		</Column>
+	{:else if chosen.length === 0}
+		<!-- Why Create session can't be pressed. -->
+		<Column narrow>
+			<InlineNotification kind="info" title="Put back at least one flight to create the session." />
+		</Column>
 	{/if}
+	<!-- Left-out flights aren't on the map. -->
 	<Column narrow lg={11}>
 		<TrackMap
-			tracks={shown.map((flight) => flight.track)}
+			tracks={chosen.map((flight) => flight.track)}
+			{highlight}
 			token={data.mapboxToken}
 			label="Map of the suggested session’s tracks"
 		/>
@@ -217,60 +218,36 @@
 	<Column lg={5}>
 		<SessionFacts flights={shown} timeZone={data.timeZone} timeZoneName={data.timeZoneName} />
 	</Column>
-	<!-- Carbon's inline row actions: remove (subtract) and add, one per row. -->
+	<!-- Carbon's inline row actions, Remove (subtract) and Add, labelled from
+	     md; a left-out flight stays in its place, marked. They become a
+	     suggestion of their own once the session is made. -->
 	<Column narrow>
-		<div class="tables" bind:this={tables}>
-			<div data-table="in">
-				{#if chosen.length === 0}
-					<EmptyState
-						title="No flights left in the session"
-						body="Put a flight back to create the session."
-					/>
+		<DataTable
+			label="Flights of the suggested session"
+			{columns}
+			rows={flights}
+			rowKey={(flight) => flight.id}
+			rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+			rowState={(flight) => (excluded.includes(flight.id) ? 'Left out' : undefined)}
+			onrowhover={(flight) => (pointed = flight?.id ?? null)}
+			summary="{chosen.length} of {flightsLabel(flights.length)} in the session"
+		>
+			{#snippet rowAction(flight)}
+				{@const out = excluded.includes(flight.id)}
+				{#if wide.current}
+					<Button kind="ghost" size="md" onclick={() => toggle(flight.id)}>
+						{out ? 'Put back' : 'Leave out'}<Icon icon={out ? Add : Subtract} />
+					</Button>
 				{:else}
-					<DataTable
-						label="Flights of the suggested session"
-						{columns}
-						rows={chosen}
-						rowKey={(flight) => flight.id}
-						rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
-						summary={flightsLabel(chosen.length)}
-					>
-						{#snippet rowAction(flight)}
-							<IconButton
-								icon={Subtract}
-								label="Leave out flight"
-								size="md"
-								data-flight={flight.id}
-								onclick={() => move(flight.id, true)}
-							/>
-						{/snippet}
-					</DataTable>
+					<IconButton
+						icon={out ? Add : Subtract}
+						label={out ? 'Put back' : 'Leave out'}
+						size="md"
+						onclick={() => toggle(flight.id)}
+					/>
 				{/if}
-			</div>
-			{#if leftOut.length > 0}
-				<!-- They become a suggestion of their own once the session is made. -->
-				<div data-table="out">
-					<DataTable
-						label="Flights left out"
-						{columns}
-						rows={leftOut}
-						rowKey={(flight) => flight.id}
-						rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
-						summary="{flightsLabel(leftOut.length)} left out"
-					>
-						{#snippet rowAction(flight)}
-							<IconButton
-								icon={Add}
-								label="Put back flight"
-								size="md"
-								data-flight={flight.id}
-								onclick={() => move(flight.id, false)}
-							/>
-						{/snippet}
-					</DataTable>
-				</div>
-			{/if}
-		</div>
+			{/snippet}
+		</DataTable>
 	</Column>
 </Grid>
 
@@ -284,13 +261,5 @@
 
 	.buttons {
 		display: flex;
-	}
-
-	/* The two tables 32px apart, as the page's other rows. A wide table
-	   scrolls inside its column rather than widening the page. */
-	.tables {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: var(--cds-spacing-07);
 	}
 </style>

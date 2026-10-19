@@ -22,6 +22,8 @@
 
 	// Splitting: admins change any session, members those of their own team.
 	let selected: string[] = $state([]);
+	// The flight pointed at in the table, brought out on the map.
+	let pointed: number | null = $state(null);
 	const canChange = $derived(
 		data.choices.admin ||
 			(data.choices.own_team_id !== null &&
@@ -98,6 +100,7 @@
 	<Column narrow lg={11}>
 		<TrackMap
 			tracks={flights.map((flight) => flight.track)}
+			highlight={pointed}
 			token={data.mapboxToken}
 			label="Map of the session’s tracks"
 		/>
@@ -135,6 +138,7 @@
 			{columns}
 			rows={flights}
 			rowKey={(flight) => flight.id}
+			onrowhover={(flight) => (pointed = flight ? flights.indexOf(flight) : null)}
 			rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
 			selectable={canChange ? () => true : undefined}
 			bind:selected
