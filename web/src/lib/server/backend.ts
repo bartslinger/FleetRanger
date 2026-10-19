@@ -34,6 +34,19 @@ export interface SuggestionPage {
 	total: number;
 }
 
+/** One suggestion with its tracks, from `GET /api/flights/suggestions/{key}`. */
+export interface SuggestionDetail {
+	key: string;
+	/** In takeoff order. */
+	flights: FlightDetail[];
+	/** The newer and older suggestions' keys. */
+	previous: string | null;
+	next: string | null;
+	/** From 1, newest first. */
+	position: number;
+	total: number;
+}
+
 /** A drone or controller to filter the logbook by. */
 export interface Device {
 	serial: string;

@@ -158,20 +158,11 @@
 	// Batch actions: admins change any flight, members those of their own team.
 	let selected: string[] = $state([]);
 
-	// The suggestions opened and the flights left out of them.
-	let expanded: string[] = $state([]);
-	let excluded: Record<string, string[]> = $state({});
-
 	// Kept in the browser's history, so going back from a flight's page
-	// restores the selection and the suggestions as they were.
-	export const snapshot: Snapshot<{
-		selected: string[];
-		allMatching: boolean;
-		expanded: string[];
-		excluded: Record<string, string[]>;
-	}> = {
-		capture: () => ({ selected, allMatching, expanded, excluded }),
-		restore: (value) => ({ selected, allMatching, expanded, excluded } = value)
+	// restores the selection.
+	export const snapshot: Snapshot<{ selected: string[]; allMatching: boolean }> = {
+		capture: () => ({ selected, allMatching }),
+		restore: (value) => ({ selected, allMatching } = value)
 	};
 
 	// All flights that match the filters, across pages, instead of `selected`.
@@ -324,8 +315,7 @@
 				total={data.suggestions.total}
 				timeZone={data.timeZone}
 				canChange={changeable}
-				bind:expanded
-				bind:excluded
+				href={(key) => `${resolve('/flights/suggestions/[key]', { key })}${query(data.state)}`}
 			/>
 			<Pagination
 				page={data.state.page}

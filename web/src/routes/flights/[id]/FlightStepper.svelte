@@ -25,7 +25,11 @@
 		const before = trail.steps.at(-1);
 		if (!before) return null;
 		const url = new URL(before.href, 'http://list');
-		return url.pathname === resolve('/flights') ? parse(url.searchParams) : null;
+		// A suggestion's page has the suggestions list's query: its flights.
+		const fromList =
+			url.pathname === resolve('/flights') ||
+			url.pathname.startsWith(`${resolve('/flights')}/suggestions/`);
+		return fromList ? parse(url.searchParams) : null;
 	});
 
 	let place: Neighbours | null = $state(null);

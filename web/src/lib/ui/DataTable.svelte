@@ -31,7 +31,6 @@
 	import ArrowDown from '@carbon/icons/es/arrow--down/16.js';
 	import ArrowUp from '@carbon/icons/es/arrow--up/16.js';
 	import ArrowsVertical from '@carbon/icons/es/arrows--vertical/16.js';
-	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
 	import Checkbox from './Checkbox.svelte';
 	import Icon from './Icon.svelte';
 
@@ -71,15 +70,8 @@
 		allMatching?: boolean;
 		/** The offer, e.g. "Select all 340 flights". */
 		selectAllLabel?: (total: number) => string;
-		/** Carbon's expandable rows: which rows open, and what they show. */
-		expandable?: (row: T) => boolean;
-		expansion?: Snippet<[row: T]>;
-		/** The expand button's name, e.g. "Flights of this suggestion". */
-		expandLabel?: (row: T) => string;
 		/** An inline action at the end of each row. */
 		rowAction?: Snippet<[row: T]>;
-		/** Keys of the open rows; bound, so a page can keep them for Back. */
-		expanded?: string[];
 	}
 
 	let {
@@ -102,23 +94,8 @@
 		total,
 		allMatching = $bindable(false),
 		selectAllLabel = (total) => `Select all ${total}`,
-		expandable,
-		expansion,
-		expandLabel = () => 'Expand row',
-		rowAction,
-		expanded = $bindable([])
+		rowAction
 	}: Props = $props();
-
-	const expands = $derived(!!expandable && !!expansion);
-	const width = $derived(
-		columns.length + (selectable ? 1 : 0) + (expands ? 1 : 0) + (rowAction ? 1 : 0)
-	);
-
-	function toggleOpen(key: string) {
-		expanded = expanded.includes(key)
-			? expanded.filter((other) => other !== key)
-			: [...expanded, key];
-	}
 
 	const selectableKeys = $derived(selectable ? rows.filter(selectable).map(rowKey) : []);
 	const allSelected = $derived(
@@ -220,9 +197,6 @@
 		<caption class="visually-hidden">{label}</caption>
 		<thead>
 			<tr>
-				{#if expands}
-					<th scope="col" class="expand"><span class="visually-hidden">Expand</span></th>
-				{/if}
 				{#if selectable}
 					<th scope="col" class="select">
 						<Checkbox
@@ -262,23 +236,7 @@
 			{#each rows as row (rowKey(row))}
 				{@const key = rowKey(row)}
 				{@const chosen = allMatching ? !!selectable?.(row) : selected.includes(key)}
-				{@const open = expands && expanded.includes(key)}
-				<tr class:linked={rowHref} class:selected={chosen} class:open>
-					{#if expands}
-						<td class="expand">
-							{#if expandable?.(row)}
-								<button
-									type="button"
-									class="chevron"
-									aria-expanded={open}
-									aria-label={expandLabel(row)}
-									onclick={() => toggleOpen(key)}
-								>
-									<Icon icon={ChevronRight} />
-								</button>
-							{/if}
-						</td>
-					{/if}
+				<tr class:linked={rowHref} class:selected={chosen}>
 					{#if selectable}
 						<td class="select">
 							<Checkbox
@@ -308,11 +266,6 @@
 						<td class="action">{@render rowAction(row)}</td>
 					{/if}
 				</tr>
-				{#if open && expansion}
-					<tr class="expansion">
-						<td colspan={width}>{@render expansion(row)}</td>
-					</tr>
-				{/if}
 			{/each}
 		</tbody>
 	</table>
@@ -595,62 +548,6 @@
 	.select {
 		width: var(--cds-size-large);
 		padding-inline: var(--cds-spacing-05) 0;
-	}
-
-	/* Carbon's expandable rows: a chevron column first, pointing right and
-	   turning down when open. The open row and its expansion read as one. */
-	.expand {
-		width: var(--cds-size-large);
-		padding: 0;
-	}
-
-	td.expand {
-		position: relative;
-		z-index: 1;
-	}
-
-	.chevron {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 100%;
-		height: var(--cds-size-medium);
-		border: 0;
-		background: none;
-		color: var(--cds-icon-primary);
-		cursor: pointer;
-	}
-
-	.chevron :global(svg) {
-		transition: transform 110ms cubic-bezier(0.2, 0, 0.38, 0.9);
-	}
-
-	.chevron[aria-expanded='true'] :global(svg) {
-		transform: rotate(90deg);
-	}
-
-	.chevron:focus-visible {
-		outline: 2px solid var(--cds-focus);
-		outline-offset: -2px;
-	}
-
-	tr.open td {
-		background: var(--cds-layer-hover-01);
-		color: var(--cds-text-primary);
-	}
-
-	/* The expansion lines up with the first column after the chevron. */
-	tr.expansion td {
-		height: auto;
-		padding: var(--cds-spacing-03) var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-size-large);
-		border-top: 0;
-		background: var(--cds-layer-hover-01);
-		color: var(--cds-text-primary);
-		white-space: normal;
-	}
-
-	tbody tr.expansion:hover td {
-		background: var(--cds-layer-hover-01);
 	}
 
 	/* An inline action: flush with the row's end, above the row link. */
