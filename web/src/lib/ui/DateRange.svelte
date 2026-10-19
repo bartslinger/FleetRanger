@@ -49,6 +49,18 @@
 		}
 	}
 
+	// As in Carbon, the calendar opens when a field gets focus (click or Tab),
+	// not only from the calendar icon. Focus within the fields keeps it open.
+	let open = $state(false);
+	let fields: HTMLElement | undefined = $state();
+	// Closing hands focus back to the field; that focus mustn't reopen it.
+	let closedAt = 0;
+	function focusedField(event: FocusEvent) {
+		if (open || (event.target as HTMLElement).closest('.date-trigger')) return;
+		if (performance.now() - closedAt < 300) return;
+		open = true;
+	}
+
 	// Phones: the native fields. A first day after the last moves the last.
 	function nativeFrom(day: string) {
 		if (!day) return onchange(null, null);
@@ -65,12 +77,13 @@
 		<DateRangePicker.Root
 			{value}
 			onValueChange={changed}
+			bind:open
 			locale="en-GB"
 			weekStartsOn={1}
 			weekdayFormat="short"
 			fixedWeeks
 		>
-			<div class="fields">
+			<div class="fields" bind:this={fields} onfocusin={focusedField}>
 				{#each [['start', 'From'], ['end', 'To']] as const as [type, label] (type)}
 					<div class="field">
 						<span class="label" id={`${id}-${type}`}>{label}</span>
@@ -89,7 +102,21 @@
 					<Icon icon={Calendar} />
 				</DateRangePicker.Trigger>
 			</div>
-			<DateRangePicker.Content class="date-menu" sideOffset={0} align="start" collisionPadding={16}>
+			<DateRangePicker.Content
+				class="date-menu"
+				customAnchor={fields}
+				sideOffset={0}
+				align="start"
+				collisionPadding={16}
+				onCloseAutoFocus={() => (closedAt = performance.now())}
+				onInteractOutside={(event) => {
+					// The fields are part of the picker.
+					if (fields?.contains(event.target as Node)) event.preventDefault();
+				}}
+				onFocusOutside={(event) => {
+					if (fields?.contains(event.target as Node)) event.preventDefault();
+				}}
+			>
 				<DateRangePicker.Calendar class="calendar">
 					{#snippet children({ months, weekdays })}
 						<DateRangePicker.Header class="calendar-header">
