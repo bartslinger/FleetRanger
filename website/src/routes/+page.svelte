@@ -150,7 +150,7 @@
 	</Grid>
 </section>
 
-<section class="quote" aria-label="What a customer says">
+<section class="quote" aria-label="What a pilot says">
 	<Grid centered>
 		<Column md={8} lg={12}>
 			<figure>
@@ -160,7 +160,7 @@
 						With FleetRanger on our own server, our operations have become much simpler.
 					</p>
 				</blockquote>
-				<figcaption>A FleetRanger customer</figcaption>
+				<figcaption>Drone pilot using FleetRanger</figcaption>
 			</figure>
 		</Column>
 	</Grid>
@@ -367,7 +367,7 @@
 		color: var(--cds-text-secondary);
 	}
 
-	/* A customer's words in Carbon's large light heading style, the opening
+	/* A pilot's words in Carbon's large light heading style, the opening
 	   quotation mark hanging in the margin so the text lines up. */
 	.quote blockquote p {
 		position: relative;
