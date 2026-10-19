@@ -9,7 +9,7 @@ mod flight;
 pub mod import;
 pub mod process;
 pub mod routes;
-mod service;
+pub mod service;
 mod upload;
 
 /// The directory holding the raw flight logs (`FLEETRANGER_LOG_DIR`).

@@ -19,12 +19,14 @@ use super::{
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
+    events::Changes,
 };
 
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     PgPool: FromRef<S>,
+    Changes: FromRef<S>,
 {
     Router::new()
         .route("/api/pairing", get(waiting).post(start))
@@ -43,10 +45,14 @@ struct Start {
     token_sha256: String,
 }
 
-async fn start(State(db): State<PgPool>, Json(body): Json<Start>) -> ApiResult<Json<Started>> {
-    Ok(Json(
-        service::start(&db, &body.serial, &body.model, &body.token_sha256).await?,
-    ))
+async fn start(
+    State(db): State<PgPool>,
+    State(changes): State<Changes>,
+    Json(body): Json<Start>,
+) -> ApiResult<Json<Started>> {
+    let started = service::start(&db, &body.serial, &body.model, &body.token_sha256).await?;
+    changes.notify();
+    Ok(Json(started))
 }
 
 async fn waiting(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<Waiting>>> {
@@ -56,9 +62,12 @@ async fn waiting(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<W
 async fn approve(
     actor: Actor,
     State(db): State<PgPool>,
+    State(changes): State<Changes>,
     Path(code): Path<String>,
 ) -> ApiResult<Json<Approved>> {
-    Ok(Json(service::approve(&db, &actor, &code).await?))
+    let approved = service::approve(&db, &actor, &code).await?;
+    changes.notify();
+    Ok(Json(approved))
 }
 
 #[derive(Serialize)]

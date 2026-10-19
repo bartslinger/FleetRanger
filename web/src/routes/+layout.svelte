@@ -26,29 +26,22 @@
 
 	trackTrail();
 
-	// Log processing, for admins: from the server, then polled; often while
-	// logs are being processed, rarely otherwise (to notice new ones).
+	// Log processing (for admins) and controllers waiting to be paired: from
+	// the server, then as they change, through server-sent events. The
+	// browser reconnects by itself, and the stream starts with the current state.
 	let processing = $derived(data.processing);
-	const BUSY_POLL_MS = 3_000;
-	const IDLE_POLL_MS = 30_000;
+	let pairing = $derived(data.pairing);
 
 	$effect(() => {
-		if (!processing) return;
-		const busy = processing.pending > 0;
-		const timer = setTimeout(poll, busy ? BUSY_POLL_MS : IDLE_POLL_MS);
-		return () => clearTimeout(timer);
+		if (!data.account) return;
+		const events = new EventSource('/api/events');
+		events.addEventListener('processing', (event) => processed(JSON.parse(event.data)));
+		events.addEventListener('pairing', (event) => (pairing = JSON.parse(event.data)));
+		return () => events.close();
 	});
 
-	async function poll() {
+	async function processed(next: ProcessingStatus) {
 		const before = processing;
-		let next: ProcessingStatus;
-		try {
-			const response = await fetch('/api/logs/processing');
-			if (!response.ok) return;
-			next = await response.json();
-		} catch {
-			return;
-		}
 		processing = next;
 		if (next.pending > 0) finished = null;
 		// A batch finished: show its result, and reload the page's data, so new flights show.
@@ -78,24 +71,6 @@
 		processingOpen = open;
 		if (!open && finished) finished = null;
 	}
-
-	// Controllers waiting to be paired, for everyone: from the server, then
-	// polled, so someone at a controller sees it come up.
-	let pairing = $derived(data.pairing);
-	const PAIRING_POLL_MS = 15_000;
-
-	$effect(() => {
-		if (!data.account) return;
-		const timer = setInterval(async () => {
-			try {
-				const response = await fetch('/api/pairing');
-				if (response.ok) pairing = await response.json();
-			} catch {
-				// Offline for a moment: try again next time.
-			}
-		}, PAIRING_POLL_MS);
-		return () => clearInterval(timer);
-	});
 
 	// The batch in progress, or else the one just finished.
 	const shownProcessing = $derived(processing && processing.pending > 0 ? processing : finished);

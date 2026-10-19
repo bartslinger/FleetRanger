@@ -8,6 +8,8 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
+use crate::events::Changes;
+
 /// A step in processing one log.
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -45,11 +47,22 @@ pub struct Snapshot {
     pub paused: Option<Paused>,
 }
 
-/// Shared between the processing loop, which updates it, and the API.
-#[derive(Clone, Default)]
-pub struct Activity(Arc<Mutex<Snapshot>>);
+/// Shared between the processing loop, which updates it, and the API. Every
+/// update tells the open event streams.
+#[derive(Clone)]
+pub struct Activity {
+    now: Arc<Mutex<Snapshot>>,
+    changes: Changes,
+}
 
 impl Activity {
+    pub fn new(changes: Changes) -> Self {
+        Self {
+            now: Arc::default(),
+            changes,
+        }
+    }
+
     pub fn snapshot(&self) -> Snapshot {
         self.lock().clone()
     }
@@ -63,12 +76,14 @@ impl Activity {
             started_at: Utc::now(),
         });
         now.paused = None;
+        self.changes.notify();
     }
 
     pub fn stage(&self, stage: Stage) {
         if let Some(current) = &mut self.lock().current {
             current.stage = stage;
         }
+        self.changes.notify();
     }
 
     pub fn idle(&self) {
@@ -77,6 +92,7 @@ impl Activity {
             finished_batch_started_at: now.batch_started_at.or(now.finished_batch_started_at),
             ..Snapshot::default()
         };
+        self.changes.notify();
     }
 
     /// A pause keeps the batch: the logs it waits for are still pending.
@@ -87,11 +103,12 @@ impl Activity {
             reason,
             until: Utc::now() + pause,
         });
+        self.changes.notify();
     }
 
     fn lock(&self) -> MutexGuard<'_, Snapshot> {
         // Every update leaves a consistent snapshot, so one that panicked can be used.
-        self.0
+        self.now
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }

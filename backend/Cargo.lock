@@ -804,6 +804,7 @@ dependencies = [
  "chrono",
  "cookie",
  "dji-log-parser",
+ "futures-util",
  "openidconnect",
  "serde",
  "serde_json",

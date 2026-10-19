@@ -3,6 +3,7 @@ mod config;
 mod download;
 mod equipment;
 mod error;
+mod events;
 mod flights;
 mod health;
 mod ingest;
@@ -27,6 +28,7 @@ use tracing_subscriber::EnvFilter;
 use crate::auth::Auth;
 use crate::config::Config;
 use crate::download::AndroidApk;
+use crate::events::Changes;
 use crate::ingest::LogDir;
 use crate::ingest::activity::Activity;
 use crate::sessions::SessionGap;
@@ -73,9 +75,16 @@ struct AppState {
     db: PgPool,
     auth: Arc<Auth>,
     activity: Activity,
+    changes: Changes,
     session_gap: SessionGap,
     log_dir: LogDir,
     android_apk: AndroidApk,
+}
+
+impl FromRef<AppState> for Changes {
+    fn from_ref(state: &AppState) -> Self {
+        state.changes.clone()
+    }
 }
 
 impl FromRef<AppState> for AndroidApk {
@@ -122,7 +131,8 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .await
         .context("failed to group flights into sessions")?;
 
-    let activity = Activity::default();
+    let changes = Changes::default();
+    let activity = Activity::new(changes.clone());
     tokio::spawn(ingest::process::run(
         db.clone(),
         config.log_dir.clone(),
@@ -145,6 +155,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
             provider,
         }),
         activity,
+        changes: changes.clone(),
         session_gap,
         log_dir: LogDir(config.log_dir.clone()),
         android_apk: AndroidApk {
@@ -157,6 +168,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .route("/healthz", get(health::check))
         .merge(auth::routes::router())
         .merge(download::router())
+        .merge(events::router())
         .merge(flights::routes::router())
         .merge(ingest::routes::router())
         .merge(pairing::routes::router())
@@ -178,7 +190,11 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(async move {
+        shutdown_signal().await;
+        // Open event streams would keep the shutdown waiting.
+        changes.close();
+    })
     .await?;
 
     Ok(())

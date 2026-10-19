@@ -19,6 +19,7 @@ use super::upload;
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
+    events::Changes,
     pairing::Controller,
 };
 
@@ -31,6 +32,7 @@ where
     PgPool: FromRef<S>,
     Activity: FromRef<S>,
     LogDir: FromRef<S>,
+    Changes: FromRef<S>,
 {
     Router::new()
         .route("/api/logs/processing", get(status))
@@ -60,6 +62,7 @@ async fn receive(
     controller: Controller,
     State(db): State<PgPool>,
     State(LogDir(log_dir)): State<LogDir>,
+    State(changes): State<Changes>,
     headers: HeaderMap,
     body: Bytes,
 ) -> ApiResult<(StatusCode, Json<Received>)> {
@@ -85,7 +88,11 @@ async fn receive(
     .await?;
     let status = match result {
         Stored::Duplicate => StatusCode::OK,
-        Stored::Added | Stored::Replaced => StatusCode::CREATED,
+        Stored::Added | Stored::Replaced => {
+            // A log waiting to be processed: admins see it come in.
+            changes.notify();
+            StatusCode::CREATED
+        }
     };
     Ok((status, Json(Received { result })))
 }
