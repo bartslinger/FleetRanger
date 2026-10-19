@@ -33,6 +33,7 @@
 	import ArrowsVertical from '@carbon/icons/es/arrows--vertical/16.js';
 	import Checkbox from './Checkbox.svelte';
 	import Icon from './Icon.svelte';
+	import Tag from './Tag.svelte';
 
 	interface Props {
 		/** Names the table for screen readers. */
@@ -72,6 +73,12 @@
 		selectAllLabel?: (total: number) => string;
 		/** An inline action at the end of each row. */
 		rowAction?: Snippet<[row: T]>;
+		/** A row's state, e.g. "Left out": a gray tag after its first cell, and
+		 * the row's text in the helper colour. Undefined for an ordinary row. */
+		rowState?: (row: T) => string | undefined;
+		/** The row pointed at or focused, and null when none is, e.g. to bring
+		 * it out on a map. */
+		onrowhover?: (row: T | null) => void;
 	}
 
 	let {
@@ -94,7 +101,9 @@
 		total,
 		allMatching = $bindable(false),
 		selectAllLabel = (total) => `Select all ${total}`,
-		rowAction
+		rowAction,
+		rowState,
+		onrowhover
 	}: Props = $props();
 
 	const selectableKeys = $derived(selectable ? rows.filter(selectable).map(rowKey) : []);
@@ -236,7 +245,16 @@
 			{#each rows as row (rowKey(row))}
 				{@const key = rowKey(row)}
 				{@const chosen = allMatching ? !!selectable?.(row) : selected.includes(key)}
-				<tr class:linked={rowHref} class:selected={chosen}>
+				{@const state = rowState?.(row)}
+				<tr
+					class:linked={rowHref}
+					class:selected={chosen}
+					class:stated={state}
+					onmouseenter={onrowhover && (() => onrowhover(row))}
+					onmouseleave={onrowhover && (() => onrowhover(null))}
+					onfocusin={onrowhover && (() => onrowhover(row))}
+					onfocusout={onrowhover && (() => onrowhover(null))}
+				>
 					{#if selectable}
 						<td class="select">
 							<Checkbox
@@ -259,6 +277,9 @@
 								<a class="row-link" href={rowHref(row)}>{@render content(row, column)}</a>
 							{:else}
 								{@render content(row, column)}
+							{/if}
+							{#if index === 0 && state}
+								<span class="state"><Tag size="sm">{state}</Tag></span>
 							{/if}
 						</td>
 					{/each}
@@ -548,6 +569,18 @@
 	.select {
 		width: var(--cds-size-large);
 		padding-inline: var(--cds-spacing-05) 0;
+	}
+
+	/* A row in a state of its own, e.g. left out: its text in the helper
+	   colour (still 4.5:1), not Carbon's disabled style, as it can still be
+	   opened and changed; the tag says which state, so colour isn't the only
+	   sign. */
+	tr.stated td {
+		color: var(--cds-text-helper);
+	}
+
+	.state {
+		margin-left: var(--cds-spacing-03);
 	}
 
 	/* An inline action: flush with the row's end, above the row link. */

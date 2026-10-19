@@ -28,9 +28,11 @@
 		label: string;
 		/** Tracks are on their way: shows Carbon's inline loading over the map. */
 		loading?: boolean;
+		/** The track to bring out, by index, e.g. the flight pointed at in a list. */
+		highlight?: number | null;
 	}
 
-	let { tracks, token, label, loading = false }: Props = $props();
+	let { tracks, token, label, loading = false, highlight = null }: Props = $props();
 
 	type View = 'satellite' | 'map';
 	let view: View = $state('satellite');
@@ -66,8 +68,12 @@
 		return {
 			type: 'FeatureCollection',
 			features: tracks
-				.filter((track) => track.coordinates.length > 1)
-				.map((track) => ({ type: 'Feature', properties: {}, geometry: track }))
+				.map((track, index) => ({
+					type: 'Feature' as const,
+					properties: { index },
+					geometry: track
+				}))
+				.filter((feature) => feature.geometry.coordinates.length > 1)
 		};
 	}
 
@@ -109,6 +115,23 @@
 			layout: { 'line-join': 'round', 'line-cap': 'round' },
 			paint: { 'line-color': TRACK, 'line-width': 3 }
 		});
+		// The highlighted track: wider, over the others.
+		map.addLayer({
+			id: 'highlight-casing',
+			type: 'line',
+			source: 'tracks',
+			filter: highlightFilter(highlight),
+			layout: { 'line-join': 'round', 'line-cap': 'round' },
+			paint: { 'line-color': casing, 'line-width': 9 }
+		});
+		map.addLayer({
+			id: 'highlight',
+			type: 'line',
+			source: 'tracks',
+			filter: highlightFilter(highlight),
+			layout: { 'line-join': 'round', 'line-cap': 'round' },
+			paint: { 'line-color': TRACK, 'line-width': 5 }
+		});
 		map.addLayer({
 			id: 'ends',
 			type: 'circle',
@@ -120,6 +143,11 @@
 				'circle-stroke-width': 3
 			}
 		});
+	}
+
+	/** Only the track with this index; none without one. */
+	function highlightFilter(index: number | null): ['==', ['get', string], number] {
+		return ['==', ['get', 'index'], index ?? -1];
 	}
 
 	const FIT = { padding: 48, maxZoom: 17 };
@@ -217,6 +245,14 @@
 		const current = tracks;
 		if (!map?.getSource('tracks')) return;
 		draw(map, current);
+	});
+
+	// Another track pointed at: only the filter changes, not the view.
+	$effect(() => {
+		const filter = highlightFilter(highlight);
+		if (!map?.getLayer('highlight')) return;
+		map.setFilter('highlight-casing', filter);
+		map.setFilter('highlight', filter);
 	});
 
 	function show(next: View) {
