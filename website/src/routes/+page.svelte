@@ -114,11 +114,7 @@
 			<div class="lead">
 				<h1 id="title">Own your flight logs</h1>
 				<div>
-					<p class="intro">
-						FleetRanger collects the logs from your DJI Enterprise controllers on your own server,
-						and turns them into a logbook: every flight with its pilot and track, grouped into
-						sessions. It is open source.
-					</p>
+					<p class="intro">Open-source flight logging for DJI Enterprise, on your own server.</p>
 					<div class="actions">
 						<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
 						<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
