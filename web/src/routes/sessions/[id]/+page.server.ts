@@ -12,6 +12,24 @@ export async function load({ fetch, params }) {
 }
 
 export const actions = {
+	/** Sets the pilot of all the session's flights, as the logbook's batch action does. */
+	setPilot: async ({ fetch, params, request }) => {
+		const form = await request.formData();
+		const { flights } = await get<Session>(fetch, `/api/sessions/${params.id}`);
+		const body = {
+			flight_ids: flights.map((flight) => flight.id),
+			pilot_id: String(form.get('pilot_id') ?? '') || null
+		};
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
+		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
+		// For the toast: an admin's change can move the flights to another team.
+		const after = await get<Session>(fetch, `/api/sessions/${params.id}`);
+		const moved = (after.flights[0].team_id ?? '') !== String(form.get('team_before') ?? '');
+		return {
+			pilotName: after.flights[0].pilot_name,
+			movedTo: moved ? after.flights[0].team_name : null
+		};
+	},
 	split: async ({ fetch, request }) => {
 		const form = await request.formData();
 		const body = { flight_ids: form.getAll('flight_id').map(String) };

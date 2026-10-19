@@ -7,6 +7,8 @@
 	import Grid from '#lib/ui/Grid.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
+	import Select from '#lib/ui/Select.svelte';
+	import Edit from '@carbon/icons/es/edit/16.js';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import type { PageProps } from './$types';
@@ -34,6 +36,31 @@
 	function removed(count: number) {
 		selected = [];
 		toast(`${count} ${count === 1 ? 'flight' : 'flights'} removed from the session.`);
+	}
+
+	// The pilot of all its flights, as the flight page sets one flight's.
+	const pilotOptions = $derived([
+		{ value: '', label: 'Unknown' },
+		...data.choices.pilots.map((pilot) => ({
+			value: pilot.id,
+			label: data.choices.admin ? `${pilot.name} (${pilot.team_name})` : pilot.name
+		}))
+	]);
+	// Their pilot if they share one; "that was me" if none is known yet.
+	const pilotChoice = $derived.by(() => {
+		const known = new Set(flights.map((flight) => flight.pilot_id));
+		if (known.size === 1 && !known.has(null)) return flights[0].pilot_id ?? '';
+		if (known.size === 1 && data.choices.pilots.some((pilot) => pilot.id === data.account?.id)) {
+			return data.account?.id ?? '';
+		}
+		return '';
+	});
+	const severalPilots = $derived(new Set(flights.map((flight) => flight.pilot_id)).size > 1);
+
+	function pilotSet(result: Record<string, unknown> | undefined) {
+		const name = (result?.pilotName as string | null) ?? 'Unknown';
+		const team = result?.movedTo as string | null | undefined;
+		toast(`Pilot set to ${name}.${team ? ` The flights moved to ${team}.` : ''}`);
 	}
 
 	const columns: TableColumn<Row>[] = $derived([
@@ -76,7 +103,31 @@
 		/>
 	</Column>
 	<Column lg={5}>
-		<SessionFacts {flights} timeZone={data.timeZone} timeZoneName={data.timeZoneName} />
+		<SessionFacts {flights} timeZone={data.timeZone} timeZoneName={data.timeZoneName}>
+			{#snippet pilotAction()}
+				{#if canChange}
+					<Modal
+						title="Change pilot"
+						triggerIcon={Edit}
+						submitLabel="Save"
+						action="?/setPilot"
+						error={form?.pilotMessage}
+						onsuccess={pilotSet}
+					>
+						<input type="hidden" name="team_before" value={flights[0].team_id ?? ''} />
+						<Select label="Pilot" name="pilot_id" options={pilotOptions} value={pilotChoice} />
+						<p class="help">
+							{severalPilots
+								? `All ${flights.length} flights get this pilot, also those that have another one now.`
+								: `All ${flights.length} flights get this pilot.`}
+							{data.choices.admin
+								? 'They move to the pilot’s team. With Unknown, they keep their team.'
+								: 'Choose Unknown for flights not flown by someone in your team. They stay in your team.'}
+						</p>
+					</Modal>
+				{/if}
+			{/snippet}
+		</SessionFacts>
 	</Column>
 	<Column narrow>
 		<DataTable
@@ -129,3 +180,13 @@
 		</DataTable>
 	</Column>
 </Grid>
+
+<style>
+	.help {
+		margin-top: calc(-1 * var(--cds-spacing-03));
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-helper-text-01-font-size);
+		line-height: var(--cds-helper-text-01-line-height);
+		letter-spacing: var(--cds-helper-text-01-letter-spacing);
+	}
+</style>

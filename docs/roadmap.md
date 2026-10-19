@@ -27,7 +27,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 ## Phase 3: sessions
 
 - [x] Automatic grouping by time gap
-- [ ] Assigning a pilot per session
+- [x] Assigning a pilot per session (sets it on all its flights)
 - [x] Splitting and merging sessions (moving a flight is splitting it off and merging)
 - [x] Only uploads join sessions by themselves (same night's sync); the rest by hand: new session, add to session, flights without session
 - [x] Suggested sessions to review (one by one; making all of them at once only if it turns out to be needed)
