@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The FleetRanger mark (web/src/lib/assets/favicon.svg): a shield with a
+     route, drawn on its 32-unit grid and scaled into the adaptive icon's
+     66dp safe zone of 108dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.8"
+        android:scaleY="1.8"
+        android:translateX="25.2"
+        android:translateY="25.2">
+        <path
+            android:fillColor="#0f62fe"
+            android:pathData="M16,2 L28,6 V15.5 C28,23 23,28 16,30 C9,28 4,23 4,15.5 V6 Z" />
+        <path
+            android:pathData="M9.5,18 V14 A3.25,3.25 0 0,1 16,14 V18 A3.25,3.25 0 0,0 22.5,18 V14"
+            android:strokeColor="#ffffff"
+            android:strokeWidth="2.25"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:fillColor="#ffffff"
+            android:pathData="M7,22.5 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z M20,9.5 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
+    </group>
+</vector>
