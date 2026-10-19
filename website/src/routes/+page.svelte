@@ -107,7 +107,7 @@
 
 <section class="hero" aria-labelledby="title">
 	<Grid centered>
-		<Column md={8} lg={8}>
+		<Column md={8} lg={7}>
 			<div class="lead">
 				<h1 id="title">Own your flight logs</h1>
 				<div>
@@ -119,11 +119,11 @@
 				</div>
 			</div>
 		</Column>
-		<Column md={8} lg={8}>
+		<Column md={8} lg={9}>
 			<div class="hero-laptop">
 				<Laptop
 					{...session}
-					width={40}
+					width={56}
 					alt="A session in FleetRanger: a flight's track on a satellite map, with its pilot, team, times and distance, and the list of its flights."
 				/>
 			</div>
@@ -295,12 +295,18 @@
 			min-height: 26rem;
 		}
 
+		/* As wide as its nine columns. */
 		.hero-laptop {
 			display: flex;
 			align-items: center;
+			max-width: none;
 			height: 100%;
 			margin: 0;
 			padding-inline-start: var(--cds-spacing-07);
+		}
+
+		.hero-laptop > :global(*) {
+			flex: 1;
 		}
 	}
 
