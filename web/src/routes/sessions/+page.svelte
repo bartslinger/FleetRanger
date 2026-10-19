@@ -168,14 +168,14 @@
 			label="View"
 			options={[
 				{
-					label: 'Table',
-					href: href(data.page, data.size, 'table'),
-					selected: data.view === 'table'
-				},
-				{
 					label: 'Cards',
 					href: href(data.page, data.size, 'cards'),
 					selected: data.view === 'cards'
+				},
+				{
+					label: 'Table',
+					href: href(data.page, data.size, 'table'),
+					selected: data.view === 'table'
 				}
 			]}
 		/>
