@@ -225,7 +225,7 @@
 				body="No sessions you can see have a flight that passes these filters."
 			>
 				{#snippet action()}
-					<Button kind="tertiary" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
+					<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
 				{/snippet}
 			</EmptyState>
 		{:else if data.total === 0}

@@ -50,4 +50,9 @@
 	.action {
 		margin-top: var(--cds-spacing-05);
 	}
+
+	/* A ghost button hangs: its text lines up with the text above (Carbon). */
+	.action :global(.ghost) {
+		margin-inline-start: calc(-1 * var(--cds-spacing-05));
+	}
 </style>
