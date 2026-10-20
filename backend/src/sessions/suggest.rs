@@ -206,6 +206,7 @@ mod tests {
             pilot_name: None,
             team_id: team,
             team_name: None,
+            archived_at: None,
         }
     }
 

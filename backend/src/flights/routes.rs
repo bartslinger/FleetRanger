@@ -42,6 +42,13 @@ where
         .route("/api/flights/{id}/neighbours", get(neighbours))
         .route("/api/flights/pilot", post(set_pilot))
         .route("/api/flights/team", post(set_team))
+        .route("/api/flights/archive", post(archive))
+        .route("/api/flights/restore", post(restore))
+}
+
+#[derive(Deserialize)]
+struct Batch {
+    flight_ids: Vec<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -132,6 +139,24 @@ async fn set_team(
     Ok(Json(Changed { changed }))
 }
 
+async fn archive(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Json(batch): Json<Batch>,
+) -> ApiResult<Json<Changed>> {
+    let changed = service::archive(&db, &actor, &batch.flight_ids).await?;
+    Ok(Json(Changed { changed }))
+}
+
+async fn restore(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Json(batch): Json<Batch>,
+) -> ApiResult<Json<Changed>> {
+    let changed = service::restore(&db, &actor, &batch.flight_ids).await?;
+    Ok(Json(Changed { changed }))
+}
+
 #[derive(Deserialize)]
 struct ListQuery {
     /// 1-based.
@@ -159,6 +184,8 @@ struct ListQuery {
     /// `suggestions`: a flight's neighbours are those of its suggested
     /// session (with `session=none`).
     view: Option<String>,
+    /// `true`: only archived flights, which are otherwise left out.
+    archived: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -248,6 +275,7 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
     };
     let filter = Filter {
         in_session,
+        archived: query.archived.unwrap_or(false),
         ..filter(
             &query.aircraft,
             &query.controller,
@@ -293,6 +321,7 @@ pub fn filter(
         queue,
         pilot_ids,
         unknown_pilot,
+        archived: false,
     })
 }
 

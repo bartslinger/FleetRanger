@@ -206,6 +206,29 @@ pub async fn set_team(
     Ok(db::set_team(db, &ids, team_id).await?)
 }
 
+/// Archives a batch of flights, all or none: they leave their sessions and
+/// every list and total. Returns how many weren't archived yet.
+pub async fn archive(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
+    let ids = changeable(db, actor, ids).await?;
+    Ok(db::archive(db, &ids).await?)
+}
+
+/// Restores a batch of archived flights, without a session. Returns how many
+/// were archived.
+pub async fn restore(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
+    let ids = changeable(db, actor, ids).await?;
+    Ok(db::restore(db, &ids).await?)
+}
+
+/// These flights, once, if they all exist and the actor may change them.
+async fn changeable(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<Vec<Uuid>> {
+    let ids = distinct(ids)?;
+    let flight_teams = db::teams_of(db, &ids).await?.ok_or(ApiError::NotFound)?;
+    let own_teams = db::own_teams(db, actor.user_id).await?;
+    policy::change_flights(actor.role, &own_teams, &flight_teams)?;
+    Ok(ids)
+}
+
 fn distinct(ids: &[Uuid]) -> ApiResult<Vec<Uuid>> {
     let mut ids = ids.to_vec();
     ids.sort_unstable();

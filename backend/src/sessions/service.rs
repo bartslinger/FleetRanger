@@ -55,7 +55,18 @@ pub async fn create(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResul
         .ok_or(ApiError::NotFound)?;
     let own_teams = flights::db::own_teams(db, actor.user_id).await?;
     policy::change_sessions(actor.role, &own_teams, &teams)?;
+    not_archived(db, &flight_ids).await?;
     Ok(db::split(db, &flight_ids).await?)
+}
+
+/// Archived flights are never in a session.
+async fn not_archived(db: &PgPool, flight_ids: &[Uuid]) -> ApiResult<()> {
+    if flights::db::any_archived(db, flight_ids).await? {
+        return Err(ApiError::Invalid(
+            "Archived flights can’t be in a session. Restore them first.".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 /// Adds these flights to a session. They leave the sessions they were in.
@@ -74,6 +85,7 @@ pub async fn add(db: &PgPool, actor: &Actor, session: Uuid, flight_ids: &[Uuid])
     );
     let own_teams = flights::db::own_teams(db, actor.user_id).await?;
     policy::change_sessions(actor.role, &own_teams, &teams)?;
+    not_archived(db, &flight_ids).await?;
     Ok(db::add(db, session, &flight_ids).await?)
 }
 

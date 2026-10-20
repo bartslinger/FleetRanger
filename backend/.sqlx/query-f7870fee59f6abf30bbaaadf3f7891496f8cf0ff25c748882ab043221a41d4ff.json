@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                team_id, (select t.name from teams t where t.id = flights.team_id) as \"team_name?\",\n                track, metrics,\n                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_id?\",\n                (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_team_id?\",\n                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_id?\",\n                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_team_id?\"\n         from flights\n         where session_id = $1\n           and ($2\n                or pilot_id = $3\n                or team_id in (select team_id from team_members where user_id = $3))\n         order by takeoff_at, id",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                team_id, (select t.name from teams t where t.id = flights.team_id) as \"team_name?\",\n                track, metrics,\n                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_id?\",\n                (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_team_id?\",\n                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_id?\",\n                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_team_id?\",\n                archived_at\n         from flights\n         where id = any($1)\n           and ($2\n                or pilot_id = $3\n                or team_id in (select team_id from team_members where user_id = $3))\n         order by takeoff_at, id",
   "describe": {
     "columns": [
       {
@@ -171,11 +171,22 @@
         "name": "rc_team_id?",
         "type_info": "Uuid",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "archived_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "archived_at"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
+        "UuidArray",
         "Bool",
         "Uuid"
       ]
@@ -199,8 +210,9 @@
       null,
       null,
       null,
-      null
+      null,
+      true
     ]
   },
-  "hash": "2baf016fe2f6cd0be747dcd51ad51423046948a0967bdfdc48ca2ab492d5ebba"
+  "hash": "f7870fee59f6abf30bbaaadf3f7891496f8cf0ff25c748882ab043221a41d4ff"
 }

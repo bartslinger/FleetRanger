@@ -161,8 +161,21 @@ pub fn set_pilot(
         Some(team) => TeamChange::Follow(team),
         None => TeamChange::Keep,
     };
+    change_flights(role, own_teams, flight_teams)?;
+    if role == Role::Member && new_pilot_team.is_some_and(|team| !own_teams.contains(&team)) {
+        return Err(ApiError::Invalid(
+            "Choose someone of your own teams.".to_owned(),
+        ));
+    }
+    Ok(change)
+}
+
+/// Whether the actor may change these flights, e.g. archive or restore them:
+/// admins any flight, members those of their own teams, and the all-flights
+/// role none.
+pub fn change_flights(role: Role, own_teams: &[Uuid], flight_teams: &[Option<Uuid>]) -> ApiResult<()> {
     match role {
-        Role::Admin => Ok(change),
+        Role::Admin => Ok(()),
         Role::AllFlights => Err(ApiError::Forbidden),
         Role::Member => {
             if own_teams.is_empty() {
@@ -173,12 +186,7 @@ pub fn set_pilot(
                     "You can only change flights of your own teams.".to_owned(),
                 ));
             }
-            if new_pilot_team.is_some_and(|team| !own_teams.contains(&team)) {
-                return Err(ApiError::Invalid(
-                    "Choose someone of your own teams.".to_owned(),
-                ));
-            }
-            Ok(change)
+            Ok(())
         }
     }
 }

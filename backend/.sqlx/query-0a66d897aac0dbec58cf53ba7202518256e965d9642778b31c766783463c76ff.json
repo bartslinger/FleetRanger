@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.aircraft_serial = e.serial) as last_flight_at,\n                          null::bool as \"paired?\",\n                          null::timestamptz as \"synced_at?\",\n                          null::text as \"app_version?\"\n                   from aircraft e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   where e.id = $1",
+  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.aircraft_serial = e.serial and f.archived_at is null)\n                              as last_flight_at,\n                          null::bool as \"paired?\",\n                          null::timestamptz as \"synced_at?\",\n                          null::text as \"app_version?\"\n                   from aircraft e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   where e.id = $1",
   "describe": {
     "columns": [
       {
@@ -124,5 +124,5 @@
       null
     ]
   },
-  "hash": "368a6c4fbedc304276cd07434cc81b905efba79344428d8428c3ed30b74b5c41"
+  "hash": "0a66d897aac0dbec58cf53ba7202518256e965d9642778b31c766783463c76ff"
 }

@@ -51,6 +51,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Flight detail with map
 - [x] Session overview (list, and a page with all tracks on one map)
 - [x] Admin pages: users, teams, equipment
+- [~] Archiving flights, with an "Archived" filter to see and restore them
 - [x] Push log processing and pairing status to the browser with server-sent events, instead of polling, for a snappier interface
 
 ## Phase 6: remote controller app

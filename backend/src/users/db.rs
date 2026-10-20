@@ -41,7 +41,8 @@ pub async fn list(db: &PgPool, archived: bool) -> sqlx::Result<Vec<User>> {
                   (select max(created_at) from login_sessions s where s.user_id = u.id)
                       as last_login_at,
                   u.archived_at,
-                  (select count(*) from flights f where f.pilot_id = u.id) as "flights!"
+                  (select count(*) from flights f where f.pilot_id = u.id and f.archived_at is null)
+                      as "flights!"
            from users u
            left join logins l on l.user_id = u.id
            where $1 or u.archived_at is null
@@ -64,7 +65,8 @@ pub async fn get(db: &PgPool, id: Uuid) -> sqlx::Result<Option<User>> {
                   (select max(created_at) from login_sessions s where s.user_id = u.id)
                       as last_login_at,
                   u.archived_at,
-                  (select count(*) from flights f where f.pilot_id = u.id) as "flights!"
+                  (select count(*) from flights f where f.pilot_id = u.id and f.archived_at is null)
+                      as "flights!"
            from users u
            left join logins l on l.user_id = u.id
            where u.id = $1"#,

@@ -46,6 +46,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
   - the all-flights role
   - admins
   - later, people it has been shared with
+- **Archiving flights** (user's decisions, 2026-10-20): a flight that should count as not having happened is archived, never deleted (`flights.archived_at`). It leaves its session (a session left empty is deleted) and is left out everywhere: lists, sessions, suggestions, totals, filter options and the equipment's last flight. Flights shows them with an "Archived" filter, with an "Archived" tag and Restore; a restored flight comes back without a session. Archived flights can't be added to a session, and an upload of the same log again leaves its flight archived. Who may archive and restore follows setting a flight's pilot: members their teams' flights, admins any, the all-flights role none. Who archived a flight is for the audit log, not a column.
 - **Within a team**, any member can change a flight's pilot to another member, or to unknown. No acceptance is needed. "This wasn't me" means setting the pilot to unknown, and the flight stays in the team.
 - **Admins** manage users, teams and devices, and can move flights between teams.
 - **Setting a flight's pilot:**

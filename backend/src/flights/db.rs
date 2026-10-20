@@ -4,7 +4,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::policy::FlightScope;
+use crate::{policy::FlightScope, sessions};
 
 /// A flight as listed in the logbook.
 #[derive(Serialize)]
@@ -23,6 +23,7 @@ pub struct FlightSummary {
     /// None: in the organisation's queue.
     pub team_id: Option<Uuid>,
     pub team_name: Option<String>,
+    pub archived_at: Option<DateTime<Utc>>,
 }
 
 /// The logbook's filters: only the flights of this drone and/or controller.
@@ -47,6 +48,8 @@ pub struct Filter {
     /// those without a pilot.
     pub pilot_ids: Option<Vec<Uuid>>,
     pub unknown_pilot: bool,
+    /// Only archived flights (true), or else only the others.
+    pub archived: bool,
 }
 
 /// Columns the logbook can be sorted by.
@@ -114,7 +117,8 @@ pub async fn list(
                 rc_serial,
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
-                team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?"
+                team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?",
+                archived_at
          from flights
          where ($5
                 or pilot_id = $6
@@ -126,6 +130,7 @@ pub async fn list(
            and ($11::timestamptz is null or takeoff_at < $11)
            and ($12::uuid[] is null or team_id = any($12) or ($13 and team_id is null))
            and ($14::uuid[] is null or pilot_id = any($14) or ($15 and pilot_id is null))
+           and (archived_at is not null) = $16
          order by
              case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
              case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -162,6 +167,7 @@ pub async fn list(
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.archived,
     )
     .fetch_all(db)
     .await
@@ -195,6 +201,7 @@ pub struct FlightDetail {
     pub rc_id: Option<Uuid>,
     #[serde(skip)]
     pub rc_team_id: Option<Uuid>,
+    pub archived_at: Option<DateTime<Utc>>,
 }
 
 /// A flight in the scope, or None if it doesn't exist or isn't in the scope.
@@ -212,7 +219,8 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
-                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?"
+                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                archived_at
          from flights
          where id = $1
            and ($2
@@ -246,7 +254,8 @@ pub async fn of_session(
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
-                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?"
+                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                archived_at
          from flights
          where session_id = $1
            and ($2
@@ -280,7 +289,8 @@ pub async fn details(
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
-                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?"
+                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                archived_at
          from flights
          where id = any($1)
            and ($2
@@ -309,7 +319,8 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
              and ($6::timestamptz is null or takeoff_at >= $6)
              and ($7::timestamptz is null or takeoff_at < $7)
              and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))
-             and ($10::uuid[] is null or pilot_id = any($10) or ($11 and pilot_id is null))"#,
+             and ($10::uuid[] is null or pilot_id = any($10) or ($11 and pilot_id is null))
+             and (archived_at is not null) = $12"#,
         scope.all,
         scope.user_id,
         filter.aircraft_serials.as_deref(),
@@ -321,6 +332,7 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.archived,
     )
     .fetch_one(db)
     .await
@@ -342,6 +354,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
              and ($7::timestamptz is null or takeoff_at < $7)
              and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))
              and ($10::uuid[] is null or pilot_id = any($10) or ($11 and pilot_id is null))
+             and (archived_at is not null) = $12
            order by takeoff_at, id"#,
         scope.all,
         scope.user_id,
@@ -354,6 +367,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.archived,
     )
     .fetch_all(db)
     .await
@@ -398,6 +412,7 @@ pub async fn neighbours(
                  and ($10::timestamptz is null or takeoff_at < $10)
                  and ($11::uuid[] is null or team_id = any($11) or ($12 and team_id is null))
                  and ($13::uuid[] is null or pilot_id = any($13) or ($14 and pilot_id is null))
+                 and (archived_at is not null) = $15
                window w as (order by
                    case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
                    case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -435,6 +450,7 @@ pub async fn neighbours(
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.archived,
     )
     .fetch_optional(db)
     .await
@@ -473,7 +489,8 @@ pub async fn aircraft_of(
                       and ($8::uuid[] is null or f.team_id = any($8)
                            or ($9 and f.team_id is null))
                       and ($10::uuid[] is null or f.pilot_id = any($10)
-                           or ($11 and f.pilot_id is null))))
+                           or ($11 and f.pilot_id is null))
+                      and (f.archived_at is not null) = $12))
            group by f.aircraft_serial, a.name
            order by lower(coalesce(a.name, f.aircraft_serial))"#,
         scope.all,
@@ -487,6 +504,7 @@ pub async fn aircraft_of(
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.archived,
     )
     .fetch_all(db)
     .await
@@ -516,7 +534,8 @@ pub async fn controllers_of(
                       and ($8::uuid[] is null or f.team_id = any($8)
                            or ($9 and f.team_id is null))
                       and ($10::uuid[] is null or f.pilot_id = any($10)
-                           or ($11 and f.pilot_id is null))))
+                           or ($11 and f.pilot_id is null))
+                      and (f.archived_at is not null) = $12))
            group by f.rc_serial, r.name
            order by lower(coalesce(r.name, f.rc_serial))"#,
         scope.all,
@@ -530,6 +549,7 @@ pub async fn controllers_of(
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.archived,
     )
     .fetch_all(db)
     .await
@@ -566,7 +586,8 @@ pub async fn teams_in(
                       and ($8::timestamptz is null or f.takeoff_at >= $8)
                       and ($9::timestamptz is null or f.takeoff_at < $9)
                       and ($10::uuid[] is null or f.pilot_id = any($10)
-                           or ($11 and f.pilot_id is null))))
+                           or ($11 and f.pilot_id is null))
+                      and (f.archived_at is not null) = $12))
            group by f.team_id, t.name
            order by lower(t.name) nulls last"#,
         scope.all,
@@ -580,6 +601,7 @@ pub async fn teams_in(
         filter.to,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.archived,
     )
     .fetch_all(db)
     .await
@@ -616,7 +638,8 @@ pub async fn pilots_in(
                       and ($8::timestamptz is null or f.takeoff_at >= $8)
                       and ($9::timestamptz is null or f.takeoff_at < $9)
                       and ($10::uuid[] is null or f.team_id = any($10)
-                           or ($11 and f.team_id is null))))
+                           or ($11 and f.team_id is null))
+                      and (f.archived_at is not null) = $12))
            group by f.pilot_id, u.name
            order by lower(u.name) nulls last"#,
         scope.all,
@@ -630,6 +653,7 @@ pub async fn pilots_in(
         filter.to,
         filter.team_ids.as_deref(),
         filter.queue,
+        filter.archived,
     )
     .fetch_all(db)
     .await
@@ -712,6 +736,46 @@ pub async fn set_team(db: &PgPool, ids: &[Uuid], team_id: Option<Uuid>) -> sqlx:
     .execute(db)
     .await?;
     Ok(result.rows_affected())
+}
+
+/// Archives these flights, taking them out of their sessions, and returns how
+/// many weren't archived yet. Deletes a session left without flights.
+pub async fn archive(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<u64> {
+    let mut tx = sessions::db::locked(db).await?;
+    let archived = sqlx::query!(
+        "update flights set archived_at = now(), session_id = null
+         where id = any($1) and archived_at is null",
+        ids,
+    )
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    sessions::db::delete_empty(&mut tx).await?;
+    tx.commit().await?;
+    Ok(archived)
+}
+
+/// Restores these archived flights, without a session, and returns how many
+/// were archived.
+pub async fn restore(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<u64> {
+    let result = sqlx::query!(
+        "update flights set archived_at = null where id = any($1) and archived_at is not null",
+        ids,
+    )
+    .execute(db)
+    .await?;
+    Ok(result.rows_affected())
+}
+
+/// Whether any of these flights is archived.
+pub async fn any_archived(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<bool> {
+    sqlx::query_scalar!(
+        r#"select exists(select 1 from flights where id = any($1) and archived_at is not null)
+               as "exists!""#,
+        ids,
+    )
+    .fetch_one(db)
+    .await
 }
 
 /// A user who can be chosen as the pilot of flights: active and in a team.
@@ -1149,5 +1213,71 @@ mod tests {
             .unwrap();
         set_team(&db, &[flight], None).await.unwrap();
         assert_eq!(pilot_of().await, None);
+    }
+
+    /// Archiving takes flights out of their sessions, deletes a session left
+    /// empty and leaves them out of the list but for the archived filter;
+    /// restoring brings them back without a session.
+    #[sqlx::test]
+    async fn archived_flights_leave_sessions_and_lists(db: PgPool) {
+        let (a, b, c) = (
+            flight(&db, None, None).await,
+            flight(&db, None, None).await,
+            flight(&db, None, None).await,
+        );
+        let kept = sessions::db::split(&db, &[a, b]).await.unwrap();
+        let emptied = sessions::db::split(&db, &[c]).await.unwrap();
+        let session_of = async |id: Uuid| -> Option<Uuid> {
+            sqlx::query_scalar("select session_id from flights where id = $1")
+                .bind(id)
+                .fetch_one(&db)
+                .await
+                .unwrap()
+        };
+        let session_exists = async |id: Uuid| -> bool {
+            sqlx::query_scalar("select exists(select 1 from sessions where id = $1)")
+                .bind(id)
+                .fetch_one(&db)
+                .await
+                .unwrap()
+        };
+
+        assert_eq!(archive(&db, &[a, c]).await.unwrap(), 2);
+        assert_eq!(archive(&db, &[a]).await.unwrap(), 0);
+        assert_eq!(session_of(a).await, None);
+        assert_eq!(session_of(b).await, Some(kept));
+        assert!(!session_exists(emptied).await);
+        assert!(any_archived(&db, &[b, c]).await.unwrap());
+
+        let everything = FlightScope {
+            all: true,
+            user_id: Uuid::nil(),
+        };
+        let listed = async |archived: bool| -> Vec<Uuid> {
+            let filter = Filter {
+                archived,
+                ..Filter::default()
+            };
+            let sort = Sort {
+                key: SortKey::TakeoffAt,
+                descending: false,
+            };
+            let mut ids: Vec<Uuid> = list(&db, &everything, &filter, &sort, 100, 0)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|flight| flight.id)
+                .collect();
+            ids.sort();
+            ids
+        };
+        assert_eq!(listed(false).await, vec![b]);
+        let mut archived = vec![a, c];
+        archived.sort();
+        assert_eq!(listed(true).await, archived);
+
+        assert_eq!(restore(&db, &[a]).await.unwrap(), 1);
+        assert_eq!(session_of(a).await, None);
+        assert!(!any_archived(&db, &[a, b]).await.unwrap());
     }
 }

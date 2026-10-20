@@ -223,7 +223,7 @@ pub async fn neighbours(
 const SESSIONS_LOCK: i64 = 0x5e55_1015;
 
 /// A transaction holding the sessions lock.
-async fn locked(db: &PgPool) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+pub(crate) async fn locked(db: &PgPool) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
     let mut tx = db.begin().await?;
     sqlx::query!("select pg_advisory_xact_lock($1)", SESSIONS_LOCK)
         .execute(&mut *tx)
@@ -337,7 +337,7 @@ pub async fn remove(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<u64> {
     Ok(removed)
 }
 
-async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
+pub(crate) async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
     sqlx::query!(
         "delete from sessions s where not exists (select 1 from flights f where f.session_id = s.id)"
     )
@@ -360,7 +360,7 @@ pub async fn place_upload(db: &PgPool, raw_log_id: Uuid, gap: SessionGap) -> sql
                   l.received_at
            from flights f
            join raw_logs l on l.id = f.raw_log_id
-           where f.raw_log_id = $1 and f.session_id is null
+           where f.raw_log_id = $1 and f.session_id is null and f.archived_at is null
              and f.pilot_id is not null and l.pilot_id is not null"#,
         raw_log_id
     )

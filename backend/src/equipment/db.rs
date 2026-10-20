@@ -47,7 +47,8 @@ pub async fn list(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Equipment>> {
                 r#"select e.id, e.serial, e.name, e.team_id, t.name as "team_name?",
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
-                           where f.aircraft_serial = e.serial) as last_flight_at,
+                           where f.aircraft_serial = e.serial and f.archived_at is null)
+                              as last_flight_at,
                           null::bool as "paired?",
                           null::timestamptz as "synced_at?",
                           null::text as "app_version?"
@@ -65,7 +66,8 @@ pub async fn list(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Equipment>> {
                 r#"select e.id, e.serial, e.name, e.team_id, t.name as "team_name?",
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
-                           where f.rc_serial = e.serial) as last_flight_at,
+                           where f.rc_serial = e.serial and f.archived_at is null)
+                              as last_flight_at,
                           e.token_sha256 is not null as "paired?",
                           e.synced_at, e.app_version
                    from remote_controllers e
@@ -87,7 +89,8 @@ pub async fn get(db: &PgPool, kind: Kind, id: Uuid) -> sqlx::Result<Option<Equip
                 r#"select e.id, e.serial, e.name, e.team_id, t.name as "team_name?",
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
-                           where f.aircraft_serial = e.serial) as last_flight_at,
+                           where f.aircraft_serial = e.serial and f.archived_at is null)
+                              as last_flight_at,
                           null::bool as "paired?",
                           null::timestamptz as "synced_at?",
                           null::text as "app_version?"
@@ -106,7 +109,8 @@ pub async fn get(db: &PgPool, kind: Kind, id: Uuid) -> sqlx::Result<Option<Equip
                 r#"select e.id, e.serial, e.name, e.team_id, t.name as "team_name?",
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
-                           where f.rc_serial = e.serial) as last_flight_at,
+                           where f.rc_serial = e.serial and f.archived_at is null)
+                              as last_flight_at,
                           e.token_sha256 is not null as "paired?",
                           e.synced_at, e.app_version
                    from remote_controllers e

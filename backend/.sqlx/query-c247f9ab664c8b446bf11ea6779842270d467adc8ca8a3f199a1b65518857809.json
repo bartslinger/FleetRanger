@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select u.id, u.name, u.role,\n                  array(select m.team_id from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_ids!\",\n                  array(select t.name from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_names!\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id) as \"flights!\"\n           from users u\n           left join logins l on l.user_id = u.id\n           where $1 or u.archived_at is null\n           order by lower(u.name), u.id",
+  "query": "select u.id, u.name, u.role,\n                  array(select m.team_id from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_ids!\",\n                  array(select t.name from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_names!\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id and f.archived_at is null)\n                      as \"flights!\"\n           from users u\n           left join logins l on l.user_id = u.id\n           where $1 or u.archived_at is null\n           order by lower(u.name), u.id",
   "describe": {
     "columns": [
       {
@@ -100,5 +100,5 @@
       null
     ]
   },
-  "hash": "c7cbb763c393e6e580e6ed2dd3416e5ced0736799fb30d3f3b1a735fa0b77d69"
+  "hash": "c247f9ab664c8b446bf11ea6779842270d467adc8ca8a3f199a1b65518857809"
 }

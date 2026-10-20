@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select u.id, u.name, u.role,\n                  array(select m.team_id from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_ids!\",\n                  array(select t.name from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_names!\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id) as \"flights!\"\n           from users u\n           left join logins l on l.user_id = u.id\n           where u.id = $1",
+  "query": "select u.id, u.name, u.role,\n                  array(select m.team_id from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_ids!\",\n                  array(select t.name from team_members m join teams t on t.id = m.team_id\n                        where m.user_id = u.id order by lower(t.name), t.id) as \"team_names!\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id and f.archived_at is null)\n                      as \"flights!\"\n           from users u\n           left join logins l on l.user_id = u.id\n           where u.id = $1",
   "describe": {
     "columns": [
       {
@@ -100,5 +100,5 @@
       null
     ]
   },
-  "hash": "072689e66952cc02eec3efd46590a4761bfa3aa854a6eceb21bbf4271f08c5e5"
+  "hash": "ead0e56d27ba367a3a2c035c35daa69a4c02c610dccb41fbc7522894bacf7260"
 }

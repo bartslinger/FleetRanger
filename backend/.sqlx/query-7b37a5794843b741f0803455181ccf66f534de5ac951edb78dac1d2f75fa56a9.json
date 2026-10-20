@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update flights set archived_at = null where id = any($1) and archived_at is not null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b37a5794843b741f0803455181ccf66f534de5ac951edb78dac1d2f75fa56a9"
+}
