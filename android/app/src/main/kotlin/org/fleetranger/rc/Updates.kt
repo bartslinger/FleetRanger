@@ -9,8 +9,8 @@ import java.io.IOException
 
 /**
  * Updates of this app. The server offers the latest release's APK (see
- * "Releases" in android/README.md); the upload service checks once a day, the
- * settings on request. Android's installer installs it, the same screens as
+ * "Releases" in android/README.md); the app checks whenever it comes to the
+ * front, the upload service once a day, the settings on request. Android's installer installs it, the same screens as
  * installing from the download page: the person holding the controller
  * confirms (the first time also allows FleetRanger to install apps), and
  * afterwards "App installed" opens the new version.

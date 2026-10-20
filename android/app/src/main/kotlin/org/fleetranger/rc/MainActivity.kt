@@ -243,7 +243,25 @@ class MainActivity : ComponentActivity() {
         startUploads()
         pilotList = pilots.current
         last = pilots.last()
-        if (paired) refreshPilots()
+        if (paired) {
+            refreshPilots()
+            checkForUpdate()
+        }
+    }
+
+    /**
+     * Asks the server for a newer release whenever the app comes to the front
+     * (user's request), so the hint shows soon after a release rather than at
+     * the next daily check. Offline, the last answer stays.
+     */
+    private fun checkForUpdate() {
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { updates.check(server) }
+            } catch (_: IOException) {
+                // Not reachable now.
+            }
+        }
     }
 
     /**
