@@ -23,8 +23,16 @@
 	interface Props {
 		/** The trigger's label, which is also the title. */
 		title: string;
-		/** The trigger's style: primary for "New …", tertiary as a page action. */
-		triggerKind?: 'primary' | 'tertiary' | 'danger-tertiary';
+		/** The trigger's style: primary for "New …", tertiary as a page action,
+		 * danger-ghost in a table row. */
+		triggerKind?: 'primary' | 'tertiary' | 'danger-tertiary' | 'danger-ghost';
+		/** The trigger's accessible name, when its text alone doesn't say what
+		 * it acts on, e.g. "Disconnect Claude" for each row's "Disconnect".
+		 * It starts with the visible text. */
+		triggerLabel?: string;
+		/** Carbon's optional label above the title: what the dialog is about,
+		 * e.g. the item a row's action affects. */
+		label?: string;
 		/** An icon-only trigger instead, e.g. Edit beside a value; the title is
 		 * its label and tooltip. */
 		triggerIcon?: IconDescriptor;
@@ -49,6 +57,8 @@
 	let {
 		title,
 		triggerKind = 'primary',
+		triggerLabel,
+		label,
 		triggerIcon,
 		submitLabel,
 		danger = false,
@@ -81,7 +91,7 @@
 				{#if triggerIcon}
 					<IconButton {...props} icon={triggerIcon} label={title} />
 				{:else}
-					<Button {...props} kind={triggerKind}>{title}</Button>
+					<Button {...props} kind={triggerKind} aria-label={triggerLabel}>{title}</Button>
 				{/if}
 			{/snippet}
 		</Dialog.Trigger>
@@ -97,9 +107,11 @@
 				to.focus();
 			}}
 			onOpenAutoFocus={(event) => {
-				// The first field, or for a confirmation the primary button.
+				// The first visible field, or for a confirmation the primary button.
 				event.preventDefault();
-				const field = body?.querySelector<HTMLElement>('input, select, textarea');
+				const field = body?.querySelector<HTMLElement>(
+					'input:not([type=hidden]), select, textarea'
+				);
 				(field ?? submit)?.focus();
 			}}
 		>
@@ -120,7 +132,10 @@
 				}}
 			>
 				<div class="header">
-					<Dialog.Title class="modal-title">{title}</Dialog.Title>
+					<div>
+						{#if label}<p class="modal-label">{label}</p>{/if}
+						<Dialog.Title class="modal-title">{title}</Dialog.Title>
+					</div>
 					<!-- type="button": a button in a form submits it by default. -->
 					<Dialog.Close class="modal-close" aria-label="Close" type="button">
 						<Icon icon={Close} />
@@ -202,6 +217,16 @@
 		position: relative;
 		margin-bottom: var(--cds-spacing-03);
 		padding: var(--cds-spacing-05) var(--cds-spacing-09) 0 var(--cds-spacing-05);
+	}
+
+	/* Carbon's modal label: label-01 in the secondary text colour, 4px above the title. */
+	.modal-label {
+		margin: 0 0 var(--cds-spacing-02);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-label-01-font-size);
+		line-height: var(--cds-label-01-line-height);
+		letter-spacing: var(--cds-label-01-letter-spacing);
+		overflow-wrap: anywhere;
 	}
 
 	:global(.modal-title) {

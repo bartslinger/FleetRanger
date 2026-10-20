@@ -16,6 +16,8 @@
 		identifier?: boolean;
 		/** Lists, e.g. names: may wrap onto more lines rather than widen the table. */
 		wrap?: boolean;
+		/** Left out on phones (below md), e.g. so a row's action stays in view. */
+		wideOnly?: boolean;
 		/** A control after the value, e.g. a button to change it. */
 		after?: Snippet<[row: T]>;
 		sortable?: boolean;
@@ -221,7 +223,12 @@
 					</th>
 				{/if}
 				{#each columns as column (column.key)}
-					<th scope="col" class:numeric={column.numeric} aria-sort={ariaSort(column.key)}>
+					<th
+						scope="col"
+						class:numeric={column.numeric}
+						class:wide-only={column.wideOnly}
+						aria-sort={ariaSort(column.key)}
+					>
 						{#if column.sortable && sortHref}
 							{@const current = sort?.key === column.key}
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built by the caller -->
@@ -274,6 +281,7 @@
 							class:identifier={column.identifier}
 							class:wrap={column.wrap}
 							class:with-control={column.after}
+							class:wide-only={column.wideOnly}
 						>
 							{#if index === 0 && rowHref}
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built by the caller -->
@@ -503,6 +511,13 @@
 
 	.select-all:hover {
 		background: var(--cds-button-primary-hover);
+	}
+
+	/* Columns left out on phones, by CSS so the server renders the same table. */
+	@media (max-width: 41.99rem) {
+		.wide-only {
+			display: none;
+		}
 	}
 
 	/* On phones the offer takes a line of its own under the bar's, so the
