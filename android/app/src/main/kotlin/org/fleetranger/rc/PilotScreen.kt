@@ -49,11 +49,17 @@ import org.fleetranger.rc.ui.WarningNotification
 /** Every tile in the list the same height, whether or not it has a second line. */
 private val TILE_HEIGHT = 104.dp
 
+/** "Not in the list", as chosen from the list, apart from any pilot's key. */
+private const val NOT_LISTED = "not-listed"
+
 /**
- * "Who's flying?": the last pilot is one tap; anyone else is two, through
- * "Other pilot" and the list. Choosing hands over to DJI Pilot 2. Without a
- * last pilot (a new controller, or that pilot was removed) the list shows
- * straight away.
+ * "Who's flying?": the pilot's tile opens DJI Pilot 2, and says so. The last
+ * pilot is there already, so the same pilot again is one tap. Anyone else is
+ * chosen through "Other pilot" and the list, which goes back to this screen
+ * with them on the tile, so a different pilot or team is a step more, on
+ * purpose (user's decision, 2026-10-20). Without a last pilot (a new
+ * controller, or that pilot was removed) the list shows straight away, and
+ * choosing goes to this screen too.
  */
 @Composable
 fun PilotScreen(
@@ -68,10 +74,23 @@ fun PilotScreen(
     onUpdate: () -> Unit = {},
 ) {
     var choosing by rememberSaveable { mutableStateOf(false) }
+    // Who was chosen in the list, by key; null for the last pilot.
+    var chosenKey by rememberSaveable { mutableStateOf<String?>(null) }
+    // The pilot on the tile: the one chosen, or else the last. A pilot in a
+    // Pick, so "Not in the list" (no pilot) can be on the tile too.
+    val current: Pick? = when (val key = chosenKey) {
+        NOT_LISTED -> Pick(null)
+        null -> last?.let(::Pick)
+        else -> list.pilots.find { it.key == key }?.let(::Pick) ?: last?.let(::Pick)
+    }
     val settingsButton: @Composable () -> Unit = {
         Button("Settings", onSettings, kind = ButtonKind.Ghost)
     }
-    BackHandler(enabled = choosing && last != null) { choosing = false }
+    BackHandler(enabled = choosing && current != null) { choosing = false }
+    val choose: (Pilot?) -> Unit = { pilot ->
+        chosenKey = pilot?.key ?: NOT_LISTED
+        choosing = false
+    }
 
     Column(
         Modifier
@@ -92,23 +111,34 @@ fun PilotScreen(
             )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s05)) {
-            if (last != null && !choosing) {
+            if (current != null && !choosing) {
                 Heading("Who’s flying?", settingsButton)
-                LastPilot(last, onFly = { onChoose(last) }, onOther = { choosing = true })
-            } else if (last != null) {
+                CurrentPilot(
+                    current,
+                    onFly = {
+                        onChoose(current.pilot)
+                        chosenKey = null
+                    },
+                    onOther = { choosing = true },
+                )
+            } else if (current != null) {
                 Heading("Other pilot") {
                     Button("Back", { choosing = false }, kind = ButtonKind.Ghost)
                 }
-                // The last pilot is on the first screen already.
-                PilotList(list.copy(pilots = list.pilots.filter { it != last }), onChoose)
+                // The one on the first screen is there already.
+                PilotList(
+                    list.copy(pilots = list.pilots.filter { it != current.pilot }),
+                    choose,
+                    showNotListed = current.pilot != null,
+                )
             } else {
                 Heading("Who’s flying?", settingsButton)
-                PilotList(list, onChoose)
+                PilotList(list, choose)
             }
         }
         // Not on "Other pilot", which needs the room for the list; the first
         // screen shows it. An update shares the row, so it takes no height.
-        val choosingOther = last != null && choosing
+        val choosingOther = current != null && choosing
         if ((syncStatus != null || update != null) && !choosingOther) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (syncStatus != null) SyncLine(syncStatus, onSettings)
@@ -163,9 +193,13 @@ private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
     }
 }
 
-/** The usual case: the same pilot again, in one tap. */
+/** Who flies: a pilot, or none for "Not in the list". */
+private data class Pick(val pilot: Pilot?)
+
+/** The pilot on the tile, in one tap to DJI Pilot 2; or another one. */
 @Composable
-private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
+private fun CurrentPilot(current: Pick, onFly: () -> Unit, onOther: () -> Unit) {
+    val pilot = current.pilot
     // Carbon's wide gutter: a gloved tap mustn't hit the wrong one.
     // 144dp when there's room, at least 96dp with the startup warning above.
     Row(
@@ -173,8 +207,10 @@ private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(Spacing.s07),
     ) {
         ClickableTile(
-            title = last.name,
-            detail = "Flew last · ${last.teamName}",
+            title = pilot?.name ?: "Not in the list",
+            detail = pilot?.teamName ?: "Set the pilot later in the logbook",
+            action = "Open DJI Pilot 2",
+            icon = CarbonIcons.Launch,
             onClick = onFly,
             // Carbon's heading-05 is regular; semibold on purpose, to read outdoors.
             titleStyle = Type.heading05.copy(color = Colors.textPrimary, fontWeight = FontWeight.SemiBold),
@@ -189,9 +225,12 @@ private fun LastPilot(last: Pilot, onFly: () -> Unit, onOther: () -> Unit) {
     }
 }
 
-/** Everyone: the controller's team, then other teams, and "Not in the list". */
+/**
+ * Everyone: the controller's team, then other teams, and "Not in the list"
+ * unless it's on the first screen already. Choosing only chooses.
+ */
 @Composable
-private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit) {
+private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, showNotListed: Boolean = true) {
     val (team, others) = list.pilots.partition { list.teamId == null || it.teamId == list.teamId }
     val state = rememberLazyGridState()
     Box {
@@ -206,13 +245,15 @@ private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit) {
         items(team, key = { it.key }) { pilot ->
             PilotTile(pilot, detail = pilot.teamName, onChoose)
         }
-        item(key = "not-in-the-list") {
-            ClickableTile(
-                title = "Not in the list",
-                detail = "Set the pilot later in the logbook",
-                onClick = { onChoose(null) },
-                modifier = Modifier.height(TILE_HEIGHT),
-            )
+        if (showNotListed) {
+            item(key = "not-in-the-list") {
+                ClickableTile(
+                    title = "Not in the list",
+                    detail = "Set the pilot later in the logbook",
+                    onClick = { onChoose(null) },
+                    modifier = Modifier.height(TILE_HEIGHT),
+                )
+            }
         }
         if (others.isNotEmpty()) {
             sectionHeading("Other teams")
