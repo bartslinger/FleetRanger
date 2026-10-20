@@ -192,8 +192,20 @@ class UploadService : Service() {
 
     /** Tells the screens and the notification what the service is doing. */
     private fun report(state: SyncStatus.State, waiting: Int, current: String? = null) {
-        val status = SyncStatus.read(this)
-            .copy(state = state, waiting = waiting, current = current, uploadOver = sync.uploadOver)
+        val before = SyncStatus.read(this)
+        // Counted when done, as uploads and the server's answers change it.
+        val onServer = if (state == SyncStatus.State.Done) {
+            logs.all().count { it.state == FlightLogs.State.Uploaded }
+        } else {
+            before.onServer
+        }
+        val status = before.copy(
+            state = state,
+            waiting = waiting,
+            onServer = onServer,
+            current = current,
+            uploadOver = sync.uploadOver,
+        )
         SyncStatus.write(this, status)
         val busy = state == SyncStatus.State.Uploading && current != null
         getSystemService(NotificationManager::class.java)

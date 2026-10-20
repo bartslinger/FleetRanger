@@ -237,6 +237,8 @@ private fun ColumnScope.SyncTab(
         }
         Text(
             when {
+                // Logs the server had already weren't sent, and that's no gap.
+                status.uploaded == 0 && status.onServer > 0 -> "FleetRanger already had them"
                 status.uploaded == 0 -> "No logs uploaded yet"
                 else -> "${status.uploaded} ${if (status.uploaded == 1) "log" else "logs"} uploaded, " +
                     "the last at " +
