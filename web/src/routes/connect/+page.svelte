@@ -46,8 +46,12 @@
 			{@const app = data.request.app}
 			<DecisionTile
 				title="Connect {app} to FleetRanger?"
-				description="{app} ({data.request.host}) asks to act for you, {data.account
-					?.name}. What it reads goes to {app}."
+				description="{app} asks to act for you, {data.account?.name}. What it reads goes to {app}."
+				facts={[
+					// The name is only what the app says; where it sends you back is who it is.
+					{ label: 'Address of the app', value: data.request.host },
+					{ label: 'Name, as the app gives it', value: app }
+				]}
 				helper="You can disconnect it at any time under Connected apps in your profile."
 			>
 				<PermissionList

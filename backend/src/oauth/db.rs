@@ -204,6 +204,9 @@ pub async fn use_access(db: &PgPool, access_sha256: &[u8]) -> sqlx::Result<Optio
 pub struct Connection {
     pub id: Uuid,
     pub app: String,
+    /// The host its first return address goes to: who the app really is,
+    /// as the name is only what it says.
+    pub host: String,
     pub scopes: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub last_used_at: DateTime<Utc>,
@@ -212,10 +215,13 @@ pub struct Connection {
 pub async fn connections(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Connection>> {
     sqlx::query_as!(
         Connection,
-        "select g.id, c.name as app, g.scopes, g.created_at, g.last_used_at
-         from oauth_grants g join oauth_clients c on c.id = g.client_id
-         where g.user_id = $1
-         order by g.created_at desc",
+        r#"select g.id, c.name as app,
+                  coalesce(substring(c.redirect_uris[1] from '^[a-z]+://([^/:?#]+)'), '')
+                      as "host!",
+                  g.scopes, g.created_at, g.last_used_at
+           from oauth_grants g join oauth_clients c on c.id = g.client_id
+           where g.user_id = $1
+           order by g.created_at desc"#,
         user_id,
     )
     .fetch_all(db)
