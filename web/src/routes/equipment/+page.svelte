@@ -44,7 +44,9 @@
 			{
 				key: 'paired',
 				header: 'Pairing',
-				format: (item) => (item.paired ? 'Paired' : 'Not paired')
+				format: (item) => (item.paired ? 'Paired' : 'Not paired'),
+				// An unpaired controller can't upload; paired is the normal state.
+				status: (item) => (item.paired ? undefined : 'warning')
 			},
 			{
 				key: 'synced_at',
