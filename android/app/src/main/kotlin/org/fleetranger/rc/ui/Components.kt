@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -102,6 +103,13 @@ fun ClickableTile(
     modifier: Modifier = Modifier,
     detail: String? = null,
     titleStyle: TextStyle = Type.headingCompact02.copy(color = Colors.textPrimary),
+    /**
+     * What a tap does, e.g. "Open DJI Pilot 2": plain tile text, as Carbon
+     * allows no link inside a clickable tile; the whole tile is the target.
+     */
+    action: String? = null,
+    /** The arrow for somewhere in the app, Launch for another app. */
+    icon: ImageVector = CarbonIcons.ArrowRight,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -126,8 +134,15 @@ fun ClickableTile(
                 )
             }
         }
+        if (action != null) {
+            BasicText(
+                action,
+                style = Type.bodyCompact02.copy(color = Colors.textSecondary),
+                modifier = Modifier.align(Alignment.BottomStart).padding(Spacing.s05),
+            )
+        }
         Icon(
-            CarbonIcons.ArrowRight,
+            icon,
             Colors.interactive,
             Modifier.align(Alignment.BottomEnd).padding(Spacing.s04),
         )

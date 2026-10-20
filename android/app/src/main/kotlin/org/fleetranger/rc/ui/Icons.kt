@@ -30,6 +30,13 @@ private fun icon(name: String, viewBox: Float, vararg paths: String): ImageVecto
 
 object CarbonIcons {
     val ArrowRight = icon("arrow--right", 20f, "M11.8 2.8 10.8 3.8 16.2 9.3 1 9.3 1 10.7 16.2 10.7 10.8 16.2 11.8 17.2 19 10z")
+    /** Leaving the app, e.g. opening DJI Pilot 2; the arrow stays in it. */
+    val Launch = icon(
+        "launch",
+        32f,
+        "M26,28H6a2.0027,2.0027,0,0,1-2-2V6A2.0027,2.0027,0,0,1,6,4H16V6H6V26H26V16h2V26A2.0027,2.0027,0,0,1,26,28Z",
+        "M20 2 20 4 26.586 4 18 12.586 19.414 14 28 5.414 28 12 30 12 30 2 20 2z",
+    )
     val ArrowLeft = icon("arrow--left", 32f, "M14 26 15.41 24.59 7.83 17 28 17 28 15 7.83 15 15.41 7.41 14 6 4 16 14 26z")
     val TrashCan = icon(
         "trash-can",
