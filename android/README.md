@@ -8,8 +8,12 @@ Compose, with our own Carbon components (light theme only). See "Clients" in
 
 `./build.sh assembleDebug` runs Gradle in a pinned Docker image (see
 `Dockerfile`) and writes `app/build/outputs/apk/debug/app-debug.apk`. The
-image is x86_64: on an arm64 machine, Docker needs QEMU's binfmt support
-(`apt install qemu-user-binfmt` on Ubuntu), and builds are slow.
+image is built for the machine's own architecture, so Gradle, Kotlin and R8
+run natively. On an arm64 machine only aapt2, which Google publishes for
+x86_64 alone, runs under QEMU: Docker needs QEMU's binfmt support (`apt
+install qemu-user-binfmt` on Ubuntu). A clean release build takes under a
+minute on the arm64 development VM, where emulating the whole image took 12
+to 15.
 
 ## Releases
 
