@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use super::{
     ACCESS_SECONDS, CODE_SECONDS, IDLE_DAYS, OAuth, SCOPES,
-    db::{self, Code, Connection, Tokens},
+    db::{self, Code, Connection, Refreshed, Tokens},
     pkce_matches, random_token, sha256,
 };
 use crate::{
@@ -363,13 +363,15 @@ async fn issue(db: &PgPool, request: &TokenRequest) -> Result<Response, TokenErr
                 .filter(|code| code.client_id == client_id)
                 .filter(|code| request.redirect_uri.as_ref() == Some(&code.redirect_uri))
                 .filter(|code| pkce_matches(verifier, &code.code_challenge))
-                .filter(|code| {
-                    request
-                        .resource
-                        .as_ref()
-                        .is_none_or(|r| *r == code.resource)
-                })
                 .ok_or(TokenError::Refused("invalid_grant"))?;
+            // RFC 8707: a token for another resource than the one allowed.
+            if request
+                .resource
+                .as_ref()
+                .is_some_and(|r| *r != code.resource)
+            {
+                return Err(TokenError::Refused("invalid_target"));
+            }
             db::create_grant(db, &code, &tokens).await?;
             code.scopes
         }
@@ -378,9 +380,24 @@ async fn issue(db: &PgPool, request: &TokenRequest) -> Result<Response, TokenErr
                 .refresh_token
                 .as_deref()
                 .ok_or(TokenError::Refused("invalid_request"))?;
-            db::refresh(db, &sha256(refresh_token), client_id, &tokens, IDLE_DAYS)
-                .await?
-                .ok_or(TokenError::Refused("invalid_grant"))?
+            let resource = request.resource.as_deref();
+            match db::refresh(
+                db,
+                &sha256(refresh_token),
+                client_id,
+                &tokens,
+                IDLE_DAYS,
+                resource,
+            )
+            .await?
+            {
+                Refreshed::Renewed(scopes) => scopes,
+                Refreshed::Reused => {
+                    tracing::warn!(%client_id, "an old refresh token came back; the app was disconnected");
+                    return Err(TokenError::Refused("invalid_grant"));
+                }
+                Refreshed::Refused => return Err(TokenError::Refused("invalid_grant")),
+            }
         }
         _ => return Err(TokenError::Refused("unsupported_grant_type")),
     };
@@ -463,7 +480,8 @@ mod tests {
     }
 
     /// A code works once, only with its PKCE verifier; a refresh token works
-    /// once, and its new access token replaces the old one.
+    /// once, its new access token replaces the old one, and a used one coming
+    /// back ends the connection.
     #[sqlx::test]
     async fn codes_and_refresh_tokens_work_once(db: PgPool) {
         let user: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
@@ -514,19 +532,16 @@ mod tests {
 
         let mut renewal = request("refresh_token", client);
         renewal.refresh_token = Some(refresh);
-        let (new_access, _) = tokens(&db, &renewal).await.unwrap();
+        let (new_access, new_refresh) = tokens(&db, &renewal).await.unwrap();
+        let works =
+            async |token: &str| db::use_access(&db, &sha256(token)).await.unwrap().is_some();
+        assert!(!works(&access).await);
+        assert!(works(&new_access).await);
+
+        // The old refresh token again: copied, so the connection ends for both.
         assert_eq!(tokens(&db, &renewal).await, Err("invalid_grant"));
-        assert!(
-            db::use_access(&db, &sha256(&access))
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            db::use_access(&db, &sha256(&new_access))
-                .await
-                .unwrap()
-                .is_some()
-        );
+        assert!(!works(&new_access).await);
+        renewal.refresh_token = Some(new_refresh);
+        assert_eq!(tokens(&db, &renewal).await, Err("invalid_grant"));
     }
 }

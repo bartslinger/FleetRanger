@@ -112,32 +112,64 @@ pub async fn create_grant(db: &PgPool, code: &Code, tokens: &Tokens<'_>) -> sqlx
 
 /// Replaces a grant's tokens, given its current refresh token, if the app is
 /// the grant's, the grant was used within `idle_days` and its user may still
-/// log in. Returns the grant's scopes.
+/// log in. Given the refresh token it had before, the grant ends: the token
+/// was copied, and either holder may be the thief (RFC 9700, 4.14.2).
 pub async fn refresh(
     db: &PgPool,
     refresh_sha256: &[u8],
     client_id: Uuid,
     tokens: &Tokens<'_>,
     idle_days: i32,
-) -> sqlx::Result<Option<Vec<String>>> {
-    sqlx::query_scalar!(
+    resource: Option<&str>,
+) -> sqlx::Result<Refreshed> {
+    let refreshed = sqlx::query!(
         "update oauth_grants g
          set access_token_sha256 = $3, access_expires_at = now() + make_interval(secs => $4),
-             refresh_token_sha256 = $5, last_used_at = now()
+             previous_refresh_sha256 = g.refresh_token_sha256, refresh_token_sha256 = $5,
+             last_used_at = now()
          from users u, logins l
          where g.refresh_token_sha256 = $1 and g.client_id = $2
            and g.last_used_at > now() - make_interval(days => $6)
+           and ($7::text is null or g.resource = $7)
            and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id
-         returning g.scopes",
+         returning g.scopes, g.resource",
         refresh_sha256,
         client_id,
         tokens.access_sha256,
         tokens.access_seconds,
         tokens.refresh_sha256,
         idle_days,
+        resource,
     )
     .fetch_optional(db)
-    .await
+    .await?;
+    if let Some(grant) = refreshed {
+        return Ok(Refreshed::Renewed(grant.scopes));
+    }
+    // A refresh token that was already replaced: someone else has a copy.
+    let reused = sqlx::query!(
+        "delete from oauth_grants where previous_refresh_sha256 = $1",
+        refresh_sha256
+    )
+    .execute(db)
+    .await?
+    .rows_affected()
+        > 0;
+    Ok(if reused {
+        Refreshed::Reused
+    } else {
+        Refreshed::Refused
+    })
+}
+
+pub enum Refreshed {
+    /// New tokens, with the grant's scopes.
+    Renewed(Vec<String>),
+    /// An old refresh token came back, so the grant was ended.
+    Reused,
+    /// Unknown, idle too long, another app's or resource's, or its user may
+    /// no longer log in.
+    Refused,
 }
 
 /// Who an access token acts for, and what for.

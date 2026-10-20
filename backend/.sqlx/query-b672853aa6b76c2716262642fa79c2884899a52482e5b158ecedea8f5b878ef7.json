@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from oauth_grants where previous_refresh_sha256 = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b672853aa6b76c2716262642fa79c2884899a52482e5b158ecedea8f5b878ef7"
+}
