@@ -78,7 +78,6 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 
 ## Later
 
-- Operations
 - Session reports with organisation-specific fields
 - Areas
 - Sharing flights, also outside the organisation
