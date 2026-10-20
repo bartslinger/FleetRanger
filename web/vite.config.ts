@@ -20,7 +20,11 @@ export default defineConfig({
 	server: {
 		proxy: {
 			'/api': backendUrl,
-			'/auth': backendUrl
+			'/auth': backendUrl,
+			// AI assistants: the MCP server and how they find its OAuth.
+			'/mcp': backendUrl,
+			'/.well-known/oauth-authorization-server': backendUrl,
+			'/.well-known/oauth-protected-resource': backendUrl
 		},
 		// File change events may not cross the VM's shared folder; set VITE_POLL=1 to poll instead.
 		watch: process.env.VITE_POLL ? { usePolling: true, interval: 300 } : undefined
