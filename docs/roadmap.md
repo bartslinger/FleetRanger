@@ -62,7 +62,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Syncing finished logs over approved Wi-Fi networks, any Wi-Fi or any connection
 - [x] Uploading only the logs the server lacks (asked by hash before uploading)
 - [x] Pairing: linking a (new) controller to the organisation, which any user can do, with unpairing and the download page
-- [~] Onboarding asks which logs to upload (from today, all or from a date, with the number of logs each covers); today's until chosen
+- [~] Onboarding asks which logs to upload (all, or from a date that starts at today, with the number of logs each covers); today's until chosen
 
 ## Public website (fleetranger.org)
 

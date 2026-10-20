@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -39,10 +41,11 @@ private val DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 /**
  * After pairing: which logs to upload, chosen on purpose rather than all of
- * them by default. From today is chosen to begin with, and is what the
- * controller uploads until someone continues. Each choice says how many of
- * the controller's logs it covers. `onChoose` gets the first day to upload,
- * or null for all logs.
+ * them by default. The same choices as the settings' "Sync logs from": all
+ * logs, or from a date, which starts at today and is what the controller
+ * uploads until someone continues. Each choice says how many of the
+ * controller's logs it covers. `onChoose` gets the first day to upload, or
+ * null for all logs.
  */
 @Composable
 fun SyncFromScreen(onChoose: (LocalDate?) -> Unit) {
@@ -56,51 +59,42 @@ fun SyncFromScreen(onChoose: (LocalDate?) -> Unit) {
             }
         }
     }
-    val today = remember { LocalDate.now() }
-    // Null for all logs.
-    var from by remember { mutableStateOf<LocalDate?>(today) }
-    var aDate by remember { mutableStateOf(false) }
+    // The date, kept while "All logs" is chosen, so choosing a date again
+    // brings it back.
+    var date by remember { mutableStateOf(LocalDate.now()) }
+    var allLogs by remember { mutableStateOf(false) }
 
     fun pickDate() {
-        val initial = from ?: today
         DatePickerDialog(
             context,
             { _, year, month, day ->
-                from = LocalDate.of(year, month + 1, day)
-                aDate = true
+                date = LocalDate.of(year, month + 1, day)
+                allLogs = false
             },
-            initial.year,
-            initial.monthValue - 1,
-            initial.dayOfMonth,
+            date.year,
+            date.monthValue - 1,
+            date.dayOfMonth,
         ).show()
     }
 
     SyncFromContent(
         days = days,
-        today = today,
-        from = from,
-        aDate = aDate,
-        onToday = {
-            from = today
-            aDate = false
-        },
-        onAllLogs = {
-            from = null
-            aDate = false
-        },
+        date = date,
+        allLogs = allLogs,
+        onAllLogs = { allLogs = true },
+        onADate = { allLogs = false },
         onPickDate = ::pickDate,
-        onContinue = { onChoose(from) },
+        onContinue = { onChoose(if (allLogs) null else date) },
     )
 }
 
 @Composable
 private fun SyncFromContent(
     days: List<LocalDate>?,
-    today: LocalDate,
-    from: LocalDate?,
-    aDate: Boolean,
-    onToday: () -> Unit,
+    date: LocalDate,
+    allLogs: Boolean,
     onAllLogs: () -> Unit,
+    onADate: () -> Unit,
     onPickDate: () -> Unit,
     onContinue: () -> Unit,
 ) {
@@ -118,9 +112,7 @@ private fun SyncFromContent(
             .fillMaxSize()
             .background(Colors.background)
             .verticalScroll(rememberScrollState())
-            // Tighter than other screens: the controller's 392dp must hold
-            // the three 64dp choices and Continue without scrolling.
-            .padding(horizontal = Spacing.s07, vertical = Spacing.s05),
+            .padding(horizontal = Spacing.s07, vertical = Spacing.s06),
     ) {
         BasicText(
             "Which logs to upload",
@@ -131,23 +123,17 @@ private fun SyncFromContent(
             if (days == null) {
                 "Looking for flight logs on this controller…"
             } else {
-                "Logs upload from the day you choose. You can change it later in Settings."
+                "FleetRanger uploads the flight logs on this controller from the day you choose on, " +
+                    "except those it already has. You can change this later in Settings."
             },
             style = Type.bodyCompact02.copy(color = Colors.textPrimary),
-            modifier = Modifier.padding(top = Spacing.s03, bottom = Spacing.s02),
+            modifier = Modifier.widthIn(max = 600.dp).padding(top = Spacing.s05, bottom = Spacing.s03),
         )
-        RadioButton("From today", selected = from == today && !aDate, onSelect = onToday, detail = count(today))
-        RadioButton("All logs", selected = from == null, onSelect = onAllLogs, detail = count(null))
+        // As in the settings: the date beside "From a date".
+        RadioButton("All logs", selected = allLogs, onSelect = onAllLogs, detail = count(null))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
-                "From a date",
-                selected = aDate,
-                onSelect = onPickDate,
-                detail = if (aDate) count(from) else null,
-            )
-            if (aDate && from != null) {
-                DateField(DATE.format(from), onPickDate, Modifier.padding(start = Spacing.s06))
-            }
+            RadioButton("From a date", selected = !allLogs, onSelect = onADate, detail = count(date))
+            DateField(DATE.format(date), onPickDate, Modifier.padding(start = Spacing.s06))
         }
         Button("Continue", onContinue, modifier = Modifier.padding(top = Spacing.s05))
     }
@@ -159,11 +145,10 @@ private fun SyncFromScreenPreview() {
     val today = LocalDate.of(2026, 10, 20)
     SyncFromContent(
         days = List(40) { today.minusDays(it * 9L) },
-        today = today,
-        from = today,
-        aDate = false,
-        onToday = {},
+        date = today,
+        allLogs = false,
         onAllLogs = {},
+        onADate = {},
         onPickDate = {},
         onContinue = {},
     )
