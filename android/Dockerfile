@@ -1,8 +1,20 @@
-# Builds the remote controller app. Google's Android build tools only run on
-# x86_64 Linux, so this image is amd64; on an arm64 machine it runs under QEMU
-# (see build.sh). Everything is pinned: the base image by digest, downloads by
-# checksum, SDK packages by version.
+# Builds the remote controller app, natively on x86_64 and arm64 machines:
+# Java (Gradle, Kotlin, R8), which does nearly all the work, runs on the
+# machine's own architecture. Only aapt2, which Google publishes for x86_64
+# Linux alone, needs x86_64; on arm64 it runs under QEMU (see build.sh), with
+# the x86_64 glibc and libgcc_s it needs copied from the x86_64 variant of the
+# same base image (on x86_64 those are the image's own). Everything is
+# pinned: the base image by digest, downloads by checksum, SDK packages by
+# version.
+FROM --platform=linux/amd64 eclipse-temurin:21-jdk-noble@sha256:107215954359f1ab0be058a247d7c64ed6e69c71c1682d471d38ef751ec8e964 AS x86
+
 FROM eclipse-temurin:21-jdk-noble@sha256:107215954359f1ab0be058a247d7c64ed6e69c71c1682d471d38ef751ec8e964
+
+COPY --from=x86 /lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+COPY --from=x86 /usr/lib/x86_64-linux-gnu/libc.so.6 /usr/lib/x86_64-linux-gnu/libm.so.6 \
+    /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 /usr/lib/x86_64-linux-gnu/libdl.so.2 \
+    /usr/lib/x86_64-linux-gnu/libpthread.so.0 /usr/lib/x86_64-linux-gnu/librt.so.1 \
+    /usr/lib/x86_64-linux-gnu/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends unzip \
