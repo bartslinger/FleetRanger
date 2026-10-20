@@ -8,3 +8,4 @@ local.properties
 *.local
 # Claude Code's personal settings, such as permissions.
 .claude/settings.local.json
+.DS_Store
