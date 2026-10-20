@@ -457,7 +457,7 @@ private fun Text(text: String, small: Boolean = false) {
  * date input (value and calendar icon) on the white panel, so in field-02.
  */
 @Composable
-private fun DateField(value: String, onPick: () -> Unit, modifier: Modifier = Modifier) {
+fun DateField(value: String, onPick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier
             .widthIn(min = 200.dp)

@@ -13,7 +13,8 @@ import java.time.ZoneId
 /**
  * When logs sync: over any Wi-Fi network (the default), approved ones only,
  * or any connection; Wi-Fi never when metered. And only logs from a chosen date
- * on (all logs by default). See "Clients" in docs/architecture.md.
+ * on: chosen while onboarding, today until then. See "Clients" in
+ * docs/architecture.md.
  */
 class SyncSettings(private val context: Context) {
     private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)

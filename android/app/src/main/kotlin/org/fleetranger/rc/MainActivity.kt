@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import java.io.IOException
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,10 +63,15 @@ class MainActivity : ComponentActivity() {
     private var logAccessRefused by mutableStateOf(false)
     private val askForLogs =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-            getSharedPreferences("onboarding", MODE_PRIVATE).edit()
-                .putBoolean("asked_for_logs", true).apply()
+            onboarding().edit().putBoolean("asked_for_logs", true).apply()
             startUploads()
         }
+
+    /**
+     * Set on pairing, until someone chose which logs to upload. Controllers
+     * paired before this step existed never had it, and keep their setting.
+     */
+    private var choosingLogs by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,6 +89,7 @@ class MainActivity : ComponentActivity() {
         if (server.url == null) Setup.server(this)?.let { server.url = it }
         serverUrl = server.url
         paired = server.paired
+        choosingLogs = onboarding().getBoolean("choose_logs", false)
         setUp(intent)
         setContent {
             when {
@@ -90,6 +97,10 @@ class MainActivity : ComponentActivity() {
                     server.url = url
                     serverUrl = url
                 }, onPaired = {
+                    // Until someone chooses, only today's logs upload.
+                    sync.syncFrom = LocalDate.now()
+                    onboarding().edit().putBoolean("choose_logs", true).apply()
+                    choosingLogs = true
                     paired = true
                     refreshPilots()
                     startUploads()
@@ -106,7 +117,13 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                 )
-                showLogs -> LogsScreen(syncStatus, onBack = { showLogs = false })
+                choosingLogs -> SyncFromScreen(onChoose = { from ->
+                    sync.syncFrom = from
+                    onboarding().edit().putBoolean("choose_logs", false).apply()
+                    choosingLogs = false
+                    startUploads()
+                })
+                showLogs ->LogsScreen(syncStatus, onBack = { showLogs = false })
                 showSettings -> SettingsScreen(
                     settings = sync,
                     serverUrl = serverUrl,
@@ -148,16 +165,18 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Uploads run once the controller is paired and may read the logs. Without
-     * access, the onboarding screen explains Android's question before asking.
+     * Uploads run once the controller is paired, may read the logs and someone
+     * chose which. Without access, the onboarding screen explains Android's
+     * question before asking.
      */
     private fun startUploads() {
         hasLogAccess = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
             PackageManager.PERMISSION_GRANTED
-        logAccessRefused = !hasLogAccess &&
-            getSharedPreferences("onboarding", MODE_PRIVATE).getBoolean("asked_for_logs", false)
-        if (paired && hasLogAccess) UploadService.start(this)
+        logAccessRefused = !hasLogAccess && onboarding().getBoolean("asked_for_logs", false)
+        if (paired && hasLogAccess && !choosingLogs) UploadService.start(this)
     }
+
+    private fun onboarding() = getSharedPreferences("onboarding", MODE_PRIVATE)
 
     /**
      * Follows the connection while the app is in front, for the settings:
