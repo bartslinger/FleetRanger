@@ -249,6 +249,8 @@ export interface AppRequest {
 export interface Connection {
 	id: string;
 	app: string;
+	/** Where the app sends the user back: who it really is. */
+	host: string;
 	scopes: string[];
 	created_at: string;
 	last_used_at: string;

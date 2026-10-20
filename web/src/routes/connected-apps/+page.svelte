@@ -17,8 +17,9 @@
 	/** What each scope lets an app do, briefly. */
 	const ACCESS: Record<string, string> = { 'flights:read': 'Reads flights and sessions' };
 
-	// On phones only the app and when it was last used, so Disconnect stays in view.
+	// On phones only the app and its address, so Disconnect stays in view. The address tells apps with the same name apart.
 	const wide = new MediaQuery('min-width: 42rem');
+	const address: TableColumn<Row> = { key: 'host', header: 'Address', identifier: true };
 	const lastUsed: TableColumn<Row> = $derived({
 		key: 'last_used_at',
 		header: `Last used (${data.timeZoneName})`,
@@ -28,6 +29,7 @@
 		wide.current
 			? [
 					{ key: 'app', header: 'App' },
+					address,
 					{
 						key: 'scopes',
 						header: 'Access',
@@ -40,7 +42,7 @@
 					},
 					lastUsed
 				]
-			: [{ key: 'app', header: 'App' }, lastUsed]
+			: [{ key: 'app', header: 'App' }, address]
 	);
 </script>
 
