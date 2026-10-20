@@ -13,6 +13,9 @@ data class SyncStatus(
     val waiting: Int,
     /** Logs uploaded, ever. */
     val uploaded: Int,
+    /** Of the logs on the controller, those FleetRanger has: uploaded from
+     * here, or found there already (e.g. after pairing again). */
+    val onServer: Int = 0,
     /** Epoch milliseconds of the last upload; 0 if none yet. */
     val lastUploadAt: Long,
     /** The log being uploaded. */
@@ -50,8 +53,8 @@ data class SyncStatus(
         }
         State.Uploading -> "Uploading ${current ?: "a log"} (${waiting} waiting)"
         State.Unreachable -> "Can’t reach FleetRanger; ${plural(waiting, "log")} waiting"
-        // Nothing uploaded yet, e.g. every log is from before the chosen date.
-        State.Done -> if (uploaded == 0) "No logs to upload" else "All logs uploaded"
+        // Nothing in FleetRanger, e.g. every log is from before the chosen date.
+        State.Done -> if (onServer == 0) "No logs to upload" else "All ${plural(onServer, "log")} are in FleetRanger"
     }
 
     companion object {
@@ -64,6 +67,7 @@ data class SyncStatus(
                     ?.let { runCatching { State.valueOf(it) }.getOrNull() } ?: State.Starting,
                 waiting = prefs.getInt("waiting", 0),
                 uploaded = prefs.getInt("uploaded", 0),
+                onServer = prefs.getInt("on_server", 0),
                 lastUploadAt = prefs.getLong("last_upload_at", 0),
                 current = prefs.getString("current", null),
                 uploadOver = prefs.getString("upload_over", null)
@@ -77,6 +81,7 @@ data class SyncStatus(
                 .putString("state", status.state.name)
                 .putInt("waiting", status.waiting)
                 .putInt("uploaded", status.uploaded)
+                .putInt("on_server", status.onServer)
                 .putLong("last_upload_at", status.lastUploadAt)
                 .putString("current", status.current)
                 .putString("upload_over", status.uploadOver.name)
