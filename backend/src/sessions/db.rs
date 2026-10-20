@@ -223,7 +223,9 @@ pub async fn neighbours(
 const SESSIONS_LOCK: i64 = 0x5e55_1015;
 
 /// A transaction holding the sessions lock.
-pub(crate) async fn locked(db: &PgPool) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+pub(crate) async fn locked(
+    db: &PgPool,
+) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
     let mut tx = db.begin().await?;
     sqlx::query!("select pg_advisory_xact_lock($1)", SESSIONS_LOCK)
         .execute(&mut *tx)

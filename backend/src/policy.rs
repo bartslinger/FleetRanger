@@ -173,7 +173,11 @@ pub fn set_pilot(
 /// Whether the actor may change these flights, e.g. archive or restore them:
 /// admins any flight, members those of their own teams, and the all-flights
 /// role none.
-pub fn change_flights(role: Role, own_teams: &[Uuid], flight_teams: &[Option<Uuid>]) -> ApiResult<()> {
+pub fn change_flights(
+    role: Role,
+    own_teams: &[Uuid],
+    flight_teams: &[Option<Uuid>],
+) -> ApiResult<()> {
     match role {
         Role::Admin => Ok(()),
         Role::AllFlights => Err(ApiError::Forbidden),
