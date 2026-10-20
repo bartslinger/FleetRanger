@@ -4,7 +4,6 @@
 	app gets less than they can do themselves.
 -->
 <script lang="ts">
-	import { page } from '$app/state';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DecisionTile from '#lib/ui/DecisionTile.svelte';
@@ -32,8 +31,9 @@
 		'See tracks, locations or raw flight logs'
 	]);
 
-	// The answer goes with the app's request, which is the page's query.
-	const action = (name: string) => `${page.url.search}&/${name}`;
+	// The answer goes with the app's request as the server checked it, never
+	// the raw query, which could name another action.
+	const action = (name: string) => `?${data.query}&/${name}`;
 </script>
 
 <svelte:head>
