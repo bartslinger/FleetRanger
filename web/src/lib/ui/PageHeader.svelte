@@ -128,6 +128,12 @@
 		.wide {
 			display: none;
 		}
+
+		/* The actions always on a line of their own below the title, not
+		   squeezed beside a short one. */
+		.text {
+			flex-basis: 100%;
+		}
 	}
 
 	@media (min-width: 42rem) {
