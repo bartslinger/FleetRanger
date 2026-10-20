@@ -147,6 +147,7 @@ class MainActivity : ComponentActivity() {
                     last = last,
                     opensAtStartup = opensAtStartup,
                     onChoose = ::fly,
+                    onSelect = ::select,
                     onOpenStartupSettings = { DjiPilot.openSettings(this) },
                     onSettings = {
                         refreshNetwork()
@@ -310,6 +311,12 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Opens the settings, e.g. from the upload notification. */
         const val EXTRA_SETTINGS = "settings"
+    }
+
+    /** A pilot chosen in the list flies from now on, and is the last pilot next time. */
+    private fun select(pilot: Pilot?) {
+        pilots.choose(pilot)
+        last = pilots.last()
     }
 
     private fun fly(pilot: Pilot?) {

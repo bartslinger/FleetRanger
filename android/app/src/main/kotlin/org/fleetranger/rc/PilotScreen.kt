@@ -59,7 +59,8 @@ private const val NOT_LISTED = "not-listed"
  * with them on the tile, so a different pilot or team is a step more, on
  * purpose (user's decision, 2026-10-20). Without a last pilot (a new
  * controller, or that pilot was removed) the list shows straight away, and
- * choosing goes to this screen too.
+ * choosing goes to this screen too. A choice in the list counts at once,
+ * also if DJI Pilot 2 is opened some other way (user's request, 2026-10-20).
  */
 @Composable
 fun PilotScreen(
@@ -67,6 +68,7 @@ fun PilotScreen(
     last: Pilot?,
     opensAtStartup: Boolean,
     onChoose: (Pilot?) -> Unit,
+    onSelect: (Pilot?) -> Unit,
     onOpenStartupSettings: () -> Unit,
     onSettings: () -> Unit,
     syncStatus: SyncStatus? = null,
@@ -88,6 +90,7 @@ fun PilotScreen(
     }
     BackHandler(enabled = choosing && current != null) { choosing = false }
     val choose: (Pilot?) -> Unit = { pilot ->
+        onSelect(pilot)
         chosenKey = pilot?.key ?: NOT_LISTED
         choosing = false
     }
@@ -327,11 +330,11 @@ private val previewPilots = listOf(
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun LastPilotPreview() {
-    PilotScreen(PilotList("north", previewPilots), previewPilots[1], true, {}, {}, {})
+    PilotScreen(PilotList("north", previewPilots), previewPilots[1], true, {}, {}, {}, {})
 }
 
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun PilotListPreview() {
-    PilotScreen(PilotList("north", previewPilots), last = null, true, {}, {}, {})
+    PilotScreen(PilotList("north", previewPilots), last = null, true, {}, {}, {}, {})
 }
