@@ -157,7 +157,7 @@ The HTTP headers add the install's DJI API key, the content type and the HTTP cl
 
 Every request is stored exactly as sent, with the response. An operator can check all of the above on their own install.
 
-¹ Verified in the code of DJI Pilot 2 version 17.3.0.21 (October 2026), and consistent with the fixed size of every request we have seen.
+¹ Verified in the code of DJI Pilot 2 version 17.3.0.21 (October 2026), and consistent with the fixed size of every request we have seen. The app's flight record library uses [LibTomCrypt](https://github.com/libtom/libtomcrypt), a widely used open-source cryptography library, for the RSA encryption, the padding and the random source. Those functions are public code, so how the key blocks are built can be read in its source.
 
 ## Operations
 
