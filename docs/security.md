@@ -146,7 +146,9 @@ sequenceDiagram
 
 The HTTP headers add the install's DJI API key, the content type and the HTTP client's standard headers.
 
-**What a key block contains.** Each block is RSA-2048 with PKCS#1 v1.5 padding. Inside are 52 bytes: the 32-byte AES key and the 16-byte IV, each with its length. The rest of the 256 bytes is random padding. The app generates the key and IV when it writes the log, from nothing else: no serial numbers, positions, times or other log data.¹
+**What a key block contains.** Each block is RSA-2048 with PKCS#1 v1.5 padding. Inside are 52 bytes: the 32-byte AES key and the 16-byte IV, each with its length. The rest of the 256 bytes is padding from the operating system's random source. The app generates the key and IV when it writes the log, from nothing else: no serial numbers, positions, times or other log data.¹
+
+**What DJI sends back.** For each of the 10 feature-point names, a 32-byte AES key and a 16-byte IV: exactly what was in the key blocks. Every response we have stored holds 10 such pairs, all different.
 
 **What DJI can learn.**
 - That the install's API key asks for keys, how often, and from which IP address. One request goes out per log, shortly after the log arrives.
