@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    extract::{FromRequestParts, Request, State},
+    extract::{Request, State},
     http::{HeaderValue, StatusCode, header, request::Parts},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -39,7 +39,7 @@ use crate::{
         self,
         db::{Filter, FlightDetail, Sort, SortKey},
     },
-    oauth,
+    oauth::{self, Bearer},
     policy::{self, Role},
     sessions,
 };
@@ -96,40 +96,63 @@ where
 }
 
 /// Lets through apps with an access token for `/mcp` and `flights:read`, and
-/// hands the tools who they act for; others get a 401 that says where to get
-/// a token (RFC 9728). Debug builds also accept a login session's token, for
-/// trying the tools without OAuth.
+/// hands the tools who they act for. Others get a 401 that says where to get
+/// a token (RFC 9728), or a 403 for a token without the scope (RFC 6750).
+/// Debug builds also accept a login session, for trying the tools without
+/// OAuth; release builds only access tokens.
 ///
 /// Over MCP everyone is a member (user's decision, 2026-10-20): admins and the
 /// all-flights role see what a member of their teams sees, which is what
 /// matters to them as a pilot.
 async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) -> Response {
-    let (mut parts, body) = request.into_parts();
-    let actor = match oauth::actor(&gate.db, &parts, &gate.resource, SCOPE).await {
-        Ok(Some(actor)) => Some(actor),
-        Ok(None) => Actor::from_request_parts(&mut parts, &gate.db).await.ok(),
+    let (parts, body) = request.into_parts();
+    let bearer = match oauth::bearer(&gate.db, &parts, &gate.resource, SCOPE).await {
+        Ok(bearer) => bearer,
         Err(error) => {
             tracing::error!(%error, "checking an MCP access token");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
-    let Some(mut actor) = actor else {
-        let challenge = format!(
-            r#"Bearer resource_metadata="{}", scope="{SCOPE}""#,
-            gate.metadata
-        );
-        let mut response = StatusCode::UNAUTHORIZED.into_response();
-        if let Ok(value) = HeaderValue::from_str(&challenge) {
-            response
-                .headers_mut()
-                .insert(header::WWW_AUTHENTICATE, value);
+    let refusal = match bearer {
+        Bearer::Valid(actor) => Ok(actor),
+        Bearer::Missing => Err((StatusCode::UNAUTHORIZED, None)),
+        Bearer::Invalid => Err((StatusCode::UNAUTHORIZED, Some("invalid_token"))),
+        Bearer::Insufficient => Err((StatusCode::FORBIDDEN, Some("insufficient_scope"))),
+    };
+    #[cfg(debug_assertions)]
+    let refusal = match refusal {
+        Err((StatusCode::UNAUTHORIZED, error)) => {
+            use axum::extract::FromRequestParts;
+            Actor::from_request_parts(&mut parts.clone(), &gate.db)
+                .await
+                .map_err(|_| (StatusCode::UNAUTHORIZED, error))
         }
-        return response;
+        other => other,
+    };
+    let mut actor = match refusal {
+        Ok(actor) => actor,
+        Err((status, error)) => return challenge(&gate.metadata, status, error),
     };
     actor.role = Role::Member;
     let mut request = Request::from_parts(parts, body);
     request.extensions_mut().insert(actor);
     next.run(request).await
+}
+
+/// A refusal with the `WWW-Authenticate` header: where to get a token, which
+/// scope it needs, and what was wrong with the one sent, if any.
+fn challenge(metadata: &str, status: StatusCode, error: Option<&str>) -> Response {
+    let mut value = format!(r#"Bearer resource_metadata="{metadata}", scope="{SCOPE}""#);
+    if let Some(error) = error {
+        value.push_str(&format!(r#", error="{error}""#));
+    }
+    let mut response = status.into_response();
+    if let Ok(value) = HeaderValue::from_str(&value) {
+        response
+            .headers_mut()
+            .insert(header::WWW_AUTHENTICATE, value);
+    }
+    response
 }
 
 #[derive(Clone)]
