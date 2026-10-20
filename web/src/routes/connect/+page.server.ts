@@ -16,7 +16,7 @@ export async function load({ fetch, url }) {
 	// An action's name in the app's own link would make a button do something
 	// else (Cancel would run "/allow"): such a request is refused.
 	if (actionNames(url).length > 0) {
-		return { request: null, query: '', problem: 'The app’s request is malformed.' };
+		return { request: null, query: '', problem: 'Malformed request' };
 	}
 	// The backend checks who asks and for what; a bad request is shown, and the
 	// app isn't sent back an error, as it may not be who it says it is.
@@ -29,7 +29,7 @@ export async function load({ fetch, url }) {
 
 async function answer(fetch: typeof globalThis.fetch, url: URL, allow: boolean) {
 	// Exactly the one action the button names.
-	if (actionNames(url).length !== 1) return { problem: 'The app’s request is malformed.' };
+	if (actionNames(url).length !== 1) return { problem: 'Malformed request' };
 	const body = { ...request(url), allow };
 	const result = await send<{ redirect: string }>(fetch, 'POST', '/api/oauth/approve', body);
 	if (!result.ok) return { problem: result.message };

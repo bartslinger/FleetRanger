@@ -193,45 +193,42 @@ struct Valid {
     resource: String,
 }
 
-/// Checks a request. A message on failure, for the consent page: the app
-/// isn't sent an error, since it may not be who it says it is.
+/// Checks a request. A short title on failure, for the consent page's error
+/// (which says what to do): the app isn't sent an error, since it may not be
+/// who it says it is.
 async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) -> ApiResult<Valid> {
     let invalid = |message: &str| ApiError::Invalid(message.to_owned());
     let client = match request.client_id.as_deref().map(str::parse::<Uuid>) {
         Some(Ok(id)) => db::client(db, id).await?,
         _ => None,
     }
-    .ok_or_else(|| invalid("The app isn’t registered with FleetRanger."))?;
+    .ok_or_else(|| invalid("App not registered"))?;
     let redirect_uri = request
         .redirect_uri
         .clone()
         .filter(|uri| registered(uri, &client.redirect_uris))
-        .ok_or_else(|| invalid("The app gave a return address it didn’t register."))?;
+        .ok_or_else(|| invalid("Return address not registered"))?;
     if request.response_type.as_deref() != Some("code") {
-        return Err(invalid("The app asked for an unsupported kind of access."));
+        return Err(invalid("Unsupported kind of access"));
     }
     let code_challenge = request
         .code_challenge
         .clone()
         .filter(|challenge| (43..=128).contains(&challenge.len()))
         .filter(|_| request.code_challenge_method.as_deref() == Some("S256"))
-        .ok_or_else(|| invalid("The app didn’t secure its request (PKCE)."))?;
+        .ok_or_else(|| invalid("Request not secured (PKCE)"))?;
     let scopes: Vec<String> = match request.scope.as_deref().map(str::trim) {
         None | Some("") => SCOPES.iter().map(|&scope| scope.to_owned()).collect(),
         Some(scope) => scope.split(' ').map(str::to_owned).collect(),
     };
     if !scopes.iter().all(|scope| SCOPES.contains(&scope.as_str())) {
-        return Err(invalid(
-            "The app asked for access FleetRanger doesn’t give.",
-        ));
+        return Err(invalid("Access FleetRanger doesn’t give"));
     }
     let resource = match (&request.resource, &*oauth.resources) {
         (Some(resource), resources) if resources.contains(resource) => resource.clone(),
         (None, [only]) => only.clone(),
         _ => {
-            return Err(invalid(
-                "The app asked for a part of FleetRanger that doesn’t exist.",
-            ));
+            return Err(invalid("Unknown part of FleetRanger"));
         }
     };
     Ok(Valid {
@@ -297,7 +294,7 @@ async fn approve(
 ) -> ApiResult<Json<Redirect>> {
     let valid = validate(&db, &oauth, &decision.request).await?;
     let mut url = Url::parse(&valid.redirect_uri)
-        .map_err(|_| ApiError::Invalid("The app’s return address is invalid.".to_owned()))?;
+        .map_err(|_| ApiError::Invalid("Invalid return address".to_owned()))?;
     let code = if decision.allow {
         let code = random_token();
         let stored = Code {

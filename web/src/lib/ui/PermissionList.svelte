@@ -41,11 +41,13 @@
 		margin: 0;
 	}
 
+	/* A quiet heading: the label style, so the lists don't shout. */
 	h2 {
-		font-size: var(--cds-heading-compact-01-font-size);
-		font-weight: var(--cds-heading-compact-01-font-weight);
-		line-height: var(--cds-heading-compact-01-line-height);
-		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-label-01-font-size);
+		font-weight: var(--cds-label-01-font-weight);
+		line-height: var(--cds-label-01-line-height);
+		letter-spacing: var(--cds-label-01-letter-spacing);
 	}
 
 	ul {

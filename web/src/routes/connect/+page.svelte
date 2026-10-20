@@ -16,8 +16,7 @@
 
 	/** What each scope lets an app do. */
 	const ABILITIES: Record<string, string> = {
-		'flights:read':
-			'Read summaries of your flights and sessions, and those of your teams: times, air time, distance, pilots and equipment'
+		'flights:read': 'Read your flights and sessions, and those of your teams'
 	};
 
 	// Admins and the all-flights role see every team's flights in FleetRanger,
@@ -27,8 +26,8 @@
 	);
 	const limits = $derived([
 		'Change anything',
-		...(seesAllTeams ? ['See flights of other teams'] : []),
-		'See tracks, locations or raw flight logs'
+		...(seesAllTeams ? ['See other teams’ flights'] : []),
+		'See tracks or locations'
 	]);
 
 	// The answer goes with the app's request as the server checked it, never
@@ -40,26 +39,24 @@
 	<title>Connect an app · FleetRanger</title>
 </svelte:head>
 
+<!-- Centred on six of the grid's columns (all on phones). -->
 <Grid>
-	<Column>
+	<Column md={6} mdOffset={1} lg={6} lgOffset={5}>
 		{#if data.request}
 			{@const app = data.request.app}
+			<!-- The name is only what the app says; its address, where it sends
+			     you back, is who it is. -->
 			<DecisionTile
 				title="Connect {app} to FleetRanger?"
-				description="{app} asks to act for you, {data.account?.name}. What it reads goes to {app}."
-				facts={[
-					// The name is only what the app says; where it sends you back is who it is.
-					{ label: 'Address of the app', value: data.request.host },
-					{ label: 'Name, as the app gives it', value: app }
-				]}
-				helper="You can disconnect it at any time under Connected apps in your profile."
+				description="{data.request.host} wants to read your flight data, as {data.account?.name}."
+				helper="What {app} reads is sent to {app}. You can disconnect it under Connected apps."
 			>
 				<PermissionList
 					heading="{app} will be able to"
 					items={data.request.scopes.map((scope) => ABILITIES[scope] ?? scope)}
 					granted
 				/>
-				<PermissionList heading="{app} will not be able to" items={limits} granted={false} />
+				<PermissionList heading="{app} won’t be able to" items={limits} granted={false} />
 				{#if form?.problem}
 					<InlineNotification kind="error" title={form.problem} />
 				{/if}
@@ -74,7 +71,7 @@
 			</DecisionTile>
 		{:else}
 			<DecisionTile title="This app can’t connect">
-				<InlineNotification kind="error" title={data.problem ?? 'The request is invalid.'}>
+				<InlineNotification kind="error" title={data.problem ?? 'Invalid request'}>
 					Go back to the app and try again. If it keeps happening, the app may not work with
 					FleetRanger.
 				</InlineNotification>

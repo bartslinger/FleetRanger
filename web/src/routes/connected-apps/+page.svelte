@@ -7,7 +7,6 @@
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import { dateTime } from '#lib/format.js';
-	import { MediaQuery } from 'svelte/reactivity';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -17,33 +16,30 @@
 	/** What each scope lets an app do, briefly. */
 	const ACCESS: Record<string, string> = { 'flights:read': 'Reads flights and sessions' };
 
-	// On phones only the app and its address, so Disconnect stays in view. The address tells apps with the same name apart.
-	const wide = new MediaQuery('min-width: 42rem');
-	const address: TableColumn<Row> = { key: 'host', header: 'Address', identifier: true };
-	const lastUsed: TableColumn<Row> = $derived({
-		key: 'last_used_at',
-		header: `Last used (${data.timeZoneName})`,
-		format: (row) => dateTime(row.last_used_at, data.timeZone)
-	});
-	const columns: TableColumn<Row>[] = $derived(
-		wide.current
-			? [
-					{ key: 'app', header: 'App' },
-					address,
-					{
-						key: 'scopes',
-						header: 'Access',
-						format: (row) => row.scopes.map((scope) => ACCESS[scope] ?? scope).join(', ')
-					},
-					{
-						key: 'created_at',
-						header: `Connected (${data.timeZoneName})`,
-						format: (row) => dateTime(row.created_at, data.timeZone)
-					},
-					lastUsed
-				]
-			: [{ key: 'app', header: 'App' }, address]
-	);
+	// On phones only the app and its address, which tells apps with the same
+	// name apart, so Disconnect stays in view.
+	const columns: TableColumn<Row>[] = $derived([
+		{ key: 'app', header: 'App' },
+		{ key: 'host', header: 'Address', identifier: true },
+		{
+			key: 'scopes',
+			header: 'Access',
+			wideOnly: true,
+			format: (row) => row.scopes.map((scope) => ACCESS[scope] ?? scope).join(', ')
+		},
+		{
+			key: 'created_at',
+			header: `Connected (${data.timeZoneName})`,
+			wideOnly: true,
+			format: (row) => dateTime(row.created_at, data.timeZone)
+		},
+		{
+			key: 'last_used_at',
+			header: `Last used (${data.timeZoneName})`,
+			wideOnly: true,
+			format: (row) => dateTime(row.last_used_at, data.timeZone)
+		}
+	]);
 </script>
 
 <PageHeader
@@ -56,14 +52,16 @@
 		{#if data.connections.length === 0}
 			<EmptyState
 				title="No connected apps"
-				body="Apps appear here once you allow them to connect to FleetRanger."
+				body="To connect an AI assistant, add FleetRanger in the assistant's settings, for example as a connector in Claude. It then asks you here to allow it."
 			/>
 		{:else}
 			<DataTable label="Connected apps" {columns} rows={data.connections} rowKey={(row) => row.id}>
 				{#snippet rowAction(row)}
 					<Modal
 						title="Disconnect"
-						triggerKind="danger-tertiary"
+						triggerKind="danger-ghost"
+						triggerLabel="Disconnect {row.app} ({row.host})"
+						label="{row.app} · {row.host}"
 						submitLabel="Disconnect"
 						danger
 						action="?/disconnect"
