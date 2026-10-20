@@ -84,6 +84,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - Sharing flights, also outside the organisation
 - Invite links for accounts
 - Suggesting operations from flights that overlap in time and area
+- MCP
 
 ## Open questions
 
