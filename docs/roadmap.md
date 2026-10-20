@@ -73,7 +73,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 ## MCP (AI assistants)
 
 - [x] Read-only summary tools at `/mcp`, off unless the install switches it on
-- [ ] OAuth, so assistants in claude.ai and others can connect
+- [~] OAuth, so assistants in claude.ai and others can connect: consent page and connected apps work locally; security review in progress
 - [ ] `/mcp` in the nginx routes (Ansible repo)
 
 ## Before production use
