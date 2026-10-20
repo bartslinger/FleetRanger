@@ -36,41 +36,53 @@ pub struct OAuth {
     pub resources: Arc<[String]>,
 }
 
-/// The user an access token in the request acts for, if it is valid for this
-/// resource and scope. None without a bearer token, or with one that isn't an
-/// access token (in debug builds it may be a login session's).
-pub async fn actor(
+/// What a request's bearer token is worth for a resource and scope.
+pub enum Bearer {
+    /// A valid access token for them, acting for this user.
+    Valid(Actor),
+    /// No bearer token.
+    Missing,
+    /// Unknown or expired, or its user may no longer log in (RFC 6750:
+    /// `invalid_token`).
+    Invalid,
+    /// Valid, but for another resource or without the scope
+    /// (`insufficient_scope`).
+    Insufficient,
+}
+
+/// Checks the request's access token against this resource and scope.
+pub async fn bearer(
     db: &PgPool,
     parts: &Parts,
     resource: &str,
     scope: &str,
-) -> sqlx::Result<Option<Actor>> {
+) -> sqlx::Result<Bearer> {
     let Some(token) = parts
         .headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
     else {
-        return Ok(None);
+        return Ok(Bearer::Missing);
     };
     let Some(access) = db::use_access(db, &sha256(token)).await? else {
-        return Ok(None);
+        return Ok(Bearer::Invalid);
     };
     if access.resource != resource || !access.scopes.iter().any(|granted| granted == scope) {
-        return Ok(None);
+        return Ok(Bearer::Insufficient);
     }
     let Some(role) = Role::parse(&access.role) else {
         tracing::error!(role = access.role, "unknown user role");
-        return Ok(None);
+        return Ok(Bearer::Invalid);
     };
     let peer = parts
         .extensions
         .get::<ConnectInfo<SocketAddr>>()
         .map(|ConnectInfo(peer)| *peer);
     let Some(peer) = peer else {
-        return Ok(None);
+        return Ok(Bearer::Invalid);
     };
-    Ok(Some(Actor {
+    Ok(Bearer::Valid(Actor {
         user_id: access.user_id,
         role,
         // The audit log will name the connection here rather than a login session.

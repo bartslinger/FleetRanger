@@ -163,7 +163,8 @@ async fn set_login(db: &mut PgConnection, id: Uuid, email: Option<&str>) -> sqlx
     revoke_sessions(db, id).await
 }
 
-/// Ends the user's login sessions and disconnects their apps (OAuth grants).
+/// Ends the user's login sessions and disconnects their apps (OAuth grants,
+/// and codes an app hasn't exchanged yet).
 async fn revoke_sessions(db: &mut PgConnection, id: Uuid) -> sqlx::Result<()> {
     sqlx::query!(
         "update login_sessions set revoked_at = now()
@@ -173,6 +174,9 @@ async fn revoke_sessions(db: &mut PgConnection, id: Uuid) -> sqlx::Result<()> {
     .execute(&mut *db)
     .await?;
     sqlx::query!("delete from oauth_grants where user_id = $1", id)
+        .execute(&mut *db)
+        .await?;
+    sqlx::query!("delete from oauth_codes where user_id = $1", id)
         .execute(db)
         .await?;
     Ok(())
