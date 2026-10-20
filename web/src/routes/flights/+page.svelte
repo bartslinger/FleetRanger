@@ -231,7 +231,7 @@
 		{#if data.total === 0 && filtering}
 			<EmptyState title="No flights match" body="No flights you can see pass these filters.">
 				{#snippet action()}
-					<Button kind="tertiary" onclick={() => filter(none)}>Clear filters</Button>
+					<Button kind="ghost" onclick={() => filter(none)}>Clear filters</Button>
 				{/snippet}
 			</EmptyState>
 		{:else if data.total === 0}
