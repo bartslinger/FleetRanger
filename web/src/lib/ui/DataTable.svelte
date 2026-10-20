@@ -18,6 +18,8 @@
 		wrap?: boolean;
 		/** Left out on phones (below md), e.g. so a row's action stays in view. */
 		wideOnly?: boolean;
+		/** Carbon's icon indicator before the value, which says the status in words. */
+		status?: (row: T) => 'warning' | undefined;
 		/** A control after the value, e.g. a button to change it. */
 		after?: Snippet<[row: T]>;
 		sortable?: boolean;
@@ -35,6 +37,7 @@
 	import ArrowDown from '@carbon/icons/es/arrow--down/16.js';
 	import ArrowUp from '@carbon/icons/es/arrow--up/16.js';
 	import ArrowsVertical from '@carbon/icons/es/arrows--vertical/16.js';
+	import WarningAltFilled from '@carbon/icons/es/warning--alt--filled/16.js';
 	import Checkbox from './Checkbox.svelte';
 	import Icon from './Icon.svelte';
 	import Tag from './Tag.svelte';
@@ -283,6 +286,9 @@
 							class:with-control={column.after}
 							class:wide-only={column.wideOnly}
 						>
+							{#if column.status?.(row) === 'warning'}
+								<span class="status warning"><Icon icon={WarningAltFilled} /></span>
+							{/if}
 							{#if index === 0 && rowHref}
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built by the caller -->
 								<a class="row-link" href={rowHref(row)}>{@render content(row, column)}</a>
@@ -603,6 +609,24 @@
 	}
 
 	/* A cell with a control: above the row link, which covers the row. */
+	/* Icon indicator: 16 px icon, left-aligned with the text (Carbon's status
+	   indicator pattern). Carbon fills the warning's exclamation mark black in
+	   both themes. */
+	.status {
+		display: inline-flex;
+		vertical-align: -0.1875rem;
+		margin-inline-end: var(--cds-spacing-03);
+	}
+
+	.status.warning {
+		color: var(--cds-support-warning);
+	}
+
+	.status.warning :global([data-icon-path='inner-path']) {
+		fill: #000;
+		opacity: 1;
+	}
+
 	td.with-control {
 		position: relative;
 		z-index: 1;
