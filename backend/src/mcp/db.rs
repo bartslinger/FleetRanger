@@ -2,6 +2,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::{flights::db::Filter, policy::FlightScope};
 
@@ -140,6 +141,26 @@ pub async fn start_of_day(
     .await
 }
 
+/// A team the user flies for.
+#[derive(Serialize)]
+pub struct OwnTeam {
+    pub id: Uuid,
+    pub name: String,
+}
+
+/// The teams the user flies for, by name; none for someone who doesn't fly.
+pub async fn own_teams(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<OwnTeam>> {
+    sqlx::query_as!(
+        OwnTeam,
+        "select t.id, t.name from team_members m join teams t on t.id = m.team_id
+         where m.user_id = $1 and t.archived_at is null
+         order by lower(t.name), t.id",
+        user_id,
+    )
+    .fetch_all(db)
+    .await
+}
+
 /// Today in the time zone; fails for a time zone Postgres doesn't know.
 pub async fn today(db: &PgPool, time_zone: &str) -> sqlx::Result<NaiveDate> {
     sqlx::query_scalar!(
@@ -152,8 +173,6 @@ pub async fn today(db: &PgPool, time_zone: &str) -> sqlx::Result<NaiveDate> {
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
-
     use super::*;
 
     async fn insert_id(db: &PgPool, sql: &'static str) -> Uuid {
