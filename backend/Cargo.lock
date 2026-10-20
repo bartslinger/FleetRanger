@@ -812,6 +812,7 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-extra",
+ "base64 0.23.1",
  "chrono",
  "cookie",
  "dji-log-parser",
