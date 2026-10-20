@@ -7,6 +7,7 @@ mod events;
 mod flights;
 mod health;
 mod ingest;
+mod mcp;
 mod pairing;
 mod policy;
 mod sessions;
@@ -158,8 +159,22 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         },
     };
 
+    // Off unless the install switches it on (FLEETRANGER_MCP).
+    let mcp = if config.mcp {
+        mcp::db::today(&state.db, &config.time_zone)
+            .await
+            .with_context(|| format!("TIME_ZONE {} is not a known time zone", config.time_zone))?;
+        let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
+        hosts.extend(config.public_url.host_str().map(str::to_owned));
+        tracing::info!("MCP server on at /mcp");
+        mcp::router(state.db.clone(), config.time_zone.clone(), hosts)
+    } else {
+        Router::new()
+    };
+
     let app = Router::new()
         .route("/healthz", get(health::check))
+        .merge(mcp)
         .merge(auth::routes::router())
         .merge(download::router())
         .merge(events::router())

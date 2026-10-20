@@ -46,6 +46,7 @@ impl Auth {
 
 /// Who is making a request: a logged-in user. Handlers get one only through a
 /// valid login session, and pass it to the service functions they call.
+#[derive(Clone)]
 pub struct Actor {
     pub user_id: Uuid,
     pub role: Role,
@@ -66,10 +67,10 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let jar = CookieJar::from_headers(&parts.headers);
-        let token = jar
-            .get(SESSION_COOKIE)
-            .ok_or(StatusCode::UNAUTHORIZED)?
-            .value();
+        let token = match jar.get(SESSION_COOKIE) {
+            Some(cookie) => cookie.value(),
+            None => bearer(&parts.headers).ok_or(StatusCode::UNAUTHORIZED)?,
+        };
         let ConnectInfo(peer) = parts
             .extensions
             .get::<ConnectInfo<SocketAddr>>()
@@ -100,6 +101,23 @@ where
             name: session.name,
         })
     }
+}
+
+/// A login session's token sent as `Authorization: Bearer …`, which only debug
+/// builds accept: for trying the MCP server with a local assistant until it
+/// has OAuth (see "Clients" in docs/architecture.md).
+#[cfg(debug_assertions)]
+fn bearer(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(header::AUTHORIZATION)?
+        .to_str()
+        .ok()?
+        .strip_prefix("Bearer ")
+}
+
+#[cfg(not(debug_assertions))]
+fn bearer(_headers: &HeaderMap) -> Option<&str> {
+    None
 }
 
 /// The database stores only this hash of a session token, so a leaked database
