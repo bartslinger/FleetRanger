@@ -60,10 +60,21 @@
 		theme: Theme;
 		/** Further header actions, e.g. processing progress. */
 		actions?: HeaderAction[];
+		/** Pages about the user's account, linked in the profile panel. */
+		profileLinks?: { href: string; label: string }[];
 		children: Snippet;
 	}
 
-	let { name, logo, nav, account, theme: initialTheme, actions = [], children }: Props = $props();
+	let {
+		name,
+		logo,
+		nav,
+		account,
+		theme: initialTheme,
+		actions = [],
+		profileLinks = [],
+		children
+	}: Props = $props();
 
 	let open = $state(false);
 	let menuButton: HTMLButtonElement | undefined = $state();
@@ -264,6 +275,11 @@
 						bind:value={theme}
 						onchange={setTheme}
 					/>
+					{#each profileLinks as link (link.href)}
+						<Button kind="ghost" href={link.href} fill onclick={() => togglePanel('profile')}
+							>{link.label}</Button
+						>
+					{/each}
 					<!-- Posted straight to the backend, which ends the login session. -->
 					<form class="logout" method="post" action="/auth/logout">
 						<Button kind="ghost" type="submit" fill>Log out</Button>

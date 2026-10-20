@@ -22,6 +22,7 @@ use uuid::Uuid;
 use super::db::{self, LoginUser};
 use super::oidc::PendingLogin;
 use super::{Actor, Auth, SESSION_COOKIE, SESSION_IDLE_DAYS, client_ip, token_hash};
+use crate::oauth::OAuth;
 
 /// Holds a login in progress, only on its way back from the provider.
 const LOGIN_COOKIE: &str = "fleetranger_login";
@@ -31,6 +32,7 @@ where
     S: Clone + Send + Sync + 'static,
     PgPool: FromRef<S>,
     Arc<Auth>: FromRef<S>,
+    OAuth: FromRef<S>,
 {
     Router::new()
         .route("/auth/login", get(login))
@@ -201,15 +203,19 @@ struct Me {
     /// So the web app shows only what the user can use; the backend still
     /// checks every request.
     role: &'static str,
+    /// Whether apps (such as AI assistants) can connect to this install, so
+    /// the web app offers the list of connected apps only then.
+    apps: bool,
 }
 
 /// The logged-in user, or 401.
-async fn me(actor: Actor) -> Json<Me> {
+async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
     Json(Me {
         id: actor.user_id,
         email: actor.email,
         name: actor.name,
         role: actor.role.as_str(),
+        apps: !oauth.resources.is_empty(),
     })
 }
 

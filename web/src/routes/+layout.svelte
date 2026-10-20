@@ -143,7 +143,17 @@
 	{#if shownProcessing}<ProcessingPanel status={shownProcessing} timeZone={data.timeZone} />{/if}
 {/snippet}
 
-<Shell name="FleetRanger" logo={favicon} {nav} account={data.account} theme={data.theme} {actions}>
+<Shell
+	name="FleetRanger"
+	logo={favicon}
+	{nav}
+	account={data.account}
+	theme={data.theme}
+	{actions}
+	profileLinks={data.account?.apps
+		? [{ href: resolve('/connected-apps'), label: 'Connected apps' }]
+		: []}
+>
 	{@render children()}
 </Shell>
 

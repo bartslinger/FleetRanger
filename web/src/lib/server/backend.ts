@@ -232,6 +232,26 @@ export interface Account {
 	email: string;
 	name: string;
 	role: 'member' | 'all_flights' | 'admin';
+	/** Whether apps (such as AI assistants) can connect to this install. */
+	apps: boolean;
+}
+
+/** An app asking to connect, from `POST /api/oauth/request`. */
+export interface AppRequest {
+	/** As the app named itself. */
+	app: string;
+	/** Where the app sends the user back: who it really is. */
+	host: string;
+	scopes: string[];
+}
+
+/** An app the user connected, from `GET /api/oauth/connections`. */
+export interface Connection {
+	id: string;
+	app: string;
+	scopes: string[];
+	created_at: string;
+	last_used_at: string;
 }
 
 /** The user of the browser's login session, or null if it isn't logged in. */
