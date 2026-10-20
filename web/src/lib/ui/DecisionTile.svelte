@@ -4,7 +4,7 @@
 	with a title, a short description, the content, the buttons and a note
 	below them, after Carbon's login pattern (nothing else to do). Place it on
 	the grid, e.g. centred on six columns. Buttons go in `actions`, primary
-	first.
+	first (each may sit in its own form); they share the tile's width.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -74,10 +74,21 @@
 		letter-spacing: var(--cds-helper-text-01-letter-spacing);
 	}
 
-	/* Side by side, 1px apart as Carbon's button sets. */
+	/* Carbon's fluid buttons in a floating container: equal widths filling
+	   the tile, 1px apart, primary first; they stack, primary on top, only
+	   when a label no longer fits. */
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 1px;
+	}
+
+	.actions > :global(*) {
+		flex: 1 1 10rem;
+		display: flex;
+	}
+
+	.actions :global(.button) {
+		flex: 1;
 	}
 </style>
