@@ -9,7 +9,14 @@
 	import Icon, { type IconDescriptor } from './Icon.svelte';
 
 	type Props = {
-		kind?: 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger' | 'danger-tertiary';
+		kind?:
+			| 'primary'
+			| 'secondary'
+			| 'tertiary'
+			| 'ghost'
+			| 'danger'
+			| 'danger-tertiary'
+			| 'danger-ghost';
 		size?: 'sm' | 'md' | 'lg' | 'xl';
 		/** Fills its container, e.g. in a form or a panel. */
 		fill?: boolean;
@@ -189,6 +196,21 @@
 		color: var(--cds-text-on-color);
 	}
 
+	/* A quiet destructive action, e.g. in a table row; it asks to confirm. */
+	.danger-ghost {
+		background: transparent;
+		color: var(--cds-button-danger-secondary);
+		padding-inline-end: calc(var(--cds-spacing-05) - 1px);
+	}
+	.danger-ghost:hover {
+		background: var(--cds-button-danger-hover);
+		color: var(--cds-text-on-color);
+	}
+	.danger-ghost:active {
+		background: var(--cds-button-danger-active);
+		color: var(--cds-text-on-color);
+	}
+
 	.button:disabled,
 	.button:disabled:hover {
 		background: var(--cds-button-disabled);
@@ -199,6 +221,8 @@
 
 	.ghost:disabled,
 	.ghost:disabled:hover,
+	.danger-ghost:disabled,
+	.danger-ghost:disabled:hover,
 	.tertiary:disabled,
 	.tertiary:disabled:hover {
 		background: transparent;
