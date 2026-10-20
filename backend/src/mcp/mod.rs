@@ -9,10 +9,10 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    extract::{FromRef, Request},
-    http::request::Parts,
+    extract::{FromRequestParts, Request, State},
+    http::{HeaderValue, StatusCode, header, request::Parts},
     middleware::{self, Next},
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDate, Utc};
 use rmcp::{
@@ -39,6 +39,7 @@ use crate::{
         self,
         db::{Filter, FlightDetail, Sort, SortKey},
     },
+    oauth,
     policy::{self, Role},
     sessions,
 };
@@ -46,12 +47,30 @@ use crate::{
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAX_PAGE_SIZE: u32 = 100;
 
-/// `/mcp`, for logged-in users only. `hosts` are the names the server is
-/// reached by, which the transport checks against DNS rebinding.
-pub fn router<S>(db: PgPool, time_zone: String, hosts: Vec<String>) -> Router<S>
+/// The scope an app needs for these tools.
+const SCOPE: &str = "flights:read";
+
+/// Who may use `/mcp`, checked before the tools run.
+#[derive(Clone)]
+struct Gate {
+    db: PgPool,
+    /// This resource's address, which access tokens must be for.
+    resource: String,
+    /// Where apps learn how to get such a token.
+    metadata: String,
+}
+
+/// The address of `/mcp` at an install, which its tokens are for.
+pub fn resource(issuer: &str) -> String {
+    format!("{issuer}/mcp")
+}
+
+/// `/mcp`, for apps with an access token for it from `issuer` (the install's
+/// address). `hosts` are the names the server is reached by, which the
+/// transport checks against DNS rebinding.
+pub fn router<S>(db: PgPool, time_zone: String, issuer: &str, hosts: Vec<String>) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
 {
     let config = StreamableHttpServerConfig::default()
         .with_legacy_session_mode(false)
@@ -66,15 +85,49 @@ where
     );
     Router::new()
         .route_service("/mcp", service)
-        .layer(middleware::from_fn_with_state(db, authenticate))
+        .layer(middleware::from_fn_with_state(
+            Gate {
+                db,
+                resource: resource(issuer),
+                metadata: format!("{issuer}/.well-known/oauth-protected-resource/mcp"),
+            },
+            authenticate,
+        ))
 }
 
-/// Lets only logged-in users through, and hands the tools who they are. Over
-/// MCP everyone is a member (user's decision, 2026-10-20): admins and the
+/// Lets through apps with an access token for `/mcp` and `flights:read`, and
+/// hands the tools who they act for; others get a 401 that says where to get
+/// a token (RFC 9728). Debug builds also accept a login session's token, for
+/// trying the tools without OAuth.
+///
+/// Over MCP everyone is a member (user's decision, 2026-10-20): admins and the
 /// all-flights role see what a member of their teams sees, which is what
 /// matters to them as a pilot.
-async fn authenticate(mut actor: Actor, mut request: Request, next: Next) -> Response {
+async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) -> Response {
+    let (mut parts, body) = request.into_parts();
+    let actor = match oauth::actor(&gate.db, &parts, &gate.resource, SCOPE).await {
+        Ok(Some(actor)) => Some(actor),
+        Ok(None) => Actor::from_request_parts(&mut parts, &gate.db).await.ok(),
+        Err(error) => {
+            tracing::error!(%error, "checking an MCP access token");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let Some(mut actor) = actor else {
+        let challenge = format!(
+            r#"Bearer resource_metadata="{}", scope="{SCOPE}""#,
+            gate.metadata
+        );
+        let mut response = StatusCode::UNAUTHORIZED.into_response();
+        if let Ok(value) = HeaderValue::from_str(&challenge) {
+            response
+                .headers_mut()
+                .insert(header::WWW_AUTHENTICATE, value);
+        }
+        return response;
+    };
     actor.role = Role::Member;
+    let mut request = Request::from_parts(parts, body);
     request.extensions_mut().insert(actor);
     next.run(request).await
 }

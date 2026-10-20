@@ -8,6 +8,7 @@ mod flights;
 mod health;
 mod ingest;
 mod mcp;
+mod oauth;
 mod pairing;
 mod policy;
 mod sessions;
@@ -32,6 +33,7 @@ use crate::download::AndroidApk;
 use crate::events::Changes;
 use crate::ingest::LogDir;
 use crate::ingest::activity::Activity;
+use crate::oauth::OAuth;
 use crate::sessions::SessionGap;
 
 #[tokio::main]
@@ -80,6 +82,13 @@ struct AppState {
     session_gap: SessionGap,
     log_dir: LogDir,
     android_apk: AndroidApk,
+    oauth: OAuth,
+}
+
+impl FromRef<AppState> for OAuth {
+    fn from_ref(state: &AppState) -> Self {
+        state.oauth.clone()
+    }
 }
 
 impl FromRef<AppState> for Changes {
@@ -143,6 +152,13 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
             None
         }
     };
+    let issuer = config.public_url.as_str().trim_end_matches('/').to_owned();
+    // The resources OAuth issues tokens for: only /mcp so far, when it's on.
+    let resources: Vec<String> = if config.mcp {
+        vec![mcp::resource(&issuer)]
+    } else {
+        Vec::new()
+    };
     let state = AppState {
         db,
         auth: Arc::new(Auth {
@@ -155,11 +171,16 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         log_dir: LogDir(config.log_dir.clone()),
         android_apk: AndroidApk {
             path: config.android_apk.clone(),
-            server: config.public_url.as_str().trim_end_matches('/').to_owned(),
+            server: issuer.clone(),
+        },
+        oauth: OAuth {
+            issuer: issuer.clone(),
+            resources: resources.into(),
         },
     };
 
-    // Off unless the install switches it on (FLEETRANGER_MCP).
+    // Off unless the install switches it on (FLEETRANGER_MCP), and OAuth
+    // with it while it is its only resource.
     let mcp = if config.mcp {
         mcp::db::today(&state.db, &config.time_zone)
             .await
@@ -167,7 +188,8 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
         hosts.extend(config.public_url.host_str().map(str::to_owned));
         tracing::info!("MCP server on at /mcp");
-        mcp::router(state.db.clone(), config.time_zone.clone(), hosts)
+        mcp::router(state.db.clone(), config.time_zone.clone(), &issuer, hosts)
+            .merge(oauth::routes::router())
     } else {
         Router::new()
     };

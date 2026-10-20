@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update oauth_grants g\n         set access_token_sha256 = $3, access_expires_at = now() + make_interval(secs => $4),\n             refresh_token_sha256 = $5, last_used_at = now()\n         from users u, logins l\n         where g.refresh_token_sha256 = $1 and g.client_id = $2\n           and g.last_used_at > now() - make_interval(days => $6)\n           and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id\n         returning g.scopes",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "scopes",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "oauth_grants",
+            "name": "scopes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Float8",
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3a252ac4fcb5cc7a99ff8c597076fcf3e53d453dc7ee440524132f686a4412db"
+}

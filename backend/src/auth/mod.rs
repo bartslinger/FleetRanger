@@ -129,7 +129,7 @@ fn token_hash(token: &str) -> Vec<u8> {
 /// The browser's address. Behind our own proxies (nginx, SvelteKit, the Vite dev
 /// server), which connect from the internal network, it is the last address in
 /// `X-Forwarded-For`, which they append. Otherwise it is the connecting peer.
-fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> IpAddr {
+pub(crate) fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> IpAddr {
     let peer = peer.ip();
     if !is_internal(peer) {
         return peer;
