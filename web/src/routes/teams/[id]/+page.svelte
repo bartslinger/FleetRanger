@@ -93,8 +93,9 @@
 		>
 			<TextInput label="Name" name="name" value={data.team.name} required autocomplete="off" />
 			<div class="buttons">
-				<Button type="submit" disabled={busy}>Save</Button>
-				<Button kind="secondary" href={previous.href} onclick={previous.onclick}>Cancel</Button>
+				<Button type="submit" disabled={busy} fill>Save</Button>
+				<Button kind="secondary" href={previous.href} onclick={previous.onclick} fill>Cancel</Button
+				>
 			</div>
 		</form>
 	</Column>
@@ -125,10 +126,11 @@
 		gap: var(--cds-spacing-07);
 	}
 
+	/* Carbon's fluid pair: equal halves of the fields' width, 1px apart. */
 	.buttons {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--cds-spacing-05);
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1px;
 		margin-top: var(--cds-spacing-05);
 	}
 
