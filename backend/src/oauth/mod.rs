@@ -81,6 +81,18 @@ pub async fn actor(
     }))
 }
 
+/// Removes expired codes, idle connections and apps that were never
+/// connected, every hour while the server runs.
+pub async fn clean_up_hourly(db: PgPool) {
+    let mut hourly = tokio::time::interval(std::time::Duration::from_secs(3600));
+    loop {
+        hourly.tick().await;
+        if let Err(error) = db::clean_up(&db, IDLE_DAYS).await {
+            tracing::error!(%error, "cleaning up OAuth data");
+        }
+    }
+}
+
 /// Codes and tokens are stored only as this hash.
 fn sha256(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
