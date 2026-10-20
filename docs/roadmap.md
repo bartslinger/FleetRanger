@@ -70,6 +70,12 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Static build reusing the web app's components
 - [~] Hosting on GitHub Pages, built by a GitHub Action from main
 
+## MCP (AI assistants)
+
+- [x] Read-only summary tools at `/mcp`, off unless the install switches it on
+- [ ] OAuth, so assistants in claude.ai and others can connect
+- [ ] `/mcp` in the nginx routes (Ansible repo)
+
 ## Before production use
 
 - [ ] Backups: PostgreSQL dumps and raw logs
@@ -83,7 +89,6 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - Sharing flights, also outside the organisation
 - Invite links for accounts
 - Suggesting operations from flights that overlap in time and area
-- MCP
 - Link media
 
 ## Open questions
