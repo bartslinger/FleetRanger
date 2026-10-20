@@ -21,17 +21,39 @@
 	// svelte-ignore state_referenced_locally
 	let tab: Kind = $state(page.state.equipmentTab ?? data.tab);
 
-	const columns: TableColumn<Row>[] = $derived([
-		{ key: 'serial', header: 'Serial number', identifier: true },
-		{ key: 'name', header: 'Name' },
-		{ key: 'team_name', header: 'Team' },
-		{ key: 'holder_name', header: 'Holder' },
-		{
-			key: 'last_flight_at',
-			header: `Last flight (${data.timeZoneName})`,
-			format: (item) => item.last_flight_at && dateTime(item.last_flight_at, data.timeZone)
-		}
-	]);
+	const lastFlight: TableColumn<Row> = $derived({
+		key: 'last_flight_at',
+		header: `Last flight (${data.timeZoneName})`,
+		format: (item) => item.last_flight_at && dateTime(item.last_flight_at, data.timeZone)
+	});
+
+	const columns: Record<Kind, TableColumn<Row>[]> = $derived({
+		drones: [
+			{ key: 'serial', header: 'Serial number', identifier: true },
+			{ key: 'name', header: 'Name' },
+			{ key: 'team_name', header: 'Team' },
+			{ key: 'holder_name', header: 'Holder' },
+			lastFlight
+		],
+		// As on a controller's page.
+		controllers: [
+			{ key: 'serial', header: 'Serial number', identifier: true },
+			{ key: 'name', header: 'Name' },
+			{ key: 'team_name', header: 'Team' },
+			{ key: 'holder_name', header: 'Holder' },
+			{
+				key: 'paired',
+				header: 'Pairing',
+				format: (item) => (item.paired ? 'Paired' : 'Not paired')
+			},
+			{
+				key: 'synced_at',
+				header: `Last sync (${data.timeZoneName})`,
+				format: (item) => (item.synced_at ? dateTime(item.synced_at, data.timeZone) : 'Never')
+			},
+			lastFlight
+		]
+	});
 
 	/** The tab is kept in the URL, so the back button and breadcrumbs return to it. */
 	function select(next: Kind) {
@@ -65,7 +87,7 @@
 				{:else}
 					<DataTable
 						label={KINDS[kind].label}
-						{columns}
+						columns={columns[kind]}
 						{rows}
 						rowKey={(item) => item.id}
 						rowHref={(item) => resolve('/equipment/[kind=kind]/[id]', { kind, id: item.id })}
