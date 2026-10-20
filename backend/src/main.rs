@@ -188,6 +188,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
         hosts.extend(config.public_url.host_str().map(str::to_owned));
         tracing::info!("MCP server on at /mcp");
+        tokio::spawn(oauth::clean_up_hourly(state.db.clone()));
         mcp::router(state.db.clone(), config.time_zone.clone(), &issuer, hosts)
             .merge(oauth::routes::router())
     } else {

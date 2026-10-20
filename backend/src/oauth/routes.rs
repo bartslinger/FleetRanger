@@ -6,7 +6,7 @@
 
 use axum::{
     Form, Json, Router,
-    extract::{FromRef, Path, State},
+    extract::{DefaultBodyLimit, FromRef, Path, State},
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{delete, get, post},
@@ -42,7 +42,11 @@ where
             "/.well-known/oauth-protected-resource/{*path}",
             get(resource_metadata),
         )
-        .route("/auth/oauth/register", post(register))
+        // Anyone may register, so a registration is kept small.
+        .route(
+            "/auth/oauth/register",
+            post(register).layer(DefaultBodyLimit::max(8 * 1024)),
+        )
         .route("/auth/oauth/token", post(token))
         .route("/api/oauth/request", post(check))
         .route("/api/oauth/approve", post(approve))
@@ -63,6 +67,8 @@ async fn server_metadata(State(oauth): State<OAuth>) -> Json<serde_json::Value> 
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
+        // RFC 9207: the answer names its issuer, so apps can check it.
+        "authorization_response_iss_parameter_supported": true,
     }))
 }
 
@@ -93,9 +99,6 @@ struct Registration {
 /// RFC 7591: an app registers itself, which grants nothing until a user
 /// allows it. Only apps without a secret (with PKCE), as AI assistants are.
 async fn register(State(db): State<PgPool>, Json(registration): Json<Registration>) -> Response {
-    if let Err(error) = db::clean_up(&db, IDLE_DAYS).await {
-        tracing::error!(%error, "cleaning up OAuth data");
-    }
     let uris = &registration.redirect_uris;
     if uris.is_empty() || uris.len() > 10 || !uris.iter().all(|uri| redirect_uri_allowed(uri)) {
         return oauth_error(
@@ -134,13 +137,37 @@ async fn register(State(db): State<PgPool>, Json(registration): Json<Registratio
 }
 
 /// HTTPS, or plain HTTP to the user's own computer (apps such as Claude Code
-/// receive the code there); never with a fragment.
+/// receive the code there); never with a fragment, and of a sensible length.
 fn redirect_uri_allowed(uri: &str) -> bool {
     let Ok(url) = Url::parse(uri) else {
         return false;
     };
-    let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
-    url.fragment().is_none() && (url.scheme() == "https" || (url.scheme() == "http" && local))
+    uri.len() <= 2000
+        && url.fragment().is_none()
+        && (url.scheme() == "https" || (url.scheme() == "http" && loopback(&url)))
+}
+
+fn loopback(url: &Url) -> bool {
+    matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+}
+
+/// Whether a request's return address is one the app registered: exactly,
+/// or on the user's own computer with any port, which such apps pick when
+/// they start (RFC 8252, 7.3).
+fn registered(given: &str, registered: &[String]) -> bool {
+    if registered.iter().any(|uri| uri == given) {
+        return true;
+    }
+    let Ok(mut given) = Url::parse(given) else {
+        return false;
+    };
+    if given.scheme() != "http" || !loopback(&given) || given.set_port(None).is_err() {
+        return false;
+    }
+    registered.iter().any(|uri| {
+        Url::parse(uri)
+            .is_ok_and(|mut uri| loopback(&uri) && uri.set_port(None).is_ok() && uri == given)
+    })
 }
 
 /// An authorization request, as the app sent it to the consent page.
@@ -178,7 +205,7 @@ async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) ->
     let redirect_uri = request
         .redirect_uri
         .clone()
-        .filter(|uri| client.redirect_uris.contains(uri))
+        .filter(|uri| registered(uri, &client.redirect_uris))
         .ok_or_else(|| invalid("The app gave a return address it didn’t register."))?;
     if request.response_type.as_deref() != Some("code") {
         return Err(invalid("The app asked for an unsupported kind of access."));
@@ -482,6 +509,19 @@ mod tests {
     /// A code works once, only with its PKCE verifier; a refresh token works
     /// once, its new access token replaces the old one, and a used one coming
     /// back ends the connection.
+    /// Apps on the user's computer may come back on another port; anything
+    /// else must be exactly as registered.
+    #[test]
+    fn return_addresses_match_as_registered() {
+        let local = ["http://127.0.0.1:33418/callback".to_owned()];
+        assert!(registered("http://127.0.0.1:50211/callback", &local));
+        assert!(!registered("http://127.0.0.1:50211/other", &local));
+        assert!(!registered("http://localhost:33418/callback", &local));
+        let web = ["https://app.example.org/callback".to_owned()];
+        assert!(registered("https://app.example.org/callback", &web));
+        assert!(!registered("https://app.example.org:8443/callback", &web));
+    }
+
     #[sqlx::test]
     async fn codes_and_refresh_tokens_work_once(db: PgPool) {
         let user: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
