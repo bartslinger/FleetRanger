@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select key, name,\n                  count(*) as \"flights!\",\n                  count(distinct session_id) as \"sessions!\",\n                  sum(air_time_s)::bigint as \"air_time_s!\",\n                  round(sum(distance_m))::float8 as \"distance_m!\",\n                  min(takeoff_at) as \"first_takeoff_at!\",\n                  max(landed_at) as \"last_landed_at!\"\n           from (\n               select f.session_id, f.air_time_s, f.distance_m, f.takeoff_at, f.landed_at,\n                      case $11\n                          when 'team' then f.team_id::text\n                          when 'pilot' then f.pilot_id::text\n                          when 'drone' then f.aircraft_serial\n                          when 'controller' then f.rc_serial\n                          when 'day' then to_char(f.takeoff_at at time zone $12, 'YYYY-MM-DD')\n                          when 'week' then to_char(f.takeoff_at at time zone $12, 'IYYY-\"W\"IW')\n                          when 'month' then to_char(f.takeoff_at at time zone $12, 'YYYY-MM')\n                      end as key,\n                      case $11\n                          when 'team' then (select t.name from teams t where t.id = f.team_id)\n                          when 'pilot' then (select u.name from users u where u.id = f.pilot_id)\n                          when 'drone' then (select a.name from aircraft a\n                                             where a.serial = f.aircraft_serial)\n                          when 'controller' then (select r.name from remote_controllers r\n                                                  where r.serial = f.rc_serial)\n                      end as name\n               from flights f\n               where f.archived_at is null\n                 and ($1\n                      or f.pilot_id = $2\n                      or f.team_id in (select team_id from team_members where user_id = $2))\n                 and ($3::text[] is null or f.aircraft_serial = any($3))\n                 and ($4::text[] is null or f.rc_serial = any($4))\n                 and ($5::timestamptz is null or f.takeoff_at >= $5)\n                 and ($6::timestamptz is null or f.takeoff_at < $6)\n                 and ($7::uuid[] is null or f.team_id = any($7) or ($8 and f.team_id is null))\n                 and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))\n           ) grouped\n           group by key, name\n           order by lower(name) nulls last, key nulls last",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "flights!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "sessions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "air_time_s!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "distance_m!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "first_takeoff_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_landed_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "TextArray",
+        "TextArray",
+        "Timestamptz",
+        "Timestamptz",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "Bool",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c067b337f650a275326db8c05c840eb61442a93aa5f4f109e889980dad208334"
+}

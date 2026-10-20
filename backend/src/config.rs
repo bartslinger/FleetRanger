@@ -27,6 +27,12 @@ pub struct Config {
     /// The longest break within a session, in minutes
     /// (`FLEETRANGER_SESSION_GAP_MINUTES`, 120 by default).
     pub session_gap_minutes: i32,
+    /// The organisation's time zone (`TIME_ZONE`, UTC by default), e.g.
+    /// `Europe/Amsterdam`: days in MCP requests are days there.
+    pub time_zone: String,
+    /// Whether AI assistants can query the install over MCP
+    /// (`FLEETRANGER_MCP=on`); off by default.
+    pub mcp: bool,
 }
 
 pub struct OidcConfig {
@@ -73,6 +79,12 @@ impl Config {
                 )?,
                 None => 120,
             };
+        let time_zone = non_empty_var("TIME_ZONE").unwrap_or_else(|| "UTC".to_owned());
+        let mcp = match non_empty_var("FLEETRANGER_MCP").as_deref() {
+            None | Some("off") => false,
+            Some("on") => true,
+            Some(_) => anyhow::bail!("FLEETRANGER_MCP must be on or off"),
+        };
 
         Ok(Self {
             bind,
@@ -83,6 +95,8 @@ impl Config {
             oidc,
             android_apk,
             session_gap_minutes,
+            time_zone,
+            mcp,
         })
     }
 }
