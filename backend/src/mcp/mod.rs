@@ -39,7 +39,8 @@ use crate::{
         self,
         db::{Filter, FlightDetail, Sort, SortKey},
     },
-    policy, sessions,
+    policy::{self, Role},
+    sessions,
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -68,8 +69,12 @@ where
         .layer(middleware::from_fn_with_state(db, authenticate))
 }
 
-/// Lets only logged-in users through, and hands the tools who they are.
-async fn authenticate(actor: Actor, mut request: Request, next: Next) -> Response {
+/// Lets only logged-in users through, and hands the tools who they are. Over
+/// MCP everyone is a member (user's decision, 2026-10-20): admins and the
+/// all-flights role see what a member of their teams sees, which is what
+/// matters to them as a pilot.
+async fn authenticate(mut actor: Actor, mut request: Request, next: Next) -> Response {
+    actor.role = Role::Member;
     request.extensions_mut().insert(actor);
     next.run(request).await
 }
@@ -190,18 +195,24 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "Start here. The teams, pilots, drones and controllers whose flights the user can see, with the ids and serials the other tools filter on, and the organisation's time zone and today's date in it."
+        description = "Start here. Who the user is (`you`: their id, name and the teams they fly for, for questions about \"my flights\" or \"my team\"), the teams, pilots, drones and controllers whose flights the user can see (their own and their teams'), with the ids and serials the other tools filter on, and the organisation's time zone and today's date in it."
     )]
     async fn directory(
         &self,
         Extension(parts): Extension<Parts>,
     ) -> Result<CallToolResult, McpError> {
-        let scope = policy::flight_scope(actor(&parts)?);
+        let actor = actor(&parts)?;
+        let scope = policy::flight_scope(actor);
         let filter = Filter::default();
         let today = db::today(&self.db, &self.time_zone)
             .await
             .map_err(internal)?;
         let directory = serde_json::json!({
+            "you": {
+                "id": actor.user_id,
+                "name": actor.name,
+                "teams": db::own_teams(&self.db, actor.user_id).await.map_err(internal)?,
+            },
             "time_zone": &*self.time_zone,
             "today": today,
             "teams": flights::db::teams_in(&self.db, &scope, &filter).await.map_err(internal)?,
@@ -374,8 +385,9 @@ impl ServerHandler for FleetRanger {
             .with_server_info(Implementation::new("FleetRanger", env!("CARGO_PKG_VERSION")))
             .with_instructions(
                 "FleetRanger keeps an organisation's drone flight logs. These tools read summaries of \
-                 the flights and sessions the user may see. Call `directory` first for ids, the time \
-                 zone and today's date. Air time is in seconds, distance in metres, times in UTC.",
+                 the user's own flights and sessions and those of their teams. Call `directory` first \
+                 for who the user is, ids, the time zone and today's date. Air time is in seconds, \
+                 distance in metres, times in UTC.",
             )
     }
 }
