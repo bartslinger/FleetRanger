@@ -21,10 +21,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Renders the user's theme choice on <html>, so the page never shows the
 	// other theme first.
-	return resolve(event, {
+	const response = await resolve(event, {
 		transformPageChunk: ({ html }) =>
 			html.replace('%fleetranger.theme%', theme === 'system' ? '' : `data-theme="${theme}"`)
 	});
+	// No page may be shown inside another site's frame, where a click on, say,
+	// Allow could be tricked out of the user (clickjacking).
+	response.headers.set('content-security-policy', "frame-ancestors 'none'");
+	response.headers.set('x-frame-options', 'DENY');
+	return response;
 };
 
 /** Calls to the backend act for the browser: they carry its cookies and address. */
