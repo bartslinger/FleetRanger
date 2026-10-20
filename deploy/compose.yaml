@@ -67,6 +67,11 @@ services:
       BACKEND_URL: http://backend:8080
       # The public address, for SvelteKit's check that form posts come from it.
       ORIGIN: ${FLEETRANGER_PUBLIC_URL:?}
+      # The browser's address: the last one in X-Forwarded-For, which nginx
+      # appends (it must always send it), not nginx's own. Passed on to the
+      # backend for its records.
+      ADDRESS_HEADER: X-Forwarded-For
+      XFF_DEPTH: 1
       TIME_ZONE: ${TIME_ZONE:-UTC}
       MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
     ports:
