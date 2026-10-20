@@ -170,7 +170,7 @@ impl From<FlightDetail> for FlightFacts {
             takeoff_at: flight.takeoff_at,
             landed_at: flight.landed_at,
             air_time_s: flight.air_time_s,
-            distance_m: flight.distance_m,
+            distance_m: flight.distance_m.round(),
             pilot_id: flight.pilot_id,
             pilot_name: flight.pilot_name,
             team_id: flight.team_id,
@@ -252,10 +252,14 @@ impl FleetRanger {
         let actor = actor(&parts)?;
         let filter = self.filter(&params.filters).await?;
         let (limit, offset) = page(params.page, params.size)?;
-        let (sessions, total) =
+        let (mut sessions, total) =
             sessions::service::list(&self.db, actor, &filter, None, limit, offset)
                 .await
                 .map_err(api)?;
+        // Whole metres, as everywhere in these tools; the sum is of the exact distances.
+        for session in &mut sessions {
+            session.distance_m = session.distance_m.round();
+        }
         json(serde_json::json!({ "sessions": sessions, "total": total }))
     }
 
@@ -294,10 +298,13 @@ impl FleetRanger {
             descending: params.oldest_first != Some(true),
         };
         let (limit, offset) = page(params.page, params.size)?;
-        let (flights, total) =
+        let (mut flights, total) =
             flights::service::list(&self.db, actor, &filter, &sort, limit, offset)
                 .await
                 .map_err(internal)?;
+        for flight in &mut flights {
+            flight.distance_m = flight.distance_m.round();
+        }
         json(serde_json::json!({ "flights": flights, "total": total }))
     }
 
@@ -387,7 +394,7 @@ impl ServerHandler for FleetRanger {
                 "FleetRanger keeps an organisation's drone flight logs. These tools read summaries of \
                  the user's own flights and sessions and those of their teams. Call `directory` first \
                  for who the user is, ids, the time zone and today's date. Air time is in seconds, \
-                 distance in metres, times in UTC.",
+                 distance in whole metres, times in UTC.",
             )
     }
 }
