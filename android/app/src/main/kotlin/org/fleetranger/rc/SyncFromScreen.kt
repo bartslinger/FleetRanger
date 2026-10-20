@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
@@ -22,7 +21,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -120,7 +118,9 @@ private fun SyncFromContent(
             .fillMaxSize()
             .background(Colors.background)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = Spacing.s07, vertical = Spacing.s06),
+            // Tighter than other screens: the controller's 392dp must hold
+            // the three 64dp choices and Continue without scrolling.
+            .padding(horizontal = Spacing.s07, vertical = Spacing.s05),
     ) {
         BasicText(
             "Which logs to upload",
@@ -131,11 +131,10 @@ private fun SyncFromContent(
             if (days == null) {
                 "Looking for flight logs on this controller…"
             } else {
-                "FleetRanger uploads the flight logs on this controller from the day you choose on, " +
-                    "except those it already has. You can change this later in Settings."
+                "Logs upload from the day you choose. You can change it later in Settings."
             },
             style = Type.bodyCompact02.copy(color = Colors.textPrimary),
-            modifier = Modifier.widthIn(max = 600.dp).padding(top = Spacing.s05, bottom = Spacing.s03),
+            modifier = Modifier.padding(top = Spacing.s03, bottom = Spacing.s02),
         )
         RadioButton("From today", selected = from == today && !aDate, onSelect = onToday, detail = count(today))
         RadioButton("All logs", selected = from == null, onSelect = onAllLogs, detail = count(null))
