@@ -21,11 +21,8 @@ use uuid::Uuid;
 
 use super::db::{self, LoginUser};
 use super::oidc::PendingLogin;
-use super::{Actor, Auth, SESSION_COOKIE, SESSION_IDLE_DAYS, client_ip, token_hash};
+use super::{Actor, Auth, SESSION_IDLE_DAYS, client_ip, login_cookie, session_cookie, token_hash};
 use crate::oauth::OAuth;
-
-/// Holds a login in progress, only on its way back from the provider.
-const LOGIN_COOKIE: &str = "fleetranger_login";
 
 pub fn router<S>() -> Router<S>
 where
@@ -65,8 +62,9 @@ async fn login(
     };
     match begun {
         Ok(Ok((url, pending))) => {
-            let cookie = Cookie::build((LOGIN_COOKIE, pending.encode()))
-                .path("/auth")
+            // Path "/" as `__Host-` requires; it lives ten minutes.
+            let cookie = Cookie::build((login_cookie(), pending.encode()))
+                .path("/")
                 .http_only(true)
                 .secure(auth.secure_cookies())
                 // Lax: sent along when the provider sends the browser back.
@@ -102,9 +100,9 @@ async fn callback(
     Query(query): Query<CallbackQuery>,
 ) -> Response {
     let pending = jar
-        .get(LOGIN_COOKIE)
+        .get(login_cookie())
         .and_then(|cookie| PendingLogin::decode(cookie.value()));
-    let jar = jar.remove(Cookie::build(LOGIN_COOKIE).path("/auth"));
+    let jar = jar.remove(Cookie::build(login_cookie()).path("/"));
 
     let (Some(pending), Some(state), Some(code), None) =
         (pending, query.state, query.code, query.error.as_deref())
@@ -122,7 +120,9 @@ async fn callback(
         return (StatusCode::SERVICE_UNAVAILABLE, "login is not configured").into_response();
     };
 
-    let return_to = pending.return_to.clone();
+    // Checked again: it comes back from a cookie, which another site on the
+    // same domain could have planted, and must never lead off this site.
+    let return_to = local_path(Some(&pending.return_to));
     let finished = {
         let auth = auth.clone();
         tokio::task::spawn_blocking(move || {
@@ -174,7 +174,7 @@ async fn callback(
         return (jar, Redirect::to("/login?error=failed")).into_response();
     }
 
-    let cookie = Cookie::build((SESSION_COOKIE, token))
+    let cookie = Cookie::build((session_cookie(), token))
         .path("/")
         .http_only(true)
         .secure(auth.secure_cookies())
@@ -185,13 +185,13 @@ async fn callback(
 }
 
 async fn logout(State(db): State<PgPool>, jar: CookieJar) -> Response {
-    if let Some(cookie) = jar.get(SESSION_COOKIE)
+    if let Some(cookie) = jar.get(session_cookie())
         && let Err(error) = db::revoke_session(&db, &token_hash(cookie.value())).await
     {
         tracing::error!(%error, "revoking a login session");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    let jar = jar.remove(Cookie::build(SESSION_COOKIE).path("/"));
+    let jar = jar.remove(Cookie::build(session_cookie()).path("/"));
     (jar, Redirect::to("/login?logged-out")).into_response()
 }
 

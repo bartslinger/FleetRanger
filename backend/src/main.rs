@@ -159,6 +159,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
     } else {
         Vec::new()
     };
+    auth::set_https(config.public_url.scheme() == "https");
     let state = AppState {
         db,
         auth: Arc::new(Auth {

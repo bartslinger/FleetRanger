@@ -5,6 +5,7 @@ mod oidc;
 pub mod routes;
 
 use std::net::{IpAddr, SocketAddr};
+use std::sync::OnceLock;
 
 use axum::{
     extract::{ConnectInfo, FromRef, FromRequestParts, Request, State},
@@ -22,8 +23,34 @@ pub use oidc::Provider;
 
 use crate::policy::Role;
 
+/// Whether the install is reached over HTTPS, set once at startup.
+static HTTPS: OnceLock<bool> = OnceLock::new();
+
+/// Over HTTPS the cookies' names start with `__Host-`: browsers then accept
+/// them only from this very host, `Secure` and for every path, so a sibling
+/// subdomain can't plant one (cookie tossing). Plain HTTP, in development,
+/// can't have that prefix.
+pub fn set_https(https: bool) {
+    let _ = HTTPS.set(https);
+}
+
+fn cookie_name(name: &'static str, prefixed: &'static str) -> &'static str {
+    if HTTPS.get().copied().unwrap_or(true) {
+        prefixed
+    } else {
+        name
+    }
+}
+
 /// Holds the login session token.
-const SESSION_COOKIE: &str = "fleetranger_session";
+fn session_cookie() -> &'static str {
+    cookie_name("fleetranger_session", "__Host-fleetranger_session")
+}
+
+/// Holds a login in progress, only on its way back from the provider.
+fn login_cookie() -> &'static str {
+    cookie_name("fleetranger_login", "__Host-fleetranger_login")
+}
 
 /// Login sessions expire after this many days without use.
 const SESSION_IDLE_DAYS: i32 = 30;
@@ -67,7 +94,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let jar = CookieJar::from_headers(&parts.headers);
-        let token = match jar.get(SESSION_COOKIE) {
+        let token = match jar.get(session_cookie()) {
             Some(cookie) => cookie.value(),
             None => bearer(&parts.headers).ok_or(StatusCode::UNAUTHORIZED)?,
         };
