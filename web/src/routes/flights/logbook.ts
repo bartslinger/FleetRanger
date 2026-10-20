@@ -25,6 +25,8 @@ export interface LogbookState {
 	withoutSession: boolean;
 	/** With `withoutSession`: those flights as suggested sessions, not a list. */
 	suggestions: boolean;
+	/** Only archived flights, which are otherwise left out; never in a session. */
+	archived: boolean;
 	/** Only flights taking off on this day ("2026-10-12"), or from it to `to`. */
 	from: string | null;
 	/** The last day, with `from`. */
@@ -41,6 +43,7 @@ export function parse(params: URLSearchParams): LogbookState {
 	const key = sort.replace(/^-/, '');
 	const from = params.get('from');
 	const to = params.get('to');
+	const archived = params.get('status') === 'archived';
 	return {
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
@@ -49,8 +52,10 @@ export function parse(params: URLSearchParams): LogbookState {
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
 		teams: list(params.get('team')),
-		withoutSession: params.get('session') === 'none',
-		suggestions: params.get('session') === 'none' && params.get('view') === 'suggestions',
+		withoutSession: !archived && params.get('session') === 'none',
+		suggestions:
+			!archived && params.get('session') === 'none' && params.get('view') === 'suggestions',
+		archived,
 		from: isDay(from) ? from : null,
 		to: isDay(from) && isDay(to) && to > from ? to : null
 	};
@@ -67,6 +72,7 @@ export function query(state: LogbookState): string {
 	if (state.teams.length > 0) params.set('team', state.teams.join(','));
 	if (state.withoutSession) params.set('session', 'none');
 	if (state.withoutSession && state.suggestions) params.set('view', 'suggestions');
+	if (state.archived) params.set('status', 'archived');
 	if (state.page > 1) params.set('page', String(state.page));
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
 	const { key, descending } = state.sort;
@@ -92,6 +98,7 @@ export function apiQuery(state: LogbookState, timeZone: string): URLSearchParams
 	if (state.withoutSession) api.set('session', 'none');
 	// A flight's neighbours are then those of its suggestion.
 	if (state.withoutSession && state.suggestions) api.set('view', 'suggestions');
+	if (state.archived) api.set('archived', 'true');
 	if (state.from) {
 		api.set('from', startOfDay(state.from, timeZone).toISOString());
 		api.set('to', startOfDay(nextDay(state.to ?? state.from), timeZone).toISOString());
@@ -111,6 +118,7 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 		teams: [],
 		withoutSession: false,
 		suggestions: false,
+		archived: false,
 		from: null,
 		to: null
 	});

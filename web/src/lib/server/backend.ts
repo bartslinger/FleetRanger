@@ -18,6 +18,8 @@ export interface FlightSummary {
 	/** Null: in the organisation's queue. */
 	team_id: string | null;
 	team_name: string | null;
+	/** Set for an archived flight: left out everywhere but the archived filter. */
+	archived_at: string | null;
 }
 
 /** Flights without a session that look like one, from `GET /api/flights/suggestions`. */
@@ -88,6 +90,8 @@ export interface FlightDetail {
 	/** The drone's and controller's pages; null where the user can't see them. */
 	aircraft_id: string | null;
 	rc_id: string | null;
+	/** Set for an archived flight. */
+	archived_at: string | null;
 }
 
 /** A session as listed by `GET /api/sessions`: what its visible flights add up to. */

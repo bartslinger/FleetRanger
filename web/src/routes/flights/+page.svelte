@@ -71,10 +71,16 @@
 		}
 	]);
 
-	const filtering = $derived(listFiltering(data.state) || data.state.withoutSession);
+	const filtering = $derived(
+		listFiltering(data.state) || data.state.withoutSession || data.state.archived
+	);
 	const sessionOptions = [
 		{ value: '', label: 'All' },
 		{ value: 'none', label: 'Without session' }
+	];
+	const statusOptions = [
+		{ value: '', label: 'Active' },
+		{ value: 'archived', label: 'Archived' }
 	];
 
 	// In a later page's breadcrumb, a filtered list names its filters:
@@ -85,12 +91,13 @@
 			...filterNames(data.state, data.devices),
 			...(data.state.withoutSession
 				? [data.state.suggestions ? 'suggested sessions' : 'without session']
-				: [])
+				: []),
+			...(data.state.archived ? ['archived'] : [])
 		].join(' · ')
 	);
 
-	type Filters = ListFilterState & Pick<LogbookState, 'withoutSession'>;
-	const none: Filters = { ...NO_FILTERS, withoutSession: false };
+	type Filters = ListFilterState & Pick<LogbookState, 'withoutSession' | 'archived'>;
+	const none: Filters = { ...NO_FILTERS, withoutSession: false, archived: false };
 
 	function filter(change: Partial<Filters>) {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves.
@@ -142,6 +149,7 @@
 	let teamOpen = $state(false);
 	let addOpen = $state(false);
 	let removeOpen = $state(false);
+	let archiveOpen = $state(false);
 	let overflow: HTMLElement | null = $state(null);
 	const wide = new MediaQuery('min-width: 42rem');
 
@@ -202,11 +210,21 @@
 				admin={data.choices.admin}
 				onchange={filter}
 			>
+				<!-- Archived flights are never in a session. -->
+				{#if !data.state.archived}
+					<Select
+						label="Session"
+						options={sessionOptions}
+						value={data.state.withoutSession ? 'none' : ''}
+						onchange={(event) => filter({ withoutSession: event.currentTarget.value === 'none' })}
+					/>
+				{/if}
 				<Select
-					label="Session"
-					options={sessionOptions}
-					value={data.state.withoutSession ? 'none' : ''}
-					onchange={(event) => filter({ withoutSession: event.currentTarget.value === 'none' })}
+					label="Status"
+					options={statusOptions}
+					value={data.state.archived ? 'archived' : ''}
+					onchange={(event) =>
+						filter({ archived: event.currentTarget.value === 'archived', withoutSession: false })}
 				/>
 			</ListFilters>
 		{/if}
@@ -264,105 +282,143 @@
 					{/if}
 				{/snippet}
 				{#snippet batchActions(ids)}
-					<!-- The frequent actions as buttons (on phones only the first); the
-					     rest in the overflow menu, as the bar holds two or three. -->
-					<Modal
-						title="New session"
-						submitLabel="Create"
-						action="?/newSession"
-						error={form && 'newSessionMessage' in form ? form.newSessionMessage : undefined}
-						onsuccess={() => done(`New session with ${flights(count(ids))}.`)}
-					>
-						{@render chosenFields(ids)}
-						<p>
-							The {flights(count(ids))} become one new session. Flights that are in a session leave it.
-						</p>
-					</Modal>
-					<span class="wide-only">
+					{#if data.state.archived}
+						<!-- Archived flights can only be restored. -->
 						<Modal
-							title="Add to session"
-							submitLabel="Add"
-							action="?/addToSession"
-							error={form && 'addMessage' in form ? form.addMessage : undefined}
-							onsuccess={() => done(`${flights(count(ids))} added to the session.`)}
-							bind:open={addOpen}
-							returnFocus={() => (wide.current ? undefined : (overflow ?? undefined))}
+							title="Restore"
+							submitLabel="Restore"
+							action="?/restore"
+							error={form && 'restoreMessage' in form ? form.restoreMessage : undefined}
+							onsuccess={() => done(`${flights(count(ids))} restored.`)}
 						>
 							{@render chosenFields(ids)}
-							<SessionChoice flights={selectedRows(ids)} timeZone={data.timeZone} />
-							<p class="help">Flights that are in another session leave it.</p>
+							<p>
+								{count(ids) === 1
+									? 'The flight counts again in Flights and totals. It comes back without a session.'
+									: `The ${count(ids)} flights count again in Flights and totals. They come back without a session.`}
+							</p>
 						</Modal>
-					</span>
-					<OverflowMenu
-						label="More actions"
-						variant="batch"
-						bind:trigger={overflow}
-						items={[
-							{ label: 'Add to session', onselect: () => (addOpen = true), phoneOnly: true },
-							{ label: 'Remove from session', onselect: () => (removeOpen = true) },
-							{ label: 'Set pilot', onselect: () => (pilotOpen = true) },
-							...(data.choices.admin
-								? [{ label: 'Move to team', onselect: () => (teamOpen = true) }]
-								: [])
-						]}
-					/>
-					<Modal
-						title="Remove from session"
-						submitLabel="Remove"
-						action="?/removeFromSession"
-						error={form && 'removeMessage' in form ? form.removeMessage : undefined}
-						onsuccess={(result) => {
-							const count = Number(result?.removed ?? 0);
-							done(
-								count === 0
-									? 'None of these flights were in a session.'
-									: `${flights(count)} removed from ${count === 1 ? 'its session' : 'their sessions'}.`
-							);
-						}}
-						trigger={false}
-						bind:open={removeOpen}
-						returnFocus={() => overflow ?? undefined}
-					>
-						{@render chosenFields(ids)}
-						<p>
-							{count(ids) === 1
-								? 'The flight leaves its session. It stays in Flights, without a session.'
-								: `The ${count(ids)} flights leave the sessions they are in. They stay in Flights, without a session.`}
-						</p>
-					</Modal>
-					<Modal
-						title="Set pilot"
-						submitLabel="Set pilot"
-						action="?/setPilot"
-						error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
-						onsuccess={() => done(`${flights(count(ids))} changed.`)}
-						trigger={false}
-						bind:open={pilotOpen}
-						returnFocus={() => overflow ?? undefined}
-					>
-						{@render chosenFields(ids)}
-						<Select label="Pilot" name="pilot" options={pilotChoices} />
-						<p class="help">
-							{data.choices.admin
-								? 'The flights move to the pilot’s team. With Unknown, they keep their team.'
-								: 'Choose Unknown for a flight that wasn’t flown by someone in your team. It stays in your team.'}
-						</p>
-					</Modal>
-					{#if data.choices.admin}
+					{:else}
+						<!-- The frequent actions as buttons (on phones only the first); the
+					     rest in the overflow menu, as the bar holds two or three. -->
 						<Modal
-							title="Move to team"
-							submitLabel="Move"
-							action="?/setTeam"
-							error={form && 'teamMessage' in form ? form.teamMessage : undefined}
-							onsuccess={() => done(`${flights(count(ids))} changed.`)}
+							title="New session"
+							submitLabel="Create"
+							action="?/newSession"
+							error={form && 'newSessionMessage' in form ? form.newSessionMessage : undefined}
+							onsuccess={() => done(`New session with ${flights(count(ids))}.`)}
+						>
+							{@render chosenFields(ids)}
+							<p>
+								The {flights(count(ids))} become one new session. Flights that are in a session leave
+								it.
+							</p>
+						</Modal>
+						<span class="wide-only">
+							<Modal
+								title="Add to session"
+								submitLabel="Add"
+								action="?/addToSession"
+								error={form && 'addMessage' in form ? form.addMessage : undefined}
+								onsuccess={() => done(`${flights(count(ids))} added to the session.`)}
+								bind:open={addOpen}
+								returnFocus={() => (wide.current ? undefined : (overflow ?? undefined))}
+							>
+								{@render chosenFields(ids)}
+								<SessionChoice flights={selectedRows(ids)} timeZone={data.timeZone} />
+								<p class="help">Flights that are in another session leave it.</p>
+							</Modal>
+						</span>
+						<OverflowMenu
+							label="More actions"
+							variant="batch"
+							bind:trigger={overflow}
+							items={[
+								{ label: 'Add to session', onselect: () => (addOpen = true), phoneOnly: true },
+								{ label: 'Remove from session', onselect: () => (removeOpen = true) },
+								{ label: 'Set pilot', onselect: () => (pilotOpen = true) },
+								...(data.choices.admin
+									? [{ label: 'Move to team', onselect: () => (teamOpen = true) }]
+									: []),
+								{ label: 'Archive', onselect: () => (archiveOpen = true) }
+							]}
+						/>
+						<Modal
+							title="Archive"
+							submitLabel="Archive"
+							action="?/archive"
+							error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
+							onsuccess={() => done(`${flights(count(ids))} archived.`)}
 							trigger={false}
-							bind:open={teamOpen}
+							bind:open={archiveOpen}
 							returnFocus={() => overflow ?? undefined}
 						>
 							{@render chosenFields(ids)}
-							<Select label="Team" name="team_id" options={teamOptions} />
-							<p class="help">A pilot who isn’t in the new team is cleared.</p>
+							<p>
+								{count(ids) === 1
+									? 'The flight is left out of Flights, sessions and totals, as if it hadn’t happened. It leaves its session.'
+									: `The ${count(ids)} flights are left out of Flights, sessions and totals, as if they hadn’t happened. They leave their sessions.`}
+								You can restore archived flights from Flights with Status: Archived.
+							</p>
 						</Modal>
+						<Modal
+							title="Remove from session"
+							submitLabel="Remove"
+							action="?/removeFromSession"
+							error={form && 'removeMessage' in form ? form.removeMessage : undefined}
+							onsuccess={(result) => {
+								const count = Number(result?.removed ?? 0);
+								done(
+									count === 0
+										? 'None of these flights were in a session.'
+										: `${flights(count)} removed from ${count === 1 ? 'its session' : 'their sessions'}.`
+								);
+							}}
+							trigger={false}
+							bind:open={removeOpen}
+							returnFocus={() => overflow ?? undefined}
+						>
+							{@render chosenFields(ids)}
+							<p>
+								{count(ids) === 1
+									? 'The flight leaves its session. It stays in Flights, without a session.'
+									: `The ${count(ids)} flights leave the sessions they are in. They stay in Flights, without a session.`}
+							</p>
+						</Modal>
+						<Modal
+							title="Set pilot"
+							submitLabel="Set pilot"
+							action="?/setPilot"
+							error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
+							onsuccess={() => done(`${flights(count(ids))} changed.`)}
+							trigger={false}
+							bind:open={pilotOpen}
+							returnFocus={() => overflow ?? undefined}
+						>
+							{@render chosenFields(ids)}
+							<Select label="Pilot" name="pilot" options={pilotChoices} />
+							<p class="help">
+								{data.choices.admin
+									? 'The flights move to the pilot’s team. With Unknown, they keep their team.'
+									: 'Choose Unknown for a flight that wasn’t flown by someone in your team. It stays in your team.'}
+							</p>
+						</Modal>
+						{#if data.choices.admin}
+							<Modal
+								title="Move to team"
+								submitLabel="Move"
+								action="?/setTeam"
+								error={form && 'teamMessage' in form ? form.teamMessage : undefined}
+								onsuccess={() => done(`${flights(count(ids))} changed.`)}
+								trigger={false}
+								bind:open={teamOpen}
+								returnFocus={() => overflow ?? undefined}
+							>
+								{@render chosenFields(ids)}
+								<Select label="Team" name="team_id" options={teamOptions} />
+								<p class="help">A pilot who isn’t in the new team is cleared.</p>
+							</Modal>
+						{/if}
 					{/if}
 				{/snippet}
 			</DataTable>

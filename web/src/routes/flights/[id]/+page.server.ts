@@ -33,5 +33,18 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { teamMessage: result.message });
 		const flight = await get<FlightDetail>(fetch, `/api/flights/${params.id}`);
 		return { teamName: flight.team_name };
+	},
+	/** Archives the flight, as the logbook's batch action does. */
+	archive: async ({ fetch, params }) => {
+		const body = { flight_ids: [params.id] };
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/archive', body);
+		if (!result.ok) return fail(result.status, { archiveMessage: result.message });
+		return { archived: true };
+	},
+	restore: async ({ fetch, params }) => {
+		const body = { flight_ids: [params.id] };
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/restore', body);
+		if (!result.ok) return fail(result.status, { restoreMessage: result.message });
+		return { restored: true };
 	}
 };

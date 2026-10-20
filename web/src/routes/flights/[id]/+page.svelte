@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import Button from '#lib/ui/Button.svelte';
 	import { clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
 	import { pilotOptions as pilotOptions_, pilotValue } from '#lib/pilots.js';
 	import Column from '#lib/ui/Column.svelte';
@@ -17,6 +19,7 @@
 	let { data, form }: PageProps = $props();
 
 	const flight = $derived(data.flight);
+	const archived = $derived(flight.archived_at !== null);
 
 	// Setting the pilot: admins on any flight, members on their team's.
 	const canSetPilot = $derived(
@@ -104,8 +107,39 @@
 	description={`${flight.aircraft_name ?? flight.aircraft_serial ?? 'Unknown drone'} · ${flight.pilot_name ?? 'Unknown pilot'}`}
 	crumb={`Flight ${dayMonth(flight.takeoff_at, data.timeZone)}, ${clock(flight.takeoff_at, data.timeZone)}`}
 	breadcrumb={[{ href: resolve('/flights'), label: 'Flights' }]}
+	status={archived ? 'Archived' : undefined}
 >
-	{#snippet actions()}<FlightStepper id={flight.id} />{/snippet}
+	{#snippet actions()}
+		<!-- Who may set the pilot may archive and restore. -->
+		{#if canSetPilot && archived}
+			<form
+				method="POST"
+				action="?/restore"
+				use:enhance={() =>
+					async ({ result, update }) => {
+						await update();
+						if (result.type === 'success') toast('Flight restored.');
+					}}
+			>
+				<Button type="submit" kind="tertiary">Restore</Button>
+			</form>
+		{:else if canSetPilot}
+			<Modal
+				title="Archive"
+				triggerKind="tertiary"
+				submitLabel="Archive"
+				action="?/archive"
+				error={form?.archiveMessage}
+				onsuccess={() => toast('Flight archived.')}
+			>
+				<p>
+					The flight is left out of Flights, sessions and totals, as if it hadn’t happened. It
+					leaves its session. You can restore it later.
+				</p>
+			</Modal>
+		{/if}
+		<FlightStepper id={flight.id} />
+	{/snippet}
 </PageHeader>
 
 <Grid rowGap>

@@ -99,6 +99,24 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { removeMessage: result.message });
 		return { removed: result.data.removed };
 	},
+	archive: async ({ fetch, request, url }) => {
+		const form = await request.formData();
+		const flights = await flightIds(fetch, url, form);
+		if ('message' in flights) return fail(409, { archiveMessage: flights.message });
+		const body = { flight_ids: flights.ids };
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/archive', body);
+		if (!result.ok) return fail(result.status, { archiveMessage: result.message });
+		return { changed: result.data.changed };
+	},
+	restore: async ({ fetch, request, url }) => {
+		const form = await request.formData();
+		const flights = await flightIds(fetch, url, form);
+		if ('message' in flights) return fail(409, { restoreMessage: flights.message });
+		const body = { flight_ids: flights.ids };
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/restore', body);
+		if (!result.ok) return fail(result.status, { restoreMessage: result.message });
+		return { changed: result.data.changed };
+	},
 	addToSession: async ({ fetch, request, url }) => {
 		const form = await request.formData();
 		const session = String(form.get('session_id') ?? '');
