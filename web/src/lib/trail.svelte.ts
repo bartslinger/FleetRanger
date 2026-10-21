@@ -62,11 +62,16 @@ export const trail = {
 	}
 };
 
+/** The navigation about to happen begins a new trail, e.g. from a link in
+ * a header panel, which is global as the side navigation is. */
+export function startTrail() {
+	starting = true;
+}
+
 /** Marks a link as a starting point: following it begins a new trail. */
 export function startsTrail(node: HTMLElement) {
-	const start = () => (starting = true);
-	node.addEventListener('click', start);
-	return { destroy: () => node.removeEventListener('click', start) };
+	node.addEventListener('click', startTrail);
+	return { destroy: () => node.removeEventListener('click', startTrail) };
 }
 
 /** Follows the navigation; call once, while the root layout initialises. */

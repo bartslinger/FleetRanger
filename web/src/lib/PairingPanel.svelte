@@ -7,6 +7,7 @@
 	import { resolve } from '$app/paths';
 	import type { WaitingController } from '#lib/server/backend.js';
 	import Link from '#lib/ui/Link.svelte';
+	import { startTrail } from '#lib/trail.svelte.js';
 
 	interface Props {
 		controllers: WaitingController[];
@@ -27,7 +28,8 @@
 	</ul>
 </section>
 
-<Link href={resolve('/pair')}>Pair a controller</Link>
+<!-- A header panel is global, as the side navigation: no breadcrumb from here. -->
+<Link href={resolve('/pair')} onclick={startTrail}>Pair a controller</Link>
 
 <style>
 	section {
