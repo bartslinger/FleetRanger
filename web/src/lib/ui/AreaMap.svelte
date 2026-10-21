@@ -71,7 +71,7 @@
 	// Terra Draw's handles: white with a Blue 60 outline.
 	const HANDLE = '#ffffff';
 	/** How close (in pixels) a corner must come to another area to snap to it. */
-	const SNAP_PX = 12;
+	const SNAP_PX = 6;
 
 	/** The areas shown as Mapbox layers: all but the one being edited. */
 	function shown(areas: Area[], editing: string | null) {
@@ -149,7 +149,9 @@
 	async function startDrawing(instance: MapboxMap) {
 		const [{ TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode }, { TerraDrawMapboxGLAdapter }] =
 			await Promise.all([import('terra-draw'), import('terra-draw-mapbox-gl-adapter')]);
-		const snapping = { toCoordinate: true, toCustom: snapToNeighbours };
+		// Only to other areas: Terra Draw's own snapping to the area's corners
+		// reaches 40px, which pulled every nearby corner onto them.
+		const snapping = { toCustom: snapToNeighbours };
 		const created = new TerraDraw({
 			adapter: new TerraDrawMapboxGLAdapter({ map: instance }),
 			modes: [
