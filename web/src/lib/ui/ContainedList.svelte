@@ -143,8 +143,8 @@
 		outline-offset: -2px;
 	}
 
+	/* A row's action fills the row's end, e.g. a 48px icon button. */
 	.action {
 		display: flex;
-		padding-inline: var(--cds-spacing-03);
 	}
 </style>

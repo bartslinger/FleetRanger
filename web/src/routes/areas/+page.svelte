@@ -95,6 +95,7 @@
 			{#snippet action(item)}
 				<OverflowMenu
 					label={`Options for ${item.label}`}
+					variant="row"
 					items={[
 						{
 							label: 'Rename',
