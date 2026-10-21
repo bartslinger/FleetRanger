@@ -83,7 +83,7 @@
 	// Terra Draw's handles: white with a Blue 60 outline.
 	const HANDLE = '#ffffff';
 	/** How close (in pixels) a corner must come to another area to snap to it. */
-	const SNAP_PX = 6;
+	const SNAP_PX = 12;
 	/** How near (in pixels) the pointer must be to a corner to close or grab it. */
 	const POINTER_PX = 8;
 	const FIT = { padding: 48, maxZoom: 17 };
