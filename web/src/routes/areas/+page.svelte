@@ -139,6 +139,10 @@
 			onmode={(value) => (mode = value)}
 			oncreate={create}
 			onreshape={reshape}
+			ondelete={(id) => {
+				acting = data.areas.find((area) => area.id === id) ?? null;
+				deleting = acting !== null;
+			}}
 		/>
 	</Column>
 </Grid>
