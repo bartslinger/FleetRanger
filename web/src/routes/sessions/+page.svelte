@@ -155,8 +155,9 @@
 	const tracks = $derived(
 		flights.map(({ track }) => ({ type: 'LineString' as const, coordinates: track }))
 	);
+	// The session pointed at: its card (or focused), or a track on the map.
 	let pointed: string | null = $state(null);
-	let marked: string | null = $state(null);
+	let pointedTrack: string | null = $state(null);
 	const indexesOf = (session: string | null) =>
 		flights.flatMap((flight, index) => (flight.session === session ? [index] : []));
 
@@ -209,28 +210,32 @@
 	// A session open, the flight pointed at in its table; else the card's.
 	let pointedFlight: number | null = $state(null);
 	const highlight = $derived(
-		openSession ? (pointedFlight === null ? [] : [pointedFlight]) : indexesOf(pointed ?? marked)
+		openSession
+			? pointedFlight === null
+				? []
+				: [pointedFlight]
+			: indexesOf(pointed ?? pointedTrack)
 	);
-	// Another period or other filters: nothing stays marked.
-	let markedFor = untrack(() => data.sessions);
-	$effect(() => {
-		if (data.sessions === markedFor) return;
-		markedFor = data.sessions;
-		marked = null;
-	});
-	const cardElements: Record<string, HTMLElement> = $state({});
-	function mark(index: number) {
-		const session = flights[index]?.session ?? null;
-		// The same session again: unmarked.
-		marked = session === marked ? null : session;
-		if (marked) cardElements[marked]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+	// A track on the map is its session, as its card is (carbon-expert's
+	// advice, 2026-10-21): pointing at it brings the session out and its card
+	// in its hover state, without scrolling the list; a click opens it.
+	const sessionOf = (index: number) => data.sessions.find((s) => s.id === flights[index]?.session);
+	function openTrack(index: number) {
+		const session = sessionOf(index);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- sessionHref resolves
+		if (session) goto(sessionHref(session.id));
 	}
+	const trackTip = (index: number) => {
+		const session = sessionOf(index);
+		if (!session) return '';
+		const when = daySpan(session.first_takeoff_at, session.last_landed_at, data.timeZone);
+		return `${when} · ${plural(session.flights, 'flight')}`;
+	};
 
-	// Kept in the browser's history, so going back from a session's page
-	// restores the marked card and the selection.
-	export const snapshot: Snapshot<{ marked: string | null; selected: string[] }> = {
-		capture: () => ({ marked, selected }),
-		restore: (value) => ({ marked, selected } = value)
+	// Kept in the browser's history, so going back restores the selection.
+	export const snapshot: Snapshot<{ selected: string[] }> = {
+		capture: () => ({ selected }),
+		restore: (value) => ({ selected } = value)
 	};
 
 	// The period's links: the same filters, another week or month.
@@ -603,10 +608,10 @@
 								{#if months.length > 1}<h2 class="month">{group.name}</h2>{/if}
 								<ul>
 									{#each group.sessions as session (session.id)}
-										<li bind:this={cardElements[session.id]}>
+										<li>
 											<ClickableTile
 												href={sessionHref(session.id)}
-												marked={wide.current && marked === session.id}
+												hovered={wide.current && pointedTrack === session.id}
 												onpointerenter={() => (pointed = session.id)}
 												onpointerleave={() => (pointed = null)}
 												onfocus={() => (pointed = session.id)}
@@ -668,7 +673,12 @@
 							reserveLegend
 							fly
 							height={MAP_HEIGHT}
-							ontrackclick={opened ? undefined : mark}
+							ontrackclick={opened ? undefined : openTrack}
+							ontrackhover={opened
+								? undefined
+								: (index) =>
+										(pointedTrack = index === null ? null : (sessionOf(index)?.id ?? null))}
+							tracktip={opened ? undefined : trackTip}
 							token={data.mapboxToken}
 							label={openSession
 								? 'Map of the session’s tracks'
