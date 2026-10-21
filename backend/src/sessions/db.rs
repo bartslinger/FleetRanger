@@ -58,6 +58,7 @@ pub async fn list(
     window: Option<Window>,
     limit: i64,
     offset: i64,
+    with_tracks: bool,
 ) -> sqlx::Result<Vec<SessionSummary>> {
     sqlx::query_as!(
         SessionSummary,
@@ -72,7 +73,8 @@ pub async fn list(
                 array_remove(array_agg(distinct f.team_id), null) as "team_ids!",
                 jsonb_agg(jsonb_build_object('takeoff_at', f.takeoff_at, 'landed_at', f.landed_at,
                                              'air_time_s', f.air_time_s,
-                                             'from', f.track->'coordinates'->0)
+                                             'from', f.track->'coordinates'->0,
+                                             'track', case when $16 then f.track->'coordinates' end)
                           order by f.takeoff_at) as "flight_times!"
          from flights f
          left join users u on u.id = f.pilot_id
@@ -119,6 +121,7 @@ pub async fn list(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
+        with_tracks,
     )
     .fetch_all(db)
     .await
@@ -656,7 +659,7 @@ mod tests {
             to: at("08:10"),
         });
         let all = Filter::default();
-        let listed = list(&db, &everything, &all, around_morning, 10, 0)
+        let listed = list(&db, &everything, &all, around_morning, 10, 0, false)
             .await
             .unwrap();
         assert_eq!(listed.len(), 1);
@@ -671,7 +674,7 @@ mod tests {
             to: at("13:00"),
         });
         assert!(
-            list(&db, &everything, &all, afternoon, 10, 0)
+            list(&db, &everything, &all, afternoon, 10, 0, false)
                 .await
                 .unwrap()
                 .is_empty()
@@ -687,7 +690,7 @@ mod tests {
             aircraft_serials: Some(vec![serial.to_owned()]),
             ..Filter::default()
         };
-        let listed = list(&db, &everything, &drone("A"), None, 10, 0)
+        let listed = list(&db, &everything, &drone("A"), None, 10, 0, false)
             .await
             .unwrap();
         assert_eq!(listed.len(), 1);
@@ -720,7 +723,7 @@ mod tests {
         assert_eq!(place.previous, Some(evening), "newer first");
         assert_eq!(place.next, Some(morning));
         assert_eq!((place.position, place.total), (2, 3));
-        let listed: Vec<Uuid> = list(&db, &everything, &all, None, 10, 0)
+        let listed: Vec<Uuid> = list(&db, &everything, &all, None, 10, 0, false)
             .await
             .unwrap()
             .into_iter()
@@ -794,7 +797,7 @@ mod tests {
             all: false,
             user_id: a,
         };
-        let listed = list(&db, &member, &all, None, 10, 0).await.unwrap();
+        let listed = list(&db, &member, &all, None, 10, 0, false).await.unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(
             (listed[0].flights, listed[0].pilots.clone()),
@@ -811,7 +814,7 @@ mod tests {
             user_id: outsider,
         };
         assert!(
-            list(&db, &stranger, &all, None, 10, 0)
+            list(&db, &stranger, &all, None, 10, 0, false)
                 .await
                 .unwrap()
                 .is_empty()
@@ -827,7 +830,10 @@ mod tests {
             user_id: outsider,
         };
         assert_eq!(
-            list(&db, &everything, &all, None, 10, 0).await.unwrap()[0].flights,
+            list(&db, &everything, &all, None, 10, 0, false)
+                .await
+                .unwrap()[0]
+                .flights,
             2
         );
     }
