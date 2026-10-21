@@ -7,14 +7,18 @@ import {
 	type FlightChoices,
 	type SessionPage
 } from '#lib/server/backend.js';
-import { apiFilters, parse, query } from './list.js';
+import { listFilters, parse, PERIOD_SIZE, query } from './list.js';
 
 export async function load({ fetch, url }) {
-	const state = parse(url.searchParams);
-	const filters = apiFilters(state, TIME_ZONE);
+	const state = parse(url.searchParams, TIME_ZONE);
+	const filters = listFilters(state, TIME_ZONE);
 	const api = new URLSearchParams(filters);
-	api.set('page', String(state.page));
-	api.set('size', String(state.size));
+	// The cards show their whole period on one page.
+	const cards = state.view === 'cards';
+	api.set('page', cards ? '1' : String(state.page));
+	api.set('size', cards ? String(PERIOD_SIZE) : String(state.size));
+	// The cards' map shows all their tracks, coarse.
+	if (cards) api.set('tracks', '1');
 	// The filters' options: the equipment and teams of flights in a session.
 	const options = new URLSearchParams(filters);
 	options.set('session', 'any');
@@ -26,7 +30,8 @@ export async function load({ fetch, url }) {
 
 	// Past the last page, e.g. after sessions were merged: go to the last one.
 	const pages = Math.max(1, Math.ceil(total / state.size));
-	if (state.page > pages) redirect(307, `${url.pathname}${query({ ...state, page: pages })}`);
+	if (!cards && state.page > pages)
+		redirect(307, `${url.pathname}${query({ ...state, page: pages })}`);
 
 	return { sessions, total, state, choices, devices, mapboxToken: MAPBOX_ACCESS_TOKEN };
 }

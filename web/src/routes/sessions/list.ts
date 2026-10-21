@@ -2,26 +2,45 @@
 // Flights list's filters. Defaults are left out of the URL.
 
 import type { Filters } from '#lib/ListFilters.svelte';
+import { days, periodOf, today, type Period } from '#lib/period.js';
 import { isDay, nextDay, startOfDay } from '#lib/zone.js';
 
 export const PAGE_SIZES = [25, 50, 100];
 const DEFAULT_SIZE = 50;
+/** The cards show a whole period on one page, up to the backend's largest page. */
+export const PERIOD_SIZE = 100;
 
 export interface SessionListState extends Filters {
 	page: number;
 	size: number;
 	view: 'cards' | 'table';
+	/** The cards' week or month (exploring); the table uses `from` and `to`. */
+	period: Period;
+	/** The current month, the default, left out of the URL. */
+	thisMonth: string;
 }
 
 /** Serials and ids, comma-separated in the URL. */
 const list = (value: string | null) => (value ?? '').split(',').filter(Boolean);
 
-export function parse(params: URLSearchParams): SessionListState {
+/** The cards' period: `week=2026-10-12` (a Monday) or `month=2026-10`, else this month. */
+function period(params: URLSearchParams, thisMonth: string): Period {
+	const week = params.get('week');
+	if (isDay(week)) return periodOf('week', week);
+	const month = params.get('month');
+	if (month && isDay(`${month}-01`)) return periodOf('month', `${month}-01`);
+	return periodOf('month', thisMonth);
+}
+
+export function parse(params: URLSearchParams, timeZone: string): SessionListState {
 	const page = Number.parseInt(params.get('page') ?? '', 10);
 	const size = Number.parseInt(params.get('size') ?? '', 10);
 	const from = params.get('from');
 	const to = params.get('to');
+	const thisMonth = periodOf('month', today(timeZone)).start;
 	return {
+		period: period(params, thisMonth),
+		thisMonth,
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		view: params.get('view') === 'table' ? 'table' : 'cards',
@@ -48,6 +67,10 @@ export function query(state: SessionListState): string {
 	if (state.page > 1) params.set('page', String(state.page));
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
 	if (state.view !== 'cards') params.set('view', state.view);
+	else if (state.period.unit === 'week') params.set('week', state.period.start);
+	else if (state.period.start !== state.thisMonth) {
+		params.set('month', state.period.start.slice(0, 7));
+	}
 	const text = params.toString();
 	return text ? `?${text}` : '';
 }
@@ -67,4 +90,9 @@ export function apiFilters(state: Filters, timeZone: string): URLSearchParams {
 		api.set('to', startOfDay(nextDay(state.to ?? state.from), timeZone).toISOString());
 	}
 	return api;
+}
+
+/** The list's filters for the backend: the cards' period, or the table's days. */
+export function listFilters(state: SessionListState, timeZone: string): URLSearchParams {
+	return apiFilters(state.view === 'cards' ? { ...state, ...days(state.period) } : state, timeZone);
 }
