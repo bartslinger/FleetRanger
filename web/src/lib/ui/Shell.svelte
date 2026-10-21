@@ -38,6 +38,7 @@
 
 <script lang="ts">
 	import { tick, untrack, type Snippet } from 'svelte';
+	import { mergeProps, Tooltip } from 'bits-ui';
 	import UserAvatar from '@carbon/icons/es/user--avatar/20.js';
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -48,6 +49,7 @@
 	import Icon from './Icon.svelte';
 	import RadioButtonGroup from './RadioButtonGroup.svelte';
 	import Toasts from './Toasts.svelte';
+	import TooltipContent from './TooltipContent.svelte';
 
 	interface Props {
 		name: string;
@@ -182,6 +184,37 @@
 
 <a class="skip" href="#main-content">Skip to main content</a>
 
+<!-- A header global action. Its tooltip is in a portal, so it takes the
+     page's theme, not the dark header's: Carbon's tooltip is the inverse of
+     the surface it lands on, and in the header's theme it was a light box on
+     the light page (carbon-expert's advice, 2026-10-21). None while its
+     panel is open. -->
+{#snippet utility(id: string, label: string, icon: Snippet)}
+	<Tooltip.Provider delayDuration={100}>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<button
+						{...mergeProps(props, { onclick: () => togglePanel(id), onfocusout })}
+						bind:this={panelButtons[id]}
+						class="action"
+						class:active={panelOpen === id}
+						type="button"
+						aria-label={label}
+						aria-expanded={panelOpen === id}
+						aria-controls="{id}-panel"
+					>
+						{@render icon()}
+					</button>
+				{/snippet}
+			</Tooltip.Trigger>
+			{#if panelOpen !== id}<TooltipContent kind="icon">{label}</TooltipContent>{/if}
+		</Tooltip.Root>
+	</Tooltip.Provider>
+{/snippet}
+
+{#snippet profileIcon()}<Icon icon={UserAvatar} />{/snippet}
+
 <header class="theme-dark">
 	{#if account}
 		<button
@@ -211,20 +244,7 @@
 	{#if account}
 		<div class="utilities">
 			{#each actions as action (action.id)}
-				<button
-					bind:this={panelButtons[action.id]}
-					class="action"
-					class:active={panelOpen === action.id}
-					type="button"
-					aria-label={action.label}
-					aria-expanded={panelOpen === action.id}
-					aria-controls="{action.id}-panel"
-					onclick={() => togglePanel(action.id)}
-					{onfocusout}
-				>
-					{@render action.icon()}
-					<span class="tooltip" aria-hidden="true">{action.label}</span>
-				</button>
+				{@render utility(action.id, action.label, action.icon)}
 				{#if panelOpen === action.id}
 					<section
 						bind:this={panelElements[action.id]}
@@ -238,20 +258,7 @@
 					</section>
 				{/if}
 			{/each}
-			<button
-				bind:this={panelButtons.profile}
-				class="action"
-				class:active={panelOpen === 'profile'}
-				type="button"
-				aria-label="Profile"
-				aria-expanded={panelOpen === 'profile'}
-				aria-controls="profile-panel"
-				onclick={() => togglePanel('profile')}
-				{onfocusout}
-			>
-				<Icon icon={UserAvatar} />
-				<span class="tooltip" aria-hidden="true">Profile</span>
-			</button>
+			{@render utility('profile', 'Profile', profileIcon)}
 			{#if panelOpen === 'profile'}
 				<section
 					bind:this={panelElements.profile}
@@ -460,28 +467,6 @@
 		border-bottom-color: transparent;
 		background: var(--cds-layer-01);
 		color: var(--cds-icon-primary);
-	}
-
-	.tooltip {
-		position: absolute;
-		top: calc(100% + var(--cds-spacing-02));
-		right: 0;
-		z-index: 10;
-		padding: var(--cds-spacing-01) var(--cds-spacing-05);
-		background: var(--cds-background-inverse);
-		color: var(--cds-text-inverse);
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-		border-radius: 2px;
-		white-space: nowrap;
-		visibility: hidden;
-		pointer-events: none;
-	}
-
-	.action:not(.active):hover .tooltip,
-	.action:not(.active):focus-visible .tooltip {
-		visibility: visible;
 	}
 
 	.panel {
