@@ -54,8 +54,10 @@ export function parse(params: URLSearchParams, timeZone: string): SessionListSta
 	};
 }
 
-/** The query string for a state, e.g. "?drone=A1&view=table". */
-export function query(state: SessionListState): string {
+/** The query string for a state, e.g. "?drone=A1&view=table"; with a
+ * session, that one open over the list. (`parse` leaves `session` out: the
+ * list's load doesn't depend on it, the layout's loads the session.) */
+export function query(state: SessionListState, session?: string): string {
 	const params = new URLSearchParams();
 	if (state.from) params.set('from', state.from);
 	if (state.from && state.to) params.set('to', state.to);
@@ -71,6 +73,7 @@ export function query(state: SessionListState): string {
 	else if (state.period.start !== state.thisMonth) {
 		params.set('month', state.period.start.slice(0, 7));
 	}
+	if (session) params.set('session', session);
 	const text = params.toString();
 	return text ? `?${text}` : '';
 }

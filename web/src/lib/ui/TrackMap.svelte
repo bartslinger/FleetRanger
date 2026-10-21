@@ -17,7 +17,6 @@
 <script lang="ts">
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
-	import { untrack } from 'svelte';
 	import { addAreaLayers, bounds, setAreas, type Area } from './areas.js';
 	import InlineNotification from './InlineNotification.svelte';
 	import Loading from './Loading.svelte';
@@ -41,13 +40,13 @@
 		ontrackclick?: (index: number) => void;
 		/** A CSS height, e.g. to fill the window beside a list; at least 20rem. */
 		height?: string;
-		/** Tracks to zoom to, animated, by index, e.g. the session being
-		 * opened; back to all without. */
-		focus?: number[] | null;
 		/** Keep the legend's row also while it has nothing to say, so one
 		 * appearing later (e.g. a session's takeoffs and landings) moves
 		 * nothing under the map. */
 		reserveLegend?: boolean;
+		/** Other tracks are flown to, not jumped to: e.g. from a month's
+		 * sessions to one of them, and from one session to the next. */
+		fly?: boolean;
 	}
 
 	let {
@@ -60,8 +59,8 @@
 		ends: showEnds = true,
 		ontrackclick,
 		height,
-		focus = null,
-		reserveLegend = false
+		reserveLegend = false,
+		fly = false
 	}: Props = $props();
 
 	type View = 'satellite' | 'map';
@@ -189,6 +188,8 @@
 	}
 
 	const FIT = { padding: 48, maxZoom: 17 };
+	/** A flight to other tracks: within carbon-expert's 600–800ms. */
+	const FLY_MS = 700;
 
 	/** The tracks' extent; null without positions. */
 	const extentOf = (tracks: Track[]) => bounds(tracks.flatMap((track) => track.coordinates));
@@ -198,7 +199,8 @@
 	function draw(map: MapboxMap, tracks: Track[]) {
 		(map.getSource('tracks') as GeoJSONSource | undefined)?.setData(lines(tracks));
 		(map.getSource('ends') as GeoJSONSource | undefined)?.setData(ends(tracks));
-		fit(map, tracks, false);
+		// The first view at once; later ones flown to, where asked.
+		fit(map, tracks, fly && placed);
 	}
 
 	function fit(map: MapboxMap, tracks: Track[], animate: boolean) {
@@ -208,7 +210,7 @@
 			if (!placed) map.once('idle', () => (placed = true));
 			return;
 		}
-		map.fitBounds(extent, { ...FIT, animate });
+		map.fitBounds(extent, { ...FIT, animate, duration: animate ? FLY_MS : 0 });
 		// Shown once the new view is drawn: until its tiles are in, Mapbox
 		// draws the ones it has, from the starting view (the whole world).
 		if (!placed) map.once('idle', () => (placed = true));
@@ -218,9 +220,14 @@
 	// (the starting view, or the style's) first.
 	let placed = $state(false);
 
+	// Only a new token makes a new map: read through the caller's data (e.g.
+	// a page's `data.mapboxToken`), the prop changes with every navigation,
+	// which made a new map each time, so it never flew (user's feedback).
+	const mapToken = $derived(token);
+
 	// Creates the map in the browser; mapbox-gl can't run on the server.
 	$effect(() => {
-		if (!token || !container) return;
+		if (!mapToken || !container) return;
 		const element = container;
 		let cancelled = false;
 		let created: MapboxMap | undefined;
@@ -231,7 +238,7 @@
 			const initial = extentOf(tracks);
 			created = new mapboxgl.Map({
 				container: element,
-				accessToken: token,
+				accessToken: mapToken,
 				style: styleUrl(view),
 				attributionControl: false,
 				cooperativeGestures: matchMedia('(pointer: coarse)').matches,
@@ -296,24 +303,6 @@
 	$effect(() => {
 		const current = areas;
 		if (map?.getSource('areas')) setAreas(map, current);
-	});
-
-	// Tracks to zoom to: an animated fit to them, or back to all. Carbon's
-	// duration-slow-01, as the layout around the map may move with it.
-	let focused = false;
-	$effect(() => {
-		const indexes = focus;
-		if (!map?.getSource('tracks')) return;
-		const all = untrack(() => tracks);
-		if (indexes?.length) {
-			const extent = extentOf(indexes.map((index) => all[index]).filter(Boolean));
-			if (extent) map.fitBounds(extent, { ...FIT, duration: 400 });
-			focused = true;
-		} else if (focused) {
-			const extent = extentOf(all);
-			if (extent) map.fitBounds(extent, { ...FIT, duration: 400 });
-			focused = false;
-		}
 	});
 
 	// Another track pointed at: only the filter changes, not the view.

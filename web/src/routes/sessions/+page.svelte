@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { goto, preloadData, pushState, replaceState } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
 	import SessionFacts from '#lib/SessionFacts.svelte';
-	import type { PageData as SessionData } from './[id]/$types';
+	import PilotDialog from '#lib/PilotDialog.svelte';
+	import Edit from '@carbon/icons/es/edit/16.js';
 	import ListFilters, {
 		NO_FILTERS,
 		filterNames,
@@ -14,7 +14,16 @@
 	} from '#lib/ListFilters.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import { PAGE_SIZES, PERIOD_SIZE, query, type SessionListState } from './list.js';
-	import { clock, day, daySpan, distance, duration, month } from '#lib/format.js';
+	import {
+		areaShares,
+		clock,
+		day,
+		daySpan,
+		distance,
+		duration,
+		month,
+		timeSpan
+	} from '#lib/format.js';
 	import { periodName, periodOf, step, switchTo, today, type Period } from '#lib/period.js';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -151,48 +160,33 @@
 	const indexesOf = (session: string | null) =>
 		flights.flatMap((flight, index) => (flight.session === session ? [index] : []));
 
-	// From lg a card opens its session over the list, at the session's URL
-	// but without loading its page (SvelteKit's shallow routing): the one map
-	// stays and moves to the left while it zooms to the session, the cards
-	// go, the facts come in on the right and the flights under it. The full
-	// data loads meanwhile and fills in. Back closes it; the URL opened
-	// directly is the session's own page. Not below lg, or with a modifier
-	// key (a new tab).
-	const opened = $derived(page.state.session ?? null);
-	let loaded = $state<{ id: string; data: SessionData } | null>(null);
-	const openedData = $derived(loaded && loaded.id === opened ? loaded.data : null);
+	// A session open over the list, in the URL (`session=`, user's decision,
+	// 2026-10-21: one page, so a reload shows the same): a card is a link to
+	// it, the layout's load brings it. The one map stays: it flies to the
+	// session, the cards go and its facts come in on the right, its flights
+	// in the table under it. Back closes it, as ✕ and Esc do.
+	const openSession = $derived(data.openSession);
+	const opened = $derived(openSession?.id ?? null);
 	const openedRow = $derived(data.sessions.find((session) => session.id === opened));
-	function open(event: MouseEvent, id: string, url: string) {
-		if (!wide.current || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) {
-			return;
+	const sessionHref = (id: string) => `${resolve('/sessions')}${query(data.state, id)}`;
+
+	// Opened from the list in this tab, Back returns to it as it was (its
+	// scroll position too); opened directly, ✕ replaces it with the list.
+	let cameFromList = false;
+	afterNavigate(({ from, to }) => {
+		if (!to?.url.searchParams.has('session')) cameFromList = false;
+		else if (
+			from &&
+			from.url.pathname === to.url.pathname &&
+			!from.url.searchParams.has('session')
+		) {
+			cameFromList = true;
 		}
-		event.preventDefault();
-		pointed = null;
-		// The facts at the top, in view; Back returns to this place.
-		listScroll = window.scrollY;
-		window.scrollTo({ top: 0 });
-		show(id, url, pushState);
-	}
-
-	/** From the open session to an earlier or later one in the list: in
-	 * place of it in the history, so Back and ✕ return to the list. */
-	function goToSession(event: MouseEvent, id: string, url: string) {
-		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
-		event.preventDefault();
-		show(id, url, replaceState);
-	}
-
-	function show(id: string, url: string, record: typeof pushState) {
-		// The full tracks take over once the map has flown to the session:
-		// arriving sooner, they cut the flight short (user's feedback).
-		flown = false;
-		setTimeout(() => (flown = true), 450);
-		record(url, { session: id });
-		preloadData(url).then((result) => {
-			if (result.type === 'loaded' && result.status === 200) {
-				loaded = { id, data: result.data as SessionData };
-			}
-		});
+	});
+	function close() {
+		if (cameFromList) history.back();
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves
+		else goto(href(data.state), { replaceState: true });
 	}
 
 	// Esc closes the open session, as its ✕ does, unless something over it
@@ -200,37 +194,18 @@
 	function closeOnEscape(event: KeyboardEvent) {
 		if (event.key !== 'Escape' || !opened || event.defaultPrevented) return;
 		if (document.querySelector('[role="dialog"], [role="menu"]')) return;
-		history.back();
+		close();
 	}
 
-	// The map: the open session's full tracks once loaded and flown to, else
-	// the cards'.
-	let flown = $state(true);
-
-	// Where the list was scrolled to when a session opened.
-	let listScroll = 0;
-	let wasOpen = false;
-	$effect(() => {
-		if (opened) wasOpen = true;
-		else if (wasOpen) {
-			wasOpen = false;
-			requestAnimationFrame(() => window.scrollTo({ top: listScroll }));
-		}
-	});
-	const full = $derived(openedData && flown ? openedData : null);
-	const mapTracks = $derived(full ? full.session.flights.map((flight) => flight.track) : tracks);
-	const focus = $derived(opened && !full ? indexesOf(opened) : null);
-	// Flying to a session, it's brought out and the rest dimmed; once it's
-	// shown, the flight pointed at in its list.
+	// The map: the open session's tracks, else the cards'. It flies from one
+	// to the other (`fly`): to a session, to the next, back to the period.
+	const mapTracks = $derived(
+		openSession ? openSession.flights.map((flight) => flight.track) : tracks
+	);
+	// A session open, the flight pointed at in its table; else the card's.
 	let pointedFlight: number | null = $state(null);
 	const highlight = $derived(
-		full
-			? pointedFlight === null
-				? []
-				: [pointedFlight]
-			: opened
-				? indexesOf(opened)
-				: indexesOf(pointed ?? marked)
+		openSession ? (pointedFlight === null ? [] : [pointedFlight]) : indexesOf(pointed ?? marked)
 	);
 	// Another period or other filters: nothing stays marked.
 	let markedFor = untrack(() => data.sessions);
@@ -266,11 +241,17 @@
 	const openedIndex = $derived(data.sessions.findIndex((session) => session.id === opened));
 	const earlier = $derived(openedRow ? data.sessions[openedIndex + 1] : undefined);
 	const later = $derived(openedRow ? data.sessions[openedIndex - 1] : undefined);
+	// Its day, from its flights: it may be outside the list's period.
+	const openedDay = $derived(
+		openSession?.flights[0] ? day(openSession.flights[0].takeoff_at, data.timeZone, true) : ''
+	);
 	const periodLines = $derived(
-		openedRow
+		openSession
 			? [
-					day(openedRow.first_takeoff_at, data.timeZone, true),
-					`${openedIndex + 1} of ${data.total} · ${periodName(data.state.period)}`
+					openedDay,
+					openedRow
+						? `${openedIndex + 1} of ${data.total} · ${periodName(data.state.period)}`
+						: periodName(data.state.period)
 				]
 			: [periodName(data.state.period), sessions(data.total)]
 	);
@@ -297,14 +278,55 @@
 
 	const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
-	type Flight = SessionData['session']['flights'][number];
-	// The open session's flights, as on its page, fewer columns.
+	// The open session's flights: changing their pilot, moving some to a
+	// session of their own, taking them out (its page's tasks before).
+	type Flight = NonNullable<typeof data.openSession>['flights'][number];
+	const openFlights = $derived(openSession?.flights ?? []);
+	let selectedFlights: string[] = $state([]);
+	// Another session open starts without a selection.
+	let selectedFlightsFor = untrack(() => opened);
+	$effect(() => {
+		if (opened === selectedFlightsFor) return;
+		selectedFlightsFor = opened;
+		selectedFlights = [];
+	});
+	const canChangeFlights = $derived(
+		data.choices.admin ||
+			openFlights.every(
+				(flight) => flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id)
+			)
+	);
+	const flightsLabel = (count: number) => plural(count, 'flight');
+	function moved(count: number) {
+		selectedFlights = [];
+		toast(`${flightsLabel(count)} moved to a new session.`);
+	}
+	function removed(count: number) {
+		selectedFlights = [];
+		toast(`${flightsLabel(count)} removed from the session.`);
+	}
+	// The pilot of all its flights or the selected ones, in one dialog.
+	let pilotOpen = $state(false);
+	let pilotFor: Flight[] = $state([]);
+	let pilotWhich = $state('');
+	let pilotOpener: HTMLElement | undefined;
+	function changePilot(of: Flight[], which: string, event: Event) {
+		pilotFor = of;
+		pilotWhich = which;
+		pilotOpener = event.currentTarget as HTMLElement;
+		pilotOpen = true;
+	}
+	function pilotSet(result: Record<string, unknown> | undefined) {
+		selectedFlights = [];
+		const id = result?.pilotId as string | null;
+		const name = data.choices.pilots.find((pilot) => pilot.id === id)?.name ?? 'Unknown';
+		toast(`Pilot set to ${name} for ${flightsLabel(Number(result?.changed ?? 0))}.`);
+	}
 	const flightColumns: TableColumn<Flight>[] = $derived([
 		{
 			key: 'takeoff_at',
 			header: 'Time',
-			format: (flight) =>
-				`${clock(flight.takeoff_at, data.timeZone)}–${clock(flight.landed_at, data.timeZone)}`
+			format: (flight) => timeSpan(flight.takeoff_at, flight.landed_at, data.timeZone)
 		},
 		{
 			key: 'air_time_s',
@@ -318,6 +340,17 @@
 			numeric: true,
 			format: (flight) => distance(flight.distance_m)
 		},
+		// Only when one of the flights crossed an area.
+		...(openFlights.some((flight) => flight.areas.length > 0)
+			? [
+					{
+						key: 'areas',
+						header: 'Areas',
+						wrap: true,
+						format: (flight) => areaShares(flight.areas, flight.air_time_s)?.value ?? '—'
+					} satisfies TableColumn<Flight>
+				]
+			: []),
 		{ key: 'pilot_name', header: 'Pilot' },
 		{ key: 'aircraft_serial', header: 'Drone serial', identifier: true }
 	]);
@@ -339,15 +372,17 @@
 		     through the period's sessions instead, in time like the periods
 		     (‹ earlier), disabled at its ends; ✕ in place of the list's tools
 		     goes back to the list (user's choice, 2026-10-21). -->
-		{#if openedRow}
-			{@const url = (session: Row) => resolve('/sessions/[id]', { id: session.id })}
+		{#if openSession}
+			<!-- Stepping replaces the history entry, so Back and ✕ return to the
+			     list; the page keeps its scroll. -->
 			{#if earlier}
 				<IconButton
 					icon={ChevronLeft}
 					size="lg"
 					label="Earlier session"
-					href={url(earlier)}
-					onclick={(event) => goToSession(event, earlier.id, url(earlier))}
+					href={sessionHref(earlier.id)}
+					data-sveltekit-replacestate
+					data-sveltekit-noscroll
 				/>
 			{:else}
 				<IconButton icon={ChevronLeft} size="lg" label="Earlier session" disabled />
@@ -357,8 +392,9 @@
 					icon={ChevronRight}
 					size="lg"
 					label="Later session"
-					href={url(later)}
-					onclick={(event) => goToSession(event, later.id, url(later))}
+					href={sessionHref(later.id)}
+					data-sveltekit-replacestate
+					data-sveltekit-noscroll
 				/>
 			{:else}
 				<IconButton icon={ChevronRight} size="lg" label="Later session" disabled />
@@ -401,12 +437,12 @@
 			<TooltipContent side="top">{periodLabel}</TooltipContent>
 		</Tooltip.Root>
 		<span class="tools">
-			{#if openedRow}
+			{#if openSession}
 				<IconButton
 					icon={Close}
 					size="lg"
 					label="Back to {periodName(data.state.period)}"
-					onclick={() => history.back()}
+					onclick={close}
 				/>
 			{:else}
 				<ListFilters
@@ -450,11 +486,13 @@
 <svelte:window onkeydown={closeOnEscape} />
 
 <PageHeader
-	title={openedRow ? `Session ${day(openedRow.first_takeoff_at, data.timeZone, true)}` : 'Sessions'}
-	breadcrumb={openedRow
-		? [{ href: href(data.state), label: 'Sessions', follow: () => history.back() }]
+	title={openSession ? `Session ${openedDay}` : 'Sessions'}
+	breadcrumb={openSession
+		? [{ href: href(data.state), label: 'Sessions', follow: close }]
 		: undefined}
-	{crumb}
+	crumb={openSession && openSession.flights[0]
+		? `Session ${day(openSession.flights[0].takeoff_at, data.timeZone)}`
+		: crumb}
 	reserveBreadcrumb={data.state.view === 'cards' && wide.current}
 >
 	{#snippet actions()}
@@ -516,7 +554,7 @@
 					This {data.state.period.unit} has {data.total} sessions; the table shows them all.
 				</InlineNotification>
 			{/if}
-			<div class="cards-view" class:opened={opened && wide.current}>
+			<div class="cards-view" class:opened={opened !== null}>
 				<!-- The cards, and in their place the open session's facts. -->
 				<div class="side">
 					<!-- Stays when a session opens; only its controls change. -->
@@ -546,9 +584,7 @@
 									{#each group.sessions as session (session.id)}
 										<li bind:this={cardElements[session.id]}>
 											<ClickableTile
-												href={resolve('/sessions/[id]', { id: session.id })}
-												onclick={(event) =>
-													open(event, session.id, resolve('/sessions/[id]', { id: session.id }))}
+												href={sessionHref(session.id)}
 												marked={wide.current && marked === session.id}
 												onpointerenter={() => (pointed = session.id)}
 												onpointerleave={() => (pointed = null)}
@@ -575,47 +611,110 @@
 							</section>
 						{/each}
 					</div>
-					{#if opened && wide.current}
+					{#if openSession}
 						<div class="facts-side">
-							{#if openedData}
-								<div class="panel">
-									<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
-								</div>
-							{/if}
+							<div class="panel">
+								<SessionFacts flights={openSession.flights} timeZone={data.timeZone}>
+									{#snippet pilotAction()}
+										{#if canChangeFlights}
+											<IconButton
+												icon={Edit}
+												label="Change pilot"
+												name="Change pilot of the session’s flights"
+												onclick={(event) =>
+													changePilot(
+														openFlights,
+														`All ${flightsLabel(openFlights.length)} in the session.`,
+														event
+													)}
+											/>
+										{/if}
+									{/snippet}
+								</SessionFacts>
+							</div>
 						</div>
 					{/if}
 				</div>
-				{#if wide.current}
+				<!-- Below lg only for an open session, under its facts. -->
+				{#if wide.current || openSession}
 					<div class="map-side">
 						<!-- The tracks aren't focusable: the cards are the same sessions. -->
 						<TrackMap
 							tracks={mapTracks}
 							{highlight}
-							{focus}
-							ends={full !== null}
+							ends={openSession !== null}
+							areas={openSession ? data.areas : []}
 							reserveLegend
+							fly
 							height={MAP_HEIGHT}
 							ontrackclick={opened ? undefined : mark}
 							token={data.mapboxToken}
-							label={openedRow
+							label={openSession
 								? 'Map of the session’s tracks'
 								: `Map of the sessions in ${periodName(data.state.period)}; the list beside it has the same sessions`}
 						/>
 					</div>
 				{/if}
 			</div>
-			{#if opened && openedData}
+			{#if openSession}
 				<div class="opened-flights" id="session-flights">
 					<DataTable
 						label="Flights of the session"
 						columns={flightColumns}
-						rows={openedData.session.flights}
+						rows={openFlights}
 						rowKey={(flight) => flight.id}
 						rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
-						onrowhover={(flight) =>
-							(pointedFlight = flight ? openedData.session.flights.indexOf(flight) : null)}
-						summary={plural(openedData.session.flights.length, 'flight')}
-					/>
+						onrowhover={(flight) => (pointedFlight = flight ? openFlights.indexOf(flight) : null)}
+						selectable={canChangeFlights ? () => true : undefined}
+						bind:selected={selectedFlights}
+						selectedLabel={(count) => `${flightsLabel(count)} selected`}
+						summary={flightsLabel(openFlights.length)}
+					>
+						{#snippet batchActions(ids)}
+							<Button
+								onclick={(event: MouseEvent) =>
+									changePilot(
+										openFlights.filter((flight) => ids.includes(flight.id)),
+										`The ${flightsLabel(ids.length)} selected.`,
+										event
+									)}>Change pilot</Button
+							>
+							{#if ids.length < openFlights.length}
+								<Modal
+									title="Move to new session"
+									submitLabel="Move"
+									action="?/split"
+									error={form?.splitMessage}
+									onsuccess={() => moved(ids.length)}
+								>
+									{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+									<p>
+										The {ids.length === 1 ? 'flight becomes' : `${ids.length} flights become`} a session
+										of {ids.length === 1 ? 'its' : 'their'} own. Merge sessions in the list to undo this.
+									</p>
+								</Modal>
+							{/if}
+							<Modal
+								title="Remove from session"
+								submitLabel="Remove"
+								action="?/remove"
+								error={form?.removeMessage}
+								onsuccess={() => removed(ids.length)}
+							>
+								{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+								<input type="hidden" name="all" value={String(ids.length === openFlights.length)} />
+								<p>
+									{#if ids.length === openFlights.length}
+										The session ends. Its {ids.length === 1 ? 'flight stays' : 'flights stay'} in Flights,
+										without a session.
+									{:else}
+										The {ids.length === 1 ? 'flight leaves' : `${ids.length} flights leave`} the session.
+										{ids.length === 1 ? 'It stays' : 'They stay'} in Flights, without a session.
+									{/if}
+								</p>
+							</Modal>
+						{/snippet}
+					</DataTable>
 				</div>
 			{/if}
 		{/if}
@@ -660,6 +759,16 @@
 		{/if}
 	</Column>
 </Grid>
+
+<PilotDialog
+	flights={pilotFor}
+	which={pilotWhich}
+	choices={data.choices}
+	bind:open={pilotOpen}
+	returnFocus={() => (pilotOpener?.isConnected ? pilotOpener : undefined)}
+	error={form?.pilotMessage}
+	onsuccess={pilotSet}
+/>
 
 <style>
 	/* Each month under its heading, which stays in view while its cards
@@ -797,23 +906,32 @@
 			gap: var(--cds-spacing-01);
 			animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 120ms both facts-in;
 		}
+	}
 
-		/* The facts, and the flights: panels 2px apart, as the cards. */
-		.panel {
-			padding: var(--cds-spacing-05);
-			background: var(--cds-layer-01);
-		}
+	/* The facts as a panel on the toolbar's layer, 2px under it (the
+	   toolbar's margin), at every width. */
+	.panel {
+		padding: var(--cds-spacing-05);
+		background: var(--cds-layer-01);
+	}
 
-		/* 16px all round: the facts' last group keeps no space of its own. */
-		.panel :global(dl:last-child) {
-			margin-bottom: 0;
-		}
+	/* 16px all round: the facts' last group keeps no space of its own. */
+	.panel :global(dl:last-child) {
+		margin-bottom: 0;
 	}
 
 	@keyframes facts-in {
 		from {
 			opacity: 0;
 			transform: translateX(2rem);
+		}
+	}
+
+	/* Below lg a session open shows in the cards' place: toolbar, facts,
+	   map, flights, one under the other. */
+	@media (max-width: 65.99rem) {
+		.opened .cards {
+			display: none;
 		}
 	}
 

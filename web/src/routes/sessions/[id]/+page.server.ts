@@ -1,42 +1,16 @@
-import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
-import { fail, redirect } from '@sveltejs/kit';
-import { parsePilot } from '#lib/pilots.js';
-import { get, send, type Area, type FlightChoices, type Session } from '#lib/server/backend.js';
+import { TIME_ZONE } from '$app/env/private';
+import { redirect } from '@sveltejs/kit';
+import { get, type Session } from '#lib/server/backend.js';
 
+/** A session's address: it opens over the cards of the month it was flown
+ * in (`/sessions?month=…&session=…`), which is its page now. */
 export async function load({ fetch, params }) {
-	const [session, choices, areas] = await Promise.all([
-		get<Session>(fetch, `/api/sessions/${params.id}`),
-		get<FlightChoices>(fetch, '/api/flights/choices'),
-		get<Area[]>(fetch, '/api/areas')
-	]);
-	// A public token: the browser needs it to load the map.
-	return { session, choices, areas, mapboxToken: MAPBOX_ACCESS_TOKEN };
+	const session = await get<Session>(fetch, `/api/sessions/${params.id}`);
+	const start = session.flights[0]?.takeoff_at;
+	// en-CA writes dates as 2026-10-21.
+	const day = start
+		? new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date(start))
+		: null;
+	const month = day ? `month=${day.slice(0, 7)}&` : '';
+	redirect(307, `/sessions?${month}session=${encodeURIComponent(params.id)}`);
 }
-
-export const actions = {
-	/** Sets the pilot of these flights, as the logbook's batch action does. */
-	setPilot: async ({ fetch, request }) => {
-		const form = await request.formData();
-		const pilot = parsePilot(String(form.get('pilot') ?? ''));
-		const body = { flight_ids: form.getAll('flight_id').map(String), ...pilot };
-		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
-		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
-		return { pilotId: pilot.pilot_id, changed: result.data.changed };
-	},
-	split: async ({ fetch, request }) => {
-		const form = await request.formData();
-		const body = { flight_ids: form.getAll('flight_id').map(String) };
-		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions/split', body);
-		if (!result.ok) return fail(result.status, { splitMessage: result.message });
-		return { split: result.data.id };
-	},
-	remove: async ({ fetch, request }) => {
-		const form = await request.formData();
-		const body = { flight_ids: form.getAll('flight_id').map(String) };
-		const result = await send<{ removed: number }>(fetch, 'POST', '/api/sessions/remove', body);
-		if (!result.ok) return fail(result.status, { removeMessage: result.message });
-		// All its flights gone, the session is too: back to the list.
-		if (form.get('all') === 'true') redirect(303, '/sessions');
-		return { removed: result.data.removed };
-	}
-};
