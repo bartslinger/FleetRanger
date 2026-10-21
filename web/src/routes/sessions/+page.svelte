@@ -226,18 +226,20 @@
 	const at = (period: Period) => href({ ...data.state, period });
 	const thisPeriod = $derived(periodOf(data.state.period.unit, today(data.timeZone)));
 
-	// The toolbar's name, and whether it's cut off: then a tooltip has it in
-	// full. Checked when its width or its text changes.
-	const periodLabel = $derived(`${periodName(data.state.period)} · ${sessions(data.total)}`);
+	// The toolbar's two lines, the name and the count, and which are cut off:
+	// a tooltip has those in full, only those (user's feedback). Checked when
+	// the width or the text changes.
+	const periodLines = $derived([periodName(data.state.period), sessions(data.total)]);
 	let periodHeading: HTMLElement | undefined = $state();
-	let periodCut = $state(false);
+	let cutLines: boolean[] = $state([false, false]);
+	const periodCut = $derived(cutLines.some(Boolean));
+	const periodLabel = $derived(periodLines.filter((_, line) => cutLines[line]).join(' · '));
 	$effect(() => {
 		const heading = periodHeading;
 		if (!heading) return;
-		void periodLabel;
-		// Either line, the name or the count.
+		void periodLines;
 		const check = () =>
-			(periodCut = [...heading.children].some((line) => line.scrollWidth > line.clientWidth));
+			(cutLines = [...heading.children].map((line) => line.scrollWidth > line.clientWidth));
 		const frame = requestAnimationFrame(check);
 		const resizes = new ResizeObserver(check);
 		resizes.observe(heading);
