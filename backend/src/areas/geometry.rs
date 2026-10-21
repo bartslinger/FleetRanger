@@ -13,31 +13,19 @@ use serde_json::{Value, json};
 /// slivers from borders that almost, but not exactly, coincide.
 const SLIVER_M2: f64 = 1.0;
 
-/// An area's boundary from GeoJSON: a Polygon or MultiPolygon in
-/// [longitude, latitude]. None if it isn't one, or has no usable ring.
+/// An area's boundary from GeoJSON: a Polygon in [longitude, latitude], as a
+/// MultiPolygon for clipping. None if it isn't one, or has no usable ring.
 pub fn parse(value: &Value) -> Option<MultiPolygon> {
     #[derive(Deserialize)]
     #[serde(tag = "type")]
     enum Geometry {
-        Polygon {
-            coordinates: Vec<Vec<Vec<f64>>>,
-        },
-        MultiPolygon {
-            coordinates: Vec<Vec<Vec<Vec<f64>>>>,
-        },
+        Polygon { coordinates: Vec<Vec<Vec<f64>>> },
     }
-    let parts = match Geometry::deserialize(value).ok()? {
-        Geometry::Polygon { coordinates } => vec![coordinates],
-        Geometry::MultiPolygon { coordinates } => coordinates,
-    };
-    let mut polygons = Vec::new();
-    for rings in parts {
-        let mut rings = rings.into_iter().map(ring);
-        let exterior = rings.next()??;
-        let interiors = rings.collect::<Option<Vec<_>>>()?;
-        polygons.push(Polygon::new(exterior, interiors));
-    }
-    (!polygons.is_empty()).then(|| MultiPolygon::new(polygons))
+    let Geometry::Polygon { coordinates } = Geometry::deserialize(value).ok()?;
+    let mut rings = coordinates.into_iter().map(ring);
+    let exterior = rings.next()??;
+    let interiors = rings.collect::<Option<Vec<_>>>()?;
+    Some(MultiPolygon::new(vec![Polygon::new(exterior, interiors)]))
 }
 
 /// A closed ring of at least three distinct corners, all on the map.

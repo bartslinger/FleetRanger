@@ -13,7 +13,7 @@ const RECOMPUTE_BATCH: i64 = 200;
 pub struct Area {
     pub id: Uuid,
     pub name: String,
-    /// GeoJSON Polygon or MultiPolygon.
+    /// GeoJSON Polygon.
     pub boundary: Value,
 }
 

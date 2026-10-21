@@ -7,13 +7,11 @@ import type { GeoJSONSource, Map as MapboxMap } from 'mapbox-gl';
 export interface Area {
 	id: string;
 	name: string;
-	/** GeoJSON Polygon or MultiPolygon, [longitude, latitude]. */
 	boundary: Boundary;
 }
 
-export type Boundary =
-	| { type: 'Polygon'; coordinates: number[][][] }
-	| { type: 'MultiPolygon'; coordinates: number[][][][] };
+/** A GeoJSON Polygon, [longitude, latitude]: the outer ring, then any holes. */
+export type Boundary = { type: 'Polygon'; coordinates: number[][][] };
 
 // Map paint can't read CSS variables, so these are Carbon's values: Blue 50
 // outlines with a white casing and a light Blue 60 fill, and names in white
@@ -28,11 +26,6 @@ type FeatureCollection = Extract<
 	Parameters<GeoJSONSource['setData']>[0],
 	{ type: 'FeatureCollection' }
 >;
-
-/** A boundary's parts, each as its rings. */
-export function parts(boundary: Boundary): number[][][][] {
-	return boundary.type === 'Polygon' ? [boundary.coordinates] : boundary.coordinates;
-}
 
 /** The extent of these positions as [[west, south], [east, north]]. */
 export function bounds(positions: number[][]): [[number, number], [number, number]] | null {
@@ -52,20 +45,13 @@ export function bounds(positions: number[][]): [[number, number], [number, numbe
 
 /** The outer corners of these areas, e.g. to fit a map to them. */
 export function corners(areas: Area[]): number[][] {
-	return areas.flatMap((area) => parts(area.boundary).flatMap((rings) => rings[0]));
+	return areas.flatMap((area) => area.boundary.coordinates[0]);
 }
 
-/** A point inside the largest part: the middle of the widest stretch of a
- * line across it, halfway between its north and south. */
+/** A point inside the area: the middle of the widest stretch of a line
+ * across it, halfway between its north and south. */
 function labelPoint(boundary: Boundary): number[] {
-	const size = (ring: number[][]) => {
-		const [[west, south], [east, north]] = bounds(ring) ?? [
-			[0, 0],
-			[0, 0]
-		];
-		return (east - west) * (north - south);
-	};
-	const rings = parts(boundary).reduce((a, b) => (size(b[0]) > size(a[0]) ? b : a));
+	const rings = boundary.coordinates;
 	const [[west, south], [east, north]] = bounds(rings[0]) ?? [
 		[0, 0],
 		[0, 0]
