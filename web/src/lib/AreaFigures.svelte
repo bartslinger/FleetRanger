@@ -76,8 +76,11 @@
 </section>
 
 <style>
+	/* In a narrow column the table hangs into the gutter; the heading lines up
+	   with the page's text. */
 	h2 {
 		margin: 0 0 var(--cds-spacing-05);
+		padding-inline: var(--cds-spacing-05);
 		font-size: var(--cds-heading-03-font-size);
 		font-weight: var(--cds-heading-03-font-weight);
 		line-height: var(--cds-heading-03-line-height);

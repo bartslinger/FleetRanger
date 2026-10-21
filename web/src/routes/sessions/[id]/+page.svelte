@@ -152,8 +152,7 @@
 	</Column>
 	<!-- Where the session was flown, before its flights; once the organisation has areas. -->
 	{#if data.areas.length > 0}
-		<!-- With a gutter, as beside the flight page's facts. -->
-		<Column lg={11}>
+		<Column narrow lg={11}>
 			<AreaFigures
 				{areas}
 				airTime={facts.airTime}
