@@ -4,9 +4,9 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-**Releases:** v0.3.0 and android-v0.2.1 run on the first organisation's server; the deploy dumps the database before changing the release. v0.3.0 brought **areas** (admins draw them on the Areas page; flights and sessions show each area's share of the air time, and the lists and MCP filter by them) and **list filters** in a panel behind a Filters button.
+**Releases:** v0.4.0 and android-v0.2.1 run on the first organisation's server; the deploy dumps the database before changing the release. v0.4.0 reworked **Sessions**: the cards show a week or a month beside a map with all its tracks, each card with a **day strip** (the day with its flights and night, each flight's times on hover); **a session opens on the page itself** (the map flies to it, its facts replace the cards, its flights follow in a table, the arrows step through sessions across weeks and months with the filters kept); a track on the map opens its session, and in an open session points at its flight's row with its times. Tracks are **cyan** with a dot for takeoff and an X for landing; the street map follows the theme and the satellite or map choice is kept for the tab. Times carry no time-zone label. v0.3.0 brought areas and list filters.
 
-**Since v0.3.0:** a **day strip** on each session card: the day from 00:00 to 24:00 with the flights and night, and each flight's times on hover. The **session cards show a week or a month**, with all its tracks on the map beside them (hovering a card brings out its session; nothing loads). Times carry no time-zone label. **A session opens on the Sessions page itself**: the map flies to it, its facts replace the cards and its flights follow in a table; the arrows step through sessions across weeks and months with the filters kept. Next: the track colours (not magenta), numbers at takeoffs and landings, and perhaps a colour per pilot.
+**Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
 **Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
 
