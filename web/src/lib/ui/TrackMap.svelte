@@ -624,10 +624,37 @@
 	}
 
 	/* Carbon's content switcher, small (32px), over the map's top left. */
+	/* All controls 16px from the map's edges, so those on the left line up
+	   with the page's title and text, which start 16px into the column the
+	   map fills (user's request). Mapbox's own keep their look (user's
+	   choice). */
+	.track-map :global(.mapboxgl-ctrl-top-right .mapboxgl-ctrl) {
+		margin: var(--cds-spacing-05) var(--cds-spacing-05) 0 0;
+	}
+
+	.track-map :global(.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl) {
+		margin: 0 0 var(--cds-spacing-05) var(--cds-spacing-05);
+	}
+
+	.track-map :global(.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl) {
+		margin: 0 var(--cds-spacing-05) var(--cds-spacing-05) 0;
+	}
+
+	/* The scale 8px above the logo, as one group in the corner (user's
+	   choice, over 16px, beside it, and the logo bottom right). */
+	.track-map :global(.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl-scale) {
+		margin-bottom: var(--cds-spacing-03);
+	}
+
+	/* Its 4px pull towards the corner undone: the logo fills its box. */
+	.track-map :global(.mapboxgl-ctrl-logo) {
+		margin: 0;
+	}
+
 	.switcher {
 		position: absolute;
-		top: var(--cds-spacing-03);
-		left: var(--cds-spacing-03);
+		top: var(--cds-spacing-05);
+		left: var(--cds-spacing-05);
 		display: flex;
 	}
 
