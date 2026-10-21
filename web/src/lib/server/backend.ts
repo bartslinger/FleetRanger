@@ -1,6 +1,7 @@
 import { BACKEND_URL } from '$app/env/private';
 import { error } from '@sveltejs/kit';
 import type { Area } from '#lib/ui/areas.js';
+import type { DayStripFlight } from '#lib/ui/DayStrip.svelte';
 import type { Track } from '#lib/ui/TrackMap.svelte';
 
 export type { Area };
@@ -128,6 +129,8 @@ export interface SessionSummary {
 	pilots: string[];
 	teams: string[];
 	team_ids: string[];
+	/** Each visible flight's times and takeoff point, in takeoff order: the day strip. */
+	flight_times: DayStripFlight[];
 }
 
 /** One page of `GET /api/sessions`, newest first. */

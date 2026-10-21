@@ -12,6 +12,7 @@
 	import type { HTMLAttributes } from 'svelte/elements';
 	import { mergeProps, Tooltip } from 'bits-ui';
 	import Icon, { type IconDescriptor } from './Icon.svelte';
+	import TooltipContent from './TooltipContent.svelte';
 
 	interface Props extends HTMLAttributes<HTMLElement> {
 		icon: IconDescriptor;
@@ -62,11 +63,7 @@
 					{/if}
 				{/snippet}
 			</Tooltip.Trigger>
-			<Tooltip.Portal>
-				<Tooltip.Content class="tooltip" side="bottom" sideOffset={4} collisionPadding={16}>
-					{label}
-				</Tooltip.Content>
-			</Tooltip.Portal>
+			<TooltipContent>{label}</TooltipContent>
 		</Tooltip.Root>
 	</Tooltip.Provider>
 {/if}
@@ -123,18 +120,5 @@
 	.disabled {
 		color: var(--cds-icon-disabled);
 		cursor: not-allowed;
-	}
-
-	/* Carbon's tooltip: inverse, body-compact-01, rendered in a portal. */
-	:global(.tooltip) {
-		z-index: 10;
-		max-width: 18rem;
-		padding: var(--cds-spacing-02) var(--cds-spacing-05);
-		background: var(--cds-background-inverse);
-		color: var(--cds-text-inverse);
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-		border-radius: 2px;
 	}
 </style>
