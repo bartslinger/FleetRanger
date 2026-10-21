@@ -6,7 +6,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Releases:** v0.3.0 and android-v0.2.1 run on the first organisation's server; the deploy dumps the database before changing the release. v0.3.0 brought **areas** (admins draw them on the Areas page; flights and sessions show each area's share of the air time, and the lists and MCP filter by them) and **list filters** in a panel behind a Filters button.
 
-**Since v0.3.0:** a **day strip** on each session card: the day from 00:00 to 24:00 with the flights and night, and each flight's times on hover.
+**Since v0.3.0:** a **day strip** on each session card: the day from 00:00 to 24:00 with the flights and night, and each flight's times on hover. The **session cards show a week or a month**, with all its tracks on the map beside them (hovering a card brings out its session; nothing loads). Times carry no time-zone label. Next, exploring: a smooth transition from a card to the session's page.
 
 **Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
 
