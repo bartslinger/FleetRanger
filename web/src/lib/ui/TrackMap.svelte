@@ -17,7 +17,7 @@
 <script lang="ts">
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
-	import { addAreaLayers, setAreas, type Area } from './areas.js';
+	import { addAreaLayers, bounds, setAreas, type Area } from './areas.js';
 	import InlineNotification from './InlineNotification.svelte';
 	import Loading from './Loading.svelte';
 
@@ -160,22 +160,8 @@
 
 	const FIT = { padding: 48, maxZoom: 17 };
 
-	/** The tracks' extent as [[west, south], [east, north]]; null without positions. */
-	function bounds(tracks: Track[]): [[number, number], [number, number]] | null {
-		const positions = tracks.flatMap((track) => track.coordinates);
-		if (positions.length === 0) return null;
-		let [west, south, east, north] = [180, 90, -180, -90];
-		for (const [lon, lat] of positions) {
-			west = Math.min(west, lon);
-			east = Math.max(east, lon);
-			south = Math.min(south, lat);
-			north = Math.max(north, lat);
-		}
-		return [
-			[west, south],
-			[east, north]
-		];
-	}
+	/** The tracks' extent; null without positions. */
+	const extentOf = (tracks: Track[]) => bounds(tracks.flatMap((track) => track.coordinates));
 
 	/** Puts the tracks into the sources and fits them. Before `style.load` there
 	 * are no sources yet; it adds them with the tracks of that moment. */
@@ -186,7 +172,7 @@
 	}
 
 	function fit(map: MapboxMap, tracks: Track[], animate: boolean) {
-		const extent = bounds(tracks);
+		const extent = extentOf(tracks);
 		if (!extent) return;
 		map.fitBounds(extent, { ...FIT, animate });
 		// Shown once the new view is drawn: until its tiles are in, Mapbox
@@ -207,7 +193,7 @@
 		import('mapbox-gl').then(({ default: mapboxgl }) => {
 			if (cancelled) return;
 			// With tracks known, the very first frame already shows them.
-			const initial = bounds(tracks);
+			const initial = extentOf(tracks);
 			created = new mapboxgl.Map({
 				container: element,
 				accessToken: token,

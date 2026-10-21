@@ -35,8 +35,6 @@
 	import InlineNotification from './InlineNotification.svelte';
 	import TextInput from './TextInput.svelte';
 
-	type Polygon = Extract<Boundary, { type: 'Polygon' }>;
-
 	interface Props {
 		areas: Area[];
 		/** The install's public Mapbox token; without one there is no map. */
@@ -52,9 +50,9 @@
 		 * e.g. to lock a list meanwhile. */
 		onmode?: (mode: Mode) => void;
 		/** Saves a new area; resolves to an error message, if refused. */
-		oncreate: (name: string, boundary: Polygon) => Promise<string | undefined>;
+		oncreate: (name: string, boundary: Boundary) => Promise<string | undefined>;
 		/** Saves a changed shape; resolves to an error message, if refused. */
-		onreshape: (id: string, boundary: Polygon) => Promise<string | undefined>;
+		onreshape: (id: string, boundary: Boundary) => Promise<string | undefined>;
 		/** The Delete tool was used on the selected area, e.g. to confirm it. */
 		ondelete?: (id: string) => void;
 	}
@@ -123,7 +121,7 @@
 		const rings = shown(areas, mode, selected).map((area) => area.boundary.coordinates[0]);
 		let best: number[] | undefined;
 		let nearest = SNAP_PX;
-		for (const ring of rings as number[][][]) {
+		for (const ring of rings) {
 			for (const corner of ring) {
 				const p = context.project(corner[0], corner[1]);
 				const distance = Math.hypot(p.x - pointer.x, p.y - pointer.y);
@@ -131,7 +129,7 @@
 			}
 		}
 		if (best) return best;
-		for (const ring of rings as number[][][]) {
+		for (const ring of rings) {
 			for (let i = 0; i + 1 < ring.length; i++) {
 				const a = context.project(ring[i][0], ring[i][1]);
 				const b = context.project(ring[i + 1][0], ring[i + 1][1]);
@@ -229,13 +227,13 @@
 	}
 
 	/** The polygon drawn or edited, if any. */
-	function drawn(): Polygon | null {
+	function drawn(): Boundary | null {
 		const feature = draw
 			?.getSnapshot()
 			.find(
 				(feature) => feature.geometry.type === 'Polygon' && !feature.properties.currentlyDrawing
 			);
-		return feature ? (feature.geometry as Polygon) : null;
+		return feature ? (feature.geometry as Boundary) : null;
 	}
 
 	/** Puts the name field above the drawn shape's top, kept on the map (it
@@ -286,12 +284,7 @@
 					type: 'Polygon',
 					// Only the outer ring: holes are where other areas are, and
 					// clipping on save puts them back.
-					coordinates: [
-						(area.boundary.coordinates[0] as number[][]).map(([lon, lat]) => [
-							round(lon),
-							round(lat)
-						])
-					]
+					coordinates: [area.boundary.coordinates[0].map(([lon, lat]) => [round(lon), round(lat)])]
 				}
 			}
 		]);
@@ -405,7 +398,7 @@
 	$effect(() => {
 		const area = areas.find((area) => area.id === selected);
 		if (!map || !area) return;
-		const ring = area.boundary.coordinates[0] as number[][];
+		const ring = area.boundary.coordinates[0];
 		const view = map.getBounds();
 		if (view && ring.every(([lon, lat]) => view.contains([lon, lat]))) return;
 		const extent = bounds(ring);
