@@ -16,7 +16,7 @@
 
 <script lang="ts">
 	import 'mapbox-gl/dist/mapbox-gl.css';
-	import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
+	import type { ExpressionSpecification, Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
 	import { addAreaLayers, bounds, setAreas, type Area } from './areas.js';
 	import InlineNotification from './InlineNotification.svelte';
 	import Loading from './Loading.svelte';
@@ -70,10 +70,12 @@
 	let failed = $state(false);
 
 	// Map paint can't read CSS variables, so these are Carbon's values:
-	// Magenta 50 stands out on imagery and on both street maps, with a white
-	// casing (Gray 100 on the dark map).
-	const TRACK = '#ee5396';
-	const CASING = { light: '#ffffff', dark: '#161616' };
+	// Cyan 50, second in Carbon's categorical palette (user's choice,
+	// 2026-10-21, over magenta 50 and teal 50, which faded into green
+	// imagery), with a thin Cyan 80 casing on every map (user's choice, over
+	// white, Cyan 20 and 30, and Gray 100).
+	const TRACK = '#1192e8';
+	const CASING = '#003a6d';
 
 	// mapbox-gl doesn't export its GeoJSON types.
 	type FeatureCollection = Extract<
@@ -109,25 +111,28 @@
 	function ends(tracks: Track[]): FeatureCollection {
 		return {
 			type: 'FeatureCollection',
-			features: (showEnds ? tracks : [])
-				.filter((track) => track.coordinates.length > 0)
-				.flatMap((track) => [
-					point(track.coordinates[0], 'takeoff'),
-					point(track.coordinates[track.coordinates.length - 1], 'landing')
-				])
+			// With their track's index, to step back with it.
+			features: (showEnds ? tracks : []).flatMap((track, index) =>
+				track.coordinates.length > 0
+					? [
+							point(track.coordinates[0], 'takeoff', index),
+							point(track.coordinates[track.coordinates.length - 1], 'landing', index)
+						]
+					: []
+			)
 		};
 	}
 
-	function point(position: number[], kind: string): Feature {
+	function point(position: number[], kind: string, index: number): Feature {
 		return {
 			type: 'Feature',
-			properties: { kind },
+			properties: { kind, index },
 			geometry: { type: 'Point', coordinates: position.slice(0, 2) }
 		};
 	}
 
 	/** Adds the tracks to the current style; again after every style change. */
-	function addLayers(map: MapboxMap, casing: string) {
+	function addLayers(map: MapboxMap) {
 		// Areas first, so the tracks are drawn over them.
 		// Thin and neutral, behind the tracks: Gray 60 on the light street
 		// map, Gray 20 on imagery and the dark map.
@@ -140,7 +145,7 @@
 			type: 'line',
 			source: 'tracks',
 			layout: { 'line-join': 'round', 'line-cap': 'round' },
-			paint: { 'line-color': casing, 'line-width': 5, 'line-opacity': 0.9 }
+			paint: { 'line-color': CASING, 'line-width': 5, 'line-opacity': 0.9 }
 		});
 		map.addLayer({
 			id: 'track',
@@ -156,7 +161,7 @@
 			source: 'tracks',
 			filter: highlightFilter(highlight),
 			layout: { 'line-join': 'round', 'line-cap': 'round' },
-			paint: { 'line-color': casing, 'line-width': 9 }
+			paint: { 'line-color': CASING, 'line-width': 9 }
 		});
 		map.addLayer({
 			id: 'highlight',
@@ -166,17 +171,80 @@
 			layout: { 'line-join': 'round', 'line-cap': 'round' },
 			paint: { 'line-color': TRACK, 'line-width': 5 }
 		});
+		// A landing: an X drawn as the lines are (an image, as Mapbox draws
+		// none), under the takeoffs where a flight lands and the next takes off.
+		if (!map.hasImage('landing')) {
+			map.addImage('landing', landingImage(3), { pixelRatio: 2 });
+			map.addImage('landing-highlight', landingImage(5), { pixelRatio: 2 });
+		}
 		map.addLayer({
-			id: 'ends',
+			id: 'landings',
+			type: 'symbol',
+			source: 'ends',
+			filter: ['==', ['get', 'kind'], 'landing'],
+			layout: { 'icon-allow-overlap': true, 'icon-ignore-placement': true }
+		});
+		// A takeoff: a 12px dot with a 1px casing, as thin as the lines'.
+		map.addLayer({
+			id: 'takeoffs',
 			type: 'circle',
 			source: 'ends',
-			paint: {
-				'circle-radius': 6,
-				'circle-color': ['match', ['get', 'kind'], 'takeoff', casing, TRACK],
-				'circle-stroke-color': ['match', ['get', 'kind'], 'takeoff', TRACK, casing],
-				'circle-stroke-width': 3
-			}
+			filter: ['==', ['get', 'kind'], 'takeoff'],
+			paint: { 'circle-color': TRACK, 'circle-stroke-color': CASING }
 		});
+		styleEnds(map, highlightFilter(highlight));
+	}
+
+	/** The takeoffs and landings of the highlighted tracks wider, as their
+	 * lines, and on top; the others' step back with theirs. */
+	function styleEnds(map: MapboxMap, filter: ReturnType<typeof highlightFilter>) {
+		const dimmed = filter[2][1].length > 0;
+		const opacity: ExpressionSpecification | number = dimmed ? ['case', filter, 1, 0.3] : 1;
+		map.setPaintProperty('takeoffs', 'circle-radius', ['case', filter, 6, 5]);
+		map.setPaintProperty('takeoffs', 'circle-stroke-width', ['case', filter, 2, 1]);
+		map.setPaintProperty('takeoffs', 'circle-opacity', opacity);
+		map.setPaintProperty('takeoffs', 'circle-stroke-opacity', opacity);
+		map.setLayoutProperty('takeoffs', 'circle-sort-key', ['case', filter, 1, 0]);
+		map.setLayoutProperty('landings', 'icon-image', [
+			'case',
+			filter,
+			'landing-highlight',
+			'landing'
+		]);
+		map.setPaintProperty('landings', 'icon-opacity', opacity);
+		map.setLayoutProperty('landings', 'symbol-sort-key', ['case', filter, 1, 0]);
+	}
+
+	// The landing's X in an 18px box, its arms from corner to corner of the
+	// middle 8px: the legend draws the same.
+	const CROSS = [
+		[5, 5, 13, 13],
+		[13, 5, 5, 13]
+	];
+
+	/** The landing's X at twice the size, for sharp edges: as the line, of
+	 * this width over its casing 2px wider on each side (1px when 3px). */
+	function landingImage(width: 3 | 5): ImageData {
+		const canvas = document.createElement('canvas');
+		canvas.width = 36;
+		canvas.height = 36;
+		const context = canvas.getContext('2d')!;
+		context.scale(2, 2);
+		context.lineCap = 'round';
+		for (const [color, stroke] of [
+			[CASING, width === 3 ? 5 : 9],
+			[TRACK, width]
+		] as const) {
+			context.strokeStyle = color;
+			context.lineWidth = stroke;
+			context.beginPath();
+			for (const [x1, y1, x2, y2] of CROSS) {
+				context.moveTo(x1, y1);
+				context.lineTo(x2, y2);
+			}
+			context.stroke();
+		}
+		return context.getImageData(0, 0, canvas.width, canvas.height);
 	}
 
 	/** Only the tracks with these indexes; none without. */
@@ -255,8 +323,7 @@
 			created.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
 			const instance = created;
 			instance.on('style.load', () => {
-				const darkMap = view === 'map' && dark();
-				addLayers(instance, darkMap ? CASING.dark : CASING.light);
+				addLayers(instance);
 			});
 			instance.on('error', (event) => {
 				// A rejected token or an unreachable Mapbox; tile hiccups don't count.
@@ -311,10 +378,12 @@
 		if (!map?.getLayer('highlight')) return;
 		map.setFilter('highlight-casing', filter);
 		map.setFilter('highlight', filter);
-		// The others step back while some are brought out.
+		// The others step back to 30% while some are brought out (Carbon's
+		// legend hover), their takeoffs and landings with them.
 		const dimmed = filter[2][1].length > 0;
-		map.setPaintProperty('track', 'line-opacity', dimmed ? 0.35 : 1);
+		map.setPaintProperty('track', 'line-opacity', dimmed ? 0.3 : 1);
 		map.setPaintProperty('track-casing', 'line-opacity', dimmed ? 0.3 : 0.9);
+		styleEnds(map, filter);
 	});
 
 	function show(next: View) {
@@ -333,7 +402,7 @@
 		Mapbox didn’t answer or refused the token. Try again later.
 	</InlineNotification>
 {:else}
-	<figure class="track-map">
+	<figure class="track-map" style:--track={TRACK} style:--casing={CASING}>
 		<div
 			class="map"
 			class:placed
@@ -360,7 +429,18 @@
 			<figcaption class="legend" class:reserved={reserveLegend}>
 				{#if showEnds}
 					<span><span class="marker takeoff" aria-hidden="true"></span>Takeoff</span>
-					<span><span class="marker landing" aria-hidden="true"></span>Landing</span>
+					<span
+						><svg class="landing" viewBox="2 2 14 14" aria-hidden="true">
+							{#each CROSS as [x1, y1, x2, y2], arm (arm)}<line
+									{x1}
+									{y1}
+									{x2}
+									{y2}
+									class="casing"
+								/>{/each}
+							{#each CROSS as [x1, y1, x2, y2], arm (arm)}<line {x1} {y1} {x2} {y2} />{/each}
+						</svg>Landing</span
+					>
 				{/if}
 				{#if areas.length > 0}
 					<span><span class="marker area" aria-hidden="true"></span>Area</span>
@@ -475,12 +555,28 @@
 		box-sizing: border-box;
 		width: 0.75rem;
 		height: 0.75rem;
-		border: 3px solid #ee5396;
-		border-radius: 50%;
 	}
 
 	.takeoff {
-		background: #ffffff;
+		border: 1px solid var(--casing);
+		border-radius: 50%;
+		background: var(--track);
+	}
+
+	.landing {
+		width: 0.875rem;
+		height: 0.875rem;
+	}
+
+	.landing line {
+		stroke: var(--track);
+		stroke-width: 3;
+		stroke-linecap: round;
+	}
+
+	.landing .casing {
+		stroke: var(--casing);
+		stroke-width: 5;
 	}
 
 	/* An area: a thin neutral border, as on the map (Gray 50, between the
@@ -488,11 +584,6 @@
 	   read tokens. */
 	.area {
 		border: 1px solid #8d8d8d;
-		border-radius: 0;
-	}
-
-	.landing {
-		background: #ee5396;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
