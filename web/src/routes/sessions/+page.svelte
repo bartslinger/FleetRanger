@@ -32,6 +32,7 @@
 	import { Tooltip } from 'bits-ui';
 	import IconButton from '#lib/ui/IconButton.svelte';
 	import TooltipContent from '#lib/ui/TooltipContent.svelte';
+	import { roving } from '#lib/ui/roving.js';
 	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
@@ -288,7 +289,9 @@
 {#snippet periodToolbar()}
 	{@const unit = data.state.period.unit}
 	{@const other = unit === 'month' ? 'week' : 'month'}
-	<div class="list-toolbar">
+	<!-- A toolbar for screen readers, one tab stop with the arrow keys
+	     between its controls (Carbon's text toolbar, WAI-ARIA). -->
+	<div class="list-toolbar" role="toolbar" aria-label="Sessions" use:roving>
 		<IconButton
 			icon={ChevronLeft}
 			size="lg"
@@ -309,15 +312,14 @@
 			<Tooltip.Root disabled={!periodCut}>
 				<Tooltip.Trigger>
 					{#snippet child({ props })}
-						<!-- Focusable only while cut off, so the keyboard reaches the
-						     full name too; screen readers read it from the text. -->
-						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+						<!-- One of the toolbar's stops only while cut off, so the keyboard
+						     reaches the full name too; screen readers read the text. -->
 						<h2
 							{...props}
 							bind:this={periodHeading}
 							class="period"
 							aria-live="polite"
-							tabindex={periodCut ? 0 : undefined}
+							data-roving={periodCut ? 'true' : 'false'}
 						>
 							<span class="period-name">{periodName(data.state.period)}</span>
 							<span class="period-count">{sessions(data.total)}</span>
