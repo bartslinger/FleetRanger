@@ -18,37 +18,48 @@ pub async fn list(db: &PgPool, _actor: &Actor) -> ApiResult<Vec<Area>> {
     Ok(db::list(&mut conn).await?)
 }
 
-/// An area as saved, and the areas it overlapped and was clipped against.
+/// The areas a drawing became, and the areas it overlapped and was clipped
+/// against.
 #[derive(Serialize)]
 pub struct Saved {
-    pub area: Area,
+    /// One area, or more where clipping split the drawing: separate areas
+    /// with the same name (user's decision, 2026-10-21). The first one is the
+    /// largest; a changed area keeps its id with it.
+    pub areas: Vec<Area>,
     pub clipped_by: Vec<String>,
 }
 
-/// Creates an area (`id` None) or changes one, clipped where it overlaps the
-/// others, and recomputes every flight's figures per area.
+/// Creates an area, or changes the shape of one (`id`), clipped where it
+/// overlaps the others, and recomputes every flight's figures per area.
 pub async fn save(
     db: &PgPool,
     actor: &Actor,
     id: Option<Uuid>,
-    name: &str,
+    name: Option<&str>,
     boundary: &Value,
 ) -> ApiResult<Saved> {
     policy::require_admin(actor)?;
-    let name = error::name(name)?;
     let drawn = geometry::parse(boundary)
         .ok_or_else(|| ApiError::Invalid("Draw the area on the map.".to_owned()))?;
 
     let mut tx = db.begin().await?;
     db::lock_for_change(&mut tx).await?;
-    let others: Vec<(String, _)> = db::list(&mut tx)
-        .await?
+    let all = db::list(&mut tx).await?;
+    let name = match (id, name) {
+        (_, Some(name)) => error::name(name)?,
+        (Some(id), None) => {
+            let area = all.iter().find(|area| area.id == id);
+            area.ok_or(ApiError::NotFound)?.name.clone()
+        }
+        (None, None) => return Err(ApiError::Invalid("Enter a name.".to_owned())),
+    };
+    let others: Vec<(String, _)> = all
         .into_iter()
         .filter(|area| Some(area.id) != id)
         .filter_map(|area| Some((area.name, geometry::parse(&area.boundary)?)))
         .collect();
     let shapes: Vec<_> = others.iter().map(|(_, shape)| shape.clone()).collect();
-    let boundary = geometry::clip(&drawn, &shapes).ok_or_else(|| {
+    let pieces = geometry::clip(&drawn, &shapes).ok_or_else(|| {
         ApiError::Invalid(
             "Everything you drew overlaps other areas. Draw at least part of it where no other \
              area is."
@@ -59,28 +70,38 @@ pub async fn save(
         .into_iter()
         .map(|i| others[i].0.clone())
         .collect();
-    let boundary = geometry::to_geojson(&boundary);
 
-    let id = match id {
-        Some(id) => {
-            if !db::update(&mut tx, id, &name, &boundary)
-                .await
-                .map_err(name_taken)?
-            {
-                return Err(ApiError::NotFound);
+    let mut areas = Vec::new();
+    for (index, piece) in pieces.into_iter().enumerate() {
+        let boundary = geometry::to_geojson(&piece);
+        let id = match id {
+            Some(id) if index == 0 => {
+                if !db::update(&mut tx, id, &name, &boundary).await? {
+                    return Err(ApiError::NotFound);
+                }
+                id
             }
-            id
-        }
-        None => db::insert(&mut tx, &name, &boundary)
-            .await
-            .map_err(name_taken)?,
-    };
+            _ => db::insert(&mut tx, &name, &boundary).await?,
+        };
+        areas.push(Area {
+            id,
+            name: name.clone(),
+            boundary,
+        });
+    }
     db::recompute_all(&mut tx).await?;
     tx.commit().await?;
-    Ok(Saved {
-        area: Area { id, name, boundary },
-        clipped_by,
-    })
+    Ok(Saved { areas, clipped_by })
+}
+
+/// Renames an area; its shape and figures stay as they are.
+pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResult<()> {
+    policy::require_admin(actor)?;
+    let name = error::name(name)?;
+    if !db::rename(db, id, &name).await? {
+        return Err(ApiError::NotFound);
+    }
+    Ok(())
 }
 
 /// Deletes an area and recomputes every flight's figures per area.
@@ -96,10 +117,63 @@ pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
     Ok(())
 }
 
-fn name_taken(error: sqlx::Error) -> ApiError {
-    if error::is_unique_violation(&error) {
-        ApiError::Conflict("An area with this name already exists.".to_owned())
-    } else {
-        error.into()
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::policy::Role;
+    use serde_json::json;
+
+    fn admin() -> Actor {
+        Actor {
+            user_id: Uuid::nil(),
+            role: Role::Admin,
+            login_session_id: Uuid::nil(),
+            ip: [127, 0, 0, 1].into(),
+            email: String::new(),
+            name: String::new(),
+        }
+    }
+
+    fn rectangle(west: f64, east: f64, south: f64, north: f64) -> Value {
+        json!({ "type": "Polygon", "coordinates": [[
+            [west, south], [east, south], [east, north], [west, north], [west, south]
+        ]] })
+    }
+
+    #[sqlx::test]
+    async fn a_drawing_split_by_another_area_becomes_separate_areas(db: PgPool) {
+        // A narrow strip from north to south, then an area drawn across it.
+        save(
+            &db,
+            &admin(),
+            None,
+            Some("Test Road"),
+            &rectangle(0.004, 0.006, 0.0, 0.01),
+        )
+        .await
+        .ok()
+        .unwrap();
+        let saved = save(
+            &db,
+            &admin(),
+            None,
+            Some("Test Block"),
+            &rectangle(0.0, 0.01, 0.002, 0.008),
+        )
+        .await
+        .ok()
+        .unwrap();
+
+        assert_eq!(saved.areas.len(), 2);
+        assert!(saved.areas.iter().all(|area| area.name == "Test Block"));
+        assert!(
+            saved
+                .areas
+                .iter()
+                .all(|area| area.boundary["type"] == "Polygon")
+        );
+        assert_eq!(saved.clipped_by, ["Test Road"]);
+        let mut conn = db.acquire().await.unwrap();
+        assert_eq!(db::list(&mut conn).await.unwrap().len(), 3);
     }
 }
