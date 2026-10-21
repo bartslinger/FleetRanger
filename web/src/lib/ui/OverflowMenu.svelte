@@ -22,7 +22,7 @@
 	import TooltipContent from './TooltipContent.svelte';
 	import OverflowMenuHorizontal from '@carbon/icons/es/overflow-menu--horizontal/16.js';
 	import OverflowMenuVertical from '@carbon/icons/es/overflow-menu--vertical/16.js';
-	import Icon from './Icon.svelte';
+	import Icon, { type IconDescriptor } from './Icon.svelte';
 
 	interface Props {
 		/** The button's accessible name, e.g. "More actions". */
@@ -35,6 +35,9 @@
 		trigger?: HTMLElement | null;
 		/** Carbon's vertical icon, as in a table toolbar. */
 		vertical?: boolean;
+		/** An icon that says what the menu is about, e.g. a calendar for
+		 * choosing a period, in place of the overflow icon. */
+		icon?: IconDescriptor;
 	}
 
 	let {
@@ -42,7 +45,8 @@
 		items,
 		variant = 'inline',
 		trigger = $bindable(null),
-		vertical = false
+		vertical = false,
+		icon
 	}: Props = $props();
 </script>
 
@@ -58,7 +62,7 @@
 						class="overflow-trigger {variant}"
 						aria-label={label}
 					>
-						<Icon icon={vertical ? OverflowMenuVertical : OverflowMenuHorizontal} />
+						<Icon icon={icon ?? (vertical ? OverflowMenuVertical : OverflowMenuHorizontal)} />
 					</DropdownMenu.Trigger>
 				{/snippet}
 			</Tooltip.Trigger>

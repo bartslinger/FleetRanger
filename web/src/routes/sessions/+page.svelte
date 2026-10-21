@@ -27,6 +27,7 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
+	import Calendar from '@carbon/icons/es/calendar/16.js';
 	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
 	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
 	import { Tooltip } from 'bits-ui';
@@ -340,9 +341,9 @@
 				onchange={filter}
 			/>
 			<OverflowMenu
-				label="Period options"
+				label="Choose period"
 				variant="row"
-				vertical
+				icon={Calendar}
 				items={[
 					{
 						label: `Show by ${other}`,
