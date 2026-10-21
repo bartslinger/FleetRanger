@@ -4,9 +4,9 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-**First release** (v0.1.0 and android-v0.1.0) on the first organisation's server, in preparation: the web image, the full compose configuration and the Ansible role (nginx routing, secrets from a vault) are ready; next are the vault's secrets, the tags, deploying, the first admin and importing the server's logs. Backups come later (user's choice).
+**Releases:** v0.2.0 and android-v0.2.1 run on the first organisation's server. Backups come later (user's choice).
 
-**Areas** work locally: admins draw them on the Areas page (a list beside the map, with drawing tools on the map); flights and sessions show each area's share of the air time, and the lists and MCP filter by them. **List filters** moved into a panel behind a Filters button. Both are reviewed against Carbon and go into the first release; not deployed yet.
+**Next release** (v0.3.0), being prepared: **areas** (admins draw them on the Areas page, a list beside the map with drawing tools on the map; flights and sessions show each area's share of the air time, and the lists and MCP filter by them) and **list filters** in a panel behind a Filters button. Both are reviewed against Carbon; not deployed yet.
 
 **Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
 
