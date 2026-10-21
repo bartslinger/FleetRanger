@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { KINDS, type Kind } from '#lib/equipment.js';
 	import { dateTime } from '#lib/format.js';
+	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
@@ -65,6 +66,14 @@
 	}
 </script>
 
+<!-- The way to pair a controller, on the controllers' tab only (user's
+     request, 2026-10-21; carbon-expert's advice): the table toolbar's primary
+     action, as "New …" on Users and Teams, or the empty state's. A link in a
+     button's look, as it opens the page that does it. -->
+{#snippet pair()}
+	<Button href={resolve('/pair')}>Pair a controller</Button>
+{/snippet}
+
 <PageHeader title="Equipment" />
 
 <Grid>
@@ -84,7 +93,10 @@
 						title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
 						body={data.account?.role === 'member'
 							? 'Your team’s drones and remote controllers appear here once an admin assigns them to the team.'
-							: 'Drones and remote controllers appear here when flight logs that use them are imported.'}
+							: kind === 'drones'
+								? 'Drones appear here when flight logs that use them are imported.'
+								: 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with the code its screen shows.'}
+						action={kind === 'controllers' ? pair : undefined}
 					/>
 				{:else}
 					<DataTable
@@ -93,6 +105,11 @@
 						{rows}
 						rowKey={(item) => item.id}
 						rowHref={(item) => resolve('/equipment/[kind=kind]/[id]', { kind, id: item.id })}
+						toolbar={kind === 'controllers' ? pair : undefined}
+						summary="{rows.length} {(rows.length === 1
+							? KINDS[kind].one
+							: KINDS[kind].label
+						).toLowerCase()}"
 					/>
 				{/if}
 			{/snippet}
