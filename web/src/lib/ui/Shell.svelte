@@ -280,23 +280,27 @@
 						bind:value={theme}
 						onchange={setTheme}
 					/>
-					<!-- A header panel is global, as the side navigation: its links
-					     start a new breadcrumb trail. -->
-					{#each profileLinks as link (link.href)}
-						<Button
-							kind="ghost"
-							href={link.href}
-							fill
-							onclick={() => {
-								startTrail();
-								togglePanel('profile');
-							}}>{link.label}</Button
-						>
-					{/each}
-					<!-- Posted straight to the backend, which ends the login session. -->
-					<form class="logout" method="post" action="/auth/logout">
-						<Button kind="ghost" type="submit" fill>Log out</Button>
-					</form>
+					<!-- One group of full-width rows under one divider, Log out last,
+					     no icons (carbon-expert's advice, as Carbon's panel items). -->
+					<div class="items">
+						<!-- A header panel is global, as the side navigation: its links
+						     start a new breadcrumb trail. -->
+						{#each profileLinks as link (link.href)}
+							<Button
+								kind="ghost"
+								href={link.href}
+								fill
+								onclick={() => {
+									startTrail();
+									togglePanel('profile');
+								}}>{link.label}</Button
+							>
+						{/each}
+						<!-- Posted straight to the backend, which ends the login session. -->
+						<form method="post" action="/auth/logout">
+							<Button kind="ghost" type="submit" fill>Log out</Button>
+						</form>
+					</div>
 				</section>
 			{/if}
 		</div>
@@ -516,8 +520,11 @@
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 	}
 
-	/* Full width, below a divider, as the last item of the panel. */
-	.logout {
+	/* Its links and Log out: full-width rows below one divider, the last of
+	   the panel. */
+	.items {
+		display: flex;
+		flex-direction: column;
 		margin-inline: calc(-1 * var(--cds-spacing-05));
 		border-top: 1px solid var(--cds-border-subtle-00);
 	}
