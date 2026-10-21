@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use super::{
     db::Area,
-    service::{self, Saved},
+    service::{self, Drawing, Saved},
 };
 use crate::{
     auth::Actor,
@@ -37,7 +37,7 @@ struct NewArea {
     boundary: Value,
 }
 
-/// A new name, a new shape, or both.
+/// A new name or a new shape, one at a time.
 #[derive(Deserialize)]
 struct AreaChange {
     name: Option<String>,
@@ -53,29 +53,31 @@ async fn create(
     State(db): State<PgPool>,
     Json(input): Json<NewArea>,
 ) -> ApiResult<Json<Saved>> {
+    let drawing = Drawing::New(&input.name);
     Ok(Json(
-        service::save(&db, &actor, None, Some(&input.name), &input.boundary).await?,
+        service::save(&db, &actor, drawing, &input.boundary).await?,
     ))
 }
 
 /// A new shape is clipped and may split the area, as a new one is; a new
-/// name alone changes no figures.
+/// name changes no figures.
 async fn update(
     actor: Actor,
     State(db): State<PgPool>,
     Path(id): Path<Uuid>,
     Json(change): Json<AreaChange>,
 ) -> ApiResult<Json<Option<Saved>>> {
-    let name = change.name.as_deref();
-    match (&change.boundary, name) {
-        (Some(boundary), _) => Ok(Json(Some(
-            service::save(&db, &actor, Some(id), name, boundary).await?,
+    match (change.boundary, change.name) {
+        (Some(boundary), None) => Ok(Json(Some(
+            service::save(&db, &actor, Drawing::Reshape(id), &boundary).await?,
         ))),
         (None, Some(name)) => {
-            service::rename(&db, &actor, id, name).await?;
+            service::rename(&db, &actor, id, &name).await?;
             Ok(Json(None))
         }
-        (None, None) => Err(ApiError::Invalid("Nothing to change.".to_owned())),
+        _ => Err(ApiError::Invalid(
+            "Change either the name or the shape.".to_owned(),
+        )),
     }
 }
 
