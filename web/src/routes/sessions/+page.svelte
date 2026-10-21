@@ -214,8 +214,10 @@
 		{#if data.total > 0 || filtering}
 			<ListFilters
 				filters={data.state}
+				none={{ ...data.state, ...NO_FILTERS }}
 				devices={data.devices}
 				admin={data.choices.admin}
+				{filtering}
 				onchange={filter}
 			/>
 		{/if}
@@ -238,12 +240,9 @@
 				{/snippet}
 			</EmptyState>
 		{:else if data.state.view === 'cards'}
-			<!-- As the table's toolbar: how many, and Clear filters. -->
+			<!-- As the table's toolbar: how many pass the filters. -->
 			{#if filtering}
-				<div class="cards-toolbar">
-					<p>{sessions(data.total)}</p>
-					<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
-				</div>
+				<p class="cards-count">{sessions(data.total)}</p>
 			{/if}
 			<div class="cards-view">
 				<div class="cards">
@@ -318,11 +317,6 @@
 				selectedLabel={(count) => `${sessions(count)} selected`}
 				summary={sessions(data.total)}
 			>
-				{#snippet toolbar()}
-					{#if filtering}
-						<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
-					{/if}
-				{/snippet}
 				{#snippet batchActions(ids)}
 					{#if ids.length > 1}
 						<Modal
@@ -410,19 +404,14 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* The number of sessions and Clear filters, in one row like a table's
-	   toolbar: 48px high, the count in the 16px gutter. */
-	.cards-toolbar {
+	/* The number of sessions, like a table's toolbar: 48px high, in the 16px
+	   gutter. */
+	.cards-count {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		min-height: var(--cds-spacing-09);
-		margin-bottom: var(--cds-spacing-05);
+		margin: 0 0 var(--cds-spacing-05);
 		padding-inline-start: var(--cds-spacing-05);
-	}
-
-	.cards-toolbar p {
-		margin: 0;
 		color: var(--cds-text-secondary);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
