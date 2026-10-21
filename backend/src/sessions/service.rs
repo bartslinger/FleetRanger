@@ -8,7 +8,7 @@ use crate::{
     error::{ApiError, ApiResult},
     flights::{
         self,
-        db::{Filter, FlightDetail, Neighbours},
+        db::{Filter, FlightDetail},
     },
     policy,
 };
@@ -76,7 +76,7 @@ pub async fn neighbours(
     actor: &Actor,
     filter: &Filter,
     id: Uuid,
-) -> ApiResult<Neighbours> {
+) -> ApiResult<db::Neighbours> {
     let scope = policy::flight_scope(actor);
     db::neighbours(db, &scope, filter, id)
         .await?
