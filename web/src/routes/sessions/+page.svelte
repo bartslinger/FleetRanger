@@ -515,7 +515,6 @@
 	crumb={openSession && openSession.flights[0]
 		? `Session ${day(openSession.flights[0].takeoff_at, data.timeZone)}`
 		: crumb}
-	reserveBreadcrumb={data.state.view === 'cards' && wide.current}
 >
 	{#snippet actions()}
 		{#if !opened}<ViewSwitcher
