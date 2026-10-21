@@ -30,10 +30,21 @@
 		 * screens show beside the content, but on phones only further down. */
 		phoneDescription?: string;
 		actions?: Snippet;
+		/** Keep the breadcrumb's row free while there's none, so one appearing
+		 * later (a session opened over the Sessions cards) moves nothing. */
+		reserveBreadcrumb?: boolean;
 	}
 
-	let { title, breadcrumb, crumb, status, description, phoneDescription, actions }: Props =
-		$props();
+	let {
+		title,
+		breadcrumb,
+		crumb,
+		status,
+		description,
+		phoneDescription,
+		actions,
+		reserveBreadcrumb = false
+	}: Props = $props();
 
 	$effect(() => {
 		trail.title = crumb ?? title;
@@ -61,13 +72,15 @@
 				<div class="text">
 					<!-- Appearing on a page already shown (a session opened over the
 					     Sessions cards), it slides open rather than pushing the page
-					     down at once: Carbon's moderate-01, about its standard curve. -->
+					     down at once: Carbon's moderate-01, about its standard curve.
+					     With its row kept free, it just fills it. -->
 					{#if crumbs}<div
 							class="breadcrumb"
-							transition:slide={{ duration: 150, easing: cubicOut }}
+							transition:slide={{ duration: reserveBreadcrumb ? 0 : 150, easing: cubicOut }}
 						>
 							<Breadcrumb items={crumbs} />
-						</div>{/if}
+						</div>
+					{:else if reserveBreadcrumb}<div class="breadcrumb reserved"></div>{/if}
 					<div class="title">
 						<h1>{title}</h1>
 						{#if status}<Tag>{status}</Tag>{/if}
@@ -110,6 +123,11 @@
 	/* 16px to the title (with the gap), keeping it attached to the title. */
 	.breadcrumb {
 		margin-bottom: var(--cds-spacing-03);
+	}
+
+	/* As high as a breadcrumb (measured: 16px, and the same 8px below). */
+	.reserved {
+		height: var(--cds-spacing-05);
 	}
 
 	.title {
