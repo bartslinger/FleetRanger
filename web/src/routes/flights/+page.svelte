@@ -206,26 +206,31 @@
 		{#if data.total > 0 || filtering}
 			<ListFilters
 				filters={data.state}
+				none={{ ...data.state, ...none }}
 				devices={data.devices}
 				admin={data.choices.admin}
+				{filtering}
+				ownCount={Number(data.state.withoutSession) + Number(data.state.archived)}
 				onchange={filter}
 			>
-				<!-- Archived flights are never in a session. -->
-				{#if !data.state.archived}
+				{#snippet own(draft, change)}
+					<!-- Archived flights are never in a session. -->
+					{#if !draft.archived}
+						<Select
+							label="Session"
+							options={sessionOptions}
+							value={draft.withoutSession ? 'none' : ''}
+							onchange={(event) => change({ withoutSession: event.currentTarget.value === 'none' })}
+						/>
+					{/if}
 					<Select
-						label="Session"
-						options={sessionOptions}
-						value={data.state.withoutSession ? 'none' : ''}
-						onchange={(event) => filter({ withoutSession: event.currentTarget.value === 'none' })}
+						label="Status"
+						options={statusOptions}
+						value={draft.archived ? 'archived' : ''}
+						onchange={(event) =>
+							change({ archived: event.currentTarget.value === 'archived', withoutSession: false })}
 					/>
-				{/if}
-				<Select
-					label="Status"
-					options={statusOptions}
-					value={data.state.archived ? 'archived' : ''}
-					onchange={(event) =>
-						filter({ archived: event.currentTarget.value === 'archived', withoutSession: false })}
-				/>
+				{/snippet}
 			</ListFilters>
 		{/if}
 		{#if data.total === 0 && filtering}
@@ -276,11 +281,6 @@
 				selectAllLabel={(total) => `Select all ${total}`}
 				summary={flights(data.total)}
 			>
-				{#snippet toolbar()}
-					{#if filtering}
-						<Button kind="ghost" onclick={() => filter(none)}>Clear filters</Button>
-					{/if}
-				{/snippet}
 				{#snippet batchActions(ids)}
 					{#if data.state.archived}
 						<!-- Archived flights can only be restored. -->
