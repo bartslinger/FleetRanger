@@ -1,8 +1,8 @@
 <!--
 	@component
 	Carbon's clickable tile: the whole tile is one link, with no links or
-	buttons inside it. `marked` gives it the selected-row background, e.g. for
-	the item whose details show elsewhere on the page.
+	buttons inside it. `hovered` gives it the hover background while what it
+	stands for is pointed at elsewhere, e.g. its track on a map.
 	Carbon's arrow at the bottom right, in the interactive colour, says it
 	navigates (user's decision, 2026-10-21: once hovering a card brought out
 	its session on a map, a click opening it was unexpected without it; it
@@ -17,15 +17,15 @@
 
 	interface Props extends HTMLAnchorAttributes {
 		href: string;
-		marked?: boolean;
+		hovered?: boolean;
 		children: Snippet;
 	}
 
-	let { href, marked = false, children, ...rest }: Props = $props();
+	let { href, hovered = false, children, ...rest }: Props = $props();
 </script>
 
 <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
-<a class="tile" class:marked {href} {...rest}
+<a class="tile" class:hovered {href} {...rest}
 	>{@render children()}<span class="arrow"><Icon icon={ArrowRight} /></span></a
 >
 
@@ -41,16 +41,9 @@
 		transition: background-color 70ms cubic-bezier(0.2, 0, 0.38, 0.9);
 	}
 
-	.tile.marked {
-		background: var(--cds-layer-selected-01);
-	}
-
-	.tile:hover {
+	.tile:hover,
+	.tile.hovered {
 		background: var(--cds-layer-hover-01);
-	}
-
-	.tile.marked:hover {
-		background: var(--cds-layer-selected-hover-01);
 	}
 
 	.arrow {

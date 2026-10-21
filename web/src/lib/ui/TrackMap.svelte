@@ -16,9 +16,12 @@
 
 <script lang="ts">
 	import 'mapbox-gl/dist/mapbox-gl.css';
-	import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
+	import type { ExpressionSpecification, Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
 	import { addAreaLayers, bounds, setAreas, type Area } from './areas.js';
+	import { untrack } from 'svelte';
+	import { Tooltip } from 'bits-ui';
 	import InlineNotification from './InlineNotification.svelte';
+	import TooltipContent from './TooltipContent.svelte';
 	import Loading from './Loading.svelte';
 
 	interface Props {
@@ -38,6 +41,10 @@
 		ends?: boolean;
 		/** A track was clicked, by index. */
 		ontrackclick?: (index: number) => void;
+		/** The track under the pointer, by index; null when it leaves. */
+		ontrackhover?: (index: number | null) => void;
+		/** A tooltip for the track under the pointer, e.g. which session. */
+		tracktip?: (index: number) => string;
 		/** A CSS height, e.g. to fill the window beside a list; at least 20rem. */
 		height?: string;
 		/** Keep the legend's row also while it has nothing to say, so one
@@ -58,22 +65,39 @@
 		areas = [],
 		ends: showEnds = true,
 		ontrackclick,
+		ontrackhover,
+		tracktip,
 		height,
 		reserveLegend = false,
 		fly = false
 	}: Props = $props();
 
+	let pointedTrack: { index: number; x: number; y: number } | null = $state(null);
+	let tipAnchor: HTMLElement | undefined = $state();
+
 	type View = 'satellite' | 'map';
 	let view: View = $state('satellite');
+	// Satellite or map, kept for the tab's session (user's request,
+	// 2026-10-21); satellite where the browser keeps nothing.
+	const VIEW_KEY = 'fleetranger.map-view';
+	function rememberedView(): View {
+		try {
+			return sessionStorage.getItem(VIEW_KEY) === 'map' ? 'map' : 'satellite';
+		} catch {
+			return 'satellite';
+		}
+	}
 	let container: HTMLDivElement | undefined = $state();
 	let map: MapboxMap | undefined = $state.raw();
 	let failed = $state(false);
 
 	// Map paint can't read CSS variables, so these are Carbon's values:
-	// Magenta 50 stands out on imagery and on both street maps, with a white
-	// casing (Gray 100 on the dark map).
-	const TRACK = '#ee5396';
-	const CASING = { light: '#ffffff', dark: '#161616' };
+	// Cyan 50, second in Carbon's categorical palette (user's choice,
+	// 2026-10-21, over magenta 50 and teal 50, which faded into green
+	// imagery), with a thin Cyan 80 casing on every map (user's choice, over
+	// white, Cyan 20 and 30, and Gray 100).
+	const TRACK = '#1192e8';
+	const CASING = '#003a6d';
 
 	// mapbox-gl doesn't export its GeoJSON types.
 	type FeatureCollection = Extract<
@@ -109,25 +133,28 @@
 	function ends(tracks: Track[]): FeatureCollection {
 		return {
 			type: 'FeatureCollection',
-			features: (showEnds ? tracks : [])
-				.filter((track) => track.coordinates.length > 0)
-				.flatMap((track) => [
-					point(track.coordinates[0], 'takeoff'),
-					point(track.coordinates[track.coordinates.length - 1], 'landing')
-				])
+			// With their track's index, to step back with it.
+			features: (showEnds ? tracks : []).flatMap((track, index) =>
+				track.coordinates.length > 0
+					? [
+							point(track.coordinates[0], 'takeoff', index),
+							point(track.coordinates[track.coordinates.length - 1], 'landing', index)
+						]
+					: []
+			)
 		};
 	}
 
-	function point(position: number[], kind: string): Feature {
+	function point(position: number[], kind: string, index: number): Feature {
 		return {
 			type: 'Feature',
-			properties: { kind },
+			properties: { kind, index },
 			geometry: { type: 'Point', coordinates: position.slice(0, 2) }
 		};
 	}
 
 	/** Adds the tracks to the current style; again after every style change. */
-	function addLayers(map: MapboxMap, casing: string) {
+	function addLayers(map: MapboxMap) {
 		// Areas first, so the tracks are drawn over them.
 		// Thin and neutral, behind the tracks: Gray 60 on the light street
 		// map, Gray 20 on imagery and the dark map.
@@ -140,7 +167,7 @@
 			type: 'line',
 			source: 'tracks',
 			layout: { 'line-join': 'round', 'line-cap': 'round' },
-			paint: { 'line-color': casing, 'line-width': 5, 'line-opacity': 0.9 }
+			paint: { 'line-color': CASING, 'line-width': 5, 'line-opacity': 0.9 }
 		});
 		map.addLayer({
 			id: 'track',
@@ -156,7 +183,7 @@
 			source: 'tracks',
 			filter: highlightFilter(highlight),
 			layout: { 'line-join': 'round', 'line-cap': 'round' },
-			paint: { 'line-color': casing, 'line-width': 9 }
+			paint: { 'line-color': CASING, 'line-width': 9 }
 		});
 		map.addLayer({
 			id: 'highlight',
@@ -166,17 +193,89 @@
 			layout: { 'line-join': 'round', 'line-cap': 'round' },
 			paint: { 'line-color': TRACK, 'line-width': 5 }
 		});
+		// What the pointer finds a track by: 16px wide, unseen, as the line
+		// itself is a thin target.
 		map.addLayer({
-			id: 'ends',
+			id: 'track-hit',
+			type: 'line',
+			source: 'tracks',
+			layout: { 'line-join': 'round', 'line-cap': 'round' },
+			paint: { 'line-color': TRACK, 'line-width': 16, 'line-opacity': 0 }
+		});
+		// A landing: an X drawn as the lines are (an image, as Mapbox draws
+		// none), under the takeoffs where a flight lands and the next takes off.
+		if (!map.hasImage('landing')) {
+			map.addImage('landing', landingImage(3), { pixelRatio: 2 });
+			map.addImage('landing-highlight', landingImage(5), { pixelRatio: 2 });
+		}
+		map.addLayer({
+			id: 'landings',
+			type: 'symbol',
+			source: 'ends',
+			filter: ['==', ['get', 'kind'], 'landing'],
+			layout: { 'icon-allow-overlap': true, 'icon-ignore-placement': true }
+		});
+		// A takeoff: a 12px dot with a 1px casing, as thin as the lines'.
+		map.addLayer({
+			id: 'takeoffs',
 			type: 'circle',
 			source: 'ends',
-			paint: {
-				'circle-radius': 6,
-				'circle-color': ['match', ['get', 'kind'], 'takeoff', casing, TRACK],
-				'circle-stroke-color': ['match', ['get', 'kind'], 'takeoff', TRACK, casing],
-				'circle-stroke-width': 3
-			}
+			filter: ['==', ['get', 'kind'], 'takeoff'],
+			paint: { 'circle-color': TRACK, 'circle-stroke-color': CASING }
 		});
+		styleEnds(map, highlightFilter(highlight));
+	}
+
+	/** The takeoffs and landings of the highlighted tracks wider, as their
+	 * lines, and on top; the others' step back with theirs. */
+	function styleEnds(map: MapboxMap, filter: ReturnType<typeof highlightFilter>) {
+		const dimmed = filter[2][1].length > 0;
+		const opacity: ExpressionSpecification | number = dimmed ? ['case', filter, 1, 0.3] : 1;
+		map.setPaintProperty('takeoffs', 'circle-radius', ['case', filter, 6, 5]);
+		map.setPaintProperty('takeoffs', 'circle-stroke-width', ['case', filter, 2, 1]);
+		map.setPaintProperty('takeoffs', 'circle-opacity', opacity);
+		map.setPaintProperty('takeoffs', 'circle-stroke-opacity', opacity);
+		map.setLayoutProperty('takeoffs', 'circle-sort-key', ['case', filter, 1, 0]);
+		map.setLayoutProperty('landings', 'icon-image', [
+			'case',
+			filter,
+			'landing-highlight',
+			'landing'
+		]);
+		map.setPaintProperty('landings', 'icon-opacity', opacity);
+		map.setLayoutProperty('landings', 'symbol-sort-key', ['case', filter, 1, 0]);
+	}
+
+	// The landing's X in an 18px box, its arms from corner to corner of the
+	// middle 8px: the legend draws the same.
+	const CROSS = [
+		[5, 5, 13, 13],
+		[13, 5, 5, 13]
+	];
+
+	/** The landing's X at twice the size, for sharp edges: as the line, of
+	 * this width over its casing 2px wider on each side (1px when 3px). */
+	function landingImage(width: 3 | 5): ImageData {
+		const canvas = document.createElement('canvas');
+		canvas.width = 36;
+		canvas.height = 36;
+		const context = canvas.getContext('2d')!;
+		context.scale(2, 2);
+		context.lineCap = 'round';
+		for (const [color, stroke] of [
+			[CASING, width === 3 ? 5 : 9],
+			[TRACK, width]
+		] as const) {
+			context.strokeStyle = color;
+			context.lineWidth = stroke;
+			context.beginPath();
+			for (const [x1, y1, x2, y2] of CROSS) {
+				context.moveTo(x1, y1);
+				context.lineTo(x2, y2);
+			}
+			context.stroke();
+		}
+		return context.getImageData(0, 0, canvas.width, canvas.height);
 	}
 
 	/** Only the tracks with these indexes; none without. */
@@ -197,6 +296,12 @@
 	/** Puts the tracks into the sources and fits them. Before `style.load` there
 	 * are no sources yet; it adds them with the tracks of that moment. */
 	function draw(map: MapboxMap, tracks: Track[]) {
+		// Other tracks: the one pointed at is gone, e.g. clicked and opened.
+		untrack(() => {
+			if (!pointedTrack) return;
+			pointedTrack = null;
+			ontrackhover?.(null);
+		});
 		(map.getSource('tracks') as GeoJSONSource | undefined)?.setData(lines(tracks));
 		(map.getSource('ends') as GeoJSONSource | undefined)?.setData(ends(tracks));
 		// The first view at once; later ones flown to, where asked.
@@ -232,6 +337,9 @@
 		let cancelled = false;
 		let created: MapboxMap | undefined;
 		let resizes: ResizeObserver | undefined;
+		const listening = new AbortController();
+		// In the browser only: the server's page shows satellite.
+		view = rememberedView();
 		import('mapbox-gl').then(({ default: mapboxgl }) => {
 			if (cancelled) return;
 			// With tracks known, the very first frame already shows them.
@@ -255,8 +363,7 @@
 			created.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
 			const instance = created;
 			instance.on('style.load', () => {
-				const darkMap = view === 'map' && dark();
-				addLayers(instance, darkMap ? CASING.dark : CASING.light);
+				addLayers(instance);
 			});
 			instance.on('error', (event) => {
 				// A rejected token or an unreachable Mapbox; tile hiccups don't count.
@@ -270,20 +377,67 @@
 			resizes = new ResizeObserver(() => instance.resize());
 			resizes.observe(element);
 			// A track clicked, where the page wants it.
-			instance.on('click', 'track', (event) => {
+			instance.on('click', 'track-hit', (event) => {
 				// mapbox-gl's feature type leaves out the GeoJSON properties.
 				const feature = event.features?.[0] as { properties?: { index?: number } } | undefined;
 				const index = feature?.properties?.index;
 				if (index !== undefined) ontrackclick?.(index);
 			});
-			instance.on('mouseenter', 'track', () => {
-				if (ontrackclick) instance.getCanvas().style.cursor = 'pointer';
+			// The track under the pointer, its tooltip following the pointer, as
+			// Carbon's charts' do. Looked up again when the map moves under a
+			// still pointer too (dragged, zoomed): the layer's own enter and
+			// leave events stop while the map is dragged.
+			let pointer: { x: number; y: number } | null = null;
+			let dragging = false;
+			const lookUp = () => {
+				const found =
+					pointer && instance.getLayer('track-hit')
+						? instance.queryRenderedFeatures([pointer.x, pointer.y], { layers: ['track-hit'] })
+						: []; // mapbox-gl's feature type leaves out the GeoJSON properties.
+				const index = (found[0] as { properties?: { index?: number } } | undefined)?.properties
+					?.index;
+				instance.getCanvas().style.cursor =
+					index !== undefined && ontrackclick && !dragging ? 'pointer' : '';
+				if (index === undefined || !pointer) {
+					if (!pointedTrack) return;
+					pointedTrack = null;
+					ontrackhover?.(null);
+					return;
+				}
+				const another = index !== pointedTrack?.index;
+				pointedTrack = { index, ...pointer };
+				if (another) ontrackhover?.(index);
+			};
+			// The browser's pointer events, as Mapbox sends none while dragging.
+			const { signal } = listening;
+			element.addEventListener(
+				'pointermove',
+				(event) => {
+					const rect = element.getBoundingClientRect();
+					pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+					lookUp();
+				},
+				{ signal }
+			);
+			element.addEventListener(
+				'pointerleave',
+				() => {
+					pointer = null;
+					lookUp();
+				},
+				{ signal }
+			);
+			instance.on('move', lookUp);
+			instance.on('dragstart', () => (dragging = true));
+			instance.on('dragend', () => {
+				dragging = false;
+				lookUp();
 			});
-			instance.on('mouseleave', 'track', () => (instance.getCanvas().style.cursor = ''));
 			map = instance;
 		});
 		return () => {
 			cancelled = true;
+			listening.abort();
 			resizes?.disconnect();
 			created?.remove();
 			map = undefined;
@@ -311,17 +465,47 @@
 		if (!map?.getLayer('highlight')) return;
 		map.setFilter('highlight-casing', filter);
 		map.setFilter('highlight', filter);
-		// The others step back while some are brought out.
+		// The others step back to 30% while some are brought out (Carbon's
+		// legend hover), their takeoffs and landings with them.
 		const dimmed = filter[2][1].length > 0;
-		map.setPaintProperty('track', 'line-opacity', dimmed ? 0.35 : 1);
+		map.setPaintProperty('track', 'line-opacity', dimmed ? 0.3 : 1);
 		map.setPaintProperty('track-casing', 'line-opacity', dimmed ? 0.3 : 0.9);
+		styleEnds(map, filter);
 	});
 
 	function show(next: View) {
 		if (next === view) return;
 		view = next;
 		map?.setStyle(styleUrl(next));
+		try {
+			sessionStorage.setItem(VIEW_KEY, next);
+		} catch {
+			// Not kept: the next map starts on satellite.
+		}
 	}
+
+	// The street map follows the theme as it changes (user's request,
+	// 2026-10-21): chosen in the app (the root's data-theme) or, on "system",
+	// in the device's settings. Imagery is the same in both.
+	$effect(() => {
+		const current = map;
+		if (!current) return;
+		let wasDark = dark();
+		const follow = () => {
+			const nowDark = dark();
+			if (nowDark === wasDark) return;
+			wasDark = nowDark;
+			if (view === 'map') current.setStyle(styleUrl('map'));
+		};
+		const chosen = new MutationObserver(follow);
+		chosen.observe(document.documentElement, { attributeFilter: ['data-theme'] });
+		const device = matchMedia('(prefers-color-scheme: dark)');
+		device.addEventListener('change', follow);
+		return () => {
+			chosen.disconnect();
+			device.removeEventListener('change', follow);
+		};
+	});
 </script>
 
 {#if !token}
@@ -333,7 +517,7 @@
 		Mapbox didn’t answer or refused the token. Try again later.
 	</InlineNotification>
 {:else}
-	<figure class="track-map">
+	<figure class="track-map" style:--track={TRACK} style:--casing={CASING}>
 		<div
 			class="map"
 			class:placed
@@ -343,6 +527,23 @@
 			aria-label={label}
 			aria-busy={loading}
 		></div>
+		<!-- For the mouse only, and nothing only it says: e.g. the list beside
+		     the map has the same. Carbon's default tooltip, above the point. -->
+		{#if tracktip}
+			<Tooltip.Root open={pointedTrack !== null}>
+				<span
+					class="tip-anchor"
+					style:left="{pointedTrack?.x ?? 0}px"
+					style:top="{pointedTrack?.y ?? 0}px"
+					bind:this={tipAnchor}
+				></span>
+				{#if pointedTrack}
+					<TooltipContent side="top" anchor={tipAnchor} follow
+						>{tracktip(pointedTrack.index)}</TooltipContent
+					>
+				{/if}
+			</Tooltip.Root>
+		{/if}
 		{#if loading}
 			<p class="loading" role="status"><Loading /> Loading tracks…</p>
 		{/if}
@@ -360,7 +561,18 @@
 			<figcaption class="legend" class:reserved={reserveLegend}>
 				{#if showEnds}
 					<span><span class="marker takeoff" aria-hidden="true"></span>Takeoff</span>
-					<span><span class="marker landing" aria-hidden="true"></span>Landing</span>
+					<span
+						><svg class="landing" viewBox="2 2 14 14" aria-hidden="true">
+							{#each CROSS as [x1, y1, x2, y2], arm (arm)}<line
+									{x1}
+									{y1}
+									{x2}
+									{y2}
+									class="casing"
+								/>{/each}
+							{#each CROSS as [x1, y1, x2, y2], arm (arm)}<line {x1} {y1} {x2} {y2} />{/each}
+						</svg>Landing</span
+					>
 				{/if}
 				{#if areas.length > 0}
 					<span><span class="marker area" aria-hidden="true"></span>Area</span>
@@ -374,6 +586,13 @@
 	.track-map {
 		position: relative;
 		margin: 0;
+	}
+
+	.tip-anchor {
+		position: absolute;
+		width: 0;
+		height: 0;
+		pointer-events: none;
 	}
 
 	.map {
@@ -405,10 +624,37 @@
 	}
 
 	/* Carbon's content switcher, small (32px), over the map's top left. */
+	/* All controls 16px from the map's edges, so those on the left line up
+	   with the page's title and text, which start 16px into the column the
+	   map fills (user's request). Mapbox's own keep their look (user's
+	   choice). */
+	.track-map :global(.mapboxgl-ctrl-top-right .mapboxgl-ctrl) {
+		margin: var(--cds-spacing-05) var(--cds-spacing-05) 0 0;
+	}
+
+	.track-map :global(.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl) {
+		margin: 0 0 var(--cds-spacing-05) var(--cds-spacing-05);
+	}
+
+	.track-map :global(.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl) {
+		margin: 0 var(--cds-spacing-05) var(--cds-spacing-05) 0;
+	}
+
+	/* The scale 8px above the logo, as one group in the corner (user's
+	   choice, over 16px, beside it, and the logo bottom right). */
+	.track-map :global(.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl-scale) {
+		margin-bottom: var(--cds-spacing-03);
+	}
+
+	/* Its 4px pull towards the corner undone: the logo fills its box. */
+	.track-map :global(.mapboxgl-ctrl-logo) {
+		margin: 0;
+	}
+
 	.switcher {
 		position: absolute;
-		top: var(--cds-spacing-03);
-		left: var(--cds-spacing-03);
+		top: var(--cds-spacing-05);
+		left: var(--cds-spacing-05);
 		display: flex;
 	}
 
@@ -475,12 +721,28 @@
 		box-sizing: border-box;
 		width: 0.75rem;
 		height: 0.75rem;
-		border: 3px solid #ee5396;
-		border-radius: 50%;
 	}
 
 	.takeoff {
-		background: #ffffff;
+		border: 1px solid var(--casing);
+		border-radius: 50%;
+		background: var(--track);
+	}
+
+	.landing {
+		width: 0.875rem;
+		height: 0.875rem;
+	}
+
+	.landing line {
+		stroke: var(--track);
+		stroke-width: 3;
+		stroke-linecap: round;
+	}
+
+	.landing .casing {
+		stroke: var(--casing);
+		stroke-width: 5;
 	}
 
 	/* An area: a thin neutral border, as on the map (Gray 50, between the
@@ -488,11 +750,6 @@
 	   read tokens. */
 	.area {
 		border: 1px solid #8d8d8d;
-		border-radius: 0;
-	}
-
-	.landing {
-		background: #ee5396;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

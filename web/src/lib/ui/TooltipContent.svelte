@@ -16,21 +16,29 @@
 		side?: 'top' | 'bottom';
 		/** What it points at, if not the trigger, e.g. a mark inside a larger hover area. */
 		anchor?: HTMLElement;
+		/** The anchor moves, e.g. with the pointer: placed again every frame. */
+		follow?: boolean;
 		children: Snippet;
 	}
 
-	let { kind = 'default', side = 'bottom', anchor, children }: Props = $props();
+	let { kind = 'default', side = 'bottom', anchor, follow = false, children }: Props = $props();
 
 	const caret = $derived(kind === 'icon' ? { width: 8, height: 4 } : { width: 12, height: 6 });
 </script>
 
 <Tooltip.Portal>
 	<Tooltip.Content
-		class="tooltip-content {kind}"
+		class="tooltip-content {kind}{follow ? ' follow' : ''}"
 		{side}
 		sideOffset={4}
 		collisionPadding={16}
 		customAnchor={anchor}
+		updatePositionStrategy={follow ? 'always' : 'optimized'}
+		style={follow ? 'pointer-events: none' : undefined}
+		onInteractOutside={(event) => {
+			// Pressed to drag what it follows (a map): it stays.
+			if (follow) event.preventDefault();
+		}}
 	>
 		<Tooltip.Arrow class="tooltip-caret" width={caret.width} height={caret.height} />
 		{@render children()}
@@ -49,6 +57,13 @@
 		line-height: var(--cds-body-compact-01-line-height);
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 		border-radius: 2px;
+	}
+
+	/* Following the pointer, it lets the pointer through to what's under it,
+	   else moving towards it ends the hover it belongs to: its wrapper here,
+	   itself by its style (Bits UI sets it inline). */
+	:global([data-bits-floating-content-wrapper]:has(> .tooltip-content.follow)) {
+		pointer-events: none;
 	}
 
 	:global(.tooltip-content.icon) {
