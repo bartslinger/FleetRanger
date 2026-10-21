@@ -21,6 +21,8 @@
 		landed_at: string;
 		air_time_s: number;
 		from: number[] | null;
+		/** With `tracks=1`: a coarse track, [lon, lat] points (exploring). */
+		track?: number[][] | null;
 	}
 </script>
 

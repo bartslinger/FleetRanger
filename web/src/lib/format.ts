@@ -101,12 +101,13 @@ export function timeSpan(start: string, end: string, timeZone: string): string {
  * in seconds, "45 s". A bare 0:21:29 was easy to misread.
  */
 export function duration(seconds: number): string {
-	if (seconds < 59.5) return `${Math.round(seconds)} s`;
+	// Non-breaking spaces: a line never wraps inside a value.
+	if (seconds < 59.5) return `${Math.round(seconds)}${NBSP}s`;
 	const minutes = Math.round(seconds / 60);
 	const h = Math.floor(minutes / 60);
 	const m = minutes % 60;
-	if (h === 0) return `${m} min`;
-	return m === 0 ? `${h} h` : `${h} h ${m} min`;
+	if (h === 0) return `${m}${NBSP}min`;
+	return m === 0 ? `${h}${NBSP}h` : `${h}${NBSP}h${NBSP}${m}${NBSP}min`;
 }
 
 /** A download's size, as people read it: "640 kB", "12.4 MB". */
@@ -146,6 +147,6 @@ export function areaShares(
 
 /** Kilometres with one decimal; "<0.1 km" rather than a misleading "0.0 km". */
 export function distance(metres: number): string {
-	if (metres < 50) return '<0.1 km';
-	return `${(metres / 1000).toFixed(1)} km`;
+	if (metres < 50) return `<0.1${NBSP}km`;
+	return `${(metres / 1000).toFixed(1)}${NBSP}km`;
 }
