@@ -466,6 +466,29 @@
 		view = next;
 		map?.setStyle(styleUrl(next));
 	}
+
+	// The street map follows the theme as it changes (user's request,
+	// 2026-10-21): chosen in the app (the root's data-theme) or, on "system",
+	// in the device's settings. Imagery is the same in both.
+	$effect(() => {
+		const current = map;
+		if (!current) return;
+		let wasDark = dark();
+		const follow = () => {
+			const nowDark = dark();
+			if (nowDark === wasDark) return;
+			wasDark = nowDark;
+			if (view === 'map') current.setStyle(styleUrl('map'));
+		};
+		const chosen = new MutationObserver(follow);
+		chosen.observe(document.documentElement, { attributeFilter: ['data-theme'] });
+		const device = matchMedia('(prefers-color-scheme: dark)');
+		device.addEventListener('change', follow);
+		return () => {
+			chosen.disconnect();
+			device.removeEventListener('change', follow);
+		};
+	});
 </script>
 
 {#if !token}
