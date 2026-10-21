@@ -26,7 +26,9 @@
 		/** The button's accessible name, e.g. "More actions". */
 		label: string;
 		items: OverflowItem[];
-		variant?: 'inline' | 'batch';
+		/** As small as text (a breadcrumb), as large as a row (48px, e.g. a
+		 * contained list's), or the batch action bar's. */
+		variant?: 'inline' | 'row' | 'batch';
 		/** The button, e.g. to give focus back to after a dialog. */
 		trigger?: HTMLElement | null;
 	}
@@ -41,8 +43,8 @@
 	<DropdownMenu.Portal>
 		<DropdownMenu.Content
 			class="overflow-menu"
-			align={variant === 'batch' ? 'end' : 'start'}
-			sideOffset={variant === 'batch' ? 0 : 4}
+			align={variant === 'inline' ? 'start' : 'end'}
+			sideOffset={variant === 'inline' ? 4 : 0}
 			collisionPadding={16}
 		>
 			<!-- A breadcrumb trail can pass the same page twice. -->
@@ -87,12 +89,23 @@
 		}
 	}
 
+	/* Carbon's large icon button (48px), the height of a row. */
+	:global(.overflow-trigger.row) {
+		flex: none;
+		width: var(--cds-size-large);
+		height: var(--cds-size-large);
+		color: var(--cds-icon-primary);
+	}
+
 	:global(.overflow-trigger.inline:hover),
-	:global(.overflow-trigger.inline[data-state='open']) {
+	:global(.overflow-trigger.inline[data-state='open']),
+	:global(.overflow-trigger.row:hover),
+	:global(.overflow-trigger.row[data-state='open']) {
 		background: var(--cds-background-hover);
 	}
 
-	:global(.overflow-trigger.inline:focus-visible) {
+	:global(.overflow-trigger.inline:focus-visible),
+	:global(.overflow-trigger.row:focus-visible) {
 		outline: 2px solid var(--cds-focus);
 		outline-offset: -2px;
 	}
