@@ -77,6 +77,16 @@
 
 	type View = 'satellite' | 'map';
 	let view: View = $state('satellite');
+	// Satellite or map, kept for the tab's session (user's request,
+	// 2026-10-21); satellite where the browser keeps nothing.
+	const VIEW_KEY = 'fleetranger.map-view';
+	function rememberedView(): View {
+		try {
+			return sessionStorage.getItem(VIEW_KEY) === 'map' ? 'map' : 'satellite';
+		} catch {
+			return 'satellite';
+		}
+	}
 	let container: HTMLDivElement | undefined = $state();
 	let map: MapboxMap | undefined = $state.raw();
 	let failed = $state(false);
@@ -328,6 +338,8 @@
 		let created: MapboxMap | undefined;
 		let resizes: ResizeObserver | undefined;
 		const listening = new AbortController();
+		// In the browser only: the server's page shows satellite.
+		view = rememberedView();
 		import('mapbox-gl').then(({ default: mapboxgl }) => {
 			if (cancelled) return;
 			// With tracks known, the very first frame already shows them.
@@ -465,6 +477,11 @@
 		if (next === view) return;
 		view = next;
 		map?.setStyle(styleUrl(next));
+		try {
+			sessionStorage.setItem(VIEW_KEY, next);
+		} catch {
+			// Not kept: the next map starts on satellite.
+		}
 	}
 
 	// The street map follows the theme as it changes (user's request,
