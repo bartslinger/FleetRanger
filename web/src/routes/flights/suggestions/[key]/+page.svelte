@@ -233,7 +233,9 @@
 		<!-- Until the next step: stepping on drops it from the address. -->
 		<Column narrow>
 			<InlineNotification kind="success" title="Session created">
-				<Link href={resolve('/sessions/[id]', { id: data.created })}>Open session</Link>
+				<Link href="{resolve('/sessions')}?session={encodeURIComponent(data.created)}"
+					>Open session</Link
+				>
 			</InlineNotification>
 		</Column>
 	{/if}

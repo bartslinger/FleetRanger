@@ -106,28 +106,27 @@
 	{#each [6, 12, 18] as hour (hour)}
 		<span class="tick" style:left={percent(hour * 60)}></span>
 	{/each}
-	<!-- 100ms, as the icon buttons: moving along the strip, the times follow quickly. -->
-	<Tooltip.Provider delayDuration={100}>
-		{#each hits as { start, end, label, left, right }, index (index)}
-			<Tooltip.Root>
-				<!-- A span, not a button: nothing focusable inside the tile's link. -->
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<span {...props} class="hit" style:left style:right></span>
-					{/snippet}
-				</Tooltip.Trigger>
-				<span
-					class="mark"
-					style:left={percent(start)}
-					style:width={percent(end - start)}
-					bind:this={anchors[index]}
-				></span>
-				<!-- Pointing at the mark, not the hover area, which a neighbour can
+	<!-- The app's one tooltip provider (root layout): moving along the strip,
+	     the times follow at once. -->
+	{#each hits as { start, end, label, left, right }, index (index)}
+		<Tooltip.Root>
+			<!-- A span, not a button: nothing focusable inside the tile's link. -->
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<span {...props} class="hit" style:left style:right></span>
+				{/snippet}
+			</Tooltip.Trigger>
+			<span
+				class="mark"
+				style:left={percent(start)}
+				style:width={percent(end - start)}
+				bind:this={anchors[index]}
+			></span>
+			<!-- Pointing at the mark, not the hover area, which a neighbour can
 				     cut short on one side. -->
-				<TooltipContent side="top" anchor={anchors[index]}>{label}</TooltipContent>
-			</Tooltip.Root>
-		{/each}
-	</Tooltip.Provider>
+			<TooltipContent side="top" anchor={anchors[index]}>{label}</TooltipContent>
+		</Tooltip.Root>
+	{/each}
 </span>
 
 <style>

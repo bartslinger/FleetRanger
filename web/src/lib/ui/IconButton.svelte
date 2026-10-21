@@ -24,11 +24,24 @@
 		name?: string;
 		/** Already passed through `resolve()`. */
 		href?: string;
-		size?: 'xs' | 'md';
+		/** lg: 48px, as in a table toolbar. */
+		size?: 'xs' | 'md' | 'lg';
+		/** Carbon's dot badge on the icon, e.g. filters are applied; say what
+		 * it means in `name`. */
+		dot?: boolean;
 		disabled?: boolean;
 	}
 
-	let { icon, label, name, href, size = 'xs', disabled = false, ...rest }: Props = $props();
+	let {
+		icon,
+		label,
+		name,
+		href,
+		size = 'xs',
+		dot = false,
+		disabled = false,
+		...rest
+	}: Props = $props();
 </script>
 
 {#if disabled}
@@ -36,40 +49,40 @@
 		<Icon {icon} label={name ?? label} />
 	</span>
 {:else}
-	<Tooltip.Provider delayDuration={100}>
-		<Tooltip.Root>
-			<Tooltip.Trigger>
-				{#snippet child({ props })}
-					{#if href}
-						<!-- eslint-disable svelte/no-navigation-without-resolve -- resolved by the caller -->
-						<a
-							{...mergeProps(rest, props)}
-							{href}
-							class="icon-button {size}"
-							aria-label={name ?? label}
-						>
-							<Icon {icon} />
-						</a>
-						<!-- eslint-enable svelte/no-navigation-without-resolve -->
-					{:else}
-						<button
-							{...mergeProps(rest, props)}
-							type="button"
-							class="icon-button {size}"
-							aria-label={name ?? label}
-						>
-							<Icon {icon} />
-						</button>
-					{/if}
-				{/snippet}
-			</Tooltip.Trigger>
-			<TooltipContent kind="icon">{label}</TooltipContent>
-		</Tooltip.Root>
-	</Tooltip.Provider>
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				{#if href}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- resolved by the caller -->
+					<a
+						{...mergeProps(rest, props)}
+						{href}
+						class="icon-button {size}"
+						aria-label={name ?? label}
+					>
+						<Icon {icon} />
+					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{:else}
+					<button
+						{...mergeProps(rest, props)}
+						type="button"
+						class="icon-button {size}"
+						aria-label={name ?? label}
+					>
+						<Icon {icon} />
+						{#if dot}<span class="dot" aria-hidden="true"></span>{/if}
+					</button>
+				{/if}
+			{/snippet}
+		</Tooltip.Trigger>
+		<TooltipContent kind="icon">{label}</TooltipContent>
+	</Tooltip.Root>
 {/if}
 
 <style>
 	.icon-button {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -91,6 +104,22 @@
 		height: var(--cds-spacing-08);
 	}
 
+	.lg {
+		width: var(--cds-spacing-09);
+		height: var(--cds-spacing-09);
+	}
+
+	/* Carbon's badge indicator without a count: 8px, top right, 8px in. */
+	.dot {
+		position: absolute;
+		top: var(--cds-spacing-03);
+		right: var(--cds-spacing-03);
+		width: var(--cds-spacing-03);
+		height: var(--cds-spacing-03);
+		border-radius: 50%;
+		background: var(--cds-support-error);
+	}
+
 	/* Larger on phones: a better touch target. */
 	@media (max-width: 41.99rem) {
 		.icon-button {
@@ -98,7 +127,8 @@
 			height: var(--cds-spacing-07);
 		}
 
-		.md {
+		.md,
+		.lg {
 			width: var(--cds-spacing-09);
 			height: var(--cds-spacing-09);
 		}

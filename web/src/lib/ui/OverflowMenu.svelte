@@ -18,9 +18,11 @@
 </script>
 
 <script lang="ts">
-	import { DropdownMenu } from 'bits-ui';
+	import { DropdownMenu, Tooltip } from 'bits-ui';
+	import TooltipContent from './TooltipContent.svelte';
 	import OverflowMenuHorizontal from '@carbon/icons/es/overflow-menu--horizontal/16.js';
-	import Icon from './Icon.svelte';
+	import OverflowMenuVertical from '@carbon/icons/es/overflow-menu--vertical/16.js';
+	import Icon, { type IconDescriptor } from './Icon.svelte';
 
 	interface Props {
 		/** The button's accessible name, e.g. "More actions". */
@@ -31,15 +33,40 @@
 		variant?: 'inline' | 'row' | 'batch';
 		/** The button, e.g. to give focus back to after a dialog. */
 		trigger?: HTMLElement | null;
+		/** Carbon's vertical icon, as in a table toolbar. */
+		vertical?: boolean;
+		/** An icon that says what the menu is about, e.g. a calendar for
+		 * choosing a period, in place of the overflow icon. */
+		icon?: IconDescriptor;
 	}
 
-	let { label, items, variant = 'inline', trigger = $bindable(null) }: Props = $props();
+	let {
+		label,
+		items,
+		variant = 'inline',
+		trigger = $bindable(null),
+		vertical = false,
+		icon
+	}: Props = $props();
 </script>
 
 <DropdownMenu.Root>
-	<DropdownMenu.Trigger bind:ref={trigger} class="overflow-trigger {variant}" aria-label={label}>
-		<Icon icon={OverflowMenuHorizontal} />
-	</DropdownMenu.Trigger>
+	<!-- Its name in a tooltip, as for every icon-only button (Carbon). -->
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<DropdownMenu.Trigger
+					{...props}
+					bind:ref={trigger}
+					class="overflow-trigger {variant}"
+					aria-label={label}
+				>
+					<Icon icon={icon ?? (vertical ? OverflowMenuVertical : OverflowMenuHorizontal)} />
+				</DropdownMenu.Trigger>
+			{/snippet}
+		</Tooltip.Trigger>
+		<TooltipContent kind="icon">{label}</TooltipContent>
+	</Tooltip.Root>
 	<DropdownMenu.Portal>
 		<DropdownMenu.Content
 			class="overflow-menu"

@@ -12,14 +12,14 @@ use uuid::Uuid;
 
 use chrono::{DateTime, Utc};
 
-use super::db::{SessionSummary, Window};
+use super::db::{Neighbours, SessionSummary, Window};
 use super::service::{self, Session};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
     flights::{
         self,
-        db::{Filter, Neighbours},
+        db::Filter,
     },
 };
 
@@ -216,7 +216,7 @@ async fn show(
 }
 
 /// The session's place in the list with these filters, newest first: the
-/// sessions before and after it, its position and the list's length.
+/// sessions before and after it, and when they start.
 async fn neighbours(
     actor: Actor,
     State(db): State<PgPool>,
