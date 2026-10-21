@@ -5,7 +5,8 @@
 	deselects it. The drawing tools are a Mapbox control group under the zoom
 	buttons, in Mapbox's style (user's decision): New area draws a polygon,
 	named at the shape when it's closed; Edit shape makes the selected area's
-	corners draggable (right-click removes one). Drawing is Terra Draw, which
+	corners draggable (right-click removes one); Delete area asks the page to
+	delete the selected area. Drawing is Terra Draw, which
 	snaps to the corners and edges of other areas. Phones only view.
 -->
 <script lang="ts" module>
@@ -16,6 +17,7 @@
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import AreaIcon from '@carbon/icons/es/area/16.js';
 	import EditIcon from '@carbon/icons/es/edit/16.js';
+	import TrashIcon from '@carbon/icons/es/trash-can/16.js';
 	import type { IControl, Map as MapboxMap } from 'mapbox-gl';
 	import type { TerraDraw, TerraDrawMouseEvent } from 'terra-draw';
 	import {
@@ -53,6 +55,8 @@
 		oncreate: (name: string, boundary: Polygon) => Promise<string | undefined>;
 		/** Saves a changed shape; resolves to an error message, if refused. */
 		onreshape: (id: string, boundary: Polygon) => Promise<string | undefined>;
+		/** The Delete tool was used on the selected area, e.g. to confirm it. */
+		ondelete?: (id: string) => void;
 	}
 
 	let {
@@ -64,7 +68,8 @@
 		onselect,
 		onmode,
 		oncreate,
-		onreshape
+		onreshape,
+		ondelete
 	}: Props = $props();
 
 	// Through a derived, which only signals a real change: reading the prop
@@ -442,6 +447,13 @@
 			aria-label="Edit shape"
 			disabled={!selected || mode !== 'view'}
 			onclick={editShape}><Icon icon={EditIcon} /></button
+		>
+		<button
+			type="button"
+			title="Delete area"
+			aria-label="Delete area"
+			disabled={!selected || mode !== 'view'}
+			onclick={() => selected && ondelete?.(selected)}><Icon icon={TrashIcon} /></button
 		>
 	</div>
 
