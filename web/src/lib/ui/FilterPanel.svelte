@@ -17,6 +17,7 @@
 	import Filter from '@carbon/icons/es/filter/16.js';
 	import Button from './Button.svelte';
 	import Icon from './Icon.svelte';
+	import IconButton from './IconButton.svelte';
 
 	interface Props {
 		/** How many filters are applied, shown on the button. */
@@ -27,10 +28,13 @@
 		onapply: () => void;
 		/** Empties the draft's fields. */
 		onreset: () => void;
+		/** In a toolbar: a 48px filter icon, with a dot while filters are
+		 * applied and the count in its name (carbon-expert's advice). */
+		iconOnly?: boolean;
 		children: Snippet;
 	}
 
-	let { count, onopen, onapply, onreset, children }: Props = $props();
+	let { count, onopen, onapply, onreset, iconOnly = false, children }: Props = $props();
 
 	let open = $state(false);
 	let body: HTMLElement | undefined = $state();
@@ -44,10 +48,21 @@
 >
 	<Dialog.Trigger>
 		{#snippet child({ props })}
-			<!-- As tall as the fields beside it. -->
-			<Button {...props} kind="ghost" size="md" icon={Filter}>
-				Filters{count > 0 ? ` (${count})` : ''}
-			</Button>
+			{#if iconOnly}
+				<IconButton
+					{...props}
+					icon={Filter}
+					size="lg"
+					label="Filters"
+					name={count > 0 ? `Filters, ${count} applied` : 'Filters'}
+					dot={count > 0}
+				/>
+			{:else}
+				<!-- As tall as the fields beside it. -->
+				<Button {...props} kind="ghost" size="md" icon={Filter}>
+					Filters{count > 0 ? ` (${count})` : ''}
+				</Button>
+			{/if}
 		{/snippet}
 	</Dialog.Trigger>
 	<Dialog.Portal>
