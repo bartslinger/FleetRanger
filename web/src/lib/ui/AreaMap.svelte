@@ -8,6 +8,10 @@
 	corners draggable (right-click removes one). Drawing is Terra Draw, which
 	snaps to the corners and edges of other areas. Phones only view.
 -->
+<script lang="ts" module>
+	export type Mode = 'view' | 'drawing' | 'naming' | 'editing';
+</script>
+
 <script lang="ts">
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import AreaIcon from '@carbon/icons/es/area/16.js';
@@ -42,8 +46,9 @@
 		fallback?: number[][];
 		/** An area was clicked, or (null) the map outside the areas. */
 		onselect?: (id: string | null) => void;
-		/** Drawing or editing started or ended, e.g. to lock a list meanwhile. */
-		onbusy?: (busy: boolean) => void;
+		/** What the map is doing: viewing, drawing, naming or editing an area,
+		 * e.g. to lock a list meanwhile. */
+		onmode?: (mode: Mode) => void;
 		/** Saves a new area; resolves to an error message, if refused. */
 		oncreate: (name: string, boundary: Polygon) => Promise<string | undefined>;
 		/** Saves a changed shape; resolves to an error message, if refused. */
@@ -57,7 +62,7 @@
 		selected = null,
 		fallback = [],
 		onselect,
-		onbusy,
+		onmode,
 		oncreate,
 		onreshape
 	}: Props = $props();
@@ -67,7 +72,6 @@
 	// data (e.g. after saving an area) would create the map again.
 	const mapToken = $derived(token);
 
-	type Mode = 'view' | 'drawing' | 'naming' | 'editing';
 	let mode: Mode = $state('view');
 	let container: HTMLDivElement | undefined = $state();
 	let tools: HTMLDivElement | undefined = $state();
@@ -88,7 +92,7 @@
 	const POINTER_PX = 8;
 	const FIT = { padding: 48, maxZoom: 17 };
 
-	$effect(() => onbusy?.(mode !== 'view'));
+	$effect(() => onmode?.(mode));
 
 	// The name field takes focus when it appears (browsers may block autofocus).
 	let naming: HTMLFormElement | undefined = $state();
@@ -243,7 +247,8 @@
 		};
 	}
 
-	function stop() {
+	/** Stops drawing, naming or editing, throwing away what wasn't saved. */
+	export function stop() {
 		draw?.clear();
 		draw?.setMode('static');
 		if (map) map.getCanvas().style.cursor = '';
