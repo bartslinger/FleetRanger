@@ -112,7 +112,10 @@ ${fluid.base.map((line) => `\t${line}`).join('\n')}
 }
 
 ${[...fluid.media]
-	.map(([query, lines]) => `${query} {\n\t:root {\n${lines.map((line) => `\t\t${line}`).join('\n')}\n\t}\n}`)
+	.map(
+		([query, lines]) =>
+			`${query} {\n\t:root {\n${lines.map((line) => `\t\t${line}`).join('\n')}\n\t}\n}`
+	)
 	.join('\n\n')}
 
 /* Dark follows the system unless the user chose light; data-theme on <html>
