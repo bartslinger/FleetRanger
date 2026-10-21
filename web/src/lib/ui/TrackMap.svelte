@@ -422,7 +422,9 @@
 		background: #ffffff;
 	}
 
-	/* An area: its outline (Blue 50) and light fill, as on the map. */
+	/* An area: its outline (Blue 50) and light fill, as on the map. Literal
+	   values like the markers': they match the map's paint (see areas.ts),
+	   which can't read tokens. */
 	.area {
 		border: 2px solid #4589ff;
 		border-radius: 0;

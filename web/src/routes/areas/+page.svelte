@@ -93,7 +93,7 @@
 			{#if editing !== null}
 				{@const area = data.areas.find((area) => area.id === editing)}
 				<form
-					class="form"
+					class="form inset"
 					method="POST"
 					action="?/save"
 					use:enhance={({ formData, cancel }) => {
@@ -132,27 +132,28 @@
 						required
 						autocomplete="off"
 					/>
-					{#if edit.drawing || (editing === 'new' && edit.parts === 0)}
-						<InlineNotification kind="info" title="Draw a part">
+					<!-- Instructions, not a status: plain text (Carbon review). -->
+					<p class="instructions" aria-live="polite">
+						{#if edit.drawing || (editing === 'new' && edit.parts === 0)}
 							Click the map to place corners, and click the first corner to finish. Esc cancels the
 							part. Corners snap to the corners and edges of other areas.
-						</InlineNotification>
-					{:else}
-						<InlineNotification kind="info" title="Change the parts">
+						{:else}
 							Click a part to select it. Drag a corner to move it, drag a point between corners to
 							add one, and right-click a corner to remove it.
-						</InlineNotification>
-					{/if}
-					<div class="tools">
+						{/if}
+					</p>
+					<div class="pair">
 						<Button
 							kind="tertiary"
 							size="md"
+							fill
 							disabled={edit.drawing}
 							onclick={() => map?.drawPart()}>{edit.parts === 0 ? 'Draw part' : 'Add part'}</Button
 						>
 						<Button
 							kind="danger-tertiary"
 							size="md"
+							fill
 							disabled={!edit.partSelected}
 							onclick={() => map?.removePart()}>Remove part</Button
 						>
@@ -163,43 +164,48 @@
 					</div>
 				</form>
 			{:else if selected}
-				<h2 class="section">{selected.name}</h2>
-				{#if clipped?.id === selected.id}
-					<InlineNotification kind="info" title="Saved without the overlap">
-						Where it overlapped {clipped.by.join(', ')}, that part was left out.
-					</InlineNotification>
-				{/if}
-				<div class="actions">
-					<span class="wide-only">
-						<Button kind="tertiary" onclick={() => startEditing(selected.id)}>Edit area</Button>
-					</span>
-					<Modal
-						title="Delete area"
-						triggerKind="danger-tertiary"
-						submitLabel="Delete area"
-						danger
-						action="?/delete"
-						error={form && 'deleteMessage' in form ? (form.deleteMessage as string) : undefined}
-						onsuccess={() => {
-							const name = shownName;
-							goto(resolve('/areas'), { invalidateAll: true }).then(() =>
-								toast(`Area ${name} deleted.`)
-							);
-						}}
-					>
-						<!-- The dialog is still closing once the area is gone. -->
-						<input type="hidden" name="id" value={selected?.id} />
-						<p>
-							Every flight's time and distance per area is recomputed without {shownName}, so past
-							figures change. This can't be undone.
-						</p>
-					</Modal>
+				<div class="inset panel">
+					<h2 class="section">{selected.name}</h2>
+					{#if clipped?.id === selected.id}
+						<InlineNotification
+							kind="info"
+							title={`Left out where it overlapped ${clipped.by.join(', ')}.`}
+						/>
+					{/if}
+					<div class="pair">
+						<span class="wide-only">
+							<Button kind="tertiary" fill onclick={() => startEditing(selected.id)}
+								>Edit area</Button
+							>
+						</span>
+						<Modal
+							title="Delete area"
+							triggerKind="danger-tertiary"
+							submitLabel="Delete area"
+							danger
+							action="?/delete"
+							error={form && 'deleteMessage' in form ? (form.deleteMessage as string) : undefined}
+							onsuccess={() => {
+								const name = shownName;
+								goto(resolve('/areas'), { invalidateAll: true }).then(() =>
+									toast(`Area ${name} deleted.`)
+								);
+							}}
+						>
+							<!-- The dialog is still closing once the area is gone. -->
+							<input type="hidden" name="id" value={selected?.id} />
+							<p>
+								Every flight's time and distance per area is recomputed without {shownName}, so past
+								figures change. A deleted area can't be restored.
+							</p>
+						</Modal>
+					</div>
+					<Link href={resolve('/areas')}>All areas</Link>
 				</div>
-				<Link href={resolve('/areas')}>All areas</Link>
 			{:else if data.areas.length === 0}
 				<EmptyState
 					title="No areas yet"
-					body="Areas are named parts of the land, such as a reserve's sections or a client's sites. Flights then show their time and distance in each. Nothing about areas shows elsewhere until you add one."
+					body="Areas are named parts of the land, such as a reserve's sections or a client's sites. Flights then show their time and distance in each."
 					action={addArea}
 				/>
 			{:else}
@@ -247,26 +253,45 @@
 		gap: var(--cds-spacing-07);
 	}
 
+	/* The column has no gutter (narrow mode): containers hang into it, but
+	   type and fields line up with the page's text, 16px in. */
+	.inset {
+		padding-inline: var(--cds-spacing-05);
+	}
+
 	.section {
 		margin: 0;
-		/* The column has no gutter; line up with the fields' labels. */
 		font-size: var(--cds-heading-03-font-size);
 		font-weight: var(--cds-heading-03-font-weight);
 		line-height: var(--cds-heading-03-line-height);
 	}
 
-	.tools,
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--cds-spacing-05);
+	.instructions {
+		margin: 0;
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 	}
 
-	/* Carbon's fluid pair: equal halves, 1px apart. */
+	/* Carbon's fluid pair for Save and Cancel: equal halves, 1px apart. */
 	.buttons {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 1px;
+	}
+
+	/* The other buttons stacked at full width: side by side their labels
+	   wrap in this narrow column. */
+	.pair {
+		display: grid;
+		gap: var(--cds-spacing-03);
+	}
+
+	.pair > :global(*),
+	.pair :global(.button) {
+		width: 100%;
+		max-width: none;
 	}
 
 	/* Drawing needs a precise pointer and room: from md only. */

@@ -214,7 +214,7 @@
 	</Column>
 	<!-- Under the map, as on a session's page; once the organisation has areas. -->
 	{#if data.areas.length > 0}
-		<Column lg={11}>
+		<Column narrow lg={11}>
 			<AreaFigures areas={flight.areas} airTime={flight.air_time_s} distanceM={flight.distance_m} />
 		</Column>
 	{/if}
