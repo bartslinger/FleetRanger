@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool};
@@ -75,8 +77,9 @@ pub async fn delete(tx: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     Ok(result.rows_affected() == 1)
 }
 
-/// The areas, prepared for finding track points in them.
-async fn shapes(tx: &mut PgConnection) -> sqlx::Result<(Vec<Uuid>, Vec<Shape>)> {
+/// The areas, prepared for finding track points in them; shared with the
+/// thread that does.
+async fn shapes(tx: &mut PgConnection) -> sqlx::Result<(Vec<Uuid>, Arc<[Shape]>)> {
     let areas = list(tx).await?;
     let mut ids = Vec::new();
     let mut shapes = Vec::new();
@@ -87,7 +90,7 @@ async fn shapes(tx: &mut PgConnection) -> sqlx::Result<(Vec<Uuid>, Vec<Shape>)> 
             shapes.push(Shape::new(boundary));
         }
     }
-    Ok((ids, shapes))
+    Ok((ids, shapes.into()))
 }
 
 struct TrackedFlight {
@@ -100,22 +103,33 @@ struct TrackedFlight {
 /// Replaces the per-area figures of these flights.
 async fn store(
     tx: &mut PgConnection,
-    flights: &[TrackedFlight],
+    flights: Vec<TrackedFlight>,
     ids: &[Uuid],
-    shapes: &[Shape],
+    shapes: Arc<[Shape]>,
 ) -> sqlx::Result<()> {
+    let all: Vec<Uuid> = flights.iter().map(|flight| flight.id).collect();
+    // Finding the shares is CPU work: on Tokio's blocking threads, so the
+    // workers keep serving other requests meanwhile.
+    let shares = tokio::task::spawn_blocking(move || {
+        let mut shares = Vec::new();
+        for flight in &flights {
+            let track = geometry::track_points(&flight.track);
+            for share in geometry::shares(&track, &shapes, flight.air_time_s, flight.distance_m) {
+                shares.push((flight.id, share));
+            }
+        }
+        shares
+    })
+    .await
+    .expect("computing area shares panicked");
     let (mut flight_ids, mut area_ids, mut times, mut distances) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    for flight in flights {
-        let track = geometry::track_points(&flight.track);
-        for share in geometry::shares(&track, shapes, flight.air_time_s, flight.distance_m) {
-            flight_ids.push(flight.id);
-            area_ids.push(ids[share.area]);
-            times.push(share.air_time_s);
-            distances.push(share.distance_m);
-        }
+    for (flight_id, share) in shares {
+        flight_ids.push(flight_id);
+        area_ids.push(ids[share.area]);
+        times.push(share.air_time_s);
+        distances.push(share.distance_m);
     }
-    let all: Vec<Uuid> = flights.iter().map(|flight| flight.id).collect();
     sqlx::query!("delete from flight_areas where flight_id = any($1)", &all)
         .execute(&mut *tx)
         .await?;
@@ -146,7 +160,7 @@ pub async fn compute_flight(tx: &mut PgConnection, flight_id: Uuid) -> sqlx::Res
     )
     .fetch_all(&mut *tx)
     .await?;
-    store(tx, &flights, &ids, &shapes).await
+    store(tx, flights, &ids, shapes).await
 }
 
 /// Recomputes every flight's figures per area, archived flights included,
@@ -169,6 +183,6 @@ pub async fn recompute_all(tx: &mut PgConnection) -> sqlx::Result<()> {
             return Ok(());
         };
         after = last.id;
-        store(tx, &flights, &ids, &shapes).await?;
+        store(tx, flights, &ids, shapes.clone()).await?;
     }
 }
