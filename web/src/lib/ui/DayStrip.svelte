@@ -21,7 +21,7 @@
 		landed_at: string;
 		air_time_s: number;
 		from: number[] | null;
-		/** With `tracks=1`: a coarse track, [lon, lat] points (exploring). */
+		/** With `tracks=1`: a coarse track, [lon, lat] points, for the cards' map. */
 		track?: number[][] | null;
 	}
 </script>

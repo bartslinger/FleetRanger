@@ -108,7 +108,7 @@
 		return groups;
 	});
 
-	// Exploring: the cards show a week or a month, and from lg a map beside
+	// The cards show a week or a month, and from lg a map beside
 	// them has all their tracks at once (coarse, from the list). Pointing at
 	// a card brings out its session's tracks; nothing loads. Clicking a track
 	// marks its card; clicking a card opens the session. Below lg there's no
@@ -415,8 +415,9 @@
 	}
 
 	/* Under the times it pictures, the same width on every card, so the
-	   strips line up and share one scale (exploring: the user found a
-	   full-width strip more than it needs; beside the title, titles wrapped). */
+	   strips line up and share one scale (user's choice, 2026-10-21: a
+	   full-width strip was more than it needs; beside the title, titles
+	   wrapped). */
 	.card-strip {
 		display: block;
 		width: 12rem;

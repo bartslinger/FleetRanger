@@ -1,6 +1,6 @@
 <!--
 	@component
-	Steps through weeks or months (exploring, for the Sessions cards). Carbon
+	Steps through weeks or months, for the Sessions cards. Carbon
 	has no such component; built from its parts as carbon-expert advised: a
 	content switcher for the unit, then previous and next as ghost icon
 	buttons around the period's name, as in the date picker's calendar
