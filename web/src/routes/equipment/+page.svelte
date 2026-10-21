@@ -106,6 +106,10 @@
 						rowKey={(item) => item.id}
 						rowHref={(item) => resolve('/equipment/[kind=kind]/[id]', { kind, id: item.id })}
 						toolbar={kind === 'controllers' ? pair : undefined}
+						summary="{rows.length} {(rows.length === 1
+							? KINDS[kind].one
+							: KINDS[kind].label
+						).toLowerCase()}"
 					/>
 				{/if}
 			{/snippet}
