@@ -18,7 +18,8 @@
 </script>
 
 <script lang="ts">
-	import { DropdownMenu } from 'bits-ui';
+	import { DropdownMenu, Tooltip } from 'bits-ui';
+	import TooltipContent from './TooltipContent.svelte';
 	import OverflowMenuHorizontal from '@carbon/icons/es/overflow-menu--horizontal/16.js';
 	import OverflowMenuVertical from '@carbon/icons/es/overflow-menu--vertical/16.js';
 	import Icon from './Icon.svelte';
@@ -46,9 +47,24 @@
 </script>
 
 <DropdownMenu.Root>
-	<DropdownMenu.Trigger bind:ref={trigger} class="overflow-trigger {variant}" aria-label={label}>
-		<Icon icon={vertical ? OverflowMenuVertical : OverflowMenuHorizontal} />
-	</DropdownMenu.Trigger>
+	<!-- Its name in a tooltip, as for every icon-only button (Carbon). -->
+	<Tooltip.Provider delayDuration={100}>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<DropdownMenu.Trigger
+						{...props}
+						bind:ref={trigger}
+						class="overflow-trigger {variant}"
+						aria-label={label}
+					>
+						<Icon icon={vertical ? OverflowMenuVertical : OverflowMenuHorizontal} />
+					</DropdownMenu.Trigger>
+				{/snippet}
+			</Tooltip.Trigger>
+			<TooltipContent kind="icon">{label}</TooltipContent>
+		</Tooltip.Root>
+	</Tooltip.Provider>
 	<DropdownMenu.Portal>
 		<DropdownMenu.Content
 			class="overflow-menu"
