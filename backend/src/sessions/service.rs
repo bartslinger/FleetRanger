@@ -22,11 +22,51 @@ pub async fn list(
     window: Option<Window>,
     limit: i64,
     offset: i64,
+    with_tracks: bool,
 ) -> ApiResult<(Vec<SessionSummary>, i64)> {
     let scope = policy::flight_scope(actor);
-    let sessions = db::list(db, &scope, filter, window, limit, offset).await?;
+    let mut sessions = db::list(db, &scope, filter, window, limit, offset, with_tracks).await?;
+    if with_tracks {
+        for session in &mut sessions {
+            simplify_tracks(&mut session.flight_times);
+        }
+    }
     let total = db::count(db, &scope, filter, window).await?;
     Ok((sessions, total))
+}
+
+/// About 5 m, in degrees: finer than a map of a week's or month's sessions
+/// can show.
+const PREVIEW_TOLERANCE: f64 = 0.00005;
+
+/// Each flight's `track` (its coordinates) as a coarse [lon, lat] line, for
+/// a map of many sessions at once: a few dozen points instead of thousands.
+fn simplify_tracks(flights: &mut serde_json::Value) {
+    use geo::{LineString, Simplify};
+    let Some(flights) = flights.as_array_mut() else {
+        return;
+    };
+    for flight in flights {
+        let Some(track) = flight.get_mut("track") else {
+            continue;
+        };
+        let points: Vec<(f64, f64)> = track
+            .as_array()
+            .map(|points| {
+                points
+                    .iter()
+                    .filter_map(|point| Some((point.get(0)?.as_f64()?, point.get(1)?.as_f64()?)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let line = LineString::from(points).simplify(PREVIEW_TOLERANCE);
+        // Six decimals, about 10 cm: the rest is only bytes.
+        let round = |value: f64| (value * 1e6).round() / 1e6;
+        *track = line
+            .points()
+            .map(|point| serde_json::json!([round(point.x()), round(point.y())]))
+            .collect();
+    }
 }
 
 /// A session's place in the list of those the actor may see that pass the
