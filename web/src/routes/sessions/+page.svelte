@@ -439,8 +439,10 @@
 			align-items: start;
 		}
 
+		/* 6 columns up to xlg, so a card's last line fits beside its arrow;
+		   5 from xlg (carbon-expert's suggestion). */
 		.cards {
-			grid-column: span 5;
+			grid-column: span 6;
 		}
 
 		/* Level with the first card, 16px below the header while the cards
@@ -448,6 +450,16 @@
 		.map-side {
 			position: sticky;
 			top: calc(3rem + var(--cds-spacing-05));
+			grid-column: span 10;
+		}
+	}
+
+	@media (min-width: 82rem) {
+		.cards {
+			grid-column: span 5;
+		}
+
+		.map-side {
 			grid-column: span 11;
 		}
 	}
