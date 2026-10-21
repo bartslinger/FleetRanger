@@ -20,6 +20,7 @@
 <script lang="ts">
 	import { DropdownMenu } from 'bits-ui';
 	import OverflowMenuHorizontal from '@carbon/icons/es/overflow-menu--horizontal/16.js';
+	import OverflowMenuVertical from '@carbon/icons/es/overflow-menu--vertical/16.js';
 	import Icon from './Icon.svelte';
 
 	interface Props {
@@ -31,14 +32,22 @@
 		variant?: 'inline' | 'row' | 'batch';
 		/** The button, e.g. to give focus back to after a dialog. */
 		trigger?: HTMLElement | null;
+		/** Carbon's vertical icon, as in a table toolbar. */
+		vertical?: boolean;
 	}
 
-	let { label, items, variant = 'inline', trigger = $bindable(null) }: Props = $props();
+	let {
+		label,
+		items,
+		variant = 'inline',
+		trigger = $bindable(null),
+		vertical = false
+	}: Props = $props();
 </script>
 
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger bind:ref={trigger} class="overflow-trigger {variant}" aria-label={label}>
-		<Icon icon={OverflowMenuHorizontal} />
+		<Icon icon={vertical ? OverflowMenuVertical : OverflowMenuHorizontal} />
 	</DropdownMenu.Trigger>
 	<DropdownMenu.Portal>
 		<DropdownMenu.Content

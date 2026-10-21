@@ -27,7 +27,10 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
-	import PeriodNav from '#lib/ui/PeriodNav.svelte';
+	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
+	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
+	import IconButton from '#lib/ui/IconButton.svelte';
+	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
@@ -251,32 +254,65 @@
 	]);
 </script>
 
-<!-- The list's own controls: the period, the count and Filters. Above the
-     cards, where the pointer works (user's choice, 2026-10-21). -->
+<!-- The list's toolbar, attached to the cards as a table's (Carbon's 48px
+     toolbar, carbon-expert's check): the period between previous and next,
+     with its count; at the end Filters, a dot while some apply, and a menu
+     for the unit and the current period, which change less often (no room
+     for a switcher in this column). Above the cards, where the pointer
+     works (user's choice, 2026-10-21). -->
 {#snippet periodToolbar()}
-	<ListFilters
-		filters={data.state}
-		none={{ ...data.state, ...NO_FILTERS }}
-		devices={data.devices}
-		admin={data.choices.admin}
-		filtering={cardsFiltering}
-		count={sessions(data.total)}
-		onchange={filter}
-	>
-		{#snippet dates()}
-			<PeriodNav
-				unit={data.state.period.unit}
-				units={{
-					week: at(switchTo('week', data.state.period, today(data.timeZone))),
-					month: at(switchTo('month', data.state.period, today(data.timeZone)))
-				}}
-				name={periodName(data.state.period)}
-				previous={at(step(data.state.period, -1))}
-				next={at(step(data.state.period, 1))}
-				current={data.state.period.start === thisPeriod.start ? null : at(thisPeriod)}
+	{@const unit = data.state.period.unit}
+	{@const other = unit === 'month' ? 'week' : 'month'}
+	<div class="list-toolbar">
+		<IconButton
+			icon={ChevronLeft}
+			size="lg"
+			label="Previous {unit}"
+			href={at(step(data.state.period, -1))}
+		/>
+		<h2 class="period" aria-live="polite">
+			{periodName(data.state.period)}<span class="period-count">{` · ${sessions(data.total)}`}</span
+			>
+		</h2>
+		<IconButton
+			icon={ChevronRight}
+			size="lg"
+			label="Next {unit}"
+			href={at(step(data.state.period, 1))}
+		/>
+		<span class="tools">
+			<ListFilters
+				toolbar
+				filters={data.state}
+				none={{ ...data.state, ...NO_FILTERS }}
+				devices={data.devices}
+				admin={data.choices.admin}
+				filtering={cardsFiltering}
+				onchange={filter}
 			/>
-		{/snippet}
-	</ListFilters>
+			<OverflowMenu
+				label="Period options"
+				variant="row"
+				vertical
+				items={[
+					{
+						label: `Show by ${other}`,
+						// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
+						onselect: () => goto(at(switchTo(other, data.state.period, today(data.timeZone))))
+					},
+					...(data.state.period.start === thisPeriod.start
+						? []
+						: [
+								{
+									label: `Go to this ${unit}`,
+									// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
+									onselect: () => goto(at(thisPeriod))
+								}
+							])
+				]}
+			/>
+		</span>
+	</div>
 {/snippet}
 
 <!-- A session open: its title, the breadcrumb back to the list (through the
@@ -628,6 +664,38 @@
 		.cards-view {
 			grid-template-columns: 11fr 5fr;
 		}
+	}
+
+	/* Carbon's large table toolbar: 48px on the list's layer, 2px above the
+	   first card, its buttons full height; the period's name lines up with
+	   the cards' text. */
+	.list-toolbar {
+		display: flex;
+		align-items: center;
+		min-height: var(--cds-spacing-09);
+		/* 2px to the first card, against the months' 24px gap in the list. */
+		margin-bottom: calc(var(--cds-spacing-01) - var(--cds-spacing-06));
+		background: var(--cds-layer-01);
+	}
+
+	.period {
+		flex: none;
+		margin: 0;
+		padding-inline: var(--cds-spacing-03);
+		font-size: var(--cds-heading-compact-01-font-size);
+		font-weight: var(--cds-heading-compact-01-font-weight);
+		line-height: var(--cds-heading-compact-01-line-height);
+		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
+	}
+
+	.period-count {
+		color: var(--cds-text-secondary);
+		font-weight: var(--cds-body-compact-01-font-weight);
+	}
+
+	.tools {
+		display: flex;
+		margin-inline-start: auto;
 	}
 
 	/* The open session's day, times and totals, above its facts. */

@@ -115,7 +115,8 @@
 		onchange,
 		own,
 		dates,
-		count
+		count,
+		toolbar = false
 	}: {
 		/** The applied filters, the list's own among them. */
 		filters: T;
@@ -137,6 +138,8 @@
 		dates?: Snippet;
 		/** E.g. "16 sessions", before the buttons, where there's no table toolbar. */
 		count?: string;
+		/** In a list's own toolbar: only the panel, behind a filter icon. */
+		toolbar?: boolean;
 	} = $props();
 
 	// The panel's choice until Apply; it starts as what's applied.
@@ -174,73 +177,90 @@
 	const areaOptions = $derived(devices.areas.map((area) => ({ value: area.id, label: area.name })));
 </script>
 
-<div class="filter-bar" class:spread={dates}>
-	{#if dates}
-		{@render dates()}
-	{:else}
-		<div class="dates">
-			<DateRange
-				from={applied.from}
-				to={applied.to}
-				onchange={(from, to) => onchange({ from, to } as Partial<T>)}
-			/>
-		</div>
-	{/if}
-	<div class="buttons">
-		{#if count}<p class="count">{count}</p>{/if}
-		<FilterPanel
-			count={panelCount(applied) + ownCount}
-			onopen={() => (draft = { ...applied })}
-			onapply={() => onchange(draft)}
-			onreset={() => (draft = { ...none, from: applied.from, to: applied.to })}
-		>
-			<MultiSelect
-				label="Pilots"
-				placeholder="All pilots"
-				options={pilotOptions}
-				value={draft.pilots}
-				onchange={(pilots) => change({ pilots } as Partial<T>)}
-			/>
-			<MultiSelect
-				label="Drones"
-				placeholder="All drones"
-				options={droneOptions}
-				value={draft.drones}
-				onchange={(drones) => change({ drones } as Partial<T>)}
-			/>
-			<MultiSelect
-				label="Controllers"
-				placeholder="All controllers"
-				options={controllerOptions}
-				value={draft.controllers}
-				onchange={(controllers) => change({ controllers } as Partial<T>)}
-			/>
-			{#if admin}
-				<MultiSelect
-					label="Teams"
-					placeholder="All teams"
-					options={teamOptions}
-					value={draft.teams}
-					onchange={(teams) => change({ teams } as Partial<T>)}
+{#if toolbar}
+	<!-- In a list's toolbar: only the panel, behind a filter icon. -->
+	<FilterPanel
+		iconOnly
+		count={panelCount(applied) + ownCount}
+		onopen={() => (draft = { ...applied })}
+		onapply={() => onchange(draft)}
+		onreset={() => (draft = { ...none, from: applied.from, to: applied.to })}
+	>
+		{@render fields()}
+	</FilterPanel>
+{:else}
+	<div class="filter-bar" class:spread={dates}>
+		{#if dates}
+			{@render dates()}
+		{:else}
+			<div class="dates">
+				<DateRange
+					from={applied.from}
+					to={applied.to}
+					onchange={(from, to) => onchange({ from, to } as Partial<T>)}
 				/>
-			{/if}
-			<!-- Once the organisation has areas: a flight passes when it has time in any of them. -->
-			{#if areaOptions.length > 0 || draft.areas.length > 0}
-				<MultiSelect
-					label="Areas flown"
-					placeholder="All areas"
-					options={areaOptions}
-					value={draft.areas}
-					onchange={(areas) => change({ areas } as Partial<T>)}
-				/>
-			{/if}
-			{@render own?.(draft, change)}
-		</FilterPanel>
-		{#if filtering}
-			<Button kind="ghost" size="md" onclick={() => onchange(none)}>Clear filters</Button>
+			</div>
 		{/if}
+		<div class="buttons">
+			{#if count}<p class="count">{count}</p>{/if}
+			<FilterPanel
+				count={panelCount(applied) + ownCount}
+				onopen={() => (draft = { ...applied })}
+				onapply={() => onchange(draft)}
+				onreset={() => (draft = { ...none, from: applied.from, to: applied.to })}
+			>
+				{@render fields()}
+			</FilterPanel>
+			{#if filtering}
+				<Button kind="ghost" size="md" onclick={() => onchange(none)}>Clear filters</Button>
+			{/if}
+		</div>
 	</div>
-</div>
+{/if}
+
+{#snippet fields()}
+	<MultiSelect
+		label="Pilots"
+		placeholder="All pilots"
+		options={pilotOptions}
+		value={draft.pilots}
+		onchange={(pilots) => change({ pilots } as Partial<T>)}
+	/>
+	<MultiSelect
+		label="Drones"
+		placeholder="All drones"
+		options={droneOptions}
+		value={draft.drones}
+		onchange={(drones) => change({ drones } as Partial<T>)}
+	/>
+	<MultiSelect
+		label="Controllers"
+		placeholder="All controllers"
+		options={controllerOptions}
+		value={draft.controllers}
+		onchange={(controllers) => change({ controllers } as Partial<T>)}
+	/>
+	{#if admin}
+		<MultiSelect
+			label="Teams"
+			placeholder="All teams"
+			options={teamOptions}
+			value={draft.teams}
+			onchange={(teams) => change({ teams } as Partial<T>)}
+		/>
+	{/if}
+	<!-- Once the organisation has areas: a flight passes when it has time in any of them. -->
+	{#if areaOptions.length > 0 || draft.areas.length > 0}
+		<MultiSelect
+			label="Areas flown"
+			placeholder="All areas"
+			options={areaOptions}
+			value={draft.areas}
+			onchange={(areas) => change({ areas } as Partial<T>)}
+		/>
+	{/if}
+	{@render own?.(draft, change)}
+{/snippet}
 
 <style>
 	/* The dates, then the buttons, with 16px before the list. The column is
