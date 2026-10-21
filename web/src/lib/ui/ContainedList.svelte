@@ -10,6 +10,12 @@
 	interface Props {
 		/** For screen readers, e.g. "Areas". */
 		label: string;
+		/** The list header's title, e.g. "3 areas"; no header without one. */
+		title?: string;
+		/** An action in the header, e.g. a small button to add an item. */
+		headerAction?: Snippet;
+		/** Shown in place of the rows when there are none. */
+		empty?: string;
 		items: T[];
 		selected?: string | null;
 		onselect?: (id: string) => void;
@@ -18,9 +24,29 @@
 		action?: Snippet<[item: T]>;
 	}
 
-	let { label, items, selected = null, onselect, disabled = false, action }: Props = $props();
+	let {
+		label,
+		title,
+		headerAction,
+		empty,
+		items,
+		selected = null,
+		onselect,
+		disabled = false,
+		action
+	}: Props = $props();
 </script>
 
+{#if title}
+	<!-- Carbon's on-page list header: 32px, its title and an optional action. -->
+	<div class="header">
+		<h2 class="title">{title}</h2>
+		{#if headerAction}{@render headerAction()}{/if}
+	</div>
+{/if}
+{#if items.length === 0 && empty}
+	<p class="empty">{empty}</p>
+{/if}
 <ul class="list" aria-label={label}>
 	{#each items as item (item.id)}
 		<li class:selected={item.id === selected}>
@@ -37,6 +63,32 @@
 </ul>
 
 <style>
+	.header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		min-height: var(--cds-spacing-07);
+		padding-left: var(--cds-spacing-05);
+	}
+
+	.title {
+		margin: 0;
+		font-size: var(--cds-heading-compact-01-font-size);
+		font-weight: var(--cds-heading-compact-01-font-weight);
+		line-height: var(--cds-heading-compact-01-line-height);
+		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
+	}
+
+	.empty {
+		margin: 0;
+		padding: var(--cds-spacing-05);
+		background: var(--cds-layer-01);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+	}
+
 	.list {
 		margin: 0;
 		padding: 0;

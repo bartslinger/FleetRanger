@@ -8,7 +8,6 @@
 	import type { Area, Boundary } from '#lib/ui/areas.js';
 	import Column from '#lib/ui/Column.svelte';
 	import ContainedList from '#lib/ui/ContainedList.svelte';
-	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
@@ -65,45 +64,49 @@
 
 <Grid rowGap>
 	<Column md={8} lg={4} narrow>
-		<!-- With the list it adds to (carbon-expert); the same as the map's New
-		     area tool, easier to find. Phones only view. -->
-		<div class="wide-only new">
-			<Button icon={Add} fill disabled={busy} onclick={() => map?.newArea()}>New area</Button>
-		</div>
-		{#if data.areas.length === 0}
-			<EmptyState title="No areas yet" body="Flights show their time and distance in each area." />
-		{:else}
-			<ContainedList
-				label="Areas"
-				{items}
-				{selected}
-				disabled={busy}
-				onselect={(id) => (selected = id)}
-			>
-				{#snippet action(item)}
-					<OverflowMenu
-						label={`Options for ${item.label}`}
-						items={[
-							{
-								label: 'Rename',
-								onselect: () => {
-									acting = item.area;
-									renaming = true;
-								}
-							},
-							{
-								label: 'Delete',
-								danger: true,
-								onselect: () => {
-									acting = item.area;
-									deleting = true;
-								}
+		<ContainedList
+			label="Areas"
+			title={items.length === 0
+				? 'No areas yet'
+				: `${items.length} ${items.length === 1 ? 'area' : 'areas'}`}
+			empty="Flights show their time and distance in each area."
+			{items}
+			{selected}
+			disabled={busy}
+			onselect={(id) => (selected = id)}
+		>
+			{#snippet headerAction()}
+				<!-- In the list it adds to; the same as the map's New area tool.
+				     Phones only view. -->
+				<span class="wide-only">
+					<Button size="sm" icon={Add} disabled={busy} onclick={() => map?.newArea()}
+						>New area</Button
+					>
+				</span>
+			{/snippet}
+			{#snippet action(item)}
+				<OverflowMenu
+					label={`Options for ${item.label}`}
+					items={[
+						{
+							label: 'Rename',
+							onselect: () => {
+								acting = item.area;
+								renaming = true;
 							}
-						]}
-					/>
-				{/snippet}
-			</ContainedList>
-		{/if}
+						},
+						{
+							label: 'Delete',
+							danger: true,
+							onselect: () => {
+								acting = item.area;
+								deleting = true;
+							}
+						}
+					]}
+				/>
+			{/snippet}
+		</ContainedList>
 	</Column>
 	<Column md={8} lg={12} narrow>
 		<AreaMap
@@ -155,15 +158,6 @@
 </Modal>
 
 <style>
-	/* The button above the list, full width, 1px apart like a toolbar. */
-	.new {
-		margin-bottom: 1px;
-	}
-
-	.new :global(.button) {
-		max-width: none;
-	}
-
 	/* Drawing needs a precise pointer and room: from md only. */
 	@media (max-width: 41.98rem) {
 		.wide-only {

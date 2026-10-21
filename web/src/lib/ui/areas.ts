@@ -129,6 +129,8 @@ export function addAreaLayers(map: MapboxMap, areas: Area[], selected: string | 
 		id: 'area-casing',
 		type: 'line',
 		source: 'areas',
+		// Rounded corners: Mapbox's default joins end sharp angles in long spikes.
+		layout: { 'line-join': 'round' },
 		paint: {
 			'line-color': CASING,
 			'line-width': ['case', ['get', 'selected'], 6, 4],
@@ -139,6 +141,7 @@ export function addAreaLayers(map: MapboxMap, areas: Area[], selected: string | 
 		id: 'area-outline',
 		type: 'line',
 		source: 'areas',
+		layout: { 'line-join': 'round' },
 		paint: { 'line-color': OUTLINE, 'line-width': ['case', ['get', 'selected'], 4, 2] }
 	});
 	map.addLayer({
