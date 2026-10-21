@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -29,6 +30,12 @@ pub struct SessionSummary {
     pub teams: Vec<String>,
     /// So the web app offers merging only where the policy allows it.
     pub team_ids: Vec<Uuid>,
+    /// Each visible flight's `takeoff_at`, `landed_at`, `air_time_s` and
+    /// takeoff point (`from`, [lon, lat, alt]), in takeoff order: the web
+    /// app's day strip, with day and night where the session was flown.
+    /// Null, and left out, where it isn't wanted.
+    #[serde(skip_serializing_if = "Value::is_null")]
+    pub flight_times: Value,
 }
 
 /// A time span: sessions with a flight in it, e.g. the ones near flights to be
@@ -62,7 +69,11 @@ pub async fn list(
                 sum(f.distance_m) as "distance_m!",
                 array_remove(array_agg(distinct u.name), null) as "pilots!",
                 array_remove(array_agg(distinct t.name), null) as "teams!",
-                array_remove(array_agg(distinct f.team_id), null) as "team_ids!"
+                array_remove(array_agg(distinct f.team_id), null) as "team_ids!",
+                jsonb_agg(jsonb_build_object('takeoff_at', f.takeoff_at, 'landed_at', f.landed_at,
+                                             'air_time_s', f.air_time_s,
+                                             'from', f.track->'coordinates'->0)
+                          order by f.takeoff_at) as "flight_times!"
          from flights f
          left join users u on u.id = f.pilot_id
          left join teams t on t.id = f.team_id

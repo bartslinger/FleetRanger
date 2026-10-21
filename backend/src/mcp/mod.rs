@@ -392,9 +392,11 @@ impl FleetRanger {
             sessions::service::list(&self.db, actor, &filter, None, limit, offset)
                 .await
                 .map_err(api)?;
-        // Whole metres, as everywhere in these tools; the sum is of the exact distances.
+        // Whole metres, as everywhere in these tools; the sum is of the exact
+        // distances. Without the day strip's data: apps get no takeoff points.
         for session in &mut sessions {
             session.distance_m = session.distance_m.round();
+            session.flight_times = serde_json::Value::Null;
         }
         json(serde_json::json!({ "sessions": sessions, "total": total }))
     }
