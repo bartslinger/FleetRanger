@@ -35,6 +35,10 @@
 		customAnchor={anchor}
 		updatePositionStrategy={follow ? 'always' : 'optimized'}
 		style={follow ? 'pointer-events: none' : undefined}
+		onInteractOutside={(event) => {
+			// Pressed to drag what it follows (a map): it stays.
+			if (follow) event.preventDefault();
+		}}
 	>
 		<Tooltip.Arrow class="tooltip-caret" width={caret.width} height={caret.height} />
 		{@render children()}

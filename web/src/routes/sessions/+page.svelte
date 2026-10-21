@@ -207,15 +207,29 @@
 	const mapTracks = $derived(
 		openSession ? openSession.flights.map((flight) => flight.track) : tracks
 	);
-	// A session open, the flight pointed at in its table; else the card's.
+	// A session open, the flight pointed at in its table or on the map;
+	// else the card's.
 	let pointedFlight: number | null = $state(null);
-	const highlight = $derived(
-		openSession
-			? pointedFlight === null
-				? []
-				: [pointedFlight]
-			: indexesOf(pointed ?? pointedTrack)
+	let pointedFlightTrack: number | null = $state(null);
+	const highlight = $derived.by(() => {
+		if (!openSession) return indexesOf(pointed ?? pointedTrack);
+		const flight = pointedFlight ?? pointedFlightTrack;
+		return flight === null ? [] : [flight];
+	});
+	// A flight's track, as its row (user's request, 2026-10-21): pointing at
+	// it brings the flight out, its row in the hover state, and its times
+	// and air time in a tooltip, as on the cards' day strips; with more than
+	// one pilot in the session, whose flight it was (user's request).
+	const manyPilots = $derived(
+		new Set(openSession?.flights.map((flight) => flight.pilot_id)).size > 1
 	);
+	const flightTip = (index: number) => {
+		const flight = openSession?.flights[index];
+		if (!flight) return '';
+		const times = `${clock(flight.takeoff_at, data.timeZone)}–${clock(flight.landed_at, data.timeZone)}`;
+		const tip = `${times} · ${duration(flight.air_time_s)}`;
+		return manyPilots ? `${tip} · ${flight.pilot_name ?? 'Unknown'}` : tip;
+	};
 	// A track on the map is its session, as its card is (carbon-expert's
 	// advice, 2026-10-21): pointing at it brings the session out and its card
 	// in its hover state, without scrolling the list; a click opens it.
@@ -675,10 +689,10 @@
 							height={MAP_HEIGHT}
 							ontrackclick={opened ? undefined : openTrack}
 							ontrackhover={opened
-								? undefined
+								? (index) => (pointedFlightTrack = index)
 								: (index) =>
 										(pointedTrack = index === null ? null : (sessionOf(index)?.id ?? null))}
-							tracktip={opened ? undefined : trackTip}
+							tracktip={opened ? flightTip : trackTip}
 							token={data.mapboxToken}
 							label={openSession
 								? 'Map of the session’s tracks'
@@ -696,6 +710,9 @@
 						rowKey={(flight) => flight.id}
 						rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
 						onrowhover={(flight) => (pointedFlight = flight ? openFlights.indexOf(flight) : null)}
+						hoveredRow={pointedFlightTrack === null
+							? null
+							: (openFlights[pointedFlightTrack]?.id ?? null)}
 						selectable={canChangeFlights ? () => true : undefined}
 						bind:selected={selectedFlights}
 						selectedLabel={(count) => `${flightsLabel(count)} selected`}

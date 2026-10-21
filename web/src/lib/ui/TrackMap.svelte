@@ -18,6 +18,7 @@
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import type { ExpressionSpecification, Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
 	import { addAreaLayers, bounds, setAreas, type Area } from './areas.js';
+	import { untrack } from 'svelte';
 	import { Tooltip } from 'bits-ui';
 	import InlineNotification from './InlineNotification.svelte';
 	import TooltipContent from './TooltipContent.svelte';
@@ -285,6 +286,12 @@
 	/** Puts the tracks into the sources and fits them. Before `style.load` there
 	 * are no sources yet; it adds them with the tracks of that moment. */
 	function draw(map: MapboxMap, tracks: Track[]) {
+		// Other tracks: the one pointed at is gone, e.g. clicked and opened.
+		untrack(() => {
+			if (!pointedTrack) return;
+			pointedTrack = null;
+			ontrackhover?.(null);
+		});
 		(map.getSource('tracks') as GeoJSONSource | undefined)?.setData(lines(tracks));
 		(map.getSource('ends') as GeoJSONSource | undefined)?.setData(ends(tracks));
 		// The first view at once; later ones flown to, where asked.
@@ -320,6 +327,7 @@
 		let cancelled = false;
 		let created: MapboxMap | undefined;
 		let resizes: ResizeObserver | undefined;
+		const listening = new AbortController();
 		import('mapbox-gl').then(({ default: mapboxgl }) => {
 			if (cancelled) return;
 			// With tracks known, the very first frame already shows them.
@@ -363,28 +371,61 @@
 				const index = feature?.properties?.index;
 				if (index !== undefined) ontrackclick?.(index);
 			});
-			instance.on('mouseenter', 'track-hit', () => {
-				if (ontrackclick) instance.getCanvas().style.cursor = 'pointer';
-			});
 			// The track under the pointer, its tooltip following the pointer, as
-			// Carbon's charts' do.
-			instance.on('mousemove', 'track-hit', (event) => {
-				const feature = event.features?.[0] as { properties?: { index?: number } } | undefined;
-				const index = feature?.properties?.index;
-				if (index === undefined) return;
+			// Carbon's charts' do. Looked up again when the map moves under a
+			// still pointer too (dragged, zoomed): the layer's own enter and
+			// leave events stop while the map is dragged.
+			let pointer: { x: number; y: number } | null = null;
+			let dragging = false;
+			const lookUp = () => {
+				const found =
+					pointer && instance.getLayer('track-hit')
+						? instance.queryRenderedFeatures([pointer.x, pointer.y], { layers: ['track-hit'] })
+						: []; // mapbox-gl's feature type leaves out the GeoJSON properties.
+				const index = (found[0] as { properties?: { index?: number } } | undefined)?.properties
+					?.index;
+				instance.getCanvas().style.cursor =
+					index !== undefined && ontrackclick && !dragging ? 'pointer' : '';
+				if (index === undefined || !pointer) {
+					if (!pointedTrack) return;
+					pointedTrack = null;
+					ontrackhover?.(null);
+					return;
+				}
 				const another = index !== pointedTrack?.index;
-				pointedTrack = { index, x: event.point.x, y: event.point.y };
+				pointedTrack = { index, ...pointer };
 				if (another) ontrackhover?.(index);
-			});
-			instance.on('mouseleave', 'track-hit', () => {
-				instance.getCanvas().style.cursor = '';
-				pointedTrack = null;
-				ontrackhover?.(null);
+			};
+			// The browser's pointer events, as Mapbox sends none while dragging.
+			const { signal } = listening;
+			element.addEventListener(
+				'pointermove',
+				(event) => {
+					const rect = element.getBoundingClientRect();
+					pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+					lookUp();
+				},
+				{ signal }
+			);
+			element.addEventListener(
+				'pointerleave',
+				() => {
+					pointer = null;
+					lookUp();
+				},
+				{ signal }
+			);
+			instance.on('move', lookUp);
+			instance.on('dragstart', () => (dragging = true));
+			instance.on('dragend', () => {
+				dragging = false;
+				lookUp();
 			});
 			map = instance;
 		});
 		return () => {
 			cancelled = true;
+			listening.abort();
 			resizes?.disconnect();
 			created?.remove();
 			map = undefined;
