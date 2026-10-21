@@ -3,8 +3,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::db::{
-    self, Device, Filter, FlightDetail, FlightSummary, Neighbours, PilotChoice, PilotOption, Sort,
-    TeamChoice, TeamOption,
+    self, AreaOption, Device, Filter, FlightDetail, FlightSummary, Neighbours, PilotChoice,
+    PilotOption, Sort, TeamChoice, TeamOption,
 };
 use crate::{
     auth::Actor,
@@ -57,6 +57,7 @@ pub struct Devices {
     pub controllers: Vec<Device>,
     pub teams: Vec<TeamOption>,
     pub pilots: Vec<PilotOption>,
+    pub areas: Vec<AreaOption>,
 }
 
 pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<Devices> {
@@ -66,6 +67,7 @@ pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<D
         controllers: db::controllers_of(db, &scope, filter).await?,
         teams: db::teams_in(db, &scope, filter).await?,
         pilots: db::pilots_in(db, &scope, filter).await?,
+        areas: db::areas_in(db, &scope, filter).await?,
     })
 }
 

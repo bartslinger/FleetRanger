@@ -143,6 +143,8 @@ struct FilterQuery {
     from: Option<DateTime<Utc>>,
     /// Takeoff before this instant.
     to: Option<DateTime<Utc>>,
+    /// Area ids, comma-separated.
+    area: Option<String>,
 }
 
 impl FilterQuery {
@@ -152,6 +154,7 @@ impl FilterQuery {
             &self.controller,
             &self.team,
             &self.pilot,
+            &self.area,
             self.from,
             self.to,
         )

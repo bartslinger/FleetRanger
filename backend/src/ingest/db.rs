@@ -6,6 +6,7 @@ use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use super::flight::Flight;
+use crate::areas;
 
 pub struct PendingLog {
     pub id: Uuid,
@@ -160,7 +161,7 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 .execute(&mut *tx)
                 .await?;
             }
-            sqlx::query!(
+            let flight_id = sqlx::query_scalar!(
                 // The flight's team (user's decisions, 2026-10-19): the one chosen
                 // with the pilot on the controller; else the pilot's, if they're
                 // in one team; else the controller's; else the drone's.
@@ -195,7 +196,8 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                      aircraft_serial = excluded.aircraft_serial,
                      rc_serial = excluded.rc_serial,
                      track = excluded.track,
-                     metrics = excluded.metrics",
+                     metrics = excluded.metrics
+                 returning id",
                 raw_log_id,
                 flight.takeoff_at,
                 flight.landed_at,
@@ -206,8 +208,9 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 flight.track,
                 serde_json::to_value(&flight.metrics)?,
             )
-            .execute(&mut *tx)
+            .fetch_one(&mut *tx)
             .await?;
+            areas::db::compute_flight(&mut tx, flight_id).await?;
         }
         None => {
             sqlx::query!("delete from flights where raw_log_id = $1", raw_log_id)
