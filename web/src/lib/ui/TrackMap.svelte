@@ -44,6 +44,10 @@
 		/** Tracks to zoom to, animated, by index, e.g. the session being
 		 * opened; back to all without. */
 		focus?: number[] | null;
+		/** Keep the legend's row also while it has nothing to say, so one
+		 * appearing later (e.g. a session's takeoffs and landings) moves
+		 * nothing under the map. */
+		reserveLegend?: boolean;
 	}
 
 	let {
@@ -56,7 +60,8 @@
 		ends: showEnds = true,
 		ontrackclick,
 		height,
-		focus = null
+		focus = null,
+		reserveLegend = false
 	}: Props = $props();
 
 	type View = 'satellite' | 'map';
@@ -362,8 +367,8 @@
 				>
 			{/each}
 		</div>
-		{#if showEnds || areas.length > 0}
-			<figcaption class="legend">
+		{#if showEnds || areas.length > 0 || reserveLegend}
+			<figcaption class="legend" class:reserved={reserveLegend}>
 				{#if showEnds}
 					<span><span class="marker takeoff" aria-hidden="true"></span>Takeoff</span>
 					<span><span class="marker landing" aria-hidden="true"></span>Landing</span>
@@ -451,6 +456,11 @@
 		outline: 2px solid var(--cds-focus);
 		outline-offset: -2px;
 		box-shadow: inset 0 0 0 3px var(--cds-focus-inset);
+	}
+
+	/* As high empty as with entries: label-01's 16px line. */
+	.legend.reserved {
+		min-height: var(--cds-spacing-05);
 	}
 
 	.legend {
