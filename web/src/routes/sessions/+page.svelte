@@ -445,6 +445,7 @@
 		? [{ href: href(data.state), label: 'Sessions', follow: () => history.back() }]
 		: undefined}
 	{crumb}
+	reserveBreadcrumb={data.state.view === 'cards' && wide.current}
 >
 	{#snippet actions()}
 		{#if !opened}<ViewSwitcher
@@ -566,14 +567,6 @@
 					</div>
 					{#if opened && wide.current}
 						<div class="facts-side">
-							{#if openedRow}
-								<!-- The session at a glance, at the top of its facts (user's choice,
-								     2026-10-21: no row of its own in the header). -->
-								<p class="facts-summary">
-									{daySpan(openedRow.first_takeoff_at, openedRow.last_landed_at, data.timeZone)} ·
-									{plural(openedRow.flights, 'flight')} · {duration(openedRow.air_time_s)} in the air
-								</p>
-							{/if}
 							{#if openedData}
 								<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
 							{/if}
@@ -781,7 +774,9 @@
 				visibility 0s 240ms;
 		}
 
+		/* 16px under the toolbar. */
 		.facts-side {
+			padding-top: var(--cds-spacing-05);
 			animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 120ms both facts-in;
 		}
 	}
@@ -855,15 +850,6 @@
 		display: flex;
 		flex: none;
 		margin-inline-start: auto;
-	}
-
-	/* The open session's day, times and totals, above its facts. */
-	.facts-summary {
-		margin: 0 0 var(--cds-spacing-06);
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 	}
 
 	/* The flights under the map and facts, coming in after the facts. */
