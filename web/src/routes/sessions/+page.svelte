@@ -235,7 +235,9 @@
 		const heading = periodHeading;
 		if (!heading) return;
 		void periodLabel;
-		const check = () => (periodCut = heading.scrollWidth > heading.clientWidth);
+		// Either line, the name or the count.
+		const check = () =>
+			(periodCut = [...heading.children].some((line) => line.scrollWidth > line.clientWidth));
 		const frame = requestAnimationFrame(check);
 		const resizes = new ResizeObserver(check);
 		resizes.observe(heading);
@@ -315,9 +317,8 @@
 							aria-live="polite"
 							tabindex={periodCut ? 0 : undefined}
 						>
-							{periodName(data.state.period)}<span class="period-count"
-								>{` · ${sessions(data.total)}`}</span
-							>
+							<span class="period-name">{periodName(data.state.period)}</span>
+							<span class="period-count">{sessions(data.total)}</span>
 						</h2>
 					{/snippet}
 				</Tooltip.Trigger>
@@ -737,14 +738,27 @@
 		flex: none;
 	}
 
+	/* The name, and under it the count, each line the full width so the
+	   count isn't cut off behind the name (user's choice, 2026-10-21):
+	   18px + 2px + 16px in the 48px bar. */
 	.period {
+		display: flex;
 		flex: 1;
+		flex-direction: column;
+		gap: 0.125rem;
 		min-width: 0;
-		overflow: hidden;
 		margin: 0;
 		padding-inline: var(--cds-spacing-03);
+	}
+
+	.period-name,
+	.period-count {
+		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
+	}
+
+	.period-name {
 		font-size: var(--cds-heading-compact-01-font-size);
 		font-weight: var(--cds-heading-compact-01-font-weight);
 		line-height: var(--cds-heading-compact-01-line-height);
@@ -753,7 +767,10 @@
 
 	.period-count {
 		color: var(--cds-text-secondary);
-		font-weight: var(--cds-body-compact-01-font-weight);
+		font-size: var(--cds-label-01-font-size);
+		font-weight: var(--cds-label-01-font-weight);
+		line-height: var(--cds-label-01-line-height);
+		letter-spacing: var(--cds-label-01-letter-spacing);
 	}
 
 	.tools {
