@@ -9,13 +9,18 @@
 		/** E.g. "View". */
 		label: string;
 		options: { label: string; href: string; selected: boolean }[];
+		/** sm 32px (default), md 40px to match a row of md buttons. */
+		size?: 'sm' | 'md';
+		/** Low contrast, for a switcher within the page beside a high-contrast one
+		 * in the page header (Carbon's modifier). */
+		lowContrast?: boolean;
 	}
 
-	let { label, options }: Props = $props();
+	let { label, options, size = 'sm', lowContrast = false }: Props = $props();
 </script>
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -- links are resolved by the caller -->
-<nav class="switcher" aria-label={label}>
+<nav class="switcher {size}" class:low={lowContrast} aria-label={label}>
 	{#each options as option (option.href)}
 		<a
 			href={option.href}
@@ -64,6 +69,22 @@
 		background: var(--cds-layer-selected-inverse);
 		color: var(--cds-text-inverse);
 		cursor: default;
+	}
+
+	.md a {
+		height: var(--cds-size-medium);
+	}
+
+	/* Low contrast: Carbon's component tokens content-switcher-background and
+	   -selected, which our tokens don't have; their layer equivalents. */
+	.low a {
+		border-color: var(--cds-border-strong-01);
+		background: var(--cds-layer-01);
+	}
+
+	.low a.selected {
+		background: var(--cds-layer-selected-01);
+		color: var(--cds-text-primary);
 	}
 
 	a:focus-visible {

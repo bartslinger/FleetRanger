@@ -3,12 +3,17 @@
 	Carbon's clickable tile: the whole tile is one link, with no links or
 	buttons inside it. `marked` gives it the selected-row background, e.g. for
 	the item whose details show elsewhere on the page.
-	Carbon puts an arrow at the bottom right; left out, because these tiles
-	come in lists, where every item would repeat it (the user's decision).
+	Carbon's arrow at the bottom right, in the interactive colour, says it
+	navigates (user's decision, 2026-10-21: once hovering a card brought out
+	its session on a map, a click opening it was unexpected without it; it
+	was left out before). The content's last line keeps the arrow's 16px
+	plus 8px free at its end.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { HTMLAnchorAttributes } from 'svelte/elements';
+	import ArrowRight from '@carbon/icons/es/arrow--right/16.js';
+	import Icon from './Icon.svelte';
 
 	interface Props extends HTMLAnchorAttributes {
 		href: string;
@@ -20,10 +25,13 @@
 </script>
 
 <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
-<a class="tile" class:marked {href} {...rest}>{@render children()}</a>
+<a class="tile" class:marked {href} {...rest}
+	>{@render children()}<span class="arrow"><Icon icon={ArrowRight} /></span></a
+>
 
 <style>
 	.tile {
+		position: relative;
 		display: block;
 		min-height: 4rem;
 		padding: var(--cds-spacing-05);
@@ -43,6 +51,14 @@
 
 	.tile.marked:hover {
 		background: var(--cds-layer-selected-hover-01);
+	}
+
+	.arrow {
+		position: absolute;
+		right: var(--cds-spacing-05);
+		bottom: var(--cds-spacing-05);
+		display: flex;
+		color: var(--cds-icon-interactive);
 	}
 
 	.tile:focus-visible {

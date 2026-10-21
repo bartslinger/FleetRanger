@@ -29,13 +29,30 @@
 		label: string;
 		/** Tracks are on their way: shows Carbon's inline loading over the map. */
 		loading?: boolean;
-		/** The track to bring out, by index, e.g. the flight pointed at in a list. */
-		highlight?: number | null;
+		/** The tracks to bring out, by index, e.g. the flight pointed at in a list
+		 * or a session's flights. */
+		highlight?: number | number[] | null;
 		/** The organisation's areas, outlined under the tracks. */
 		areas?: Area[];
+		/** Takeoff and landing markers; left out on a map of many tracks. */
+		ends?: boolean;
+		/** A track was clicked, by index. */
+		ontrackclick?: (index: number) => void;
+		/** A CSS height, e.g. to fill the window beside a list; at least 20rem. */
+		height?: string;
 	}
 
-	let { tracks, token, label, loading = false, highlight = null, areas = [] }: Props = $props();
+	let {
+		tracks,
+		token,
+		label,
+		loading = false,
+		highlight = null,
+		areas = [],
+		ends: showEnds = true,
+		ontrackclick,
+		height
+	}: Props = $props();
 
 	type View = 'satellite' | 'map';
 	let view: View = $state('satellite');
@@ -83,7 +100,7 @@
 	function ends(tracks: Track[]): FeatureCollection {
 		return {
 			type: 'FeatureCollection',
-			features: tracks
+			features: (showEnds ? tracks : [])
 				.filter((track) => track.coordinates.length > 0)
 				.flatMap((track) => [
 					point(track.coordinates[0], 'takeoff'),
@@ -153,9 +170,12 @@
 		});
 	}
 
-	/** Only the track with this index; none without one. */
-	function highlightFilter(index: number | null): ['==', ['get', string], number] {
-		return ['==', ['get', 'index'], index ?? -1];
+	/** Only the tracks with these indexes; none without. */
+	function highlightFilter(
+		index: number | number[] | null
+	): ['in', ['get', string], ['literal', number[]]] {
+		const indexes = index === null ? [] : Array.isArray(index) ? index : [index];
+		return ['in', ['get', 'index'], ['literal', indexes]];
 	}
 
 	const FIT = { padding: 48, maxZoom: 17 };
@@ -223,6 +243,17 @@
 			});
 			// Tracks that arrived while the style was loading weren't drawn yet.
 			instance.once('load', () => draw(instance, tracks));
+			// A track clicked, where the page wants it.
+			instance.on('click', 'track', (event) => {
+				// mapbox-gl's feature type leaves out the GeoJSON properties.
+				const feature = event.features?.[0] as { properties?: { index?: number } } | undefined;
+				const index = feature?.properties?.index;
+				if (index !== undefined) ontrackclick?.(index);
+			});
+			instance.on('mouseenter', 'track', () => {
+				if (ontrackclick) instance.getCanvas().style.cursor = 'pointer';
+			});
+			instance.on('mouseleave', 'track', () => (instance.getCanvas().style.cursor = ''));
 			map = instance;
 		});
 		return () => {
@@ -253,6 +284,10 @@
 		if (!map?.getLayer('highlight')) return;
 		map.setFilter('highlight-casing', filter);
 		map.setFilter('highlight', filter);
+		// The others step back while some are brought out.
+		const dimmed = filter[2][1].length > 0;
+		map.setPaintProperty('track', 'line-opacity', dimmed ? 0.35 : 1);
+		map.setPaintProperty('track-casing', 'line-opacity', dimmed ? 0.3 : 0.9);
 	});
 
 	function show(next: View) {
@@ -275,6 +310,7 @@
 		<div
 			class="map"
 			class:placed
+			style:height={height ? `max(20rem, ${height})` : undefined}
 			bind:this={container}
 			role="region"
 			aria-label={label}
@@ -293,13 +329,17 @@
 				>
 			{/each}
 		</div>
-		<figcaption class="legend">
-			<span><span class="marker takeoff" aria-hidden="true"></span>Takeoff</span>
-			<span><span class="marker landing" aria-hidden="true"></span>Landing</span>
-			{#if areas.length > 0}
-				<span><span class="marker area" aria-hidden="true"></span>Area</span>
-			{/if}
-		</figcaption>
+		{#if showEnds || areas.length > 0}
+			<figcaption class="legend">
+				{#if showEnds}
+					<span><span class="marker takeoff" aria-hidden="true"></span>Takeoff</span>
+					<span><span class="marker landing" aria-hidden="true"></span>Landing</span>
+				{/if}
+				{#if areas.length > 0}
+					<span><span class="marker area" aria-hidden="true"></span>Area</span>
+				{/if}
+			</figcaption>
+		{/if}
 	</figure>
 {/if}
 
