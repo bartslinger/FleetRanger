@@ -6,7 +6,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **First release** (v0.1.0 and android-v0.1.0) on the first organisation's server, in preparation: the web image, the full compose configuration and the Ansible role (nginx routing, secrets from a vault) are ready; next are the vault's secrets, the tags, deploying, the first admin and importing the server's logs. Backups come later (user's choice).
 
-**Areas**: decided and the schema is in; next are drawing areas on an admin page and computing time and distance per area.
+**Areas** work locally: admins draw them on the Areas page; flights and sessions show their time and distance per area, and the lists and MCP filter by them. Reviewed against Carbon; not deployed yet.
 
 **Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
 
@@ -81,9 +81,10 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 ## Areas
 
 - [x] Schema: areas, and time and distance per flight and area
-- [ ] Admin page: drawing areas on the map with snapping, clipped on save
-- [ ] Time and distance per area for every flight, recomputed when areas change
-- [ ] Areas on the flight and session pages, filters in the lists, seconds per area in MCP
+- [x] Admin page: drawing areas on the map with snapping, clipped on save
+- [x] Time and distance per area for every flight, recomputed when areas change
+- [x] Areas on the flight and session pages, filters in the lists, seconds per area in MCP
+- [x] Carbon review of the areas UI (open: a "Discard changes?" question when cancelling a changed drawing; no keyboard alternative for drawing, see design-system.md)
 
 ## Before production use
 
