@@ -29,7 +29,9 @@
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
 	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
+	import { Tooltip } from 'bits-ui';
 	import IconButton from '#lib/ui/IconButton.svelte';
+	import TooltipContent from '#lib/ui/TooltipContent.svelte';
 	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
@@ -223,6 +225,25 @@
 	// The period's links: the same filters, another week or month.
 	const at = (period: Period) => href({ ...data.state, period });
 	const thisPeriod = $derived(periodOf(data.state.period.unit, today(data.timeZone)));
+
+	// The toolbar's name, and whether it's cut off: then a tooltip has it in
+	// full. Checked when its width or its text changes.
+	const periodLabel = $derived(`${periodName(data.state.period)} · ${sessions(data.total)}`);
+	let periodHeading: HTMLElement | undefined = $state();
+	let periodCut = $state(false);
+	$effect(() => {
+		const heading = periodHeading;
+		if (!heading) return;
+		void periodLabel;
+		const check = () => (periodCut = heading.scrollWidth > heading.clientWidth);
+		const frame = requestAnimationFrame(check);
+		const resizes = new ResizeObserver(check);
+		resizes.observe(heading);
+		return () => {
+			cancelAnimationFrame(frame);
+			resizes.disconnect();
+		};
+	});
 	// In the cards the period isn't a filter: Clear filters leaves it.
 	const cardsFiltering = $derived(listFiltering({ ...data.state, from: null }));
 
@@ -278,10 +299,31 @@
 		/>
 		<!-- After both arrows, as in a calendar's header, so they stay put
 		     whatever the name's length (user's feedback). -->
-		<h2 class="period" aria-live="polite">
-			{periodName(data.state.period)}<span class="period-count">{` · ${sessions(data.total)}`}</span
-			>
-		</h2>
+		<!-- Cut off, the full name in a tooltip, on hover and keyboard focus
+		     (our rule for truncated values; user's request). -->
+		<Tooltip.Provider delayDuration={100}>
+			<Tooltip.Root disabled={!periodCut}>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<!-- Focusable only while cut off, so the keyboard reaches the
+						     full name too; screen readers read it from the text. -->
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+						<h2
+							{...props}
+							bind:this={periodHeading}
+							class="period"
+							aria-live="polite"
+							tabindex={periodCut ? 0 : undefined}
+						>
+							{periodName(data.state.period)}<span class="period-count"
+								>{` · ${sessions(data.total)}`}</span
+							>
+						</h2>
+					{/snippet}
+				</Tooltip.Trigger>
+				<TooltipContent side="top">{periodLabel}</TooltipContent>
+			</Tooltip.Root>
+		</Tooltip.Provider>
 		<span class="tools">
 			<ListFilters
 				toolbar
