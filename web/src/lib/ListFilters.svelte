@@ -132,7 +132,7 @@
 		onchange: (change: Partial<T>) => void;
 		/** The list's own filters in the panel, after these, on the draft. */
 		own?: Snippet<[T, (change: Partial<T>) => void]>;
-		/** In place of the days, e.g. the Sessions cards' week or month (exploring).
+		/** In place of the days, e.g. the Sessions cards' week or month.
 		 * The buttons then go to the row's end, after `count`. */
 		dates?: Snippet;
 		/** E.g. "16 sessions", before the buttons, where there's no table toolbar. */

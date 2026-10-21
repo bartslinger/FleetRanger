@@ -14,7 +14,7 @@ export interface SessionListState extends Filters {
 	page: number;
 	size: number;
 	view: 'cards' | 'table';
-	/** The cards' week or month (exploring); the table uses `from` and `to`. */
+	/** The cards' week or month; the table uses `from` and `to`. */
 	period: Period;
 	/** The current month, the default, left out of the URL. */
 	thisMonth: string;
