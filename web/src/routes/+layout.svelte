@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '#lib/ui/base.css';
+	import Area from '@carbon/icons/es/area/16.js';
 	import Drone from '@carbon/icons/es/drone/16.js';
 	import Events from '@carbon/icons/es/events/16.js';
 	import FlightRoster from '@carbon/icons/es/flight--roster/16.js';
@@ -112,7 +113,8 @@
 		...(data.account?.role === 'admin'
 			? [
 					{ href: resolve('/users'), label: 'Users', icon: UserMultiple },
-					{ href: resolve('/teams'), label: 'Teams', icon: Events }
+					{ href: resolve('/teams'), label: 'Teams', icon: Events },
+					{ href: resolve('/areas'), label: 'Areas', icon: Area }
 				]
 			: []),
 		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone }

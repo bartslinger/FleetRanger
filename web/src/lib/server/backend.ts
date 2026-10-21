@@ -1,6 +1,9 @@
 import { BACKEND_URL } from '$app/env/private';
 import { error } from '@sveltejs/kit';
+import type { Area } from '#lib/ui/AreaMap.svelte';
 import type { Track } from '#lib/ui/TrackMap.svelte';
+
+export type { Area };
 
 /** A flight as listed by `GET /api/flights`. */
 export interface FlightSummary {
@@ -63,6 +66,21 @@ export interface Devices {
 	teams: { id: string | null; name: string | null }[];
 	/** No id: the flights without a pilot. */
 	pilots: { id: string | null; name: string | null }[];
+	areas: { id: string; name: string }[];
+}
+
+/** A flight's time and distance in one area. */
+export interface FlightArea {
+	id: string;
+	name: string;
+	air_time_s: number;
+	distance_m: number;
+}
+
+/** An area as saved by `POST` or `PUT /api/areas`, and the areas it was clipped against. */
+export interface SavedArea {
+	area: Area;
+	clipped_by: string[];
 }
 
 /** One flight with its track, from `GET /api/flights/{id}`. */
@@ -92,6 +110,8 @@ export interface FlightDetail {
 	rc_id: string | null;
 	/** Set for an archived flight. */
 	archived_at: string | null;
+	/** The areas its track passes through, most time first; the rest is outside all areas. */
+	areas: FlightArea[];
 }
 
 /** A session as listed by `GET /api/sessions`: what its visible flights add up to. */
