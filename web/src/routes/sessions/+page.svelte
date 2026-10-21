@@ -159,6 +159,10 @@
 		}
 		event.preventDefault();
 		pointed = null;
+		// The full tracks take over once the map has flown to the session:
+		// arriving sooner, they cut the flight short (user's feedback).
+		flown = false;
+		setTimeout(() => (flown = true), 450);
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller
 		pushState(url, { session: id });
 		preloadData(url).then((result) => {
@@ -168,12 +172,14 @@
 		});
 	}
 
-	// The map: the open session's full tracks once loaded, else the cards'.
-	const mapTracks = $derived(
-		openedData ? openedData.session.flights.map((flight) => flight.track) : tracks
-	);
-	const focus = $derived(opened && !openedData ? indexesOf(opened) : null);
-	const highlight = $derived(opened ? [] : indexesOf(pointed ?? marked));
+	// The map: the open session's full tracks once loaded and flown to, else
+	// the cards'.
+	let flown = $state(true);
+	const full = $derived(openedData && flown ? openedData : null);
+	const mapTracks = $derived(full ? full.session.flights.map((flight) => flight.track) : tracks);
+	const focus = $derived(opened && !full ? indexesOf(opened) : null);
+	// Flying to a session, it's brought out and the rest dimmed.
+	const highlight = $derived(full ? [] : opened ? indexesOf(opened) : indexesOf(pointed ?? marked));
 	// Another period or other filters: nothing stays marked.
 	let markedFor = untrack(() => data.sessions);
 	$effect(() => {
@@ -383,7 +389,7 @@
 							tracks={mapTracks}
 							{highlight}
 							{focus}
-							ends={openedData !== null}
+							ends={full !== null}
 							height={MAP_HEIGHT}
 							ontrackclick={opened ? undefined : mark}
 							token={data.mapboxToken}
@@ -393,9 +399,11 @@
 						/>
 					</div>
 					<div class="facts-side">
-						{#if openedData}
-							<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
-						{/if}
+						<div class="facts-inner">
+							{#if openedData}
+								<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
+							{/if}
+						</div>
 					</div>
 				{/if}
 			</div>
@@ -534,23 +542,40 @@
 	   column takes nothing. */
 	@media (min-width: 66rem) {
 		.cards-view {
+			--cards-share: 6;
+			container-type: inline-size;
 			grid-template-columns: 6fr 10fr 0fr;
 			gap: 0;
 			align-items: start;
 			transition: grid-template-columns 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
 		}
 
+		/* The cards and facts keep their open width while their columns close
+		   or open, pinned to the map's side, so they slide with it: the page
+		   moves sideways as one (user's request). Clipped, not hidden, so the
+		   month headings stay sticky. */
 		.cards,
 		.facts-side {
 			min-width: 0;
-			overflow: hidden;
+			overflow: clip;
 		}
 
 		.cards {
+			display: flex;
+			flex-direction: column;
+			align-items: flex-end;
 			padding-inline-end: var(--cds-spacing-05);
 			transition:
-				opacity 240ms cubic-bezier(0.2, 0, 1, 0.9),
+				opacity 400ms cubic-bezier(0.2, 0, 0.38, 0.9),
 				padding 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
+		}
+
+		.cards > section {
+			width: calc(var(--cards-share) / 16 * 100cqi - var(--cds-spacing-05));
+		}
+
+		.facts-inner {
+			width: calc(5 / 16 * 100cqi - var(--cds-spacing-05));
 		}
 
 		/* Level with the first card, 16px below the header while the cards
@@ -568,21 +593,29 @@
 			grid-template-columns: 0fr 11fr 5fr;
 		}
 
-		/* The cards fade at once (exit curve, 240ms) as their column closes. */
+		/* Both fade with the move, as long as it. */
 		.opened .cards {
 			padding-inline-end: 0;
 			opacity: 0;
 		}
 
-		/* The facts come in once the map is in place (entrance curve). */
+		.facts-side {
+			transition:
+				opacity 400ms cubic-bezier(0.2, 0, 0.38, 0.9),
+				padding 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
+		}
+
 		.opened .facts-side {
 			padding-inline-start: var(--cds-spacing-05);
 			opacity: 1;
-			transition: opacity 240ms cubic-bezier(0, 0, 0.38, 0.9) 300ms;
 		}
 	}
 
 	@media (min-width: 82rem) {
+		.cards-view {
+			--cards-share: 5;
+		}
+
 		.cards-view:not(.opened) {
 			grid-template-columns: 5fr 11fr 0fr;
 		}
