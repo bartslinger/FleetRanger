@@ -466,11 +466,14 @@
 		position: absolute;
 		top: calc(100% + var(--cds-spacing-02));
 		right: 0;
+		z-index: 10;
 		padding: var(--cds-spacing-01) var(--cds-spacing-05);
 		background: var(--cds-background-inverse);
 		color: var(--cds-text-inverse);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+		border-radius: 2px;
 		white-space: nowrap;
 		visibility: hidden;
 		pointer-events: none;

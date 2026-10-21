@@ -122,7 +122,7 @@
 				></span>
 				<!-- Pointing at the mark, not the hover area, which a neighbour can
 				     cut short on one side. -->
-				<TooltipContent side="top" anchor={anchors[index]} arrow>{label}</TooltipContent>
+				<TooltipContent side="top" anchor={anchors[index]}>{label}</TooltipContent>
 			</Tooltip.Root>
 		{/each}
 	</Tooltip.Provider>

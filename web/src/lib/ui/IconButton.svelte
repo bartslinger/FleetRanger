@@ -63,7 +63,7 @@
 					{/if}
 				{/snippet}
 			</Tooltip.Trigger>
-			<TooltipContent>{label}</TooltipContent>
+			<TooltipContent kind="icon">{label}</TooltipContent>
 		</Tooltip.Root>
 	</Tooltip.Provider>
 {/if}
