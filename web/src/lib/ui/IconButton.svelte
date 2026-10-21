@@ -49,37 +49,35 @@
 		<Icon {icon} label={name ?? label} />
 	</span>
 {:else}
-	<Tooltip.Provider delayDuration={100}>
-		<Tooltip.Root>
-			<Tooltip.Trigger>
-				{#snippet child({ props })}
-					{#if href}
-						<!-- eslint-disable svelte/no-navigation-without-resolve -- resolved by the caller -->
-						<a
-							{...mergeProps(rest, props)}
-							{href}
-							class="icon-button {size}"
-							aria-label={name ?? label}
-						>
-							<Icon {icon} />
-						</a>
-						<!-- eslint-enable svelte/no-navigation-without-resolve -->
-					{:else}
-						<button
-							{...mergeProps(rest, props)}
-							type="button"
-							class="icon-button {size}"
-							aria-label={name ?? label}
-						>
-							<Icon {icon} />
-							{#if dot}<span class="dot" aria-hidden="true"></span>{/if}
-						</button>
-					{/if}
-				{/snippet}
-			</Tooltip.Trigger>
-			<TooltipContent kind="icon">{label}</TooltipContent>
-		</Tooltip.Root>
-	</Tooltip.Provider>
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				{#if href}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- resolved by the caller -->
+					<a
+						{...mergeProps(rest, props)}
+						{href}
+						class="icon-button {size}"
+						aria-label={name ?? label}
+					>
+						<Icon {icon} />
+					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{:else}
+					<button
+						{...mergeProps(rest, props)}
+						type="button"
+						class="icon-button {size}"
+						aria-label={name ?? label}
+					>
+						<Icon {icon} />
+						{#if dot}<span class="dot" aria-hidden="true"></span>{/if}
+					</button>
+				{/if}
+			{/snippet}
+		</Tooltip.Trigger>
+		<TooltipContent kind="icon">{label}</TooltipContent>
+	</Tooltip.Root>
 {/if}
 
 <style>

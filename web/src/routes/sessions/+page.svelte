@@ -309,27 +309,25 @@
 		     whatever the name's length (user's feedback). -->
 		<!-- Cut off, the full name in a tooltip, on hover and keyboard focus
 		     (our rule for truncated values; user's request). -->
-		<Tooltip.Provider delayDuration={100}>
-			<Tooltip.Root disabled={!periodCut}>
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<!-- One of the toolbar's stops only while cut off, so the keyboard
+		<Tooltip.Root disabled={!periodCut}>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<!-- One of the toolbar's stops only while cut off, so the keyboard
 						     reaches the full name too; screen readers read the text. -->
-						<h2
-							{...props}
-							bind:this={periodHeading}
-							class="period"
-							aria-live="polite"
-							data-roving={periodCut ? 'true' : 'false'}
-						>
-							<span class="period-name">{periodName(data.state.period)}</span>
-							<span class="period-count">{sessions(data.total)}</span>
-						</h2>
-					{/snippet}
-				</Tooltip.Trigger>
-				<TooltipContent side="top">{periodLabel}</TooltipContent>
-			</Tooltip.Root>
-		</Tooltip.Provider>
+					<h2
+						{...props}
+						bind:this={periodHeading}
+						class="period"
+						aria-live="polite"
+						data-roving={periodCut ? 'true' : 'false'}
+					>
+						<span class="period-name">{periodName(data.state.period)}</span>
+						<span class="period-count">{sessions(data.total)}</span>
+					</h2>
+				{/snippet}
+			</Tooltip.Trigger>
+			<TooltipContent side="top">{periodLabel}</TooltipContent>
+		</Tooltip.Root>
 		<span class="tools">
 			<ListFilters
 				toolbar

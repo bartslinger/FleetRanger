@@ -9,6 +9,7 @@
 	import NotificationNew from '@carbon/icons/es/notification--new/20.js';
 	import WarningFilled from '@carbon/icons/es/warning--filled/20.js';
 	import UserMultiple from '@carbon/icons/es/user--multiple/16.js';
+	import { Tooltip } from 'bits-ui';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import favicon from '#lib/assets/favicon.svg';
@@ -145,19 +146,24 @@
 	{#if shownProcessing}<ProcessingPanel status={shownProcessing} timeZone={data.timeZone} />{/if}
 {/snippet}
 
-<Shell
-	name="FleetRanger"
-	logo={favicon}
-	{nav}
-	account={data.account}
-	theme={data.theme}
-	{actions}
-	profileLinks={data.account?.apps
-		? [{ href: resolve('/connected-apps'), label: 'Connected apps' }]
-		: []}
->
-	{@render children()}
-</Shell>
+<!-- One provider for every tooltip: one open at a time, and moving from one
+     control to the next shows its tooltip at once (user's feedback: with a
+     provider each, two stayed open and each waited its delay). -->
+<Tooltip.Provider delayDuration={100}>
+	<Shell
+		name="FleetRanger"
+		logo={favicon}
+		{nav}
+		account={data.account}
+		theme={data.theme}
+		{actions}
+		profileLinks={data.account?.apps
+			? [{ href: resolve('/connected-apps'), label: 'Connected apps' }]
+			: []}
+	>
+		{@render children()}
+	</Shell>
+</Tooltip.Provider>
 
 <!-- In the page from the start, so screen readers announce what's put in. -->
 <p class="visually-hidden" role="status">{announcement}</p>

@@ -52,23 +52,21 @@
 
 <DropdownMenu.Root>
 	<!-- Its name in a tooltip, as for every icon-only button (Carbon). -->
-	<Tooltip.Provider delayDuration={100}>
-		<Tooltip.Root>
-			<Tooltip.Trigger>
-				{#snippet child({ props })}
-					<DropdownMenu.Trigger
-						{...props}
-						bind:ref={trigger}
-						class="overflow-trigger {variant}"
-						aria-label={label}
-					>
-						<Icon icon={icon ?? (vertical ? OverflowMenuVertical : OverflowMenuHorizontal)} />
-					</DropdownMenu.Trigger>
-				{/snippet}
-			</Tooltip.Trigger>
-			<TooltipContent kind="icon">{label}</TooltipContent>
-		</Tooltip.Root>
-	</Tooltip.Provider>
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<DropdownMenu.Trigger
+					{...props}
+					bind:ref={trigger}
+					class="overflow-trigger {variant}"
+					aria-label={label}
+				>
+					<Icon icon={icon ?? (vertical ? OverflowMenuVertical : OverflowMenuHorizontal)} />
+				</DropdownMenu.Trigger>
+			{/snippet}
+		</Tooltip.Trigger>
+		<TooltipContent kind="icon">{label}</TooltipContent>
+	</Tooltip.Root>
 	<DropdownMenu.Portal>
 		<DropdownMenu.Content
 			class="overflow-menu"
