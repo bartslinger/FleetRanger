@@ -52,20 +52,10 @@ pub async fn insert(tx: &mut PgConnection, name: &str, boundary: &Value) -> sqlx
 }
 
 /// False if there is no such area.
-pub async fn update(
-    tx: &mut PgConnection,
-    id: Uuid,
-    name: &str,
-    boundary: &Value,
-) -> sqlx::Result<bool> {
-    let result = sqlx::query!(
-        "update areas set name = $2, boundary = $3 where id = $1",
-        id,
-        name,
-        boundary,
-    )
-    .execute(tx)
-    .await?;
+pub async fn reshape(tx: &mut PgConnection, id: Uuid, boundary: &Value) -> sqlx::Result<bool> {
+    let result = sqlx::query!("update areas set boundary = $2 where id = $1", id, boundary)
+        .execute(tx)
+        .await?;
     Ok(result.rows_affected() == 1)
 }
 

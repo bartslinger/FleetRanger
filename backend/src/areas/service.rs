@@ -29,13 +29,19 @@ pub struct Saved {
     pub clipped_by: Vec<String>,
 }
 
-/// Creates an area, or changes the shape of one (`id`), clipped where it
-/// overlaps the others, and recomputes every flight's figures per area.
+/// What a drawing is for: a new area with this name, or the area with this
+/// id, which keeps its name.
+pub enum Drawing<'a> {
+    New(&'a str),
+    Reshape(Uuid),
+}
+
+/// Creates an area, or changes the shape of one, clipped where it overlaps
+/// the others, and recomputes every flight's figures per area.
 pub async fn save(
     db: &PgPool,
     actor: &Actor,
-    id: Option<Uuid>,
-    name: Option<&str>,
+    drawing: Drawing<'_>,
     boundary: &Value,
 ) -> ApiResult<Saved> {
     policy::require_admin(actor)?;
@@ -45,13 +51,12 @@ pub async fn save(
     let mut tx = db.begin().await?;
     db::lock_for_change(&mut tx).await?;
     let all = db::list(&mut tx).await?;
-    let name = match (id, name) {
-        (_, Some(name)) => error::name(name)?,
-        (Some(id), None) => {
+    let (id, name) = match drawing {
+        Drawing::New(name) => (None, error::name(name)?),
+        Drawing::Reshape(id) => {
             let area = all.iter().find(|area| area.id == id);
-            area.ok_or(ApiError::NotFound)?.name.clone()
+            (Some(id), area.ok_or(ApiError::NotFound)?.name.clone())
         }
-        (None, None) => return Err(ApiError::Invalid("Enter a name.".to_owned())),
     };
     let others: Vec<(String, _)> = all
         .into_iter()
@@ -76,7 +81,7 @@ pub async fn save(
         let boundary = geometry::to_geojson(&piece);
         let id = match id {
             Some(id) if index == 0 => {
-                if !db::update(&mut tx, id, &name, &boundary).await? {
+                if !db::reshape(&mut tx, id, &boundary).await? {
                     return Err(ApiError::NotFound);
                 }
                 id
@@ -146,8 +151,7 @@ mod tests {
         save(
             &db,
             &admin(),
-            None,
-            Some("Test Road"),
+            Drawing::New("Test Road"),
             &rectangle(0.004, 0.006, 0.0, 0.01),
         )
         .await
@@ -156,8 +160,7 @@ mod tests {
         let saved = save(
             &db,
             &admin(),
-            None,
-            Some("Test Block"),
+            Drawing::New("Test Block"),
             &rectangle(0.0, 0.01, 0.002, 0.008),
         )
         .await

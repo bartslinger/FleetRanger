@@ -1,16 +1,15 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update areas set name = $2, boundary = $3 where id = $1",
+  "query": "update areas set boundary = $2 where id = $1",
   "describe": {
     "columns": [],
     "parameters": {
       "Left": [
         "Uuid",
-        "Text",
         "Jsonb"
       ]
     },
     "nullable": []
   },
-  "hash": "d1b476e7f9603496f3bcbcde1972a2b1fc0a8ff93baf7b114b190cf3b8b75356"
+  "hash": "2a141461704503df8d0d3760c32c75726ce4ed4443a16df0ec70e6aecfdca6c6"
 }
