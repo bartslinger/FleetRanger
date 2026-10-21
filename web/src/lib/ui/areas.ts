@@ -115,34 +115,48 @@ function names(areas: Area[]): FeatureCollection {
 }
 
 /** Adds the areas to the map's style: fills, outlines and names. The fill
- * layer is `area-fill`, e.g. for clicks. */
-export function addAreaLayers(map: MapboxMap, areas: Area[], selected: string | null = null) {
+ * layer is `area-fill`, e.g. for clicks. A `quiet` colour keeps them in the
+ * background, as on a flight's map where the tracks matter: a neutral dashed
+ * border in that colour, without a fill. */
+export function addAreaLayers(
+	map: MapboxMap,
+	areas: Area[],
+	selected: string | null = null,
+	quiet: string | null = null
+) {
 	map.addSource('areas', { type: 'geojson', data: shapes(areas, selected) });
 	map.addSource('area-names', { type: 'geojson', data: names(areas) });
 	map.addLayer({
 		id: 'area-fill',
 		type: 'fill',
 		source: 'areas',
-		paint: { 'fill-color': FILL, 'fill-opacity': ['case', ['get', 'selected'], 0.35, 0.15] }
-	});
-	map.addLayer({
-		id: 'area-casing',
-		type: 'line',
-		source: 'areas',
-		// Rounded corners: Mapbox's default joins end sharp angles in long spikes.
-		layout: { 'line-join': 'round' },
 		paint: {
-			'line-color': CASING,
-			'line-width': ['case', ['get', 'selected'], 6, 4],
-			'line-opacity': 0.8
+			'fill-color': FILL,
+			'fill-opacity': quiet ? 0 : ['case', ['get', 'selected'], 0.35, 0.15]
 		}
 	});
+	if (!quiet) {
+		map.addLayer({
+			id: 'area-casing',
+			type: 'line',
+			source: 'areas',
+			// Rounded corners: Mapbox's default joins end sharp angles in long spikes.
+			layout: { 'line-join': 'round' },
+			paint: {
+				'line-color': CASING,
+				'line-width': ['case', ['get', 'selected'], 6, 4],
+				'line-opacity': 0.8
+			}
+		});
+	}
 	map.addLayer({
 		id: 'area-outline',
 		type: 'line',
 		source: 'areas',
 		layout: { 'line-join': 'round' },
-		paint: { 'line-color': OUTLINE, 'line-width': ['case', ['get', 'selected'], 4, 2] }
+		paint: quiet
+			? { 'line-color': quiet, 'line-width': 1.5, 'line-dasharray': [3, 2] }
+			: { 'line-color': OUTLINE, 'line-width': ['case', ['get', 'selected'], 4, 2] }
 	});
 	map.addLayer({
 		id: 'area-name',
@@ -151,9 +165,14 @@ export function addAreaLayers(map: MapboxMap, areas: Area[], selected: string | 
 		layout: {
 			'text-field': ['get', 'name'],
 			'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
-			'text-size': 14
+			'text-size': quiet ? 12 : 14
 		},
-		paint: { 'text-color': '#ffffff', 'text-halo-color': HALO, 'text-halo-width': 1.5 }
+		paint: {
+			'text-color': '#ffffff',
+			'text-halo-color': HALO,
+			'text-halo-width': quiet ? 1 : 1.5,
+			'text-opacity': quiet ? 0.8 : 1
+		}
 	});
 }
 
