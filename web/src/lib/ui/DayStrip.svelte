@@ -130,7 +130,7 @@
 </span>
 
 <style>
-	/* An outline, no fill: a hovered or marked tile has the same grey as a
+	/* An outline, no fill: a hovered tile has the same grey as a
 	   filled strip would. */
 	.strip {
 		position: relative;
@@ -140,7 +140,7 @@
 	}
 
 	/* A tint over whatever the tile's background is, so night stays a step
-	   apart on a hovered or marked tile too. Carbon has no token for it. */
+	   apart on a hovered tile too. Carbon has no token for it. */
 	.night {
 		position: absolute;
 		top: 0;

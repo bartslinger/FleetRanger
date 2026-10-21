@@ -18,7 +18,9 @@
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import type { ExpressionSpecification, Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
 	import { addAreaLayers, bounds, setAreas, type Area } from './areas.js';
+	import { Tooltip } from 'bits-ui';
 	import InlineNotification from './InlineNotification.svelte';
+	import TooltipContent from './TooltipContent.svelte';
 	import Loading from './Loading.svelte';
 
 	interface Props {
@@ -38,6 +40,10 @@
 		ends?: boolean;
 		/** A track was clicked, by index. */
 		ontrackclick?: (index: number) => void;
+		/** The track under the pointer, by index; null when it leaves. */
+		ontrackhover?: (index: number | null) => void;
+		/** A tooltip for the track under the pointer, e.g. which session. */
+		tracktip?: (index: number) => string;
 		/** A CSS height, e.g. to fill the window beside a list; at least 20rem. */
 		height?: string;
 		/** Keep the legend's row also while it has nothing to say, so one
@@ -58,10 +64,15 @@
 		areas = [],
 		ends: showEnds = true,
 		ontrackclick,
+		ontrackhover,
+		tracktip,
 		height,
 		reserveLegend = false,
 		fly = false
 	}: Props = $props();
+
+	let pointedTrack: { index: number; x: number; y: number } | null = $state(null);
+	let tipAnchor: HTMLElement | undefined = $state();
 
 	type View = 'satellite' | 'map';
 	let view: View = $state('satellite');
@@ -170,6 +181,15 @@
 			filter: highlightFilter(highlight),
 			layout: { 'line-join': 'round', 'line-cap': 'round' },
 			paint: { 'line-color': TRACK, 'line-width': 5 }
+		});
+		// What the pointer finds a track by: 16px wide, unseen, as the line
+		// itself is a thin target.
+		map.addLayer({
+			id: 'track-hit',
+			type: 'line',
+			source: 'tracks',
+			layout: { 'line-join': 'round', 'line-cap': 'round' },
+			paint: { 'line-color': TRACK, 'line-width': 16, 'line-opacity': 0 }
 		});
 		// A landing: an X drawn as the lines are (an image, as Mapbox draws
 		// none), under the takeoffs where a flight lands and the next takes off.
@@ -337,16 +357,30 @@
 			resizes = new ResizeObserver(() => instance.resize());
 			resizes.observe(element);
 			// A track clicked, where the page wants it.
-			instance.on('click', 'track', (event) => {
+			instance.on('click', 'track-hit', (event) => {
 				// mapbox-gl's feature type leaves out the GeoJSON properties.
 				const feature = event.features?.[0] as { properties?: { index?: number } } | undefined;
 				const index = feature?.properties?.index;
 				if (index !== undefined) ontrackclick?.(index);
 			});
-			instance.on('mouseenter', 'track', () => {
+			instance.on('mouseenter', 'track-hit', () => {
 				if (ontrackclick) instance.getCanvas().style.cursor = 'pointer';
 			});
-			instance.on('mouseleave', 'track', () => (instance.getCanvas().style.cursor = ''));
+			// The track under the pointer, its tooltip following the pointer, as
+			// Carbon's charts' do.
+			instance.on('mousemove', 'track-hit', (event) => {
+				const feature = event.features?.[0] as { properties?: { index?: number } } | undefined;
+				const index = feature?.properties?.index;
+				if (index === undefined) return;
+				const another = index !== pointedTrack?.index;
+				pointedTrack = { index, x: event.point.x, y: event.point.y };
+				if (another) ontrackhover?.(index);
+			});
+			instance.on('mouseleave', 'track-hit', () => {
+				instance.getCanvas().style.cursor = '';
+				pointedTrack = null;
+				ontrackhover?.(null);
+			});
 			map = instance;
 		});
 		return () => {
@@ -412,6 +446,23 @@
 			aria-label={label}
 			aria-busy={loading}
 		></div>
+		<!-- For the mouse only, and nothing only it says: e.g. the list beside
+		     the map has the same. Carbon's default tooltip, above the point. -->
+		{#if tracktip}
+			<Tooltip.Root open={pointedTrack !== null}>
+				<span
+					class="tip-anchor"
+					style:left="{pointedTrack?.x ?? 0}px"
+					style:top="{pointedTrack?.y ?? 0}px"
+					bind:this={tipAnchor}
+				></span>
+				{#if pointedTrack}
+					<TooltipContent side="top" anchor={tipAnchor} follow
+						>{tracktip(pointedTrack.index)}</TooltipContent
+					>
+				{/if}
+			</Tooltip.Root>
+		{/if}
 		{#if loading}
 			<p class="loading" role="status"><Loading /> Loading tracks…</p>
 		{/if}
@@ -454,6 +505,13 @@
 	.track-map {
 		position: relative;
 		margin: 0;
+	}
+
+	.tip-anchor {
+		position: absolute;
+		width: 0;
+		height: 0;
+		pointer-events: none;
 	}
 
 	.map {
