@@ -593,6 +593,7 @@
 							{highlight}
 							{focus}
 							ends={full !== null}
+							reserveLegend
 							height={MAP_HEIGHT}
 							ontrackclick={opened ? undefined : mark}
 							token={data.mapboxToken}
