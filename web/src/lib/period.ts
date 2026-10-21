@@ -17,8 +17,13 @@ const text = (date: Date) => date.toISOString().slice(0, 10);
 
 /** Today in a time zone. */
 export function today(timeZone: string): string {
+	return dayOf(new Date().toISOString(), timeZone);
+}
+
+/** The day of an instant in a time zone, e.g. "2026-10-21". */
+export function dayOf(iso: string, timeZone: string): string {
 	// en-CA writes dates as 2026-10-21.
-	return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
+	return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date(iso));
 }
 
 /** The period of a unit that a day is in. */

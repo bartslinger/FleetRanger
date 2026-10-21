@@ -6,6 +6,8 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import { slide } from 'svelte/transition';
 	import { trail } from '#lib/trail.svelte.js';
 	import Breadcrumb, { type Crumb } from './Breadcrumb.svelte';
 	import Column from './Column.svelte';
@@ -57,7 +59,17 @@
 		<Column>
 			<div class="content">
 				<div class="text">
-					{#if crumbs}<div class="breadcrumb"><Breadcrumb items={crumbs} /></div>{/if}
+					<!-- Appearing on a page already shown (a session opened over the
+					     Sessions cards), it slides open rather than pushing the page
+					     down at once: Carbon's moderate-01, about its standard curve
+					     (user's choice, 2026-10-21, over keeping its row free). -->
+					{#if crumbs}<div
+							class="breadcrumb"
+							transition:slide={{ duration: 150, easing: cubicOut }}
+						>
+							<Breadcrumb items={crumbs} />
+						</div>
+					{/if}
 					<div class="title">
 						<h1>{title}</h1>
 						{#if status}<Tag>{status}</Tag>{/if}

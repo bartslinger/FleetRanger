@@ -7,6 +7,7 @@ import {
 	type FlightChoices,
 	type SessionPage
 } from '#lib/server/backend.js';
+import { parsePilot } from '#lib/pilots.js';
 import { listFilters, parse, PERIOD_SIZE, query } from './list.js';
 
 export async function load({ fetch, url }) {
@@ -43,5 +44,31 @@ export const actions = {
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions/merge', body);
 		if (!result.ok) return fail(result.status, { mergeMessage: result.message });
 		return { merged: result.data.id };
+	},
+	// The open session's flights, as on its page before.
+	/** Sets the pilot of these flights, as the logbook's batch action does. */
+	setPilot: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const pilot = parsePilot(String(form.get('pilot') ?? ''));
+		const body = { flight_ids: form.getAll('flight_id').map(String), ...pilot };
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
+		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
+		return { pilotId: pilot.pilot_id, changed: result.data.changed };
+	},
+	split: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const body = { flight_ids: form.getAll('flight_id').map(String) };
+		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions/split', body);
+		if (!result.ok) return fail(result.status, { splitMessage: result.message });
+		return { split: result.data.id };
+	},
+	remove: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const body = { flight_ids: form.getAll('flight_id').map(String) };
+		const result = await send<{ removed: number }>(fetch, 'POST', '/api/sessions/remove', body);
+		if (!result.ok) return fail(result.status, { removeMessage: result.message });
+		// All its flights gone, the session is too: back to the list.
+		if (form.get('all') === 'true') redirect(303, '/sessions');
+		return { removed: result.data.removed };
 	}
 };

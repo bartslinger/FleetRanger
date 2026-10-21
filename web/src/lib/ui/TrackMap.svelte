@@ -40,6 +40,13 @@
 		ontrackclick?: (index: number) => void;
 		/** A CSS height, e.g. to fill the window beside a list; at least 20rem. */
 		height?: string;
+		/** Keep the legend's row also while it has nothing to say, so one
+		 * appearing later (e.g. a session's takeoffs and landings) moves
+		 * nothing under the map. */
+		reserveLegend?: boolean;
+		/** Other tracks are flown to, not jumped to: e.g. from a month's
+		 * sessions to one of them, and from one session to the next. */
+		fly?: boolean;
 	}
 
 	let {
@@ -51,7 +58,9 @@
 		areas = [],
 		ends: showEnds = true,
 		ontrackclick,
-		height
+		height,
+		reserveLegend = false,
+		fly = false
 	}: Props = $props();
 
 	type View = 'satellite' | 'map';
@@ -179,6 +188,8 @@
 	}
 
 	const FIT = { padding: 48, maxZoom: 17 };
+	/** A flight to other tracks: within carbon-expert's 600–800ms. */
+	const FLY_MS = 700;
 
 	/** The tracks' extent; null without positions. */
 	const extentOf = (tracks: Track[]) => bounds(tracks.flatMap((track) => track.coordinates));
@@ -188,13 +199,18 @@
 	function draw(map: MapboxMap, tracks: Track[]) {
 		(map.getSource('tracks') as GeoJSONSource | undefined)?.setData(lines(tracks));
 		(map.getSource('ends') as GeoJSONSource | undefined)?.setData(ends(tracks));
-		fit(map, tracks, false);
+		// The first view at once; later ones flown to, where asked.
+		fit(map, tracks, fly && placed);
 	}
 
 	function fit(map: MapboxMap, tracks: Track[], animate: boolean) {
 		const extent = extentOf(tracks);
-		if (!extent) return;
-		map.fitBounds(extent, { ...FIT, animate });
+		if (!extent) {
+			// No tracks (e.g. a period without sessions): shown as it is.
+			if (!placed) map.once('idle', () => (placed = true));
+			return;
+		}
+		map.fitBounds(extent, { ...FIT, animate, duration: animate ? FLY_MS : 0 });
 		// Shown once the new view is drawn: until its tiles are in, Mapbox
 		// draws the ones it has, from the starting view (the whole world).
 		if (!placed) map.once('idle', () => (placed = true));
@@ -204,19 +220,25 @@
 	// (the starting view, or the style's) first.
 	let placed = $state(false);
 
+	// Only a new token makes a new map: read through the caller's data (e.g.
+	// a page's `data.mapboxToken`), the prop changes with every navigation,
+	// which made a new map each time, so it never flew (user's feedback).
+	const mapToken = $derived(token);
+
 	// Creates the map in the browser; mapbox-gl can't run on the server.
 	$effect(() => {
-		if (!token || !container) return;
+		if (!mapToken || !container) return;
 		const element = container;
 		let cancelled = false;
 		let created: MapboxMap | undefined;
+		let resizes: ResizeObserver | undefined;
 		import('mapbox-gl').then(({ default: mapboxgl }) => {
 			if (cancelled) return;
 			// With tracks known, the very first frame already shows them.
 			const initial = extentOf(tracks);
 			created = new mapboxgl.Map({
 				container: element,
-				accessToken: token,
+				accessToken: mapToken,
 				style: styleUrl(view),
 				attributionControl: false,
 				cooperativeGestures: matchMedia('(pointer: coarse)').matches,
@@ -243,6 +265,10 @@
 			});
 			// Tracks that arrived while the style was loading weren't drawn yet.
 			instance.once('load', () => draw(instance, tracks));
+			// Mapbox follows only the window's size; this follows the container,
+			// e.g. while a layout around it animates.
+			resizes = new ResizeObserver(() => instance.resize());
+			resizes.observe(element);
 			// A track clicked, where the page wants it.
 			instance.on('click', 'track', (event) => {
 				// mapbox-gl's feature type leaves out the GeoJSON properties.
@@ -258,6 +284,7 @@
 		});
 		return () => {
 			cancelled = true;
+			resizes?.disconnect();
 			created?.remove();
 			map = undefined;
 		};
@@ -329,8 +356,8 @@
 				>
 			{/each}
 		</div>
-		{#if showEnds || areas.length > 0}
-			<figcaption class="legend">
+		{#if showEnds || areas.length > 0 || reserveLegend}
+			<figcaption class="legend" class:reserved={reserveLegend}>
 				{#if showEnds}
 					<span><span class="marker takeoff" aria-hidden="true"></span>Takeoff</span>
 					<span><span class="marker landing" aria-hidden="true"></span>Landing</span>
@@ -418,6 +445,11 @@
 		outline: 2px solid var(--cds-focus);
 		outline-offset: -2px;
 		box-shadow: inset 0 0 0 3px var(--cds-focus-inset);
+	}
+
+	/* As high empty as with entries: label-01's 16px line. */
+	.legend.reserved {
+		min-height: var(--cds-spacing-05);
 	}
 
 	.legend {

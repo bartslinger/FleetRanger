@@ -7,10 +7,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{LATE_UPLOAD_HOURS, SessionGap};
-use crate::{
-    flights::db::{Filter, Neighbours},
-    policy::FlightScope,
-};
+use crate::{flights::db::Filter, policy::FlightScope};
 
 // A session is visible when one of its flights is, and only the visible
 // flights count. The visibility condition is the one in the flight queries
@@ -178,9 +175,19 @@ pub async fn count(
     .await
 }
 
+/// The sessions before (newer) and after (older) one in a list, with their
+/// first takeoff, so stepping can go on into another week or month.
+#[derive(Serialize)]
+pub struct Neighbours {
+    pub previous: Option<Uuid>,
+    pub previous_start: Option<DateTime<Utc>>,
+    pub next: Option<Uuid>,
+    pub next_start: Option<DateTime<Utc>>,
+}
+
 /// Where a session is in the scope's list with this filter, newest first as
-/// `list` orders it: the sessions before and after it, its position (from 1)
-/// and the list's length. None if the session isn't in that list.
+/// `list` orders it: the sessions before and after it. None if the session
+/// isn't in that list.
 pub async fn neighbours(
     db: &PgPool,
     scope: &FlightScope,
@@ -218,13 +225,13 @@ pub async fn neighbours(
            placed as (
                select id,
                       lag(id) over listing as previous,
+                      lag(start) over listing as previous_start,
                       lead(id) over listing as next,
-                      row_number() over listing as position,
-                      count(*) over () as total
+                      lead(start) over listing as next_start
                from listed
                window listing as (order by start desc, id)
            )
-           select previous, next, position as "position!", total as "total!"
+           select previous, previous_start, next, next_start
            from placed
            where id = $3"#,
         scope.all,
@@ -722,7 +729,7 @@ mod tests {
             .unwrap();
         assert_eq!(place.previous, Some(evening), "newer first");
         assert_eq!(place.next, Some(morning));
-        assert_eq!((place.position, place.total), (2, 3));
+        assert!(place.previous_start > place.next_start);
         let listed: Vec<Uuid> = list(&db, &everything, &all, None, 10, 0, false)
             .await
             .unwrap()
@@ -746,7 +753,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(place.next, Some(morning), "noon is left out");
-        assert_eq!((place.position, place.total), (1, 2));
+        assert_eq!(place.previous, None);
         assert!(
             neighbours(&db, &everything, &drone_a, noon)
                 .await

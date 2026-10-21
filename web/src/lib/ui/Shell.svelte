@@ -190,27 +190,25 @@
      the light page (carbon-expert's advice, 2026-10-21). None while its
      panel is open. -->
 {#snippet utility(id: string, label: string, icon: Snippet)}
-	<Tooltip.Provider delayDuration={100}>
-		<Tooltip.Root>
-			<Tooltip.Trigger>
-				{#snippet child({ props })}
-					<button
-						{...mergeProps(props, { onclick: () => togglePanel(id), onfocusout })}
-						bind:this={panelButtons[id]}
-						class="action"
-						class:active={panelOpen === id}
-						type="button"
-						aria-label={label}
-						aria-expanded={panelOpen === id}
-						aria-controls="{id}-panel"
-					>
-						{@render icon()}
-					</button>
-				{/snippet}
-			</Tooltip.Trigger>
-			{#if panelOpen !== id}<TooltipContent kind="icon">{label}</TooltipContent>{/if}
-		</Tooltip.Root>
-	</Tooltip.Provider>
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<button
+					{...mergeProps(props, { onclick: () => togglePanel(id), onfocusout })}
+					bind:this={panelButtons[id]}
+					class="action"
+					class:active={panelOpen === id}
+					type="button"
+					aria-label={label}
+					aria-expanded={panelOpen === id}
+					aria-controls="{id}-panel"
+				>
+					{@render icon()}
+				</button>
+			{/snippet}
+		</Tooltip.Trigger>
+		{#if panelOpen !== id}<TooltipContent kind="icon">{label}</TooltipContent>{/if}
+	</Tooltip.Root>
 {/snippet}
 
 {#snippet profileIcon()}<Icon icon={UserAvatar} />{/snippet}
