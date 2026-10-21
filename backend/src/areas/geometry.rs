@@ -61,35 +61,30 @@ fn ring(positions: Vec<Vec<f64>>) -> Option<LineString> {
     Some(ring)
 }
 
-/// GeoJSON for a boundary: a Polygon if it has one part, else a MultiPolygon.
-pub fn to_geojson(boundary: &MultiPolygon) -> Value {
-    let polygon = |polygon: &Polygon| {
-        std::iter::once(polygon.exterior())
-            .chain(polygon.interiors())
-            .map(|ring| ring.coords().map(|c| [c.x, c.y]).collect::<Vec<_>>())
-            .collect::<Vec<_>>()
-    };
-    match &boundary.0[..] {
-        [one] => json!({ "type": "Polygon", "coordinates": polygon(one) }),
-        parts => json!({
-            "type": "MultiPolygon",
-            "coordinates": parts.iter().map(polygon).collect::<Vec<_>>(),
-        }),
-    }
+/// GeoJSON for an area's boundary: a Polygon.
+pub fn to_geojson(polygon: &Polygon) -> Value {
+    let rings: Vec<Vec<[f64; 2]>> = std::iter::once(polygon.exterior())
+        .chain(polygon.interiors())
+        .map(|ring| ring.coords().map(|c| [c.x, c.y]).collect())
+        .collect();
+    json!({ "type": "Polygon", "coordinates": rings })
 }
 
-/// What is left of an area outside the others; None if nothing is. Only
-/// the area itself changes, never the others (user's decision, 2026-10-21).
-pub fn clip(area: &MultiPolygon, others: &[MultiPolygon]) -> Option<MultiPolygon> {
+/// What is left of a drawing outside the other areas, as separate pieces,
+/// largest first; None if nothing is. Only the drawing changes, never the
+/// others (user's decision, 2026-10-21).
+pub fn clip(area: &MultiPolygon, others: &[MultiPolygon]) -> Option<Vec<Polygon>> {
     // Without others, clipping still tidies a ring that crosses itself.
     let others = MultiPolygon::new(others.iter().flat_map(|other| other.0.clone()).collect());
-    let left = area.difference(&others);
-    let parts: Vec<Polygon> = left
+    let mut pieces: Vec<(f64, Polygon)> = area
+        .difference(&others)
         .0
         .into_iter()
-        .filter(|part| part.chamberlain_duquette_unsigned_area() >= SLIVER_M2)
+        .map(|piece| (piece.chamberlain_duquette_unsigned_area(), piece))
+        .filter(|(size, _)| *size >= SLIVER_M2)
         .collect();
-    (!parts.is_empty()).then(|| MultiPolygon::new(parts))
+    pieces.sort_by(|a, b| b.0.total_cmp(&a.0));
+    (!pieces.is_empty()).then(|| pieces.into_iter().map(|(_, piece)| piece).collect())
 }
 
 /// The indexes of the others that an area overlaps, so it would be clipped by them.
@@ -245,7 +240,7 @@ mod tests {
         let west = square(0.0, 0.0, 0.01);
         // Drawn generously over the border with `west`.
         let east = square(0.008, 0.0, 0.01);
-        let clipped = clip(&east, std::slice::from_ref(&west)).unwrap();
+        let clipped = MultiPolygon::new(clip(&east, std::slice::from_ref(&west)).unwrap());
         assert!((area_m2(&clipped) - area_m2(&rectangle(0.01, 0.0, 0.008, 0.01))).abs() < 1.0);
         assert!(
             clipped
@@ -260,8 +255,8 @@ mod tests {
     fn clipping_leaves_a_hole_or_nothing() {
         let inner = square(0.004, 0.004, 0.002);
         let around = clip(&square(0.0, 0.0, 0.01), std::slice::from_ref(&inner)).unwrap();
-        assert_eq!(around.0.len(), 1);
-        assert_eq!(around.0[0].interiors().len(), 1);
+        assert_eq!(around.len(), 1);
+        assert_eq!(around[0].interiors().len(), 1);
         // An area entirely inside another one has nothing left.
         assert_eq!(clip(&inner, &[square(0.0, 0.0, 0.01)]), None);
     }

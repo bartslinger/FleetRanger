@@ -1,6 +1,6 @@
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::PgConnection;
+use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
 use super::geometry::{self, Shape};
@@ -66,6 +66,14 @@ pub async fn update(
     )
     .execute(tx)
     .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+/// False if there is no such area.
+pub async fn rename(db: &PgPool, id: Uuid, name: &str) -> sqlx::Result<bool> {
+    let result = sqlx::query!("update areas set name = $2 where id = $1", id, name)
+        .execute(db)
+        .await?;
     Ok(result.rows_affected() == 1)
 }
 

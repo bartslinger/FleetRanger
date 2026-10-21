@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update areas set name = $2 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8f1250e1b7938f8cc360cb0712b7ea50bbddb8cc37e668dda97033a5f530136d"
+}
