@@ -17,6 +17,7 @@
 <script lang="ts">
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
+	import { untrack } from 'svelte';
 	import { addAreaLayers, bounds, setAreas, type Area } from './areas.js';
 	import InlineNotification from './InlineNotification.svelte';
 	import Loading from './Loading.svelte';
@@ -40,6 +41,9 @@
 		ontrackclick?: (index: number) => void;
 		/** A CSS height, e.g. to fill the window beside a list; at least 20rem. */
 		height?: string;
+		/** Tracks to zoom to, animated, by index, e.g. the session being
+		 * opened; back to all without. */
+		focus?: number[] | null;
 	}
 
 	let {
@@ -51,7 +55,8 @@
 		areas = [],
 		ends: showEnds = true,
 		ontrackclick,
-		height
+		height,
+		focus = null
 	}: Props = $props();
 
 	type View = 'satellite' | 'map';
@@ -210,6 +215,7 @@
 		const element = container;
 		let cancelled = false;
 		let created: MapboxMap | undefined;
+		let resizes: ResizeObserver | undefined;
 		import('mapbox-gl').then(({ default: mapboxgl }) => {
 			if (cancelled) return;
 			// With tracks known, the very first frame already shows them.
@@ -243,6 +249,10 @@
 			});
 			// Tracks that arrived while the style was loading weren't drawn yet.
 			instance.once('load', () => draw(instance, tracks));
+			// Mapbox follows only the window's size; this follows the container,
+			// e.g. while a layout around it animates.
+			resizes = new ResizeObserver(() => instance.resize());
+			resizes.observe(element);
 			// A track clicked, where the page wants it.
 			instance.on('click', 'track', (event) => {
 				// mapbox-gl's feature type leaves out the GeoJSON properties.
@@ -258,6 +268,7 @@
 		});
 		return () => {
 			cancelled = true;
+			resizes?.disconnect();
 			created?.remove();
 			map = undefined;
 		};
@@ -276,6 +287,24 @@
 	$effect(() => {
 		const current = areas;
 		if (map?.getSource('areas')) setAreas(map, current);
+	});
+
+	// Tracks to zoom to: an animated fit to them, or back to all. Carbon's
+	// duration-slow-01, as the layout around the map may move with it.
+	let focused = false;
+	$effect(() => {
+		const indexes = focus;
+		if (!map?.getSource('tracks')) return;
+		const all = untrack(() => tracks);
+		if (indexes?.length) {
+			const extent = extentOf(indexes.map((index) => all[index]).filter(Boolean));
+			if (extent) map.fitBounds(extent, { ...FIT, duration: 400 });
+			focused = true;
+		} else if (focused) {
+			const extent = extentOf(all);
+			if (extent) map.fitBounds(extent, { ...FIT, duration: 400 });
+			focused = false;
+		}
 	});
 
 	// Another track pointed at: only the filter changes, not the view.

@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { goto } from '$app/navigation';
+	import { goto, preloadData, pushState } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import SessionFacts from '#lib/SessionFacts.svelte';
+	import type { PageData as SessionData } from './[id]/$types';
 	import ListFilters, {
 		NO_FILTERS,
 		filterNames,
@@ -136,10 +139,41 @@
 	);
 	let pointed: string | null = $state(null);
 	let marked: string | null = $state(null);
-	const highlight = $derived.by(() => {
-		const session = pointed ?? marked;
-		return flights.flatMap((flight, index) => (flight.session === session ? [index] : []));
-	});
+	const indexesOf = (session: string | null) =>
+		flights.flatMap((flight, index) => (flight.session === session ? [index] : []));
+
+	// From lg a card opens its session over the list, at the session's URL
+	// but without loading its page (SvelteKit's shallow routing): the one map
+	// stays and moves to the left while it zooms to the session, the cards
+	// go, the facts come in on the right and the flights under it. The full
+	// data loads meanwhile and fills in. Back closes it; the URL opened
+	// directly is the session's own page. Not below lg, or with a modifier
+	// key (a new tab).
+	const opened = $derived(page.state.session ?? null);
+	let loaded = $state<{ id: string; data: SessionData } | null>(null);
+	const openedData = $derived(loaded && loaded.id === opened ? loaded.data : null);
+	const openedRow = $derived(data.sessions.find((session) => session.id === opened));
+	function open(event: MouseEvent, id: string, url: string) {
+		if (!wide.current || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) {
+			return;
+		}
+		event.preventDefault();
+		pointed = null;
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller
+		pushState(url, { session: id });
+		preloadData(url).then((result) => {
+			if (result.type === 'loaded' && result.status === 200) {
+				loaded = { id, data: result.data as SessionData };
+			}
+		});
+	}
+
+	// The map: the open session's full tracks once loaded, else the cards'.
+	const mapTracks = $derived(
+		openedData ? openedData.session.flights.map((flight) => flight.track) : tracks
+	);
+	const focus = $derived(opened && !openedData ? indexesOf(opened) : null);
+	const highlight = $derived(opened ? [] : indexesOf(pointed ?? marked));
 	// Another period or other filters: nothing stays marked.
 	let markedFor = untrack(() => data.sessions);
 	$effect(() => {
@@ -169,9 +203,37 @@
 	const cardsFiltering = $derived(listFiltering({ ...data.state, from: null }));
 
 	const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+	type Flight = SessionData['session']['flights'][number];
+	// The open session's flights, as on its page, fewer columns.
+	const flightColumns: TableColumn<Flight>[] = $derived([
+		{
+			key: 'takeoff_at',
+			header: 'Time',
+			format: (flight) =>
+				`${clock(flight.takeoff_at, data.timeZone)}–${clock(flight.landed_at, data.timeZone)}`
+		},
+		{
+			key: 'air_time_s',
+			header: 'Air time',
+			numeric: true,
+			format: (flight) => duration(flight.air_time_s)
+		},
+		{
+			key: 'distance_m',
+			header: 'Distance',
+			numeric: true,
+			format: (flight) => distance(flight.distance_m)
+		},
+		{ key: 'pilot_name', header: 'Pilot' },
+		{ key: 'aircraft_serial', header: 'Drone serial', identifier: true }
+	]);
 </script>
 
-<PageHeader title="Sessions" {crumb}>
+<PageHeader
+	title={openedRow ? `Session ${day(openedRow.first_takeoff_at, data.timeZone, true)}` : 'Sessions'}
+	{crumb}
+>
 	{#snippet actions()}
 		<ViewSwitcher
 			label="View"
@@ -193,7 +255,16 @@
 
 <Grid>
 	<Column narrow>
-		{#if data.state.view === 'cards'}
+		{#if opened && openedRow}
+			<!-- In place of the controls, the same height, so the map stays put. -->
+			<div class="opened-bar">
+				<Button kind="ghost" size="md" onclick={() => history.back()}>All sessions</Button>
+				<p>
+					{daySpan(openedRow.first_takeoff_at, openedRow.last_landed_at, data.timeZone)} ·
+					{plural(openedRow.flights, 'flight')} · {duration(openedRow.air_time_s)} in the air
+				</p>
+			</div>
+		{:else if data.state.view === 'cards'}
 			<ListFilters
 				filters={data.state}
 				none={{ ...data.state, ...NO_FILTERS }}
@@ -266,8 +337,8 @@
 					This {data.state.period.unit} has {data.total} sessions; the table shows them all.
 				</InlineNotification>
 			{/if}
-			<div class="cards-view">
-				<div class="cards">
+			<div class="cards-view" class:opened={opened && wide.current}>
+				<div class="cards" inert={opened !== null}>
 					{#each months as group (group.name)}
 						<section>
 							<!-- Only where the period has two months: else the period's name says it. -->
@@ -277,6 +348,8 @@
 									<li bind:this={cardElements[session.id]}>
 										<ClickableTile
 											href={resolve('/sessions/[id]', { id: session.id })}
+											onclick={(event) =>
+												open(event, session.id, resolve('/sessions/[id]', { id: session.id }))}
 											marked={wide.current && marked === session.id}
 											onpointerenter={() => (pointed = session.id)}
 											onpointerleave={() => (pointed = null)}
@@ -307,17 +380,37 @@
 					<div class="map-side">
 						<!-- The tracks aren't focusable: the cards are the same sessions. -->
 						<TrackMap
-							{tracks}
+							tracks={mapTracks}
 							{highlight}
-							ends={false}
+							{focus}
+							ends={openedData !== null}
 							height={MAP_HEIGHT}
-							ontrackclick={mark}
+							ontrackclick={opened ? undefined : mark}
 							token={data.mapboxToken}
-							label={`Map of the sessions in ${periodName(data.state.period)}; the list beside it has the same sessions`}
+							label={openedRow
+								? 'Map of the session’s tracks'
+								: `Map of the sessions in ${periodName(data.state.period)}; the list beside it has the same sessions`}
 						/>
+					</div>
+					<div class="facts-side">
+						{#if openedData}
+							<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
+						{/if}
 					</div>
 				{/if}
 			</div>
+			{#if opened && openedData}
+				<div class="opened-flights">
+					<DataTable
+						label="Flights of the session"
+						columns={flightColumns}
+						rows={openedData.session.flights}
+						rowKey={(flight) => flight.id}
+						rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+						summary={plural(openedData.session.flights.length, 'flight')}
+					/>
+				</div>
+			{/if}
 		{:else}
 			<DataTable
 				label="Sessions"
@@ -432,18 +525,32 @@
 		gap: var(--cds-spacing-07);
 	}
 
-	/* On the page's 16 columns: narrow columns, so 16px apart. */
+	/* From lg three columns, in sixteenths of the page: the cards, the map
+	   and the open session's facts. Listing: 6 | 10 | 0 up to xlg (so a
+	   card's last line fits beside its arrow), 5 | 11 | 0 from xlg; a
+	   session open: 0 | 11 | 5, as on its own page. The widths animate, so
+	   the one map moves and grows in place: Carbon's productive standard
+	   curve, duration-slow-01. 16px between them, as padding, so a closed
+	   column takes nothing. */
 	@media (min-width: 66rem) {
 		.cards-view {
-			grid-template-columns: repeat(16, minmax(0, 1fr));
-			column-gap: var(--cds-spacing-05);
+			grid-template-columns: 6fr 10fr 0fr;
+			gap: 0;
 			align-items: start;
+			transition: grid-template-columns 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
 		}
 
-		/* 6 columns up to xlg, so a card's last line fits beside its arrow;
-		   5 from xlg (carbon-expert's suggestion). */
+		.cards,
+		.facts-side {
+			min-width: 0;
+			overflow: hidden;
+		}
+
 		.cards {
-			grid-column: span 6;
+			padding-inline-end: var(--cds-spacing-05);
+			transition:
+				opacity 240ms cubic-bezier(0.2, 0, 1, 0.9),
+				padding 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
 		}
 
 		/* Level with the first card, 16px below the header while the cards
@@ -451,17 +558,64 @@
 		.map-side {
 			position: sticky;
 			top: calc(3rem + var(--cds-spacing-05));
-			grid-column: span 10;
+		}
+
+		.facts-side {
+			opacity: 0;
+		}
+
+		.opened {
+			grid-template-columns: 0fr 11fr 5fr;
+		}
+
+		/* The cards fade at once (exit curve, 240ms) as their column closes. */
+		.opened .cards {
+			padding-inline-end: 0;
+			opacity: 0;
+		}
+
+		/* The facts come in once the map is in place (entrance curve). */
+		.opened .facts-side {
+			padding-inline-start: var(--cds-spacing-05);
+			opacity: 1;
+			transition: opacity 240ms cubic-bezier(0, 0, 0.38, 0.9) 300ms;
 		}
 	}
 
 	@media (min-width: 82rem) {
-		.cards {
-			grid-column: span 5;
+		.cards-view:not(.opened) {
+			grid-template-columns: 5fr 11fr 0fr;
 		}
+	}
 
-		.map-side {
-			grid-column: span 11;
+	/* In place of the controls row, as high, with the session's times. */
+	.opened-bar {
+		display: flex;
+		gap: var(--cds-spacing-03);
+		align-items: center;
+		min-height: var(--cds-size-medium);
+		margin: 0 0 var(--cds-spacing-05) calc(-1 * var(--cds-spacing-05));
+		padding-inline-start: var(--cds-spacing-05);
+	}
+
+	.opened-bar p {
+		margin: 0;
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+	}
+
+	/* The flights under the map and facts, coming in after the facts. */
+	.opened-flights {
+		margin-top: var(--cds-spacing-07);
+		animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 360ms both flights-in;
+	}
+
+	@keyframes flights-in {
+		from {
+			opacity: 0;
+			transform: translateY(2rem);
 		}
 	}
 </style>

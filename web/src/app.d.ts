@@ -12,6 +12,9 @@ declare global {
 		interface PageState {
 			/** The Equipment page's tab, switched without loading the page. */
 			equipmentTab?: import('#lib/equipment.js').Kind;
+			/** The session open over the Sessions cards, at its own URL without
+			 * loading its page. */
+			session?: string;
 		}
 		// interface Platform {}
 	}
