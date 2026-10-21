@@ -21,6 +21,8 @@ export interface LogbookState {
 	controllers: string[];
 	/** Only the flights of these team ids, "none" for those without a team; all if empty. */
 	teams: string[];
+	/** Only the flights with time in any of these areas' ids; all if empty. */
+	areas: string[];
 	/** Only the flights in no session, the ones still to be grouped. */
 	withoutSession: boolean;
 	/** With `withoutSession`: those flights as suggested sessions, not a list. */
@@ -52,6 +54,7 @@ export function parse(params: URLSearchParams): LogbookState {
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
 		teams: list(params.get('team')),
+		areas: list(params.get('area')),
 		withoutSession: !archived && params.get('session') === 'none',
 		suggestions:
 			!archived && params.get('session') === 'none' && params.get('view') === 'suggestions',
@@ -70,6 +73,7 @@ export function query(state: LogbookState): string {
 	if (state.drones.length > 0) params.set('drone', state.drones.join(','));
 	if (state.controllers.length > 0) params.set('controller', state.controllers.join(','));
 	if (state.teams.length > 0) params.set('team', state.teams.join(','));
+	if (state.areas.length > 0) params.set('area', state.areas.join(','));
 	if (state.withoutSession) params.set('session', 'none');
 	if (state.withoutSession && state.suggestions) params.set('view', 'suggestions');
 	if (state.archived) params.set('status', 'archived');
@@ -95,6 +99,7 @@ export function apiQuery(state: LogbookState, timeZone: string): URLSearchParams
 	if (state.drones.length > 0) api.set('aircraft', state.drones.join(','));
 	if (state.controllers.length > 0) api.set('controller', state.controllers.join(','));
 	if (state.teams.length > 0) api.set('team', state.teams.join(','));
+	if (state.areas.length > 0) api.set('area', state.areas.join(','));
 	if (state.withoutSession) api.set('session', 'none');
 	// A flight's neighbours are then those of its suggestion.
 	if (state.withoutSession && state.suggestions) api.set('view', 'suggestions');
@@ -116,6 +121,7 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 		drones: filters.drone ? [filters.drone] : [],
 		controllers: filters.controller ? [filters.controller] : [],
 		teams: [],
+		areas: [],
 		withoutSession: false,
 		suggestions: false,
 		archived: false,

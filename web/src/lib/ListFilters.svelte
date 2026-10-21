@@ -1,7 +1,8 @@
 <!--
 	@component
 	The filters above the Flights and Sessions lists: takeoff days, pilots,
-	drones, controllers and, for admins, teams. A list adds its own after them.
+	drones, controllers, for admins teams, and areas once there are any. A list
+	adds its own after them.
 -->
 <script lang="ts" module>
 	import { dayMonth } from '#lib/format.js';
@@ -16,6 +17,8 @@
 		controllers: string[];
 		/** Team ids, "none" for no team (the queue); all if empty. */
 		teams: string[];
+		/** Area ids: flights with time in any of them; all if empty. */
+		areas: string[];
 		/** A day ("2026-10-12"), or the first of `to`. */
 		from: string | null;
 		to: string | null;
@@ -26,6 +29,7 @@
 		drones: [],
 		controllers: [],
 		teams: [],
+		areas: [],
 		from: null,
 		to: null
 	};
@@ -35,6 +39,7 @@
 		filters.drones.length > 0 ||
 		filters.controllers.length > 0 ||
 		filters.teams.length > 0 ||
+		filters.areas.length > 0 ||
 		filters.from !== null;
 
 	/**
@@ -59,6 +64,13 @@
 			...(filters.controllers.length > 0 ? [names(devices.controllers, filters.controllers)] : []),
 			...(filters.teams.length > 0
 				? [filters.teams.map((id) => teamName(devices, id)).join(', ')]
+				: []),
+			...(filters.areas.length > 0
+				? [
+						filters.areas
+							.map((id) => devices.areas.find((area) => area.id === id)?.name ?? 'Unknown area')
+							.join(', ')
+					]
 				: [])
 		];
 	}
@@ -126,6 +138,7 @@
 			label: team.name ?? 'No team (queue)'
 		}))
 	);
+	const areaOptions = $derived(devices.areas.map((area) => ({ value: area.id, label: area.name })));
 </script>
 
 <div class="filters">
@@ -164,6 +177,16 @@
 			options={teamOptions}
 			value={filters.teams}
 			onchange={(teams) => onchange({ teams })}
+		/>
+	{/if}
+	<!-- Once the organisation has areas: a flight passes when it has time in any of them. -->
+	{#if areaOptions.length > 0 || filters.areas.length > 0}
+		<MultiSelect
+			label="Areas flown"
+			placeholder="All areas"
+			options={areaOptions}
+			value={filters.areas}
+			onchange={(areas) => onchange({ areas })}
 		/>
 	{/if}
 	{@render children?.()}

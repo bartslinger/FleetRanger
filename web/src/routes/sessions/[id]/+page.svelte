@@ -2,6 +2,8 @@
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { day, distance, duration, timeSpan } from '#lib/format.js';
+	import AreaFigures from '#lib/AreaFigures.svelte';
+	import type { FlightArea } from '#lib/server/backend.js';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -23,6 +25,21 @@
 	type Row = (typeof flights)[number];
 
 	const facts = $derived(summary(flights, data.timeZone));
+
+	// The session's time and distance per area: its flights' added up, most time first.
+	const areas = $derived.by(() => {
+		const totals: FlightArea[] = [];
+		for (const area of flights.flatMap((flight) => flight.areas)) {
+			const total = totals.find((other) => other.id === area.id);
+			if (total) {
+				total.air_time_s += area.air_time_s;
+				total.distance_m += area.distance_m;
+			} else {
+				totals.push({ ...area });
+			}
+		}
+		return totals.sort((a, b) => b.air_time_s - a.air_time_s || a.name.localeCompare(b.name));
+	});
 
 	// Splitting: admins change any session, members those of their own team.
 	let selected: string[] = $state([]);
@@ -112,6 +129,7 @@
 		<TrackMap
 			tracks={flights.map((flight) => flight.track)}
 			highlight={pointed}
+			areas={data.areas}
 			token={data.mapboxToken}
 			label="Map of the session’s tracks"
 		/>
@@ -132,6 +150,17 @@
 			{/snippet}
 		</SessionFacts>
 	</Column>
+	<!-- Where the session was flown, before its flights; once the organisation has areas. -->
+	{#if data.areas.length > 0}
+		<!-- With a gutter, as beside the flight page's facts. -->
+		<Column lg={11}>
+			<AreaFigures
+				{areas}
+				airTime={facts.airTime}
+				distanceM={flights.reduce((total, flight) => total + flight.distance_m, 0)}
+			/>
+		</Column>
+	{/if}
 	<Column narrow>
 		<DataTable
 			label="Flights of the session"

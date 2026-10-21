@@ -1,15 +1,22 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { fail } from '@sveltejs/kit';
 import { parsePilot } from '#lib/pilots.js';
-import { get, send, type FlightChoices, type FlightDetail } from '#lib/server/backend.js';
+import {
+	get,
+	send,
+	type Area,
+	type FlightChoices,
+	type FlightDetail
+} from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
-	const [flight, choices] = await Promise.all([
+	const [flight, choices, areas] = await Promise.all([
 		get<FlightDetail>(fetch, `/api/flights/${params.id}`),
-		get<FlightChoices>(fetch, '/api/flights/choices')
+		get<FlightChoices>(fetch, '/api/flights/choices'),
+		get<Area[]>(fetch, '/api/areas')
 	]);
 	// A public token: the browser needs it to load the map.
-	return { flight, choices, mapboxToken: MAPBOX_ACCESS_TOKEN };
+	return { flight, choices, areas, mapboxToken: MAPBOX_ACCESS_TOKEN };
 }
 
 export const actions = {
