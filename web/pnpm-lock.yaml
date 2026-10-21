@@ -165,6 +165,13 @@ settings:
 importers:
 
   .:
+    dependencies:
+      terra-draw:
+        specifier: 1.38.0
+        version: 1.38.0
+      terra-draw-mapbox-gl-adapter:
+        specifier: 1.5.0
+        version: 1.5.0(mapbox-gl@3.32.0)(terra-draw@1.38.0)
     devDependencies:
       '@carbon/icons':
         specifier: 11.90.0
@@ -1173,6 +1180,15 @@ packages:
   tabbable@6.5.0:
     resolution: {integrity: sha512-wieBHXygIm7OyQOu5hQlkk62/WyCFYGlWg7L6/ZCUZwx0o398Zkn4pVmMyfYhfMG8kGrj/Krt8eIk6UKC6VzwA==}
 
+  terra-draw-mapbox-gl-adapter@1.5.0:
+    resolution: {integrity: sha512-2muROYEfeGJH7s15l3xOz1Z4067KZBJGMHBbhGbQE8gLxtQnu6WqvHCfWGBemZRGuMbUtpQxljhP3Pqv6uUx+g==}
+    peerDependencies:
+      mapbox-gl: ^3.9.2
+      terra-draw: ^1.0.0
+
+  terra-draw@1.38.0:
+    resolution: {integrity: sha512-h7bD5/mIN/t1qNKmPLqwZvsHnwtZpvFWo49PGA3n7CzM28lyc/xcMl85xWNOMBgF0Tq20UT06+KlBJ7g7B24rg==}
+
   tinyglobby@0.2.17:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
@@ -2174,6 +2190,13 @@ snapshots:
       - '@typescript-eslint/types'
 
   tabbable@6.5.0: {}
+
+  terra-draw-mapbox-gl-adapter@1.5.0(mapbox-gl@3.32.0)(terra-draw@1.38.0):
+    dependencies:
+      mapbox-gl: 3.32.0
+      terra-draw: 1.38.0
+
+  terra-draw@1.38.0: {}
 
   tinyglobby@0.2.17:
     dependencies:

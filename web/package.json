@@ -49,5 +49,9 @@
 	"imports": {
 		"#lib": "./src/lib/index.js",
 		"#lib/*": "./src/lib/*"
+	},
+	"dependencies": {
+		"terra-draw": "1.38.0",
+		"terra-draw-mapbox-gl-adapter": "1.5.0"
 	}
 }
