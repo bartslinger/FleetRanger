@@ -536,8 +536,12 @@
 <style>
 	/* Each month under its heading, which stays in view while its cards
 	   scroll; tiles 2px apart, as in Carbon's tile groups. */
+	/* minmax(0, 1fr), here and in the view: as wide as the column, never as
+	   the longest content (the toolbar's name), which scrolled the page
+	   sideways (user's feedback). */
 	.cards {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--cds-spacing-06);
 	}
 
@@ -602,6 +606,7 @@
 	   beside them, in view while the cards scroll. */
 	.cards-view {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--cds-spacing-07);
 	}
 
@@ -612,7 +617,9 @@
 	   (user's choice, 2026-10-21). 16px between, as padding. */
 	@media (min-width: 66rem) {
 		.cards-view {
-			grid-template-columns: 10fr 6fr;
+			/* minmax(0, …): a column never grows past its share for its content
+			   (the map's canvas, a long name), which scrolled the page sideways. */
+			grid-template-columns: minmax(0, 10fr) minmax(0, 6fr);
 			gap: 0;
 			align-items: start;
 		}
@@ -667,7 +674,7 @@
 
 	@media (min-width: 82rem) {
 		.cards-view {
-			grid-template-columns: 11fr 5fr;
+			grid-template-columns: minmax(0, 11fr) minmax(0, 5fr);
 		}
 	}
 
