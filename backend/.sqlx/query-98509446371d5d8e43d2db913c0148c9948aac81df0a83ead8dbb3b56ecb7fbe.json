@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from flight_areas where flight_id = any($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "98509446371d5d8e43d2db913c0148c9948aac81df0a83ead8dbb3b56ecb7fbe"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "lock table areas in share row exclusive mode",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "a22e7fc71cec540755ff24ce093bf5a060f620a73186fdc7ee77f9e3ed1fc715"
+}

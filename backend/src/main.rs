@@ -1,3 +1,4 @@
+mod areas;
 mod auth;
 mod config;
 mod download;
@@ -199,6 +200,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
     let app = Router::new()
         .route("/healthz", get(health::check))
         .merge(mcp)
+        .merge(areas::routes::router())
         .merge(auth::routes::router())
         .merge(download::router())
         .merge(events::router())

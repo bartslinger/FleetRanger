@@ -50,6 +50,8 @@ pub struct Filter {
     pub unknown_pilot: bool,
     /// Only archived flights (true), or else only the others.
     pub archived: bool,
+    /// Only flights with time in one of these areas, if given.
+    pub area_ids: Option<Vec<Uuid>>,
 }
 
 /// Columns the logbook can be sorted by.
@@ -131,6 +133,9 @@ pub async fn list(
            and ($12::uuid[] is null or team_id = any($12) or ($13 and team_id is null))
            and ($14::uuid[] is null or pilot_id = any($14) or ($15 and pilot_id is null))
            and (archived_at is not null) = $16
+           and ($17::uuid[] is null or exists (select 1 from flight_areas fa
+                                               where fa.flight_id = flights.id
+                                                 and fa.area_id = any($17)))
          order by
              case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
              case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -168,6 +173,7 @@ pub async fn list(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.archived,
+        filter.area_ids.as_deref(),
     )
     .fetch_all(db)
     .await
@@ -202,6 +208,10 @@ pub struct FlightDetail {
     #[serde(skip)]
     pub rc_team_id: Option<Uuid>,
     pub archived_at: Option<DateTime<Utc>>,
+    /// The areas the track passes through, with the time (`air_time_s`) and
+    /// distance (`distance_m`) in each, most time first. The rest of the
+    /// flight is outside all areas.
+    pub areas: Value,
 }
 
 /// A flight in the scope, or None if it doesn't exist or isn't in the scope.
@@ -220,7 +230,13 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
                 (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
-                archived_at
+                archived_at,
+                (select coalesce(jsonb_agg(jsonb_build_object(
+                            'id', a.id, 'name', a.name,
+                            'air_time_s', fa.air_time_s, 'distance_m', fa.distance_m)
+                            order by fa.air_time_s desc, lower(a.name), a.id), '[]')
+                 from flight_areas fa join areas a on a.id = fa.area_id
+                 where fa.flight_id = flights.id) as "areas!"
          from flights
          where id = $1
            and ($2
@@ -255,7 +271,13 @@ pub async fn of_session(
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
                 (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
-                archived_at
+                archived_at,
+                (select coalesce(jsonb_agg(jsonb_build_object(
+                            'id', a.id, 'name', a.name,
+                            'air_time_s', fa.air_time_s, 'distance_m', fa.distance_m)
+                            order by fa.air_time_s desc, lower(a.name), a.id), '[]')
+                 from flight_areas fa join areas a on a.id = fa.area_id
+                 where fa.flight_id = flights.id) as "areas!"
          from flights
          where session_id = $1
            and ($2
@@ -290,7 +312,13 @@ pub async fn details(
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
                 (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
-                archived_at
+                archived_at,
+                (select coalesce(jsonb_agg(jsonb_build_object(
+                            'id', a.id, 'name', a.name,
+                            'air_time_s', fa.air_time_s, 'distance_m', fa.distance_m)
+                            order by fa.air_time_s desc, lower(a.name), a.id), '[]')
+                 from flight_areas fa join areas a on a.id = fa.area_id
+                 where fa.flight_id = flights.id) as "areas!"
          from flights
          where id = any($1)
            and ($2
@@ -320,7 +348,10 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
              and ($7::timestamptz is null or takeoff_at < $7)
              and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))
              and ($10::uuid[] is null or pilot_id = any($10) or ($11 and pilot_id is null))
-             and (archived_at is not null) = $12"#,
+             and (archived_at is not null) = $12
+             and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                                 where fa.flight_id = flights.id
+                                                   and fa.area_id = any($13)))"#,
         scope.all,
         scope.user_id,
         filter.aircraft_serials.as_deref(),
@@ -333,6 +364,7 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.archived,
+        filter.area_ids.as_deref(),
     )
     .fetch_one(db)
     .await
@@ -355,6 +387,9 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
              and ($8::uuid[] is null or team_id = any($8) or ($9 and team_id is null))
              and ($10::uuid[] is null or pilot_id = any($10) or ($11 and pilot_id is null))
              and (archived_at is not null) = $12
+             and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                                 where fa.flight_id = flights.id
+                                                   and fa.area_id = any($13)))
            order by takeoff_at, id"#,
         scope.all,
         scope.user_id,
@@ -368,6 +403,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.archived,
+        filter.area_ids.as_deref(),
     )
     .fetch_all(db)
     .await
@@ -413,6 +449,9 @@ pub async fn neighbours(
                  and ($11::uuid[] is null or team_id = any($11) or ($12 and team_id is null))
                  and ($13::uuid[] is null or pilot_id = any($13) or ($14 and pilot_id is null))
                  and (archived_at is not null) = $15
+                 and ($16::uuid[] is null or exists (select 1 from flight_areas fa
+                                                     where fa.flight_id = flights.id
+                                                       and fa.area_id = any($16)))
                window w as (order by
                    case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,
                    case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,
@@ -451,6 +490,7 @@ pub async fn neighbours(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.archived,
+        filter.area_ids.as_deref(),
     )
     .fetch_optional(db)
     .await
@@ -490,7 +530,10 @@ pub async fn aircraft_of(
                            or ($9 and f.team_id is null))
                       and ($10::uuid[] is null or f.pilot_id = any($10)
                            or ($11 and f.pilot_id is null))
-                      and (f.archived_at is not null) = $12))
+                      and (f.archived_at is not null) = $12
+                      and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                                          where fa.flight_id = f.id
+                                                            and fa.area_id = any($13)))))
            group by f.aircraft_serial, a.name
            order by lower(coalesce(a.name, f.aircraft_serial))"#,
         scope.all,
@@ -505,6 +548,7 @@ pub async fn aircraft_of(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.archived,
+        filter.area_ids.as_deref(),
     )
     .fetch_all(db)
     .await
@@ -535,7 +579,10 @@ pub async fn controllers_of(
                            or ($9 and f.team_id is null))
                       and ($10::uuid[] is null or f.pilot_id = any($10)
                            or ($11 and f.pilot_id is null))
-                      and (f.archived_at is not null) = $12))
+                      and (f.archived_at is not null) = $12
+                      and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                                          where fa.flight_id = f.id
+                                                            and fa.area_id = any($13)))))
            group by f.rc_serial, r.name
            order by lower(coalesce(r.name, f.rc_serial))"#,
         scope.all,
@@ -550,6 +597,7 @@ pub async fn controllers_of(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.archived,
+        filter.area_ids.as_deref(),
     )
     .fetch_all(db)
     .await
@@ -587,7 +635,10 @@ pub async fn teams_in(
                       and ($9::timestamptz is null or f.takeoff_at < $9)
                       and ($10::uuid[] is null or f.pilot_id = any($10)
                            or ($11 and f.pilot_id is null))
-                      and (f.archived_at is not null) = $12))
+                      and (f.archived_at is not null) = $12
+                      and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                                          where fa.flight_id = f.id
+                                                            and fa.area_id = any($13)))))
            group by f.team_id, t.name
            order by lower(t.name) nulls last"#,
         scope.all,
@@ -599,6 +650,61 @@ pub async fn teams_in(
         filter.in_session,
         filter.from,
         filter.to,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
+        filter.archived,
+        filter.area_ids.as_deref(),
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// An area to offer in the lists' filter.
+#[derive(Serialize)]
+pub struct AreaOption {
+    pub id: Uuid,
+    pub name: String,
+}
+
+/// The areas to offer in the lists' filter, as `aircraft_of` does for
+/// drones: those with time of flights passing the other filters, and the
+/// chosen ones.
+pub async fn areas_in(
+    db: &PgPool,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Vec<AreaOption>> {
+    sqlx::query_as!(
+        AreaOption,
+        r#"select a.id, a.name
+           from areas a
+           where a.id = any(coalesce($3::uuid[], '{}'))
+              or exists (
+                  select 1 from flight_areas fa join flights f on f.id = fa.flight_id
+                  where fa.area_id = a.id
+                    and ($1
+                         or f.pilot_id = $2
+                         or f.team_id in (select team_id from team_members where user_id = $2))
+                    and ($4::text[] is null or f.aircraft_serial = any($4))
+                    and ($5::text[] is null or f.rc_serial = any($5))
+                    and ($6::bool is null or (f.session_id is not null) = $6)
+                    and ($7::timestamptz is null or f.takeoff_at >= $7)
+                    and ($8::timestamptz is null or f.takeoff_at < $8)
+                    and ($9::uuid[] is null or f.team_id = any($9) or ($10 and f.team_id is null))
+                    and ($11::uuid[] is null or f.pilot_id = any($11)
+                         or ($12 and f.pilot_id is null))
+                    and (f.archived_at is not null) = $13)
+           order by lower(a.name), a.id"#,
+        scope.all,
+        scope.user_id,
+        filter.area_ids.as_deref(),
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.in_session,
+        filter.from,
+        filter.to,
+        filter.team_ids.as_deref(),
+        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.archived,
@@ -639,7 +745,10 @@ pub async fn pilots_in(
                       and ($9::timestamptz is null or f.takeoff_at < $9)
                       and ($10::uuid[] is null or f.team_id = any($10)
                            or ($11 and f.team_id is null))
-                      and (f.archived_at is not null) = $12))
+                      and (f.archived_at is not null) = $12
+                      and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                                          where fa.flight_id = f.id
+                                                            and fa.area_id = any($13)))))
            group by f.pilot_id, u.name
            order by lower(u.name) nulls last"#,
         scope.all,
@@ -654,6 +763,7 @@ pub async fn pilots_in(
         filter.team_ids.as_deref(),
         filter.queue,
         filter.archived,
+        filter.area_ids.as_deref(),
     )
     .fetch_all(db)
     .await

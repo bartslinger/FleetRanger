@@ -181,6 +181,8 @@ struct ListQuery {
     /// Only the flights of these pilots' ids, comma-separated; `none` for the
     /// flights without a pilot.
     pilot: Option<String>,
+    /// Only the flights with time in these areas, ids comma-separated.
+    area: Option<String>,
     /// `suggestions`: a flight's neighbours are those of its suggested
     /// session (with `session=none`).
     view: Option<String>,
@@ -281,6 +283,7 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
             &query.controller,
             &query.team,
             &query.pilot,
+            &query.area,
             query.from,
             query.to,
         )?
@@ -289,12 +292,13 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
 }
 
 /// The filters the flights and sessions lists share, from their query
-/// parameters: drones, controllers, teams, pilots and takeoff times.
+/// parameters: drones, controllers, teams, pilots, areas and takeoff times.
 pub fn filter(
     aircraft: &Option<String>,
     controller: &Option<String>,
     team: &Option<String>,
     pilot: &Option<String>,
+    area: &Option<String>,
     from: Option<DateTime<Utc>>,
     to: Option<DateTime<Utc>>,
 ) -> Result<Filter, String> {
@@ -311,6 +315,7 @@ pub fn filter(
     let (team_ids, queue) = id_list(team).map_err(|()| "team must be team ids or none")?;
     let (pilot_ids, unknown_pilot) =
         id_list(pilot).map_err(|()| "pilot must be user ids or none")?;
+    let (area_ids, _) = id_list(area).map_err(|()| "area must be area ids")?;
     Ok(Filter {
         aircraft_serials: serials(aircraft),
         rc_serials: serials(controller),
@@ -322,6 +327,7 @@ pub fn filter(
         pilot_ids,
         unknown_pilot,
         archived: false,
+        area_ids,
     })
 }
 

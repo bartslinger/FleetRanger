@@ -177,6 +177,8 @@ struct Filters {
     drones: Option<Vec<String>>,
     /// Controller serials from `directory`.
     controllers: Option<Vec<String>>,
+    /// Area ids from `directory`: flights with time in one of them.
+    areas: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -184,7 +186,8 @@ struct TotalsParams {
     #[serde(flatten)]
     filters: Filters,
     /// What to total per: nothing (one row), team, pilot, drone,
-    /// controller, day, week or month.
+    /// controller, day, week, month or area. Per area, each flight counts
+    /// with only its time and distance in that area.
     group_by: Option<GroupBy>,
 }
 
@@ -237,6 +240,62 @@ struct FlightFacts {
     controller_name: Option<String>,
     /// The highest point above takeoff, the battery's and camera's serials.
     metrics: Value,
+    /// Seconds and metres in each area the flight passed through; the rest
+    /// was outside all areas.
+    areas: Vec<AreaFacts>,
+}
+
+/// Time and distance in one area.
+#[derive(Serialize)]
+struct AreaFacts {
+    id: Uuid,
+    name: String,
+    air_time_s: i64,
+    distance_m: f64,
+}
+
+impl AreaFacts {
+    /// From a flight's `areas`; distances in whole metres, as everywhere in these tools.
+    fn of(areas: &Value) -> Vec<Self> {
+        #[derive(Deserialize)]
+        struct Stored {
+            id: Uuid,
+            name: String,
+            air_time_s: i64,
+            distance_m: f64,
+        }
+        Vec::<Stored>::deserialize(areas)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|area| Self {
+                id: area.id,
+                name: area.name,
+                air_time_s: area.air_time_s,
+                distance_m: area.distance_m.round(),
+            })
+            .collect()
+    }
+
+    /// The totals per area of several flights, most time first.
+    fn total(flights: &[FlightFacts]) -> Vec<Self> {
+        let mut totals: Vec<Self> = Vec::new();
+        for area in flights.iter().flat_map(|flight| &flight.areas) {
+            match totals.iter_mut().find(|total| total.id == area.id) {
+                Some(total) => {
+                    total.air_time_s += area.air_time_s;
+                    total.distance_m += area.distance_m;
+                }
+                None => totals.push(Self {
+                    id: area.id,
+                    name: area.name.clone(),
+                    air_time_s: area.air_time_s,
+                    distance_m: area.distance_m,
+                }),
+            }
+        }
+        totals.sort_by(|a, b| b.air_time_s.cmp(&a.air_time_s).then(a.name.cmp(&b.name)));
+        totals
+    }
 }
 
 impl From<FlightDetail> for FlightFacts {
@@ -256,6 +315,7 @@ impl From<FlightDetail> for FlightFacts {
             controller_serial: flight.rc_serial,
             controller_name: flight.rc_name,
             metrics: flight.metrics,
+            areas: AreaFacts::of(&flight.areas),
         }
     }
 }
@@ -295,6 +355,7 @@ impl FleetRanger {
             "pilots": flights::db::pilots_in(&self.db, &scope, &filter).await.map_err(internal)?,
             "drones": flights::db::aircraft_of(&self.db, &scope, &filter).await.map_err(internal)?,
             "controllers": flights::db::controllers_of(&self.db, &scope, &filter).await.map_err(internal)?,
+            "areas": flights::db::areas_in(&self.db, &scope, &filter).await.map_err(internal)?,
         });
         json(directory)
     }
@@ -309,12 +370,11 @@ impl FleetRanger {
     ) -> Result<CallToolResult, McpError> {
         let scope = policy::flight_scope(actor(&parts)?);
         let filter = self.filter(&params.filters).await?;
-        let group_by = params.group_by.unwrap_or(GroupBy::None);
-        json(
-            db::totals(&self.db, &scope, &filter, group_by, &self.time_zone)
-                .await
-                .map_err(internal)?,
-        )
+        let totals = match params.group_by.unwrap_or(GroupBy::None) {
+            GroupBy::Area => db::area_totals(&self.db, &scope, &filter).await,
+            group_by => db::totals(&self.db, &scope, &filter, group_by, &self.time_zone).await,
+        };
+        json(totals.map_err(internal)?)
     }
 
     #[tool(
@@ -339,7 +399,9 @@ impl FleetRanger {
         json(serde_json::json!({ "sessions": sessions, "total": total }))
     }
 
-    #[tool(description = "One session with its flights, in takeoff order.")]
+    #[tool(
+        description = "One session with its flights, in takeoff order, and its time and distance per area."
+    )]
     async fn get_session(
         &self,
         Extension(parts): Extension<Parts>,
@@ -349,7 +411,8 @@ impl FleetRanger {
             .await
             .map_err(api)?;
         let flights: Vec<FlightFacts> = session.flights.into_iter().map(Into::into).collect();
-        json(serde_json::json!({ "id": session.id, "flights": flights }))
+        let areas = AreaFacts::total(&flights);
+        json(serde_json::json!({ "id": session.id, "flights": flights, "areas": areas }))
     }
 
     #[tool(
@@ -385,7 +448,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "One flight's facts: times, air time, distance, highest point above takeoff, pilot, team and the serials of drone, controller, battery and camera."
+        description = "One flight's facts: times, air time, distance, highest point above takeoff, pilot, team, the serials of drone, controller, battery and camera, and its time and distance per area."
     )]
     async fn get_flight(
         &self,
@@ -446,6 +509,7 @@ impl FleetRanger {
         };
         let (team_ids, queue) = ids(filters.teams.as_deref(), "teams")?;
         let (pilot_ids, unknown_pilot) = ids(filters.pilots.as_deref(), "pilots")?;
+        let (area_ids, _) = ids(filters.areas.as_deref(), "areas")?;
         Ok(Filter {
             aircraft_serials: filters.drones.clone(),
             rc_serials: filters.controllers.clone(),
@@ -457,6 +521,7 @@ impl FleetRanger {
             pilot_ids,
             unknown_pilot,
             archived: false,
+            area_ids,
         })
     }
 }

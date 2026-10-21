@@ -17,6 +17,8 @@ cookie = { version = "0.18.2", default-features = false }
 dji-log-parser = { path = "vendor/dji-log-parser" }
 # Builds the server-sent events stream; already in the tree through axum.
 futures-util = { version = "0.3.34", default-features = false }
+# Areas: clipping polygons against each other and finding the track points inside them.
+geo = { version = "0.33.1", default-features = false }
 openidconnect = { version = "4.0.1", default-features = false, features = ["ureq"] }
 # The MCP server for AI assistants (the protocol's official Rust SDK).
 rmcp = { version = "3.6.0", features = ["transport-streamable-http-server"] }

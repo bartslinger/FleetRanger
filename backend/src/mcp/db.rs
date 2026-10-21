@@ -9,11 +9,11 @@ use crate::{flights::db::Filter, policy::FlightScope};
 /// The totals of one group of flights.
 #[derive(Serialize)]
 pub struct Totals {
-    /// What the flights share: a team's or pilot's id, a drone's or
+    /// What the flights share: a team's, pilot's or area's id, a drone's or
     /// controller's serial, a day ("2026-10-12"), week ("2026-W42") or month
     /// ("2026-10"); none without grouping, or for flights without one.
     pub key: Option<String>,
-    /// The team's, pilot's, drone's or controller's name.
+    /// The team's, pilot's, drone's, controller's or area's name.
     pub name: Option<String>,
     pub flights: i64,
     /// Sessions with a flight in the group; one spanning two groups counts in both.
@@ -37,6 +37,7 @@ pub enum GroupBy {
     Day,
     Week,
     Month,
+    Area,
 }
 
 impl GroupBy {
@@ -50,6 +51,7 @@ impl GroupBy {
             Self::Day => "day",
             Self::Week => "week",
             Self::Month => "month",
+            Self::Area => "area",
         }
     }
 }
@@ -106,6 +108,9 @@ pub async fn totals(
                  and ($6::timestamptz is null or f.takeoff_at < $6)
                  and ($7::uuid[] is null or f.team_id = any($7) or ($8 and f.team_id is null))
                  and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))
+                 and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                                     where fa.flight_id = f.id
+                                                       and fa.area_id = any($13)))
            ) grouped
            group by key, name
            order by lower(name) nulls last, key nulls last"#,
@@ -121,6 +126,57 @@ pub async fn totals(
         filter.unknown_pilot,
         group_by.as_str(),
         time_zone,
+        filter.area_ids.as_deref(),
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// The time and distance in each area of the flights in the scope that pass
+/// the filter, by area name: flights count in every area they have time in,
+/// with only their time and distance there. Time outside all areas isn't
+/// listed.
+pub async fn area_totals(
+    db: &PgPool,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Vec<Totals>> {
+    sqlx::query_as!(
+        Totals,
+        r#"select a.id::text as key, a.name as "name?",
+                  count(*) as "flights!",
+                  count(distinct f.session_id) as "sessions!",
+                  sum(fa.air_time_s)::bigint as "air_time_s!",
+                  round(sum(fa.distance_m))::float8 as "distance_m!",
+                  min(f.takeoff_at) as "first_takeoff_at!",
+                  max(f.landed_at) as "last_landed_at!"
+           from flights f
+           join flight_areas fa on fa.flight_id = f.id
+           join areas a on a.id = fa.area_id
+           where f.archived_at is null
+             and ($1
+                  or f.pilot_id = $2
+                  or f.team_id in (select team_id from team_members where user_id = $2))
+             and ($3::text[] is null or f.aircraft_serial = any($3))
+             and ($4::text[] is null or f.rc_serial = any($4))
+             and ($5::timestamptz is null or f.takeoff_at >= $5)
+             and ($6::timestamptz is null or f.takeoff_at < $6)
+             and ($7::uuid[] is null or f.team_id = any($7) or ($8 and f.team_id is null))
+             and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))
+             and ($11::uuid[] is null or a.id = any($11))
+           group by a.id, a.name
+           order by lower(a.name), a.id"#,
+        scope.all,
+        scope.user_id,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.from,
+        filter.to,
+        filter.team_ids.as_deref(),
+        filter.queue,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
+        filter.area_ids.as_deref(),
     )
     .fetch_all(db)
     .await

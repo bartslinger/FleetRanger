@@ -86,7 +86,10 @@ pub async fn list(
                  and ($11::uuid[] is null or g.team_id = any($11)
                       or ($12 and g.team_id is null))
                  and ($13::uuid[] is null or g.pilot_id = any($13)
-                      or ($14 and g.pilot_id is null)))
+                      or ($14 and g.pilot_id is null))
+                 and ($15::uuid[] is null or exists (select 1 from flight_areas fa
+                                                     where fa.flight_id = g.id
+                                                       and fa.area_id = any($15))))
          group by f.session_id
          order by min(f.takeoff_at) desc, f.session_id
          limit $3 offset $4"#,
@@ -104,6 +107,7 @@ pub async fn list(
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.area_ids.as_deref(),
     )
     .fetch_all(db)
     .await
@@ -138,7 +142,10 @@ pub async fn count(
                    and ($9::uuid[] is null or g.team_id = any($9)
                         or ($10 and g.team_id is null))
                    and ($11::uuid[] is null or g.pilot_id = any($11)
-                        or ($12 and g.pilot_id is null)))"#,
+                        or ($12 and g.pilot_id is null))
+                   and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                                       where fa.flight_id = g.id
+                                                         and fa.area_id = any($13))))"#,
         scope.all,
         scope.user_id,
         window.map(|w| w.from),
@@ -151,6 +158,7 @@ pub async fn count(
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.area_ids.as_deref(),
     )
     .fetch_one(db)
     .await
@@ -187,7 +195,10 @@ pub async fn neighbours(
                        and ($8::uuid[] is null or g.team_id = any($8)
                             or ($9 and g.team_id is null))
                        and ($10::uuid[] is null or g.pilot_id = any($10)
-                            or ($11 and g.pilot_id is null)))
+                            or ($11 and g.pilot_id is null))
+                       and ($12::uuid[] is null or exists (select 1 from flight_areas fa
+                                                           where fa.flight_id = g.id
+                                                             and fa.area_id = any($12))))
                group by f.session_id
            ),
            placed as (
@@ -213,6 +224,7 @@ pub async fn neighbours(
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
+        filter.area_ids.as_deref(),
     )
     .fetch_optional(db)
     .await
