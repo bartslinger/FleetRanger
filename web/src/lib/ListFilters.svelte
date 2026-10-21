@@ -114,8 +114,6 @@
 		ownCount = 0,
 		onchange,
 		own,
-		dates,
-		count,
 		toolbar = false
 	}: {
 		/** The applied filters, the list's own among them. */
@@ -133,11 +131,6 @@
 		onchange: (change: Partial<T>) => void;
 		/** The list's own filters in the panel, after these, on the draft. */
 		own?: Snippet<[T, (change: Partial<T>) => void]>;
-		/** In place of the days, e.g. the Sessions cards' week or month.
-		 * The buttons then go to the row's end, after `count`. */
-		dates?: Snippet;
-		/** E.g. "16 sessions", before the buttons, where there's no table toolbar. */
-		count?: string;
 		/** In a list's own toolbar: only the panel, behind a filter icon. */
 		toolbar?: boolean;
 	} = $props();
@@ -189,20 +182,15 @@
 		{@render fields()}
 	</FilterPanel>
 {:else}
-	<div class="filter-bar" class:spread={dates}>
-		{#if dates}
-			{@render dates()}
-		{:else}
-			<div class="dates">
-				<DateRange
-					from={applied.from}
-					to={applied.to}
-					onchange={(from, to) => onchange({ from, to } as Partial<T>)}
-				/>
-			</div>
-		{/if}
+	<div class="filter-bar">
+		<div class="dates">
+			<DateRange
+				from={applied.from}
+				to={applied.to}
+				onchange={(from, to) => onchange({ from, to } as Partial<T>)}
+			/>
+		</div>
 		<div class="buttons">
-			{#if count}<p class="count">{count}</p>{/if}
 			<FilterPanel
 				count={panelCount(applied) + ownCount}
 				onopen={() => (draft = { ...applied })}
@@ -285,41 +273,6 @@
 		display: flex;
 		gap: var(--cds-spacing-03);
 		margin-inline-start: calc(-1 * var(--cds-spacing-05));
-	}
-
-	/* The period's controls at the start, the count and buttons at the end,
-	   on the content's edges (carbon-expert's layout review). */
-	.spread {
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.spread .buttons {
-		align-items: center;
-		margin-inline-start: auto;
-	}
-
-	/* Below md, second: on the line of the period's first part (PeriodNav). */
-	@media (max-width: 41.99rem) {
-		.spread .buttons {
-			order: 2;
-		}
-
-		/* No room beside the unit; the list shows how many there are. */
-		.spread .count {
-			display: none;
-		}
-	}
-
-	/* Secondary, as a table toolbar's count; the ghost button's padding is
-	   the gap after it. */
-	.count {
-		margin: 0;
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-		white-space: nowrap;
 	}
 
 	@media (min-width: 42rem) {

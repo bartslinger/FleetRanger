@@ -198,7 +198,11 @@
 
 	function fit(map: MapboxMap, tracks: Track[], animate: boolean) {
 		const extent = extentOf(tracks);
-		if (!extent) return;
+		if (!extent) {
+			// No tracks (e.g. a period without sessions): shown as it is.
+			if (!placed) map.once('idle', () => (placed = true));
+			return;
+		}
 		map.fitBounds(extent, { ...FIT, animate });
 		// Shown once the new view is drawn: until its tiles are in, Mapbox
 		// draws the ones it has, from the starting view (the whole world).

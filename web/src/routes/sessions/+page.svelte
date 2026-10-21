@@ -270,16 +270,18 @@
 			label="Previous {unit}"
 			href={at(step(data.state.period, -1))}
 		/>
-		<h2 class="period" aria-live="polite">
-			{periodName(data.state.period)}<span class="period-count">{` · ${sessions(data.total)}`}</span
-			>
-		</h2>
 		<IconButton
 			icon={ChevronRight}
 			size="lg"
 			label="Next {unit}"
 			href={at(step(data.state.period, 1))}
 		/>
+		<!-- After both arrows, as in a calendar's header, so they stay put
+		     whatever the name's length (user's feedback). -->
+		<h2 class="period" aria-live="polite">
+			{periodName(data.state.period)}<span class="period-count">{` · ${sessions(data.total)}`}</span
+			>
+		</h2>
 		<span class="tools">
 			<ListFilters
 				toolbar
@@ -346,10 +348,7 @@
 
 <Grid>
 	<Column narrow>
-		{#if data.state.view === 'cards'}
-			<!-- Nothing in the period: the controls stay, above the empty state. -->
-			{#if data.total === 0}{@render periodToolbar()}{/if}
-		{:else if data.total > 0 || filtering}
+		{#if data.state.view === 'table' && (data.total > 0 || filtering)}
 			<ListFilters
 				filters={data.state}
 				none={{ ...data.state, ...NO_FILTERS }}
@@ -359,22 +358,7 @@
 				onchange={filter}
 			/>
 		{/if}
-		{#if data.state.view === 'cards' && data.total === 0}
-			<EmptyState
-				title="No sessions in {periodName(data.state.period)}"
-				body={cardsFiltering
-					? 'No sessions you can see in this period have a flight that passes these filters.'
-					: 'Step to another period with the arrows, or see all sessions in the table.'}
-			>
-				{#snippet action()}
-					{#if cardsFiltering}
-						<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
-					{:else}
-						<Link href={href({ ...data.state, view: 'table' })}>Show the table</Link>
-					{/if}
-				{/snippet}
-			</EmptyState>
-		{:else if data.total === 0 && filtering}
+		{#if data.state.view === 'table' && data.total === 0 && filtering}
 			<EmptyState
 				title="No sessions match"
 				body="No sessions you can see have a flight that passes these filters."
@@ -383,7 +367,7 @@
 					<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
 				{/snippet}
 			</EmptyState>
-		{:else if data.total === 0}
+		{:else if data.state.view === 'table' && data.total === 0}
 			<EmptyState
 				title="No sessions yet"
 				body="A pilot’s flights are grouped into sessions once the flights have a pilot."
@@ -392,7 +376,11 @@
 					<Link href={resolve('/flights')}>Set pilots on the Flights page</Link>
 				{/snippet}
 			</EmptyState>
-		{:else if data.state.view === 'cards'}
+		{/if}
+		<!-- The map and the cards, also for a period without sessions, so the
+		     layout doesn't change (user's feedback): the empty state takes
+		     the cards' place, under their toolbar. -->
+		{#if data.state.view === 'cards'}
 			{#if data.total > PERIOD_SIZE}
 				<InlineNotification kind="info" title="Only the latest {PERIOD_SIZE}">
 					This {data.state.period.unit} has {data.total} sessions; the table shows them all.
@@ -403,6 +391,22 @@
 				<div class="side">
 					<div class="cards" inert={opened !== null}>
 						{@render periodToolbar()}
+						{#if data.total === 0}
+							<EmptyState
+								title="No sessions in {periodName(data.state.period)}"
+								body={cardsFiltering
+									? 'No sessions you can see in this period have a flight that passes these filters.'
+									: 'Step to another period with the arrows, or see all sessions in the table.'}
+							>
+								{#snippet action()}
+									{#if cardsFiltering}
+										<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
+									{:else}
+										<Link href={href({ ...data.state, view: 'table' })}>Show the table</Link>
+									{/if}
+								{/snippet}
+							</EmptyState>
+						{/if}
 						{#each months as group (group.name)}
 							<section>
 								<!-- Only where the period has two months: else the period's name says it. -->
@@ -486,7 +490,8 @@
 					/>
 				</div>
 			{/if}
-		{:else}
+		{/if}
+		{#if data.state.view === 'table' && data.total > 0}
 			<DataTable
 				label="Sessions"
 				{columns}
@@ -667,8 +672,7 @@
 	}
 
 	/* Carbon's large table toolbar: 48px on the list's layer, 2px above the
-	   first card, its buttons full height; the period's name lines up with
-	   the cards' text. */
+	   first card, its buttons full height. */
 	.list-toolbar {
 		display: flex;
 		align-items: center;
@@ -678,10 +682,20 @@
 		background: var(--cds-layer-01);
 	}
 
-	.period {
+	/* The buttons keep their 48px; the name gives way, its end (the count)
+	   cut off with an ellipsis (user's feedback: the arrows were squeezed). */
+	.list-toolbar :global(.icon-button) {
 		flex: none;
+	}
+
+	.period {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
 		margin: 0;
 		padding-inline: var(--cds-spacing-03);
+		white-space: nowrap;
+		text-overflow: ellipsis;
 		font-size: var(--cds-heading-compact-01-font-size);
 		font-weight: var(--cds-heading-compact-01-font-weight);
 		line-height: var(--cds-heading-compact-01-line-height);
@@ -695,6 +709,7 @@
 
 	.tools {
 		display: flex;
+		flex: none;
 		margin-inline-start: auto;
 	}
 
