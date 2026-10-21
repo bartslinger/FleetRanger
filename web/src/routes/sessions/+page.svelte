@@ -24,7 +24,7 @@
 		month,
 		timeSpan
 	} from '#lib/format.js';
-	import { periodName, periodOf, step, switchTo, today, type Period } from '#lib/period.js';
+	import { dayOf, periodName, periodOf, step, switchTo, today, type Period } from '#lib/period.js';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -724,7 +724,15 @@
 				{columns}
 				rows={data.sessions}
 				rowKey={(session) => session.id}
-				rowHref={(session) => resolve('/sessions/[id]', { id: session.id })}
+				rowHref={(session) =>
+					`${resolve('/sessions')}${query(
+						{
+							...data.state,
+							view: 'cards',
+							period: periodOf('month', dayOf(session.first_takeoff_at, data.timeZone))
+						},
+						session.id
+					)}`}
 				selectable={canChange ? changeable : undefined}
 				bind:selected
 				selectedLabel={(count) => `${sessions(count)} selected`}
