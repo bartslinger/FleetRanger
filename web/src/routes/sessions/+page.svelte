@@ -220,8 +220,18 @@
 	const full = $derived(openedData && flown ? openedData : null);
 	const mapTracks = $derived(full ? full.session.flights.map((flight) => flight.track) : tracks);
 	const focus = $derived(opened && !full ? indexesOf(opened) : null);
-	// Flying to a session, it's brought out and the rest dimmed.
-	const highlight = $derived(full ? [] : opened ? indexesOf(opened) : indexesOf(pointed ?? marked));
+	// Flying to a session, it's brought out and the rest dimmed; once it's
+	// shown, the flight pointed at in its list.
+	let pointedFlight: number | null = $state(null);
+	const highlight = $derived(
+		full
+			? pointedFlight === null
+				? []
+				: [pointedFlight]
+			: opened
+				? indexesOf(opened)
+				: indexesOf(pointed ?? marked)
+	);
 	// Another period or other filters: nothing stays marked.
 	let markedFor = untrack(() => data.sessions);
 	$effect(() => {
@@ -569,6 +579,45 @@
 						<div class="facts-side">
 							{#if openedData}
 								<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
+								<!-- Its flights where the eye is, as the map fills the window and
+								     the table is below it (user's feedback): pointing at one brings
+								     out its track; each opens its flight. The table stays for
+								     choosing several. -->
+								<h3 class="facts-heading">Flights</h3>
+								<ul class="flight-list">
+									{#each openedData.session.flights as flight, index (flight.id)}
+										<li>
+											<a
+												href={resolve('/flights/[id]', { id: flight.id })}
+												onpointerenter={() => (pointedFlight = index)}
+												onpointerleave={() => (pointedFlight = null)}
+												onfocus={() => (pointedFlight = index)}
+												onblur={() => (pointedFlight = null)}
+											>
+												<span>
+													{clock(flight.takeoff_at, data.timeZone)}–{clock(
+														flight.landed_at,
+														data.timeZone
+													)}
+												</span>
+												<span class="flight-numbers">
+													{duration(flight.air_time_s)} · {distance(flight.distance_m)}
+												</span>
+											</a>
+										</li>
+									{/each}
+								</ul>
+								<p class="to-table">
+									<Link
+										href="#session-flights"
+										onclick={(event) => {
+											event.preventDefault();
+											document
+												.getElementById('session-flights')
+												?.scrollIntoView({ behavior: 'smooth' });
+										}}>All flights in a table</Link
+									>
+								</p>
 							{/if}
 						</div>
 					{/if}
@@ -592,7 +641,7 @@
 				{/if}
 			</div>
 			{#if opened && openedData}
-				<div class="opened-flights">
+				<div class="opened-flights" id="session-flights">
 					<DataTable
 						label="Flights of the session"
 						columns={flightColumns}
@@ -783,9 +832,56 @@
 			animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 120ms both facts-in;
 		}
 
-		/* 16px all round: the last group's own space below goes. */
-		.facts-side :global(dl:last-child) {
-			margin-bottom: 0;
+		.facts-heading {
+			margin: 0 0 var(--cds-spacing-03);
+			font-size: var(--cds-heading-compact-01-font-size);
+			font-weight: var(--cds-heading-compact-01-font-weight);
+			line-height: var(--cds-heading-compact-01-line-height);
+			letter-spacing: var(--cds-heading-compact-01-letter-spacing);
+		}
+
+		/* Rows as in Carbon's contained list: the panel's full width, 40px,
+		   a line between, the layer's hover. */
+		.flight-list {
+			margin: 0 calc(-1 * var(--cds-spacing-05));
+			padding: 0;
+			border-top: 1px solid var(--cds-border-subtle-01);
+			list-style: none;
+		}
+
+		.flight-list a {
+			display: flex;
+			justify-content: space-between;
+			gap: var(--cds-spacing-05);
+			align-items: center;
+			min-height: var(--cds-size-medium);
+			padding-inline: var(--cds-spacing-05);
+			border-bottom: 1px solid var(--cds-border-subtle-01);
+			color: var(--cds-text-primary);
+			font-size: var(--cds-body-compact-01-font-size);
+			line-height: var(--cds-body-compact-01-line-height);
+			letter-spacing: var(--cds-body-compact-01-letter-spacing);
+			text-decoration: none;
+			font-variant-numeric: tabular-nums;
+		}
+
+		.flight-list a:hover {
+			background: var(--cds-layer-hover-01);
+		}
+
+		.flight-list a:focus-visible {
+			outline: 2px solid var(--cds-focus);
+			outline-offset: -2px;
+		}
+
+		.flight-numbers {
+			color: var(--cds-text-secondary);
+		}
+
+		.to-table {
+			margin: var(--cds-spacing-05) 0 0;
+			font-size: var(--cds-body-compact-01-font-size);
+			line-height: var(--cds-body-compact-01-line-height);
 		}
 	}
 
