@@ -171,10 +171,14 @@
 	const sessionHref = (id: string) => `${resolve('/sessions')}${query(data.state, id)}`;
 
 	// Opened from the list in this tab, Back returns to it as it was (its
-	// scroll position too); opened directly, ✕ replaces it with the list.
+	// scroll position too); opened directly, or stepped into another week or
+	// month, ✕ replaces it with the list of that one.
 	let cameFromList = false;
+	const periodParams = (url: URL) =>
+		`${url.searchParams.get('week')} ${url.searchParams.get('month')}`;
 	afterNavigate(({ from, to }) => {
 		if (!to?.url.searchParams.has('session')) cameFromList = false;
+		else if (from && periodParams(from.url) !== periodParams(to.url)) cameFromList = false;
 		else if (
 			from &&
 			from.url.pathname === to.url.pathname &&
@@ -233,14 +237,29 @@
 	const at = (period: Period) => href({ ...data.state, period });
 	const thisPeriod = $derived(periodOf(data.state.period.unit, today(data.timeZone)));
 
+	// The open session's place in the list (newest first).
+	const openedIndex = $derived(data.sessions.findIndex((session) => session.id === opened));
+	// The sessions before and after it with the list's filters, also in
+	// another week or month (user's decision, 2026-10-21), shown in theirs.
+	const neighbourHref = (id: string | null, start: string | null) =>
+		id && start
+			? `${resolve('/sessions')}${query(
+					{
+						...data.state,
+						period: periodOf(data.state.period.unit, dayOf(start, data.timeZone))
+					},
+					id
+				)}`
+			: null;
+	const earlierHref = $derived(
+		neighbourHref(data.neighbours?.next ?? null, data.neighbours?.next_start ?? null)
+	);
+	const laterHref = $derived(
+		neighbourHref(data.neighbours?.previous ?? null, data.neighbours?.previous_start ?? null)
+	);
 	// The toolbar's two lines, the name and the count, and which are cut off:
 	// a tooltip has those in full, only those (user's feedback). Checked when
 	// the width or the text changes.
-	// The open session's place in the list (newest first): the earlier one
-	// is after it, the later one before.
-	const openedIndex = $derived(data.sessions.findIndex((session) => session.id === opened));
-	const earlier = $derived(openedRow ? data.sessions[openedIndex + 1] : undefined);
-	const later = $derived(openedRow ? data.sessions[openedIndex - 1] : undefined);
 	// Its day, from its flights: it may be outside the list's period.
 	const openedDay = $derived(
 		openSession?.flights[0] ? day(openSession.flights[0].takeoff_at, data.timeZone, true) : ''
@@ -371,30 +390,31 @@
 	     between its controls (Carbon's text toolbar, WAI-ARIA). -->
 	<div class="list-toolbar" role="toolbar" aria-label="Sessions" use:roving>
 		<!-- A session open, the same bar in the same place: the arrows step
-		     through the period's sessions instead, in time like the periods
-		     (‹ earlier), disabled at its ends; ✕ in place of the list's tools
+		     through the sessions instead, in time like the periods (‹ earlier),
+		     on into the next period, disabled at the logbook's ends; ✕ in place
+		     of the list's tools
 		     goes back to the list (user's choice, 2026-10-21). -->
 		{#if openSession}
 			<!-- Stepping replaces the history entry, so Back and ✕ return to the
 			     list; the page keeps its scroll. -->
-			{#if earlier}
+			{#if earlierHref}
 				<IconButton
 					icon={ChevronLeft}
 					size="lg"
 					label="Earlier session"
-					href={sessionHref(earlier.id)}
+					href={earlierHref}
 					data-sveltekit-replacestate
 					data-sveltekit-noscroll
 				/>
 			{:else}
 				<IconButton icon={ChevronLeft} size="lg" label="Earlier session" disabled />
 			{/if}
-			{#if later}
+			{#if laterHref}
 				<IconButton
 					icon={ChevronRight}
 					size="lg"
 					label="Later session"
-					href={sessionHref(later.id)}
+					href={laterHref}
 					data-sveltekit-replacestate
 					data-sveltekit-noscroll
 				/>

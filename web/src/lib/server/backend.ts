@@ -145,8 +145,17 @@ export interface Session {
 	flights: FlightDetail[];
 }
 
+/** A session's neighbours in a list, newer and older, with their first
+ * takeoff, from `GET /api/sessions/{id}/neighbours`. */
+export interface SessionNeighbours {
+	previous: string | null;
+	previous_start: string | null;
+	next: string | null;
+	next_start: string | null;
+}
+
 /** An item's place in a list: the ones before and after it, its position
- * (from 1) and the list's length, e.g. `GET /api/sessions/{id}/neighbours`. */
+ * (from 1) and the list's length, e.g. `GET /api/flights/{id}/neighbours`. */
 export interface Neighbours {
 	previous: string | null;
 	next: string | null;
