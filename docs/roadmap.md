@@ -76,6 +76,13 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [~] OAuth, so assistants in claude.ai and others can connect: consent page and connected apps work locally; security review in progress
 - [ ] `/mcp` in the nginx routes (Ansible repo)
 
+## Areas
+
+- [ ] Schema (proposed, awaiting approval)
+- [ ] Admin page: drawing areas on the map with snapping, clipped on save
+- [ ] Time and distance per area for every flight, recomputed when areas change
+- [ ] Areas on the flight and session pages, filters in the lists, seconds per area in MCP
+
 ## Before production use
 
 - [ ] Backups: PostgreSQL dumps and raw logs
@@ -85,7 +92,6 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 ## Later
 
 - Session reports with organisation-specific fields
-- Areas
 - Sharing flights, also outside the organisation
 - Invite links for accounts
 - Suggesting operations from flights that overlap in time and area
