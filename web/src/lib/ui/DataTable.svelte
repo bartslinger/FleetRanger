@@ -86,6 +86,9 @@
 		/** The row pointed at or focused, and null when none is, e.g. to bring
 		 * it out on a map. */
 		onrowhover?: (row: T | null) => void;
+		/** The key of a row in its hover state while what it stands for is
+		 * pointed at elsewhere, e.g. its track on a map. */
+		hoveredRow?: string | null;
 	}
 
 	let {
@@ -110,7 +113,8 @@
 		selectAllLabel = (total) => `Select all ${total}`,
 		rowAction,
 		rowState,
-		onrowhover
+		onrowhover,
+		hoveredRow = null
 	}: Props = $props();
 
 	const selectableKeys = $derived(selectable ? rows.filter(selectable).map(rowKey) : []);
@@ -262,6 +266,7 @@
 					class:linked={rowHref}
 					class:selected={chosen}
 					class:stated={state}
+					class:hovered={key === hoveredRow}
 					onmouseenter={onrowhover && (() => onrowhover(row))}
 					onmouseleave={onrowhover && (() => onrowhover(null))}
 					onfocusin={onrowhover && (() => onrowhover(row))}
@@ -400,7 +405,8 @@
 		color: var(--cds-text-secondary);
 	}
 
-	tbody tr:hover td {
+	tbody tr:hover td,
+	tbody tr.hovered td {
 		background: var(--cds-layer-hover-01);
 		color: var(--cds-text-primary);
 	}
