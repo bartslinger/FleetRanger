@@ -2,7 +2,8 @@
 	@component
 	Filters behind a button, in a panel from the right (full screen on
 	phones): Carbon's batch filtering. The fields change a draft; Apply applies
-	it, Reset empties the fields. Closing without Apply discards the draft, so
+	it, Reset empties the panel's fields only (filters outside it, such as the
+	days beside the button, stay; Clear filters clears those too). Closing without Apply discards the draft, so
 	reopening shows what's applied. The button says how many filters are
 	applied.
 
@@ -54,6 +55,7 @@
 		<Dialog.Overlay class="modal-overlay" />
 		<Dialog.Content
 			class="filter-panel layer-01"
+			aria-describedby={undefined}
 			onOpenAutoFocus={(event) => {
 				event.preventDefault();
 				body?.querySelector<HTMLElement>('input:not([type=hidden]), select, button')?.focus();

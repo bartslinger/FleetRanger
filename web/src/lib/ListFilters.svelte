@@ -249,9 +249,12 @@
 		flex: 1 1 100%;
 	}
 
+	/* The ghost buttons' text lines up with what's before them: on phones the
+	   dates' left edge, from md 16px after the dates. */
 	.buttons {
 		display: flex;
 		gap: var(--cds-spacing-03);
+		margin-inline-start: calc(-1 * var(--cds-spacing-05));
 	}
 
 	@media (min-width: 42rem) {
