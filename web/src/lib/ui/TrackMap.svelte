@@ -251,7 +251,13 @@
 			instance.once('load', () => draw(instance, tracks));
 			// Mapbox follows only the window's size; this follows the container,
 			// e.g. while a layout around it animates.
-			resizes = new ResizeObserver(() => instance.resize());
+			// Drawn at once: a resized canvas is blank until Mapbox's next frame,
+			// which flashed while a layout animated (user's feedback). `_render`
+			// is Mapbox's own, typed but internal: check it on upgrades.
+			resizes = new ResizeObserver(() => {
+				instance.resize();
+				if (instance.isStyleLoaded()) instance._render(performance.now());
+			});
 			resizes.observe(element);
 			// A track clicked, where the page wants it.
 			instance.on('click', 'track', (event) => {
