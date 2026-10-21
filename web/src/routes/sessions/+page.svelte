@@ -159,6 +159,9 @@
 		}
 		event.preventDefault();
 		pointed = null;
+		// The facts at the top, in view; Back returns to this place.
+		listScroll = window.scrollY;
+		window.scrollTo({ top: 0 });
 		// The full tracks take over once the map has flown to the session:
 		// arriving sooner, they cut the flight short (user's feedback).
 		flown = false;
@@ -175,6 +178,17 @@
 	// The map: the open session's full tracks once loaded and flown to, else
 	// the cards'.
 	let flown = $state(true);
+
+	// Where the list was scrolled to when a session opened.
+	let listScroll = 0;
+	let wasOpen = false;
+	$effect(() => {
+		if (opened) wasOpen = true;
+		else if (wasOpen) {
+			wasOpen = false;
+			requestAnimationFrame(() => window.scrollTo({ top: listScroll }));
+		}
+	});
 	const full = $derived(openedData && flown ? openedData : null);
 	const mapTracks = $derived(full ? full.session.flights.map((flight) => flight.track) : tracks);
 	const focus = $derived(opened && !full ? indexesOf(opened) : null);
@@ -344,43 +358,53 @@
 				</InlineNotification>
 			{/if}
 			<div class="cards-view" class:opened={opened && wide.current}>
-				<div class="cards" inert={opened !== null}>
-					{#each months as group (group.name)}
-						<section>
-							<!-- Only where the period has two months: else the period's name says it. -->
-							{#if months.length > 1}<h2 class="month">{group.name}</h2>{/if}
-							<ul>
-								{#each group.sessions as session (session.id)}
-									<li bind:this={cardElements[session.id]}>
-										<ClickableTile
-											href={resolve('/sessions/[id]', { id: session.id })}
-											onclick={(event) =>
-												open(event, session.id, resolve('/sessions/[id]', { id: session.id }))}
-											marked={wide.current && marked === session.id}
-											onpointerenter={() => (pointed = session.id)}
-											onpointerleave={() => (pointed = null)}
-											onfocus={() => (pointed = session.id)}
-											onblur={() => (pointed = null)}
-										>
-											<span class="card-title">
-												{daySpan(session.first_takeoff_at, session.last_landed_at, data.timeZone)}
-											</span>
-											<span class="card-strip">
-												<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
-											</span>
-											<span class="card-who">
-												{session.pilots.join(', ')} · {session.teams.join(', ')}
-											</span>
-											<span class="card-numbers">
-												{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the air
-												· {distance(session.distance_m)}
-											</span>
-										</ClickableTile>
-									</li>
-								{/each}
-							</ul>
-						</section>
-					{/each}
+				<!-- The cards, and in their place the open session's facts. -->
+				<div class="side">
+					<div class="cards" inert={opened !== null}>
+						{#each months as group (group.name)}
+							<section>
+								<!-- Only where the period has two months: else the period's name says it. -->
+								{#if months.length > 1}<h2 class="month">{group.name}</h2>{/if}
+								<ul>
+									{#each group.sessions as session (session.id)}
+										<li bind:this={cardElements[session.id]}>
+											<ClickableTile
+												href={resolve('/sessions/[id]', { id: session.id })}
+												onclick={(event) =>
+													open(event, session.id, resolve('/sessions/[id]', { id: session.id }))}
+												marked={wide.current && marked === session.id}
+												onpointerenter={() => (pointed = session.id)}
+												onpointerleave={() => (pointed = null)}
+												onfocus={() => (pointed = session.id)}
+												onblur={() => (pointed = null)}
+											>
+												<span class="card-title">
+													{daySpan(session.first_takeoff_at, session.last_landed_at, data.timeZone)}
+												</span>
+												<span class="card-strip">
+													<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
+												</span>
+												<span class="card-who">
+													{session.pilots.join(', ')} · {session.teams.join(', ')}
+												</span>
+												<span class="card-numbers">
+													{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the
+													air · {distance(session.distance_m)}
+												</span>
+											</ClickableTile>
+										</li>
+									{/each}
+								</ul>
+							</section>
+						{/each}
+					</div>
+					{#if opened && wide.current}
+						<div class="facts-side">
+							{#if openedData}
+								<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
+							{/if}
+						</div>
+					{/if}
 				</div>
 				{#if wide.current}
 					<div class="map-side">
@@ -397,13 +421,6 @@
 								? 'Map of the session’s tracks'
 								: `Map of the sessions in ${periodName(data.state.period)}; the list beside it has the same sessions`}
 						/>
-					</div>
-					<div class="facts-side">
-						<div class="facts-inner">
-							{#if openedData}
-								<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
-							{/if}
-						</div>
 					</div>
 				{/if}
 			</div>
@@ -533,49 +550,22 @@
 		gap: var(--cds-spacing-07);
 	}
 
-	/* From lg three columns, in sixteenths of the page: the cards, the map
-	   and the open session's facts. Listing: 6 | 10 | 0 up to xlg (so a
-	   card's last line fits beside its arrow), 5 | 11 | 0 from xlg; a
-	   session open: 0 | 11 | 5, as on its own page. The widths animate, so
-	   the one map moves and grows in place: Carbon's productive standard
-	   curve, duration-slow-01. 16px between them, as padding, so a closed
-	   column takes nothing. */
+	/* From lg the map on the left, 10 of 16 columns (11 from xlg), and the
+	   cards on the right, 6 (5): a card's last line fits beside its arrow.
+	   A session open, its facts take the cards' place and the map stays as
+	   it is, only flying to the session, so the pointer stays over text
+	   (user's choice, 2026-10-21). 16px between, as padding. */
 	@media (min-width: 66rem) {
 		.cards-view {
-			--cards-share: 6;
-			container-type: inline-size;
-			grid-template-columns: 6fr 10fr 0fr;
+			grid-template-columns: 10fr 6fr;
 			gap: 0;
 			align-items: start;
-			transition: grid-template-columns 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
 		}
 
-		/* The cards and facts keep their open width while their columns close
-		   or open, pinned to the map's side, so they slide with it: the page
-		   moves sideways as one (user's request). Clipped, not hidden, so the
-		   month headings stay sticky. */
-		.cards,
-		.facts-side {
+		.side {
+			position: relative;
 			min-width: 0;
-			overflow: clip;
-		}
-
-		.cards {
-			display: flex;
-			flex-direction: column;
-			align-items: flex-end;
-			padding-inline-end: var(--cds-spacing-05);
-			transition:
-				opacity 400ms cubic-bezier(0.2, 0, 0.38, 0.9),
-				padding 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
-		}
-
-		.cards > section {
-			width: calc(var(--cards-share) / 16 * 100cqi - var(--cds-spacing-05));
-		}
-
-		.facts-inner {
-			width: calc(5 / 16 * 100cqi - var(--cds-spacing-05));
+			padding-inline-start: var(--cds-spacing-05);
 		}
 
 		/* Level with the first card, 16px below the header while the cards
@@ -583,41 +573,46 @@
 		.map-side {
 			position: sticky;
 			top: calc(3rem + var(--cds-spacing-05));
+			order: -1;
 		}
 
-		.facts-side {
-			opacity: 0;
-		}
-
-		.opened {
-			grid-template-columns: 0fr 11fr 5fr;
-		}
-
-		/* Both fade with the move, as long as it. */
-		.opened .cards {
-			padding-inline-end: 0;
-			opacity: 0;
-		}
-
-		.facts-side {
+		/* Carbon's short slide: the cards leave 32px to the left with the
+		   exit curve, out of the flow at once so the facts take their place;
+		   the facts come from 32px to the right with the entrance curve. */
+		.cards {
 			transition:
-				opacity 400ms cubic-bezier(0.2, 0, 0.38, 0.9),
-				padding 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
+				opacity 240ms cubic-bezier(0.2, 0, 1, 0.9),
+				transform 240ms cubic-bezier(0.2, 0, 1, 0.9),
+				visibility 0s;
 		}
 
-		.opened .facts-side {
-			padding-inline-start: var(--cds-spacing-05);
-			opacity: 1;
+		.opened .cards {
+			position: absolute;
+			inset: 0 0 auto var(--cds-spacing-05);
+			visibility: hidden;
+			opacity: 0;
+			transform: translateX(-2rem);
+			transition:
+				opacity 240ms cubic-bezier(0.2, 0, 1, 0.9),
+				transform 240ms cubic-bezier(0.2, 0, 1, 0.9),
+				visibility 0s 240ms;
+		}
+
+		.facts-side {
+			animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 120ms both facts-in;
+		}
+	}
+
+	@keyframes facts-in {
+		from {
+			opacity: 0;
+			transform: translateX(2rem);
 		}
 	}
 
 	@media (min-width: 82rem) {
 		.cards-view {
-			--cards-share: 5;
-		}
-
-		.cards-view:not(.opened) {
-			grid-template-columns: 5fr 11fr 0fr;
+			grid-template-columns: 11fr 5fr;
 		}
 	}
 
