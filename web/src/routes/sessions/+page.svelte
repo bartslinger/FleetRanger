@@ -16,6 +16,7 @@
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
+	import DayStrip from '#lib/ui/DayStrip.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Link from '#lib/ui/Link.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -269,6 +270,9 @@
 												{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the air
 												· {distance(session.distance_m)}
 											</span>
+											<span class="card-strip">
+												<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
+											</span>
 										</ClickableTile>
 									</li>
 								{/each}
@@ -402,6 +406,12 @@
 	.card-numbers {
 		color: var(--cds-text-secondary);
 		font-variant-numeric: tabular-nums;
+	}
+
+	/* The day at a glance, under the numbers. */
+	.card-strip {
+		display: block;
+		margin-top: var(--cds-spacing-04);
 	}
 
 	/* The number of sessions, like a table's toolbar: 48px high, in the 16px
