@@ -27,26 +27,39 @@ export async function load({ fetch, locals }) {
 	return { areas, fallback, mapboxToken: MAPBOX_ACCESS_TOKEN };
 }
 
+/** The drawn shape, as the page sends it. */
+function boundary(form: FormData): unknown {
+	try {
+		return JSON.parse(String(form.get('boundary') ?? 'null'));
+	} catch {
+		return null;
+	}
+}
+
 export const actions = {
-	/** Creates an area, or changes the one with the given id. */
-	save: async ({ fetch, request }) => {
+	create: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const body = { name: String(form.get('name') ?? ''), boundary: boundary(form) };
+		const result = await send<SavedArea>(fetch, 'POST', '/api/areas', body);
+		if (!result.ok) return fail(result.status, { message: result.message });
+		return { saved: result.data };
+	},
+	/** A new shape for an area; clipping may split it into more areas. */
+	reshape: async ({ fetch, request }) => {
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');
-		const name = String(form.get('name') ?? '');
-		let boundary: unknown = null;
-		try {
-			boundary = JSON.parse(String(form.get('boundary') ?? 'null'));
-		} catch {
-			// The backend says what's missing.
-		}
-		const result = id
-			? await send<SavedArea>(fetch, 'PUT', `/api/areas/${id}`, { name, boundary })
-			: await send<SavedArea>(fetch, 'POST', '/api/areas', { name, boundary });
-		if (!result.ok) {
-			const nameTaken = result.status === 409;
-			return fail(result.status, { [nameTaken ? 'nameMessage' : 'message']: result.message });
-		}
+		const body = { boundary: boundary(form) };
+		const result = await send<SavedArea>(fetch, 'PUT', `/api/areas/${id}`, body);
+		if (!result.ok) return fail(result.status, { message: result.message });
 		return { saved: result.data };
+	},
+	rename: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const body = { name: String(form.get('name') ?? '') };
+		const result = await send<null>(fetch, 'PUT', `/api/areas/${id}`, body);
+		if (!result.ok) return fail(result.status, { renameMessage: result.message });
+		return { renamed: true };
 	},
 	delete: async ({ fetch, request }) => {
 		const id = String((await request.formData()).get('id') ?? '');

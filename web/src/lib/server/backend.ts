@@ -77,9 +77,11 @@ export interface FlightArea {
 	distance_m: number;
 }
 
-/** An area as saved by `POST` or `PUT /api/areas`, and the areas it was clipped against. */
+/** What a drawing became, from `POST` or `PUT /api/areas`: one area, or more
+ * with the same name where clipping split it (largest first), and the areas
+ * it was clipped against. */
 export interface SavedArea {
-	area: Area;
+	areas: Area[];
 	clipped_by: string[];
 }
 

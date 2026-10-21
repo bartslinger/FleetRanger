@@ -12,6 +12,8 @@
 		onselect: () => void;
 		/** Only below md, where the action has no button of its own. */
 		phoneOnly?: boolean;
+		/** A destructive action, e.g. Delete: last, below a divider, in red. */
+		danger?: boolean;
 	}
 </script>
 
@@ -45,8 +47,11 @@
 		>
 			<!-- A breadcrumb trail can pass the same page twice. -->
 			{#each items as item, index (index)}
+				{#if item.danger && index > 0}
+					<DropdownMenu.Separator class="overflow-divider" />
+				{/if}
 				<DropdownMenu.Item
-					class="overflow-item{item.phoneOnly ? ' phone-only' : ''}"
+					class="overflow-item{item.phoneOnly ? ' phone-only' : ''}{item.danger ? ' danger' : ''}"
 					onSelect={item.onselect}
 				>
 					{item.label}
@@ -136,6 +141,20 @@
 	:global(.overflow-item[data-highlighted]) {
 		background: var(--cds-layer-hover-01);
 		color: var(--cds-text-primary);
+	}
+
+	:global(.overflow-item.danger) {
+		color: var(--cds-text-error);
+	}
+
+	:global(.overflow-item.danger[data-highlighted]) {
+		background: var(--cds-button-danger-primary);
+		color: var(--cds-text-on-color);
+	}
+
+	:global(.overflow-divider) {
+		height: 1px;
+		background: var(--cds-border-subtle-01);
 	}
 
 	:global(.overflow-item:focus-visible) {
