@@ -126,14 +126,14 @@
 	// map.
 	const wide = new MediaQuery('min-width: 66rem');
 
-	// The map and, a session open, its legend fit the window, 1rem from its
-	// bottom (user's feedback: a taller map scrolled awkwardly, a cut-off
-	// legend). The same height in both states, so it never resizes; sized
-	// for the open one: the shell's header (3rem), the page header with
-	// its breadcrumb (8.25rem) above, the legend (1.5rem) below: 13.75rem
-	// with the 1rem, measured at 1280px. The list has no breadcrumb, so
-	// there it ends 2rem higher.
-	const MAP_HEIGHT = 'calc(100dvh - 13.75rem)';
+	// The map and, a session open, its legend fit the window with the start
+	// of the session's flights table under them: its toolbar and header
+	// (6rem) after 1rem, so it's seen to be there (user's choice: the
+	// flights are a data table, which needs the width). Above: the shell's
+	// header (3rem) and the page header with its breadcrumb row (8.25rem);
+	// the legend (1.5rem) below the map: 12.75rem, plus the table's 7rem.
+	// The same height in both states, so the map never resizes.
+	const MAP_HEIGHT = 'calc(100dvh - 19.75rem)';
 
 	// Every flight's track, with the session it's in.
 	const flights = $derived(
@@ -581,47 +581,6 @@
 								<div class="panel">
 									<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
 								</div>
-								<!-- Its flights where the eye is, as the map fills the window and
-								     the table is below it (user's feedback): pointing at one brings
-								     out its track; each opens its flight. The table stays for
-								     choosing several. A panel of its own, 2px under the facts. -->
-								<div class="panel">
-									<h3 class="facts-heading">Flights</h3>
-									<ul class="flight-list">
-										{#each openedData.session.flights as flight, index (flight.id)}
-											<li>
-												<a
-													href={resolve('/flights/[id]', { id: flight.id })}
-													onpointerenter={() => (pointedFlight = index)}
-													onpointerleave={() => (pointedFlight = null)}
-													onfocus={() => (pointedFlight = index)}
-													onblur={() => (pointedFlight = null)}
-												>
-													<span>
-														{clock(flight.takeoff_at, data.timeZone)}–{clock(
-															flight.landed_at,
-															data.timeZone
-														)}
-													</span>
-													<span class="flight-numbers">
-														{duration(flight.air_time_s)} · {distance(flight.distance_m)}
-													</span>
-												</a>
-											</li>
-										{/each}
-									</ul>
-									<p class="to-table">
-										<Link
-											href="#session-flights"
-											onclick={(event) => {
-												event.preventDefault();
-												document
-													.getElementById('session-flights')
-													?.scrollIntoView({ behavior: 'smooth' });
-											}}>All flights in a table</Link
-										>
-									</p>
-								</div>
 							{/if}
 						</div>
 					{/if}
@@ -652,6 +611,8 @@
 						rows={openedData.session.flights}
 						rowKey={(flight) => flight.id}
 						rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+						onrowhover={(flight) =>
+							(pointedFlight = flight ? openedData.session.flights.indexOf(flight) : null)}
 						summary={plural(openedData.session.flights.length, 'flight')}
 					/>
 				</div>
@@ -846,58 +807,6 @@
 		.panel :global(dl:last-child) {
 			margin-bottom: 0;
 		}
-
-		.facts-heading {
-			margin: 0 0 var(--cds-spacing-03);
-			font-size: var(--cds-heading-compact-01-font-size);
-			font-weight: var(--cds-heading-compact-01-font-weight);
-			line-height: var(--cds-heading-compact-01-line-height);
-			letter-spacing: var(--cds-heading-compact-01-letter-spacing);
-		}
-
-		/* Rows as in Carbon's contained list: the panel's full width, 40px,
-		   a line between, the layer's hover. */
-		.flight-list {
-			margin: 0 calc(-1 * var(--cds-spacing-05));
-			padding: 0;
-			border-top: 1px solid var(--cds-border-subtle-01);
-			list-style: none;
-		}
-
-		.flight-list a {
-			display: flex;
-			justify-content: space-between;
-			gap: var(--cds-spacing-05);
-			align-items: center;
-			min-height: var(--cds-size-medium);
-			padding-inline: var(--cds-spacing-05);
-			border-bottom: 1px solid var(--cds-border-subtle-01);
-			color: var(--cds-text-primary);
-			font-size: var(--cds-body-compact-01-font-size);
-			line-height: var(--cds-body-compact-01-line-height);
-			letter-spacing: var(--cds-body-compact-01-letter-spacing);
-			text-decoration: none;
-			font-variant-numeric: tabular-nums;
-		}
-
-		.flight-list a:hover {
-			background: var(--cds-layer-hover-01);
-		}
-
-		.flight-list a:focus-visible {
-			outline: 2px solid var(--cds-focus);
-			outline-offset: -2px;
-		}
-
-		.flight-numbers {
-			color: var(--cds-text-secondary);
-		}
-
-		.to-table {
-			margin: var(--cds-spacing-05) 0 0;
-			font-size: var(--cds-body-compact-01-font-size);
-			line-height: var(--cds-body-compact-01-line-height);
-		}
 	}
 
 	@keyframes facts-in {
@@ -973,7 +882,7 @@
 
 	/* The flights under the map and facts, coming in after the facts. */
 	.opened-flights {
-		margin-top: var(--cds-spacing-07);
+		margin-top: var(--cds-spacing-05);
 		animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 360ms both flights-in;
 	}
 
