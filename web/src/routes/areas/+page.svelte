@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SavedArea } from '#lib/server/backend.js';
@@ -97,6 +98,15 @@
 					label={`Options for ${item.label}`}
 					variant="row"
 					items={[
+						{
+							label: 'Edit shape',
+							onselect: async () => {
+								// The map edits the selected area, once it knows it.
+								selected = item.id;
+								await tick();
+								map?.editShape();
+							}
+						},
 						{
 							label: 'Rename',
 							onselect: () => {

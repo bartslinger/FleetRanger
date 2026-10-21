@@ -267,7 +267,8 @@
 		mode = 'drawing';
 	}
 
-	function editShape() {
+	/** Makes the selected area's corners draggable; also for a menu outside the map. */
+	export function editShape() {
 		const area = areas.find((area) => area.id === selected);
 		if (!draw || !area || mode !== 'view') return;
 		// Terra Draw takes at most 9 decimals.
