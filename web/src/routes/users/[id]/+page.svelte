@@ -109,9 +109,7 @@
 			<div>
 				<dt>Last login</dt>
 				<dd>
-					{user.last_login_at
-						? `${dateTime(user.last_login_at, data.timeZone)} (${data.timeZoneName})`
-						: 'Never'}
+					{user.last_login_at ? dateTime(user.last_login_at, data.timeZone) : 'Never'}
 				</dd>
 			</div>
 			{#if self}

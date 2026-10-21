@@ -96,15 +96,6 @@ export function timeSpan(start: string, end: string, timeZone: string): string {
 	return `${dateTime(start, timeZone)}–${clock(end, timeZone)}`;
 }
 
-/** The time zone's abbreviation, e.g. "UTC" or "GMT+2", as it is now. */
-export function timeZoneName(timeZone: string): string {
-	return (
-		new Intl.DateTimeFormat('en-GB', { timeZone, timeZoneName: 'short' })
-			.formatToParts(new Date())
-			.find((part) => part.type === 'timeZoneName')?.value ?? timeZone
-	);
-}
-
 /**
  * With units, to the nearest minute: "2 h 19 min", "21 min"; under a minute
  * in seconds, "45 s". A bare 0:21:29 was easy to misread.

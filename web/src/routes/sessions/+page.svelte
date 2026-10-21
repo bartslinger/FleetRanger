@@ -40,7 +40,7 @@
 	const columns: TableColumn<Row>[] = $derived([
 		{
 			key: 'first_takeoff_at',
-			header: `Start (${data.timeZoneName})`,
+			header: 'Start',
 			format: (session) =>
 				`${day(session.first_takeoff_at, data.timeZone, true)}, ${clock(session.first_takeoff_at, data.timeZone)}`
 		},

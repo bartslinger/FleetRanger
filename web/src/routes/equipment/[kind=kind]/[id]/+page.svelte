@@ -98,9 +98,7 @@
 				<div>
 					<dt>Last sync</dt>
 					<dd>
-						{item.synced_at
-							? `${dateTime(item.synced_at, data.timeZone)} (${data.timeZoneName})`
-							: 'Never'}
+						{item.synced_at ? dateTime(item.synced_at, data.timeZone) : 'Never'}
 					</dd>
 				</div>
 				{#if item.app_version}
@@ -113,9 +111,7 @@
 			<div>
 				<dt>Last flight</dt>
 				<dd>
-					{item.last_flight_at
-						? `${dateTime(item.last_flight_at, data.timeZone)} (${data.timeZoneName})`
-						: 'None'}
+					{item.last_flight_at ? dateTime(item.last_flight_at, data.timeZone) : 'None'}
 				</dd>
 			</div>
 			<!-- Who can't change them sees them here; members change only the holder. -->

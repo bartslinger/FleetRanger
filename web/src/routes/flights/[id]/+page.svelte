@@ -51,7 +51,7 @@
 		const team = result?.movedTo as string | null | undefined;
 		toast(`Pilot set to ${name}.${team ? ` The flight moved to ${team}.` : ''}`);
 	}
-	const time = (iso: string) => `${dateTime(iso, data.timeZone)} (${data.timeZoneName})`;
+	const time = (iso: string) => dateTime(iso, data.timeZone);
 
 	/** A name with its serial, the serial alone, or "Unknown". */
 	function device(name: string | null, serial: string | null | undefined) {

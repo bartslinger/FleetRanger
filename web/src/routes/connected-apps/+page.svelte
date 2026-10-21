@@ -29,13 +29,13 @@
 		},
 		{
 			key: 'created_at',
-			header: `Connected (${data.timeZoneName})`,
+			header: 'Connected',
 			wideOnly: true,
 			format: (row) => dateTime(row.created_at, data.timeZone)
 		},
 		{
 			key: 'last_used_at',
-			header: `Last used (${data.timeZoneName})`,
+			header: 'Last used',
 			wideOnly: true,
 			format: (row) => dateTime(row.last_used_at, data.timeZone)
 		}
