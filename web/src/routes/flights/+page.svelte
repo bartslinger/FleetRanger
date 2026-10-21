@@ -35,7 +35,7 @@
 	const columns: TableColumn<Row>[] = $derived([
 		{
 			key: 'takeoff_at',
-			header: `Takeoff (${data.timeZoneName})`,
+			header: 'Takeoff',
 			sortable: true,
 			format: (flight) => dateTime(flight.takeoff_at, data.timeZone)
 		},

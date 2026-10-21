@@ -23,7 +23,7 @@
 
 	const lastFlight: TableColumn<Row> = $derived({
 		key: 'last_flight_at',
-		header: `Last flight (${data.timeZoneName})`,
+		header: 'Last flight',
 		format: (item) => item.last_flight_at && dateTime(item.last_flight_at, data.timeZone)
 	});
 
@@ -50,7 +50,7 @@
 			},
 			{
 				key: 'synced_at',
-				header: `Last sync (${data.timeZoneName})`,
+				header: 'Last sync',
 				format: (item) => (item.synced_at ? dateTime(item.synced_at, data.timeZone) : 'Never')
 			},
 			lastFlight

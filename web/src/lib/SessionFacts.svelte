@@ -51,19 +51,18 @@
 	interface Props {
 		flights: Flight[];
 		timeZone: string;
-		timeZoneName: string;
 		/** E.g. a button to change the pilot, after the pilot's name. */
 		pilotAction?: Snippet;
 	}
 
-	let { flights, timeZone, timeZoneName, pilotAction }: Props = $props();
+	let { flights, timeZone, pilotAction }: Props = $props();
 
 	const facts = $derived(summary(flights, timeZone));
 	const distanceM = $derived(flights.reduce((total, flight) => total + flight.distance_m, 0));
 
 	const times = $derived([
-		{ label: `First takeoff (${timeZoneName})`, value: dateTime(facts.start, timeZone) },
-		{ label: `Last landing (${timeZoneName})`, value: dateTime(facts.end, timeZone) },
+		{ label: 'First takeoff', value: dateTime(facts.start, timeZone) },
+		{ label: 'Last landing', value: dateTime(facts.end, timeZone) },
 		{
 			label: 'Duration',
 			value: duration((Date.parse(facts.end) - Date.parse(facts.start)) / 1000),

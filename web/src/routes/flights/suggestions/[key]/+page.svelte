@@ -114,7 +114,7 @@
 	const columns: TableColumn<Row>[] = $derived([
 		{
 			key: 'takeoff_at',
-			header: `Time (${data.timeZoneName})`,
+			header: 'Time',
 			format: (flight) => timeSpan(flight.takeoff_at, flight.landed_at, data.timeZone)
 		},
 		{
@@ -262,7 +262,7 @@
 	</Column>
 	<!-- On phones below the table, which then follows the map. -->
 	<Column lg={5} smOrder={1}>
-		<SessionFacts flights={shown} timeZone={data.timeZone} timeZoneName={data.timeZoneName}>
+		<SessionFacts flights={shown} timeZone={data.timeZone}>
 			{#snippet pilotAction()}
 				{#if canChange && chosen.length > 0}
 					<IconButton
