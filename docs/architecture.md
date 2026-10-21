@@ -77,6 +77,18 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **Selecting a pilot on the remote controller** sets who is flying from that moment on.
 - **An operation groups flights across teams**, for example a joint operation. Anyone can create one. Anyone with a flight in an operation sees all of its flights. Flights can only be added by people who can already see them, and must overlap the operation's time window. One operation per flight for now, through a link table, so this can be relaxed later.
 
+## Areas
+
+User's decisions, 2026-10-21, unless marked as mine.
+
+- **Areas are named parts of the land** that flights are reported by, such as a reserve's sections or a client's sites. They belong to the organisation, not to a team: an area is the same land whichever team flies over it, so every team's flights count towards it. Admins manage them.
+- **No switch:** areas appear in the web app once an admin adds the first one. Without areas, nothing about them is shown.
+- **Areas are drawn by hand** on the map, as polygons (possibly in several parts), without importing files. Drawing snaps to the corners and edges of other areas, so neighbouring areas can follow the same border.
+- **Areas don't overlap.** On saving, an area is clipped where it overlaps others; only the area being saved changes, never its neighbours. An area that would be left empty can't be saved (my choice), and the map shows the clipped result.
+- **A flight's areas come from its track**, not from what the pilot reports. The takeoff area counts because the track starts at lift-off. Each area's share is the share of the track's points inside it; the flight's air time and distance are divided by those shares so that the parts add up to the flight's totals (my choice), and the rest is "Outside areas". A flight's page shows each area's time and percentage, so a corner clipped for a few seconds shows as "<1%".
+- **Sessions show the same per area**, adding up to the session's totals. MCP gives seconds per area, which add up across flights and sessions, unlike percentages.
+- **Changing or deleting an area recomputes every flight**, archived flights included. There is no archiving of areas: past figures always follow the current areas.
+
 ## Backend structure
 
 - **One crate, organised by feature** (`flights/`, `sessions/`, `ingest/`, and so on). Each feature has `routes.rs` (HTTP), `service.rs` (policy checks, logic, audit) and `db.rs` (sqlx queries). Cross-cutting concerns (`auth/`, `policy/`, `audit/`) are top-level modules.
