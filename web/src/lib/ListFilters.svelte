@@ -37,7 +37,7 @@
 	};
 
 	/** How many of the panel's filters are applied; the dates aren't in it. */
-	export const panelCount = (filters: Filters) =>
+	const panelCount = (filters: Filters) =>
 		[filters.pilots, filters.drones, filters.controllers, filters.teams, filters.areas].filter(
 			(values) => values.length > 0
 		).length;
@@ -135,7 +135,6 @@
 	// The panel's choice until Apply; it starts as what's applied.
 	let draft: T = $state(untrack(() => ({ ...applied })));
 	const change = (next: Partial<T>) => (draft = { ...draft, ...next });
-	const filters = $derived(draft);
 
 	// Drones and controllers by name with the serial.
 	function deviceOptions(known: Device[], chosen: string[]) {
@@ -151,8 +150,8 @@
 		}
 		return options;
 	}
-	const droneOptions = $derived(deviceOptions(devices.aircraft, filters.drones));
-	const controllerOptions = $derived(deviceOptions(devices.controllers, filters.controllers));
+	const droneOptions = $derived(deviceOptions(devices.aircraft, draft.drones));
+	const controllerOptions = $derived(deviceOptions(devices.controllers, draft.controllers));
 	const pilotOptions = $derived(
 		devices.pilots.map((pilot) => ({
 			value: pilot.id ?? 'none',
@@ -178,7 +177,6 @@
 	</div>
 	<div class="buttons">
 		<FilterPanel
-			size="md"
 			count={panelCount(applied) + ownCount}
 			onopen={() => (draft = { ...applied })}
 			onapply={() => onchange(draft)}
@@ -188,21 +186,21 @@
 				label="Pilots"
 				placeholder="All pilots"
 				options={pilotOptions}
-				value={filters.pilots}
+				value={draft.pilots}
 				onchange={(pilots) => change({ pilots } as Partial<T>)}
 			/>
 			<MultiSelect
 				label="Drones"
 				placeholder="All drones"
 				options={droneOptions}
-				value={filters.drones}
+				value={draft.drones}
 				onchange={(drones) => change({ drones } as Partial<T>)}
 			/>
 			<MultiSelect
 				label="Controllers"
 				placeholder="All controllers"
 				options={controllerOptions}
-				value={filters.controllers}
+				value={draft.controllers}
 				onchange={(controllers) => change({ controllers } as Partial<T>)}
 			/>
 			{#if admin}
@@ -210,17 +208,17 @@
 					label="Teams"
 					placeholder="All teams"
 					options={teamOptions}
-					value={filters.teams}
+					value={draft.teams}
 					onchange={(teams) => change({ teams } as Partial<T>)}
 				/>
 			{/if}
 			<!-- Once the organisation has areas: a flight passes when it has time in any of them. -->
-			{#if areaOptions.length > 0 || filters.areas.length > 0}
+			{#if areaOptions.length > 0 || draft.areas.length > 0}
 				<MultiSelect
 					label="Areas flown"
 					placeholder="All areas"
 					options={areaOptions}
-					value={filters.areas}
+					value={draft.areas}
 					onchange={(areas) => change({ areas } as Partial<T>)}
 				/>
 			{/if}
