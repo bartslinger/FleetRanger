@@ -118,13 +118,14 @@
 	// map.
 	const wide = new MediaQuery('min-width: 66rem');
 
-	// The map fits the window from where it starts, 1rem above its bottom
-	// (user's feedback: a map taller than the window scrolled awkwardly).
-	// Above it: the shell's header (3rem), the page header and the 40px
-	// controls row, 12.75rem in all, measured at 1056–1920px and with a
-	// larger font. More above it (the notice past PERIOD_SIZE sessions)
-	// only makes the map a little taller than the window.
-	const MAP_HEIGHT = 'calc(100dvh - 12.75rem - var(--cds-spacing-05))';
+	// The map and, a session open, its legend fit the window, 1rem from its
+	// bottom (user's feedback: a taller map scrolled awkwardly, a cut-off
+	// legend). The same height in both states, so it never resizes; sized
+	// for the open one: the shell's header (3rem), the page header with
+	// its breadcrumb (8.25rem) above, the legend (1.5rem) below: 13.75rem
+	// with the 1rem, measured at 1280px. The list has no breadcrumb, so
+	// there it ends 2rem higher.
+	const MAP_HEIGHT = 'calc(100dvh - 13.75rem)';
 
 	// Every flight's track, with the session it's in.
 	const flights = $derived(
@@ -250,64 +251,68 @@
 	]);
 </script>
 
+<!-- The list's own controls: the period, the count and Filters. Above the
+     cards, where the pointer works (user's choice, 2026-10-21). -->
+{#snippet periodToolbar()}
+	<ListFilters
+		filters={data.state}
+		none={{ ...data.state, ...NO_FILTERS }}
+		devices={data.devices}
+		admin={data.choices.admin}
+		filtering={cardsFiltering}
+		count={sessions(data.total)}
+		onchange={filter}
+	>
+		{#snippet dates()}
+			<PeriodNav
+				unit={data.state.period.unit}
+				units={{
+					week: at(switchTo('week', data.state.period, today(data.timeZone))),
+					month: at(switchTo('month', data.state.period, today(data.timeZone)))
+				}}
+				name={periodName(data.state.period)}
+				previous={at(step(data.state.period, -1))}
+				next={at(step(data.state.period, 1))}
+				current={data.state.period.start === thisPeriod.start ? null : at(thisPeriod)}
+			/>
+		{/snippet}
+	</ListFilters>
+{/snippet}
+
+<!-- A session open: its title, the breadcrumb back to the list (through the
+     history, so the list is as it was) and no Cards|Table, which has nothing
+     to switch there (carbon-expert's advice, user's decision). -->
 <PageHeader
 	title={openedRow ? `Session ${day(openedRow.first_takeoff_at, data.timeZone, true)}` : 'Sessions'}
+	breadcrumb={openedRow
+		? [{ href: href(data.state), label: 'Sessions', follow: () => history.back() }]
+		: undefined}
 	{crumb}
 >
 	{#snippet actions()}
-		<ViewSwitcher
-			label="View"
-			options={[
-				{
-					label: 'Cards',
-					href: href({ ...data.state, view: 'cards' }),
-					selected: data.state.view === 'cards'
-				},
-				{
-					label: 'Table',
-					href: href({ ...data.state, view: 'table' }),
-					selected: data.state.view === 'table'
-				}
-			]}
-		/>
+		{#if !opened}<ViewSwitcher
+				label="View"
+				options={[
+					{
+						label: 'Cards',
+						href: href({ ...data.state, view: 'cards' }),
+						selected: data.state.view === 'cards'
+					},
+					{
+						label: 'Table',
+						href: href({ ...data.state, view: 'table' }),
+						selected: data.state.view === 'table'
+					}
+				]}
+			/>{/if}
 	{/snippet}
 </PageHeader>
 
 <Grid>
 	<Column narrow>
-		{#if opened && openedRow}
-			<!-- In place of the controls, the same height, so the map stays put. -->
-			<div class="opened-bar">
-				<Button kind="ghost" size="md" onclick={() => history.back()}>All sessions</Button>
-				<p>
-					{daySpan(openedRow.first_takeoff_at, openedRow.last_landed_at, data.timeZone)} ·
-					{plural(openedRow.flights, 'flight')} · {duration(openedRow.air_time_s)} in the air
-				</p>
-			</div>
-		{:else if data.state.view === 'cards'}
-			<ListFilters
-				filters={data.state}
-				none={{ ...data.state, ...NO_FILTERS }}
-				devices={data.devices}
-				admin={data.choices.admin}
-				filtering={cardsFiltering}
-				count={sessions(data.total)}
-				onchange={filter}
-			>
-				{#snippet dates()}
-					<PeriodNav
-						unit={data.state.period.unit}
-						units={{
-							week: at(switchTo('week', data.state.period, today(data.timeZone))),
-							month: at(switchTo('month', data.state.period, today(data.timeZone)))
-						}}
-						name={periodName(data.state.period)}
-						previous={at(step(data.state.period, -1))}
-						next={at(step(data.state.period, 1))}
-						current={data.state.period.start === thisPeriod.start ? null : at(thisPeriod)}
-					/>
-				{/snippet}
-			</ListFilters>
+		{#if data.state.view === 'cards'}
+			<!-- Nothing in the period: the controls stay, above the empty state. -->
+			{#if data.total === 0}{@render periodToolbar()}{/if}
 		{:else if data.total > 0 || filtering}
 			<ListFilters
 				filters={data.state}
@@ -361,6 +366,7 @@
 				<!-- The cards, and in their place the open session's facts. -->
 				<div class="side">
 					<div class="cards" inert={opened !== null}>
+						{@render periodToolbar()}
 						{#each months as group (group.name)}
 							<section>
 								<!-- Only where the period has two months: else the period's name says it. -->
@@ -400,6 +406,14 @@
 					</div>
 					{#if opened && wide.current}
 						<div class="facts-side">
+							{#if openedRow}
+								<!-- The session at a glance, at the top of its facts (user's choice,
+								     2026-10-21: no row of its own in the header). -->
+								<p class="facts-summary">
+									{daySpan(openedRow.first_takeoff_at, openedRow.last_landed_at, data.timeZone)} ·
+									{plural(openedRow.flights, 'flight')} · {duration(openedRow.air_time_s)} in the air
+								</p>
+							{/if}
 							{#if openedData}
 								<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
 							{/if}
@@ -616,18 +630,9 @@
 		}
 	}
 
-	/* In place of the controls row, as high, with the session's times. */
-	.opened-bar {
-		display: flex;
-		gap: var(--cds-spacing-03);
-		align-items: center;
-		min-height: var(--cds-size-medium);
-		margin: 0 0 var(--cds-spacing-05) calc(-1 * var(--cds-spacing-05));
-		padding-inline-start: var(--cds-spacing-05);
-	}
-
-	.opened-bar p {
-		margin: 0;
+	/* The open session's day, times and totals, above its facts. */
+	.facts-summary {
+		margin: 0 0 var(--cds-spacing-06);
 		color: var(--cds-text-secondary);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);

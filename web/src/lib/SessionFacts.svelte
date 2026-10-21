@@ -5,7 +5,7 @@
 	suggested one, which should look alike.
 -->
 <script lang="ts" module>
-	import { areaShares, clock, dateTime, distance, duration } from '#lib/format.js';
+	import { areaShares, clock, dayMonth, distance, duration } from '#lib/format.js';
 
 	interface Flight {
 		takeoff_at: string;
@@ -60,9 +60,20 @@
 	const facts = $derived(summary(flights, timeZone));
 	const distanceM = $derived(flights.reduce((total, flight) => total + flight.distance_m, 0));
 
+	// Times only: the date is in the title (user's decision, 2026-10-21); a
+	// landing after midnight says "+1".
+	const nextDay = $derived(dayMonth(facts.end, timeZone) !== dayMonth(facts.start, timeZone));
+
+	// In pairs, two columns: takeoff and landing, duration and air time
+	// side by side, distance and flights; the area, if any, last and wide
+	// (carbon-expert's grouping).
 	const times = $derived([
-		{ label: 'First takeoff', value: dateTime(facts.start, timeZone) },
-		{ label: 'Last landing', value: dateTime(facts.end, timeZone) },
+		{ label: 'First takeoff', value: clock(facts.start, timeZone), numeric: true },
+		{
+			label: 'Last landing',
+			value: `${clock(facts.end, timeZone)}${nextDay ? ' +1' : ''}`,
+			numeric: true
+		},
 		{
 			label: 'Duration',
 			value: duration((Date.parse(facts.end) - Date.parse(facts.start)) / 1000),
@@ -70,14 +81,16 @@
 		},
 		{ label: 'Air time', value: duration(facts.airTime), numeric: true },
 		{ label: 'Distance', value: distance(distanceM), numeric: true },
+		{ label: 'Flights', value: String(flights.length), numeric: true },
 		// Only when the flights crossed an area.
 		...[
 			areaShares(
 				flights.flatMap((flight) => flight.areas),
 				facts.airTime
 			)
-		].filter((fact) => fact !== null),
-		{ label: 'Flights', value: String(flights.length), numeric: true }
+		]
+			.filter((fact) => fact !== null)
+			.map((fact) => ({ ...fact, wide: true }))
 	]);
 </script>
 
@@ -93,9 +106,9 @@
 		<dd>{facts.teams}</dd>
 	</div>
 </dl>
-<dl class="facts">
+<dl class="facts pairs">
 	{#each times as fact (fact.label)}
-		<div>
+		<div class:wide={'wide' in fact}>
 			<dt>{fact.label}</dt>
 			<dd class:numeric={fact.numeric}>{fact.value}</dd>
 		</div>
@@ -108,6 +121,14 @@
 		display: grid;
 		gap: var(--cds-spacing-05);
 		margin: 0 0 var(--cds-spacing-07);
+	}
+
+	.pairs {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.wide {
+		grid-column: 1 / -1;
 	}
 
 	dt {
