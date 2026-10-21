@@ -578,46 +578,50 @@
 					{#if opened && wide.current}
 						<div class="facts-side">
 							{#if openedData}
-								<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
+								<div class="panel">
+									<SessionFacts flights={openedData.session.flights} timeZone={data.timeZone} />
+								</div>
 								<!-- Its flights where the eye is, as the map fills the window and
 								     the table is below it (user's feedback): pointing at one brings
 								     out its track; each opens its flight. The table stays for
-								     choosing several. -->
-								<h3 class="facts-heading">Flights</h3>
-								<ul class="flight-list">
-									{#each openedData.session.flights as flight, index (flight.id)}
-										<li>
-											<a
-												href={resolve('/flights/[id]', { id: flight.id })}
-												onpointerenter={() => (pointedFlight = index)}
-												onpointerleave={() => (pointedFlight = null)}
-												onfocus={() => (pointedFlight = index)}
-												onblur={() => (pointedFlight = null)}
-											>
-												<span>
-													{clock(flight.takeoff_at, data.timeZone)}–{clock(
-														flight.landed_at,
-														data.timeZone
-													)}
-												</span>
-												<span class="flight-numbers">
-													{duration(flight.air_time_s)} · {distance(flight.distance_m)}
-												</span>
-											</a>
-										</li>
-									{/each}
-								</ul>
-								<p class="to-table">
-									<Link
-										href="#session-flights"
-										onclick={(event) => {
-											event.preventDefault();
-											document
-												.getElementById('session-flights')
-												?.scrollIntoView({ behavior: 'smooth' });
-										}}>All flights in a table</Link
-									>
-								</p>
+								     choosing several. A panel of its own, 2px under the facts. -->
+								<div class="panel">
+									<h3 class="facts-heading">Flights</h3>
+									<ul class="flight-list">
+										{#each openedData.session.flights as flight, index (flight.id)}
+											<li>
+												<a
+													href={resolve('/flights/[id]', { id: flight.id })}
+													onpointerenter={() => (pointedFlight = index)}
+													onpointerleave={() => (pointedFlight = null)}
+													onfocus={() => (pointedFlight = index)}
+													onblur={() => (pointedFlight = null)}
+												>
+													<span>
+														{clock(flight.takeoff_at, data.timeZone)}–{clock(
+															flight.landed_at,
+															data.timeZone
+														)}
+													</span>
+													<span class="flight-numbers">
+														{duration(flight.air_time_s)} · {distance(flight.distance_m)}
+													</span>
+												</a>
+											</li>
+										{/each}
+									</ul>
+									<p class="to-table">
+										<Link
+											href="#session-flights"
+											onclick={(event) => {
+												event.preventDefault();
+												document
+													.getElementById('session-flights')
+													?.scrollIntoView({ behavior: 'smooth' });
+											}}>All flights in a table</Link
+										>
+									</p>
+								</div>
 							{/if}
 						</div>
 					{/if}
@@ -827,9 +831,20 @@
 		   content one block in both states (user's feedback: the toolbar
 		   floated above facts on the page background). */
 		.facts-side {
+			display: grid;
+			gap: var(--cds-spacing-01);
+			animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 120ms both facts-in;
+		}
+
+		/* The facts, and the flights: panels 2px apart, as the cards. */
+		.panel {
 			padding: var(--cds-spacing-05);
 			background: var(--cds-layer-01);
-			animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 120ms both facts-in;
+		}
+
+		/* 16px all round: the facts' last group keeps no space of its own. */
+		.panel :global(dl:last-child) {
+			margin-bottom: 0;
 		}
 
 		.facts-heading {
