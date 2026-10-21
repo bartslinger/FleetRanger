@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { day, distance, duration, timeSpan } from '#lib/format.js';
+	import { areaShares, day, distance, duration, timeSpan } from '#lib/format.js';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -90,6 +90,17 @@
 			numeric: true,
 			format: (flight) => distance(flight.distance_m)
 		},
+		// Only when one of the flights crossed an area.
+		...(flights.some((flight) => flight.areas.length > 0)
+			? [
+					{
+						key: 'areas',
+						header: 'Areas',
+						wrap: true,
+						format: (flight) => areaShares(flight.areas, flight.air_time_s)?.value ?? '—'
+					} satisfies TableColumn<Row>
+				]
+			: []),
 		{ key: 'pilot_name', header: 'Pilot' },
 		{ key: 'aircraft_serial', header: 'Drone serial', identifier: true }
 	]);
