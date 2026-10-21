@@ -45,7 +45,7 @@
 	import { page } from '$app/state';
 	import { setTheme, type Theme } from '#lib/theme.js';
 	import Button from './Button.svelte';
-	import { startsTrail } from '#lib/trail.svelte.js';
+	import { startsTrail, startTrail } from '#lib/trail.svelte.js';
 	import Icon from './Icon.svelte';
 	import RadioButtonGroup from './RadioButtonGroup.svelte';
 	import Toasts from './Toasts.svelte';
@@ -280,9 +280,17 @@
 						bind:value={theme}
 						onchange={setTheme}
 					/>
+					<!-- A header panel is global, as the side navigation: its links
+					     start a new breadcrumb trail. -->
 					{#each profileLinks as link (link.href)}
-						<Button kind="ghost" href={link.href} fill onclick={() => togglePanel('profile')}
-							>{link.label}</Button
+						<Button
+							kind="ghost"
+							href={link.href}
+							fill
+							onclick={() => {
+								startTrail();
+								togglePanel('profile');
+							}}>{link.label}</Button
 						>
 					{/each}
 					<!-- Posted straight to the backend, which ends the login session. -->
