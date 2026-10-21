@@ -774,10 +774,18 @@
 				visibility 0s 240ms;
 		}
 
-		/* 16px under the toolbar. */
+		/* On the toolbar's layer, 2px under it, as the cards are: toolbar and
+		   content one block in both states (user's feedback: the toolbar
+		   floated above facts on the page background). */
 		.facts-side {
-			padding-top: var(--cds-spacing-05);
+			padding: var(--cds-spacing-05);
+			background: var(--cds-layer-01);
 			animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 120ms both facts-in;
+		}
+
+		/* 16px all round: the last group's own space below goes. */
+		.facts-side :global(dl:last-child) {
+			margin-bottom: 0;
 		}
 	}
 
