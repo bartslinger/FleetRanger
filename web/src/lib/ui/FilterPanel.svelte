@@ -27,12 +27,10 @@
 		onapply: () => void;
 		/** Empties the draft's fields. */
 		onreset: () => void;
-		/** The button's: lg in a table's toolbar, md beside fields. */
-		size?: 'md' | 'lg';
 		children: Snippet;
 	}
 
-	let { count, onopen, onapply, onreset, size = 'lg', children }: Props = $props();
+	let { count, onopen, onapply, onreset, children }: Props = $props();
 
 	let open = $state(false);
 	let body: HTMLElement | undefined = $state();
@@ -46,7 +44,8 @@
 >
 	<Dialog.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} kind="ghost" {size} icon={Filter}>
+			<!-- As tall as the fields beside it. -->
+			<Button {...props} kind="ghost" size="md" icon={Filter}>
 				Filters{count > 0 ? ` (${count})` : ''}
 			</Button>
 		{/snippet}
