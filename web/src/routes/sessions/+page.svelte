@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { goto, preloadData, pushState } from '$app/navigation';
+	import { goto, preloadData, pushState, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import SessionFacts from '#lib/SessionFacts.svelte';
@@ -28,6 +28,7 @@
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import Calendar from '@carbon/icons/es/calendar/16.js';
+	import Close from '@carbon/icons/es/close/16.js';
 	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
 	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
 	import { Tooltip } from 'bits-ui';
@@ -170,17 +171,36 @@
 		// The facts at the top, in view; Back returns to this place.
 		listScroll = window.scrollY;
 		window.scrollTo({ top: 0 });
+		show(id, url, pushState);
+	}
+
+	/** From the open session to an earlier or later one in the list: in
+	 * place of it in the history, so Back and ✕ return to the list. */
+	function goToSession(event: MouseEvent, id: string, url: string) {
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+		event.preventDefault();
+		show(id, url, replaceState);
+	}
+
+	function show(id: string, url: string, record: typeof pushState) {
 		// The full tracks take over once the map has flown to the session:
 		// arriving sooner, they cut the flight short (user's feedback).
 		flown = false;
 		setTimeout(() => (flown = true), 450);
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller
-		pushState(url, { session: id });
+		record(url, { session: id });
 		preloadData(url).then((result) => {
 			if (result.type === 'loaded' && result.status === 200) {
 				loaded = { id, data: result.data as SessionData };
 			}
 		});
+	}
+
+	// Esc closes the open session, as its ✕ does, unless something over it
+	// (a dialog, a menu) takes the key first.
+	function closeOnEscape(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !opened || event.defaultPrevented) return;
+		if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+		history.back();
 	}
 
 	// The map: the open session's full tracks once loaded and flown to, else
@@ -231,7 +251,19 @@
 	// The toolbar's two lines, the name and the count, and which are cut off:
 	// a tooltip has those in full, only those (user's feedback). Checked when
 	// the width or the text changes.
-	const periodLines = $derived([periodName(data.state.period), sessions(data.total)]);
+	// The open session's place in the list (newest first): the earlier one
+	// is after it, the later one before.
+	const openedIndex = $derived(data.sessions.findIndex((session) => session.id === opened));
+	const earlier = $derived(openedRow ? data.sessions[openedIndex + 1] : undefined);
+	const later = $derived(openedRow ? data.sessions[openedIndex - 1] : undefined);
+	const periodLines = $derived(
+		openedRow
+			? [
+					day(openedRow.first_takeoff_at, data.timeZone, true),
+					`${openedIndex + 1} of ${data.total} · ${periodName(data.state.period)}`
+				]
+			: [periodName(data.state.period), sessions(data.total)]
+	);
 	let periodHeading: HTMLElement | undefined = $state();
 	let cutLines: boolean[] = $state([false, false]);
 	const periodCut = $derived(cutLines.some(Boolean));
@@ -293,18 +325,48 @@
 	<!-- A toolbar for screen readers, one tab stop with the arrow keys
 	     between its controls (Carbon's text toolbar, WAI-ARIA). -->
 	<div class="list-toolbar" role="toolbar" aria-label="Sessions" use:roving>
-		<IconButton
-			icon={ChevronLeft}
-			size="lg"
-			label="Previous {unit}"
-			href={at(step(data.state.period, -1))}
-		/>
-		<IconButton
-			icon={ChevronRight}
-			size="lg"
-			label="Next {unit}"
-			href={at(step(data.state.period, 1))}
-		/>
+		<!-- A session open, the same bar in the same place: the arrows step
+		     through the period's sessions instead, in time like the periods
+		     (‹ earlier), disabled at its ends; ✕ in place of the list's tools
+		     goes back to the list (user's choice, 2026-10-21). -->
+		{#if openedRow}
+			{@const url = (session: Row) => resolve('/sessions/[id]', { id: session.id })}
+			{#if earlier}
+				<IconButton
+					icon={ChevronLeft}
+					size="lg"
+					label="Earlier session"
+					href={url(earlier)}
+					onclick={(event) => goToSession(event, earlier.id, url(earlier))}
+				/>
+			{:else}
+				<IconButton icon={ChevronLeft} size="lg" label="Earlier session" disabled />
+			{/if}
+			{#if later}
+				<IconButton
+					icon={ChevronRight}
+					size="lg"
+					label="Later session"
+					href={url(later)}
+					onclick={(event) => goToSession(event, later.id, url(later))}
+				/>
+			{:else}
+				<IconButton icon={ChevronRight} size="lg" label="Later session" disabled />
+			{/if}
+		{:else}
+			<IconButton
+				icon={ChevronLeft}
+				size="lg"
+				label="Previous {unit}"
+				href={at(step(data.state.period, -1))}
+			/>
+			<IconButton
+				icon={ChevronRight}
+				size="lg"
+				label="Next {unit}"
+				href={at(step(data.state.period, 1))}
+			/>
+		{/if}
 		<!-- After both arrows, as in a calendar's header, so they stay put
 		     whatever the name's length (user's feedback). -->
 		<!-- Cut off, the full name in a tooltip, on hover and keyboard focus
@@ -321,44 +383,53 @@
 						aria-live="polite"
 						data-roving={periodCut ? 'true' : 'false'}
 					>
-						<span class="period-name">{periodName(data.state.period)}</span>
-						<span class="period-count">{sessions(data.total)}</span>
+						<span class="period-name">{periodLines[0]}</span>
+						<span class="period-count">{periodLines[1]}</span>
 					</h2>
 				{/snippet}
 			</Tooltip.Trigger>
 			<TooltipContent side="top">{periodLabel}</TooltipContent>
 		</Tooltip.Root>
 		<span class="tools">
-			<ListFilters
-				toolbar
-				filters={data.state}
-				none={{ ...data.state, ...NO_FILTERS }}
-				devices={data.devices}
-				admin={data.choices.admin}
-				filtering={cardsFiltering}
-				onchange={filter}
-			/>
-			<OverflowMenu
-				label="Choose period"
-				variant="row"
-				icon={Calendar}
-				items={[
-					{
-						label: `Show by ${other}`,
-						// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
-						onselect: () => goto(at(switchTo(other, data.state.period, today(data.timeZone))))
-					},
-					...(data.state.period.start === thisPeriod.start
-						? []
-						: [
-								{
-									label: `Go to this ${unit}`,
-									// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
-									onselect: () => goto(at(thisPeriod))
-								}
-							])
-				]}
-			/>
+			{#if openedRow}
+				<IconButton
+					icon={Close}
+					size="lg"
+					label="Back to {periodName(data.state.period)}"
+					onclick={() => history.back()}
+				/>
+			{:else}
+				<ListFilters
+					toolbar
+					filters={data.state}
+					none={{ ...data.state, ...NO_FILTERS }}
+					devices={data.devices}
+					admin={data.choices.admin}
+					filtering={cardsFiltering}
+					onchange={filter}
+				/>
+				<OverflowMenu
+					label="Choose period"
+					variant="row"
+					icon={Calendar}
+					items={[
+						{
+							label: `Show by ${other}`,
+							// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
+							onselect: () => goto(at(switchTo(other, data.state.period, today(data.timeZone))))
+						},
+						...(data.state.period.start === thisPeriod.start
+							? []
+							: [
+									{
+										label: `Go to this ${unit}`,
+										// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
+										onselect: () => goto(at(thisPeriod))
+									}
+								])
+					]}
+				/>
+			{/if}
 		</span>
 	</div>
 {/snippet}
@@ -366,6 +437,8 @@
 <!-- A session open: its title, the breadcrumb back to the list (through the
      history, so the list is as it was) and no Cards|Table, which has nothing
      to switch there (carbon-expert's advice, user's decision). -->
+<svelte:window onkeydown={closeOnEscape} />
+
 <PageHeader
 	title={openedRow ? `Session ${day(openedRow.first_takeoff_at, data.timeZone, true)}` : 'Sessions'}
 	breadcrumb={openedRow
@@ -435,8 +508,9 @@
 			<div class="cards-view" class:opened={opened && wide.current}>
 				<!-- The cards, and in their place the open session's facts. -->
 				<div class="side">
+					<!-- Stays when a session opens; only its controls change. -->
+					{@render periodToolbar()}
 					<div class="cards" inert={opened !== null}>
-						{@render periodToolbar()}
 						{#if data.total === 0}
 							<EmptyState
 								title="No sessions in {periodName(data.state.period)}"
@@ -696,7 +770,8 @@
 
 		.opened .cards {
 			position: absolute;
-			inset: 0 0 auto var(--cds-spacing-05);
+			/* Under the toolbar, which stays: 48px and its 2px. */
+			inset: calc(var(--cds-spacing-09) + var(--cds-spacing-01)) 0 auto var(--cds-spacing-05);
 			visibility: hidden;
 			opacity: 0;
 			transform: translateX(-2rem);
@@ -730,8 +805,8 @@
 		display: flex;
 		align-items: center;
 		min-height: var(--cds-spacing-09);
-		/* 2px to the first card, against the months' 24px gap in the list. */
-		margin-bottom: calc(var(--cds-spacing-01) - var(--cds-spacing-06));
+		/* 2px to the first card. */
+		margin-bottom: var(--cds-spacing-01);
 		background: var(--cds-layer-01);
 	}
 
