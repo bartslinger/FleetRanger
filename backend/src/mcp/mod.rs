@@ -389,7 +389,7 @@ impl FleetRanger {
         let filter = self.filter(&params.filters).await?;
         let (limit, offset) = page(params.page, params.size)?;
         let (mut sessions, total) =
-            sessions::service::list(&self.db, actor, &filter, None, limit, offset)
+            sessions::service::list(&self.db, actor, &filter, None, limit, offset, false)
                 .await
                 .map_err(api)?;
         // Whole metres, as everywhere in these tools; the sum is of the exact

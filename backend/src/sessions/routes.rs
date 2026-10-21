@@ -125,6 +125,9 @@ struct ListQuery {
     /// ones near flights to be added to a session.
     span_from: Option<DateTime<Utc>>,
     span_to: Option<DateTime<Utc>>,
+    /// `tracks=1`: each flight with a coarse track, for a map of them all.
+    #[serde(default)]
+    tracks: Option<u8>,
 }
 
 /// The Flights list's filters, from the same query string: only sessions
@@ -198,6 +201,7 @@ async fn list(
         window,
         i64::from(size),
         offset,
+        query.tracks == Some(1),
     )
     .await?;
     Ok(Json(SessionPage { sessions, total }))

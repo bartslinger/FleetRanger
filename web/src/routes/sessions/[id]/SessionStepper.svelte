@@ -9,7 +9,7 @@
 	import { page } from '$app/state';
 	import { trail } from '#lib/trail.svelte.js';
 	import Stepper from '#lib/ui/Stepper.svelte';
-	import { apiFilters, parse } from '../list.js';
+	import { listFilters, parse } from '../list.js';
 
 	let { id }: { id: string } = $props();
 
@@ -25,7 +25,7 @@
 		const before = trail.steps.at(-1);
 		const url = new URL(before?.href ?? '/', 'http://list');
 		const params = url.pathname === resolve('/sessions') ? url.searchParams : new URLSearchParams();
-		return apiFilters(parse(params), page.data.timeZone).toString();
+		return listFilters(parse(params, page.data.timeZone), page.data.timeZone).toString();
 	});
 
 	let place: Neighbours | null = $state(null);

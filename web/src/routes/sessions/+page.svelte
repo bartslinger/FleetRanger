@@ -10,9 +10,9 @@
 		type Filters
 	} from '#lib/ListFilters.svelte';
 	import Button from '#lib/ui/Button.svelte';
-	import { PAGE_SIZES, query, type SessionListState } from './list.js';
+	import { PAGE_SIZES, PERIOD_SIZE, query, type SessionListState } from './list.js';
 	import { clock, day, daySpan, distance, duration, month } from '#lib/format.js';
-	import type { Session } from '#lib/server/backend.js';
+	import { periodName, periodOf, step, switchTo, today, type Period } from '#lib/period.js';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -24,8 +24,9 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
+	import PeriodNav from '#lib/ui/PeriodNav.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
-	import TrackMap, { type Track } from '#lib/ui/TrackMap.svelte';
+	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
 	import type { PageProps, Snapshot } from './$types';
 
@@ -107,85 +108,65 @@
 		return groups;
 	});
 
-	// From lg, a map beside the cards previews one session: the first, then
-	// the one last hovered or focused. Below lg there's no map; a tap opens
-	// the session, whose page has the map.
+	// Exploring: the cards show a week or a month, and from lg a map beside
+	// them has all their tracks at once (coarse, from the list). Pointing at
+	// a card brings out its session's tracks; nothing loads. Clicking a track
+	// marks its card; clicking a card opens the session. Below lg there's no
+	// map.
 	const wide = new MediaQuery('min-width: 66rem');
-	let previewed: string | undefined = $state();
-	const shown = $derived(
-		data.sessions.find((session) => session.id === previewed) ?? data.sessions[0]
-	);
-	// Above the map, and in its name for screen readers.
-	const previewName = $derived(
-		shown
-			? `${daySpan(shown.first_takeoff_at, shown.last_landed_at, data.timeZone)} · ${shown.pilots.join(', ')}`
-			: ''
-	);
 
-	// Hovering previews after a short pause, so moving the pointer across the
-	// cards doesn't fetch every session on the way.
-	let hoverTimer: ReturnType<typeof setTimeout> | undefined;
-	function hover(id: string) {
-		clearTimeout(hoverTimer);
-		hoverTimer = setTimeout(() => (previewed = id), 150);
+	// The map fits the window from where it starts, 1rem above its bottom
+	// (user's feedback: a map taller than the window scrolled awkwardly).
+	// Above it: the shell's header (3rem), the page header and the 40px
+	// controls row, 12.75rem in all, measured at 1056–1920px and with a
+	// larger font. More above it (the notice past PERIOD_SIZE sessions)
+	// only makes the map a little taller than the window.
+	const MAP_HEIGHT = 'calc(100dvh - 12.75rem - var(--cds-spacing-05))';
+
+	// Every flight's track, with the session it's in.
+	const flights = $derived(
+		data.sessions.flatMap((session) =>
+			session.flight_times.flatMap((flight) =>
+				flight.track ? [{ session: session.id, track: flight.track }] : []
+			)
+		)
+	);
+	const tracks = $derived(
+		flights.map(({ track }) => ({ type: 'LineString' as const, coordinates: track }))
+	);
+	let pointed: string | null = $state(null);
+	let marked: string | null = $state(null);
+	const highlight = $derived.by(() => {
+		const session = pointed ?? marked;
+		return flights.flatMap((flight, index) => (flight.session === session ? [index] : []));
+	});
+	// Another period or other filters: nothing stays marked.
+	let markedFor = untrack(() => data.sessions);
+	$effect(() => {
+		if (data.sessions === markedFor) return;
+		markedFor = data.sessions;
+		marked = null;
+	});
+	const cardElements: Record<string, HTMLElement> = $state({});
+	function mark(index: number) {
+		const session = flights[index]?.session ?? null;
+		// The same session again: unmarked.
+		marked = session === marked ? null : session;
+		if (marked) cardElements[marked]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 	}
 
 	// Kept in the browser's history, so going back from a session's page
-	// restores the preview and the selection.
-	export const snapshot: Snapshot<{ previewed?: string; selected: string[] }> = {
-		capture: () => ({ previewed, selected }),
-		restore: (value) => ({ previewed, selected } = value)
+	// restores the marked card and the selection.
+	export const snapshot: Snapshot<{ marked: string | null; selected: string[] }> = {
+		capture: () => ({ marked, selected }),
+		restore: (value) => ({ marked, selected } = value)
 	};
 
-	// Tracks are fetched when a session is previewed, and kept while the list
-	// stays the same: merging and splitting reload the list and change them.
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a plain store, nothing renders from it
-	let cache = new Map<string, Track[]>();
-	let cacheOf: Row[] | undefined;
-	let shownTracks: Track[] = $state([]);
-	let tracksLoading = $state(false);
-	let tracksFailed = $state(false);
-
-	$effect(() => {
-		if (data.state.view !== 'cards' || !shown || !wide.current) return;
-		const id = shown.id;
-		if (cacheOf !== data.sessions) {
-			cache = new Map();
-			cacheOf = data.sessions;
-		}
-		tracksFailed = false;
-		const cached = cache.get(id);
-		if (cached) {
-			shownTracks = cached;
-			tracksLoading = false;
-			return;
-		}
-		let cancelled = false;
-		// Never the previous session's tracks under this session's heading;
-		// the map keeps its view until the new ones arrive.
-		shownTracks = [];
-		tracksLoading = true;
-		const store = cache;
-		fetch(`/api/sessions/${id}`)
-			.then((response) => {
-				if (!response.ok) throw new Error(String(response.status));
-				return response.json() as Promise<Session>;
-			})
-			.then((session) => {
-				const tracks = session.flights.map((flight) => flight.track);
-				store.set(id, tracks);
-				if (!cancelled) shownTracks = tracks;
-			})
-			.catch(() => {
-				if (!cancelled) tracksFailed = true;
-			})
-			.finally(() => {
-				if (!cancelled) tracksLoading = false;
-			});
-		return () => {
-			cancelled = true;
-		};
-	});
+	// The period's links: the same filters, another week or month.
+	const at = (period: Period) => href({ ...data.state, period });
+	const thisPeriod = $derived(periodOf(data.state.period.unit, today(data.timeZone)));
+	// In the cards the period isn't a filter: Clear filters leaves it.
+	const cardsFiltering = $derived(listFiltering({ ...data.state, from: null }));
 
 	const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 </script>
@@ -212,7 +193,31 @@
 
 <Grid>
 	<Column narrow>
-		{#if data.total > 0 || filtering}
+		{#if data.state.view === 'cards'}
+			<ListFilters
+				filters={data.state}
+				none={{ ...data.state, ...NO_FILTERS }}
+				devices={data.devices}
+				admin={data.choices.admin}
+				filtering={cardsFiltering}
+				count={sessions(data.total)}
+				onchange={filter}
+			>
+				{#snippet dates()}
+					<PeriodNav
+						unit={data.state.period.unit}
+						units={{
+							week: at(switchTo('week', data.state.period, today(data.timeZone))),
+							month: at(switchTo('month', data.state.period, today(data.timeZone)))
+						}}
+						name={periodName(data.state.period)}
+						previous={at(step(data.state.period, -1))}
+						next={at(step(data.state.period, 1))}
+						current={data.state.period.start === thisPeriod.start ? null : at(thisPeriod)}
+					/>
+				{/snippet}
+			</ListFilters>
+		{:else if data.total > 0 || filtering}
 			<ListFilters
 				filters={data.state}
 				none={{ ...data.state, ...NO_FILTERS }}
@@ -222,7 +227,22 @@
 				onchange={filter}
 			/>
 		{/if}
-		{#if data.total === 0 && filtering}
+		{#if data.state.view === 'cards' && data.total === 0}
+			<EmptyState
+				title="No sessions in {periodName(data.state.period)}"
+				body={cardsFiltering
+					? 'No sessions you can see in this period have a flight that passes these filters.'
+					: 'Step to another period with the arrows, or see all sessions in the table.'}
+			>
+				{#snippet action()}
+					{#if cardsFiltering}
+						<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
+					{:else}
+						<Link href={href({ ...data.state, view: 'table' })}>Show the table</Link>
+					{/if}
+				{/snippet}
+			</EmptyState>
+		{:else if data.total === 0 && filtering}
 			<EmptyState
 				title="No sessions match"
 				body="No sessions you can see have a flight that passes these filters."
@@ -241,27 +261,33 @@
 				{/snippet}
 			</EmptyState>
 		{:else if data.state.view === 'cards'}
-			<!-- As the table's toolbar: how many pass the filters. -->
-			{#if filtering}
-				<p class="cards-count">{sessions(data.total)}</p>
+			{#if data.total > PERIOD_SIZE}
+				<InlineNotification kind="info" title="Only the latest {PERIOD_SIZE}">
+					This {data.state.period.unit} has {data.total} sessions; the table shows them all.
+				</InlineNotification>
 			{/if}
 			<div class="cards-view">
 				<div class="cards">
 					{#each months as group (group.name)}
 						<section>
-							<h2 class="month">{group.name}</h2>
+							<!-- Only where the period has two months: else the period's name says it. -->
+							{#if months.length > 1}<h2 class="month">{group.name}</h2>{/if}
 							<ul>
 								{#each group.sessions as session (session.id)}
-									<li>
+									<li bind:this={cardElements[session.id]}>
 										<ClickableTile
 											href={resolve('/sessions/[id]', { id: session.id })}
-											marked={wide.current && session.id === shown?.id}
-											onpointerenter={() => hover(session.id)}
-											onpointerleave={() => clearTimeout(hoverTimer)}
-											onfocus={() => (previewed = session.id)}
+											marked={wide.current && marked === session.id}
+											onpointerenter={() => (pointed = session.id)}
+											onpointerleave={() => (pointed = null)}
+											onfocus={() => (pointed = session.id)}
+											onblur={() => (pointed = null)}
 										>
 											<span class="card-title">
 												{daySpan(session.first_takeoff_at, session.last_landed_at, data.timeZone)}
+											</span>
+											<span class="card-strip">
+												<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
 											</span>
 											<span class="card-who">
 												{session.pilots.join(', ')} · {session.teams.join(', ')}
@@ -269,9 +295,6 @@
 											<span class="card-numbers">
 												{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the air
 												· {distance(session.distance_m)}
-											</span>
-											<span class="card-strip">
-												<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
 											</span>
 										</ClickableTile>
 									</li>
@@ -282,32 +305,18 @@
 				</div>
 				{#if wide.current}
 					<div class="map-side">
-						<!-- Not a heading: it changes as the pointer moves over the cards. -->
-						<p class="map-heading">{previewName}</p>
-						{#if tracksFailed}
-							<InlineNotification kind="error" title="The tracks couldn’t load">
-								Try again later.
-							</InlineNotification>
-						{:else}
-							<TrackMap
-								tracks={shownTracks}
-								token={data.mapboxToken}
-								label={`Map of the session ${previewName}`}
-								loading={tracksLoading}
-							/>
-						{/if}
+						<!-- The tracks aren't focusable: the cards are the same sessions. -->
+						<TrackMap
+							{tracks}
+							{highlight}
+							ends={false}
+							height={MAP_HEIGHT}
+							ontrackclick={mark}
+							token={data.mapboxToken}
+							label={`Map of the sessions in ${periodName(data.state.period)}; the list beside it has the same sessions`}
+						/>
 					</div>
 				{/if}
-			</div>
-			<div class="cards-pagination">
-				<Pagination
-					page={data.state.page}
-					size={data.state.size}
-					total={data.total}
-					sizes={PAGE_SIZES}
-					noun="sessions"
-					href={(page, size) => href({ ...data.state, page, size })}
-				/>
 			</div>
 		{:else}
 			<DataTable
@@ -352,11 +361,6 @@
 </Grid>
 
 <style>
-	/* 32px below the cards, as between the page's rows before. */
-	.cards-pagination {
-		margin-top: var(--cds-spacing-07);
-	}
-
 	/* Each month under its heading, which stays in view while its cards
 	   scroll; tiles 2px apart, as in Carbon's tile groups. */
 	.cards {
@@ -403,29 +407,21 @@
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 	}
 
+	/* The last line: room at its end for the tile's arrow (16px + 8px). */
 	.card-numbers {
+		padding-inline-end: 1.5rem;
 		color: var(--cds-text-secondary);
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* The day at a glance, under the numbers. */
+	/* Under the times it pictures, the same width on every card, so the
+	   strips line up and share one scale (exploring: the user found a
+	   full-width strip more than it needs; beside the title, titles wrapped). */
 	.card-strip {
 		display: block;
-		margin-top: var(--cds-spacing-04);
-	}
-
-	/* The number of sessions, like a table's toolbar: 48px high, in the 16px
-	   gutter. */
-	.cards-count {
-		display: flex;
-		align-items: center;
-		min-height: var(--cds-spacing-09);
-		margin: 0 0 var(--cds-spacing-05);
-		padding-inline-start: var(--cds-spacing-05);
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+		width: 12rem;
+		max-width: 100%;
+		margin-block: var(--cds-spacing-03);
 	}
 
 	/* Only the cards below lg; from lg, 5 of 16 columns of cards and the map
@@ -443,25 +439,28 @@
 			align-items: start;
 		}
 
+		/* 6 columns up to xlg, so a card's last line fits beside its arrow;
+		   5 from xlg (carbon-expert's suggestion). */
+		.cards {
+			grid-column: span 6;
+		}
+
+		/* Level with the first card, 16px below the header while the cards
+		   scroll, and as high as the window allows (carbon-expert's review). */
+		.map-side {
+			position: sticky;
+			top: calc(3rem + var(--cds-spacing-05));
+			grid-column: span 10;
+		}
+	}
+
+	@media (min-width: 82rem) {
 		.cards {
 			grid-column: span 5;
 		}
 
 		.map-side {
-			position: sticky;
-			top: 3rem;
 			grid-column: span 11;
 		}
-	}
-
-	/* The previewed session, level with the first month's heading. */
-	.map-heading {
-		margin: 0;
-		padding: var(--cds-spacing-03) var(--cds-spacing-05);
-		color: var(--cds-text-primary);
-		font-size: var(--cds-heading-compact-01-font-size);
-		font-weight: var(--cds-heading-compact-01-font-weight);
-		line-height: var(--cds-heading-compact-01-line-height);
-		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
 	}
 </style>
