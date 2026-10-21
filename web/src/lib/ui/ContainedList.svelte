@@ -1,8 +1,8 @@
 <!--
 	@component
 	Carbon's contained list with interactive rows, for a list beside a canvas
-	such as a map: one item can be selected, and each row can have an action
-	(e.g. an overflow menu) at its end.
+	such as a map: one item can be selected, clicking it again deselects it,
+	and each row can have an action (e.g. an overflow menu) at its end.
 -->
 <script lang="ts" generics="T extends { id: string; label: string }">
 	import type { Snippet } from 'svelte';
@@ -18,7 +18,8 @@
 		empty?: string;
 		items: T[];
 		selected?: string | null;
-		onselect?: (id: string) => void;
+		/** An item was selected, or (null) the selected one deselected. */
+		onselect?: (id: string | null) => void;
 		/** Rows can't be chosen now, e.g. while something else is being edited. */
 		disabled?: boolean;
 		action?: Snippet<[item: T]>;
@@ -53,9 +54,9 @@
 			<button
 				type="button"
 				class="item"
-				aria-current={item.id === selected ? 'true' : undefined}
+				aria-pressed={item.id === selected}
 				{disabled}
-				onclick={() => onselect?.(item.id)}>{item.label}</button
+				onclick={() => onselect?.(item.id === selected ? null : item.id)}>{item.label}</button
 			>
 			{#if action}<span class="action">{@render action(item)}</span>{/if}
 		</li>
