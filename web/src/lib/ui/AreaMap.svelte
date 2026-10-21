@@ -7,18 +7,6 @@
 	colours are Carbon's.
 -->
 <script lang="ts" module>
-	/** An area as `GET /api/areas` gives it. */
-	export interface Area {
-		id: string;
-		name: string;
-		/** GeoJSON Polygon or MultiPolygon, [longitude, latitude]. */
-		boundary: Boundary;
-	}
-
-	export type Boundary =
-		| { type: 'Polygon'; coordinates: number[][][] }
-		| { type: 'MultiPolygon'; coordinates: number[][][][] };
-
 	/** What can be done while editing, for the buttons beside the map. */
 	export interface EditState {
 		/** Finished parts. */
@@ -32,8 +20,19 @@
 
 <script lang="ts">
 	import 'mapbox-gl/dist/mapbox-gl.css';
-	import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
+	import type { Map as MapboxMap } from 'mapbox-gl';
 	import type { TerraDraw, TerraDrawMouseEvent } from 'terra-draw';
+	import {
+		FILL,
+		OUTLINE,
+		addAreaLayers,
+		bounds,
+		corners,
+		parts,
+		setAreas,
+		type Area,
+		type Boundary
+	} from './areas.js';
 	import InlineNotification from './InlineNotification.svelte';
 
 	interface Props {
@@ -69,150 +68,14 @@
 	let draw: TerraDraw | undefined = $state.raw();
 	let failed = $state(false);
 
-	// Map paint can't read CSS variables, so these are Carbon's values: Blue 50
-	// outlines with a white casing and a light Blue 60 fill, and labels in
-	// white with a Gray 100 halo, readable on satellite imagery.
-	const OUTLINE = '#4589ff';
-	const FILL = '#0f62fe';
-	const CASING = '#ffffff';
-	const HALO = '#161616';
 	// Terra Draw's handles: white with a Blue 60 outline.
 	const HANDLE = '#ffffff';
 	/** How close (in pixels) a corner must come to another area to snap to it. */
 	const SNAP_PX = 12;
 
-	// mapbox-gl doesn't export its GeoJSON types.
-	type FeatureCollection = Extract<
-		Parameters<GeoJSONSource['setData']>[0],
-		{ type: 'FeatureCollection' }
-	>;
-
-	/** A boundary's parts, each as its rings. */
-	function parts(boundary: Boundary): number[][][][] {
-		return boundary.type === 'Polygon' ? [boundary.coordinates] : boundary.coordinates;
-	}
-
 	/** The areas shown as Mapbox layers: all but the one being edited. */
-	function shown(areas: Area[], editing: string | null, selected: string | null) {
-		return {
-			type: 'FeatureCollection',
-			features: areas
-				.filter((area) => area.id !== editing)
-				.map((area) => ({
-					type: 'Feature' as const,
-					properties: { id: area.id, name: area.name, selected: area.id === selected },
-					geometry: area.boundary
-				}))
-		} as FeatureCollection;
-	}
-
-	/** One point per area for its name: Mapbox would label a polygon once per tile. */
-	function labels(areas: Area[], editing: string | null) {
-		return {
-			type: 'FeatureCollection',
-			features: areas
-				.filter((area) => area.id !== editing)
-				.map((area) => ({
-					type: 'Feature' as const,
-					properties: { name: area.name },
-					geometry: { type: 'Point' as const, coordinates: labelPoint(area.boundary) }
-				}))
-		} as FeatureCollection;
-	}
-
-	/** A point inside the largest part: the middle of the widest stretch of a
-	 * line across it, halfway between its north and south. */
-	function labelPoint(boundary: Boundary): number[] {
-		const extent = (ring: number[][]) =>
-			bounds(ring) ?? [
-				[0, 0],
-				[0, 0]
-			];
-		const size = (ring: number[][]) => {
-			const [[west, south], [east, north]] = extent(ring);
-			return (east - west) * (north - south);
-		};
-		const rings = parts(boundary).reduce((a, b) => (size(b[0]) > size(a[0]) ? b : a));
-		const [[west, south], [east, north]] = extent(rings[0]);
-		const y = (south + north) / 2;
-		const crossings: number[] = [];
-		for (const ring of rings) {
-			for (let i = 0; i + 1 < ring.length; i++) {
-				const [[x1, y1], [x2, y2]] = [ring[i], ring[i + 1]];
-				if (y1 <= y !== y2 <= y) crossings.push(x1 + ((y - y1) * (x2 - x1)) / (y2 - y1));
-			}
-		}
-		crossings.sort((a, b) => a - b);
-		let best = [(west + east) / 2, y];
-		let widest = -1;
-		for (let i = 0; i + 1 < crossings.length; i += 2) {
-			if (crossings[i + 1] - crossings[i] > widest) {
-				widest = crossings[i + 1] - crossings[i];
-				best = [(crossings[i] + crossings[i + 1]) / 2, y];
-			}
-		}
-		return best;
-	}
-
-	function addLayers(map: MapboxMap) {
-		map.addSource('areas', { type: 'geojson', data: shown(areas, editing, selected) });
-		map.addLayer({
-			id: 'area-fill',
-			type: 'fill',
-			source: 'areas',
-			paint: {
-				'fill-color': FILL,
-				'fill-opacity': ['case', ['get', 'selected'], 0.35, 0.15]
-			}
-		});
-		map.addLayer({
-			id: 'area-casing',
-			type: 'line',
-			source: 'areas',
-			paint: {
-				'line-color': CASING,
-				'line-width': ['case', ['get', 'selected'], 6, 4],
-				'line-opacity': 0.8
-			}
-		});
-		map.addLayer({
-			id: 'area-outline',
-			type: 'line',
-			source: 'areas',
-			paint: { 'line-color': OUTLINE, 'line-width': ['case', ['get', 'selected'], 4, 2] }
-		});
-		map.addSource('area-labels', { type: 'geojson', data: labels(areas, editing) });
-		map.addLayer({
-			id: 'area-label',
-			type: 'symbol',
-			source: 'area-labels',
-			layout: {
-				'text-field': ['get', 'name'],
-				'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
-				'text-size': 14
-			},
-			paint: { 'text-color': '#ffffff', 'text-halo-color': HALO, 'text-halo-width': 1.5 }
-		});
-	}
-
-	/** The extent of these positions as [[west, south], [east, north]]. */
-	function bounds(positions: number[][]): [[number, number], [number, number]] | null {
-		if (positions.length === 0) return null;
-		let [west, south, east, north] = [180, 90, -180, -90];
-		for (const [lon, lat] of positions) {
-			west = Math.min(west, lon);
-			east = Math.max(east, lon);
-			south = Math.min(south, lat);
-			north = Math.max(north, lat);
-		}
-		return [
-			[west, south],
-			[east, north]
-		];
-	}
-
-	function corners(areas: Area[]): number[][] {
-		return areas.flatMap((area) => parts(area.boundary).flatMap((rings) => rings[0]));
+	function shown(areas: Area[], editing: string | null) {
+		return areas.filter((area) => area.id !== editing);
 	}
 
 	const FIT = { padding: 48, maxZoom: 17 };
@@ -377,7 +240,7 @@
 			created.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 			created.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
 			const instance = created;
-			instance.on('style.load', () => addLayers(instance));
+			instance.on('style.load', () => addAreaLayers(instance, shown(areas, editing), selected));
 			instance.on('error', (event) => {
 				const status = (event.error as { status?: number } | undefined)?.status;
 				if (status === 401 || status === 403 || !instance.isStyleLoaded()) failed = true;
@@ -408,10 +271,8 @@
 
 	// The areas, the selection or the area being edited changed.
 	$effect(() => {
-		const data = shown(areas, editing, selected);
-		const names = labels(areas, editing);
-		(map?.getSource('areas') as GeoJSONSource | undefined)?.setData(data);
-		(map?.getSource('area-labels') as GeoJSONSource | undefined)?.setData(names);
+		const visible = shown(areas, editing);
+		if (map) setAreas(map, visible, selected);
 	});
 
 	// A newly selected area comes into view.

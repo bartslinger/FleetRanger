@@ -17,6 +17,7 @@
 <script lang="ts">
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
+	import { addAreaLayers, setAreas, type Area } from './areas.js';
 	import InlineNotification from './InlineNotification.svelte';
 	import Loading from './Loading.svelte';
 
@@ -30,9 +31,11 @@
 		loading?: boolean;
 		/** The track to bring out, by index, e.g. the flight pointed at in a list. */
 		highlight?: number | null;
+		/** The organisation's areas, outlined under the tracks. */
+		areas?: Area[];
 	}
 
-	let { tracks, token, label, loading = false, highlight = null }: Props = $props();
+	let { tracks, token, label, loading = false, highlight = null, areas = [] }: Props = $props();
 
 	type View = 'satellite' | 'map';
 	let view: View = $state('satellite');
@@ -99,6 +102,8 @@
 
 	/** Adds the tracks to the current style; again after every style change. */
 	function addLayers(map: MapboxMap, casing: string) {
+		// Areas first, so the tracks are drawn over them.
+		addAreaLayers(map, areas);
 		map.addSource('tracks', { type: 'geojson', data: lines(tracks) });
 		map.addSource('ends', { type: 'geojson', data: ends(tracks) });
 		map.addLayer({
@@ -247,6 +252,12 @@
 		draw(map, current);
 	});
 
+	// Other areas, e.g. after navigating: only the data changes, not the view.
+	$effect(() => {
+		const current = areas;
+		if (map?.getSource('areas')) setAreas(map, current);
+	});
+
 	// Another track pointed at: only the filter changes, not the view.
 	$effect(() => {
 		const filter = highlightFilter(highlight);
@@ -296,6 +307,9 @@
 		<figcaption class="legend">
 			<span><span class="marker takeoff" aria-hidden="true"></span>Takeoff</span>
 			<span><span class="marker landing" aria-hidden="true"></span>Landing</span>
+			{#if areas.length > 0}
+				<span><span class="marker area" aria-hidden="true"></span>Area</span>
+			{/if}
 		</figcaption>
 	</figure>
 {/if}
@@ -406,6 +420,13 @@
 
 	.takeoff {
 		background: #ffffff;
+	}
+
+	/* An area: its outline (Blue 50) and light fill, as on the map. */
+	.area {
+		border: 2px solid #4589ff;
+		border-radius: 0;
+		background: rgb(15 98 254 / 0.25);
 	}
 
 	.landing {

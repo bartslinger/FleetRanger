@@ -1,6 +1,6 @@
 import { BACKEND_URL } from '$app/env/private';
 import { error } from '@sveltejs/kit';
-import type { Area } from '#lib/ui/AreaMap.svelte';
+import type { Area } from '#lib/ui/areas.js';
 import type { Track } from '#lib/ui/TrackMap.svelte';
 
 export type { Area };

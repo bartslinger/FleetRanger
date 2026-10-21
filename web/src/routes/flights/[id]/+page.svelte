@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import AreaFigures from '#lib/AreaFigures.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import { clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
 	import { pilotOptions as pilotOptions_, pilotValue } from '#lib/pilots.js';
@@ -144,7 +145,12 @@
 
 <Grid rowGap>
 	<Column narrow lg={11}>
-		<TrackMap tracks={[flight.track]} token={data.mapboxToken} label="Map of the flight’s track" />
+		<TrackMap
+			tracks={[flight.track]}
+			areas={data.areas}
+			token={data.mapboxToken}
+			label="Map of the flight’s track"
+		/>
 	</Column>
 	<Column lg={5}>
 		{#each groups as facts, index (index)}
@@ -206,6 +212,12 @@
 			</dl>
 		{/each}
 	</Column>
+	<!-- Under the map, as on a session's page; once the organisation has areas. -->
+	{#if data.areas.length > 0}
+		<Column lg={11}>
+			<AreaFigures areas={flight.areas} airTime={flight.air_time_s} distanceM={flight.distance_m} />
+		</Column>
+	{/if}
 </Grid>
 
 <style>
