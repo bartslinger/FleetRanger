@@ -2,7 +2,7 @@
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SavedArea } from '#lib/server/backend.js';
-	import AreaMap from '#lib/ui/AreaMap.svelte';
+	import AreaMap, { type Mode } from '#lib/ui/AreaMap.svelte';
 	import Add from '@carbon/icons/es/add/16.js';
 	import Button from '#lib/ui/Button.svelte';
 	import type { Area, Boundary } from '#lib/ui/areas.js';
@@ -20,8 +20,8 @@
 
 	let map: AreaMap | undefined = $state();
 	let selected: string | null = $state(null);
-	/** Drawing or editing on the map: the list waits. */
-	let busy = $state(false);
+	/** What the map is doing; while drawing, naming or editing, the list waits. */
+	let mode: Mode = $state('view');
 
 	// The area the row menu acts on, and the dialogs it opens.
 	let acting: Area | null = $state(null);
@@ -72,16 +72,24 @@
 			empty="Flights show their time and distance in each area."
 			{items}
 			{selected}
-			disabled={busy}
+			disabled={mode !== 'view'}
 			onselect={(id) => (selected = id)}
 		>
 			{#snippet headerAction()}
 				<!-- In the list it adds to; the same as the map's New area tool.
 				     Phones only view. -->
 				<span class="wide-only">
-					<Button size="sm" icon={Add} disabled={busy} onclick={() => map?.newArea()}
-						>New area</Button
-					>
+					{#if mode === 'drawing'}
+						<Button kind="ghost" size="sm" onclick={() => map?.stop()}>Cancel</Button>
+					{:else}
+						<Button
+							kind="ghost"
+							size="sm"
+							icon={Add}
+							disabled={mode !== 'view'}
+							onclick={() => map?.newArea()}>New area</Button
+						>
+					{/if}
 				</span>
 			{/snippet}
 			{#snippet action(item)}
@@ -117,7 +125,7 @@
 			{selected}
 			fallback={data.fallback}
 			onselect={(id) => (selected = id)}
-			onbusy={(value) => (busy = value)}
+			onmode={(value) => (mode = value)}
 			oncreate={create}
 			onreshape={reshape}
 		/>
