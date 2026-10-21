@@ -116,7 +116,7 @@ function names(areas: Area[]): FeatureCollection {
 
 /** Adds the areas to the map's style: fills, outlines and names. The fill
  * layer is `area-fill`, e.g. for clicks. A `quiet` colour keeps them in the
- * background, as on a flight's map where the tracks matter: a neutral dashed
+ * background, as on a flight's map where the tracks matter: a thin neutral
  * border in that colour, without a fill. */
 export function addAreaLayers(
 	map: MapboxMap,
@@ -155,7 +155,8 @@ export function addAreaLayers(
 		source: 'areas',
 		layout: { 'line-join': 'round' },
 		paint: quiet
-			? { 'line-color': quiet, 'line-width': 1.5, 'line-dasharray': [3, 2] }
+			? // Solid: shared borders would overlap, and dashes out of step look solid.
+				{ 'line-color': quiet, 'line-width': 1 }
 			: { 'line-color': OUTLINE, 'line-width': ['case', ['get', 'selected'], 4, 2] }
 	});
 	map.addLayer({

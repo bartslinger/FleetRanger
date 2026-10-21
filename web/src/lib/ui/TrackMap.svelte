@@ -103,7 +103,7 @@
 	/** Adds the tracks to the current style; again after every style change. */
 	function addLayers(map: MapboxMap, casing: string) {
 		// Areas first, so the tracks are drawn over them.
-		// Neutral and dashed, behind the tracks: Gray 60 on the light street
+		// Thin and neutral, behind the tracks: Gray 60 on the light street
 		// map, Gray 20 on imagery and the dark map.
 		const lightMap = view === 'map' && !dark();
 		addAreaLayers(map, areas, null, lightMap ? '#6f6f6f' : '#e0e0e0');
@@ -425,11 +425,11 @@
 		background: #ffffff;
 	}
 
-	/* An area: a neutral dashed border, as on the map (Gray 50, between the
+	/* An area: a thin neutral border, as on the map (Gray 50, between the
 	   map's two greys). Literal like the markers': the map's paint can't
 	   read tokens. */
 	.area {
-		border: 1px dashed #8d8d8d;
+		border: 1px solid #8d8d8d;
 		border-radius: 0;
 	}
 
