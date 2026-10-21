@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import AreaFigures from '#lib/AreaFigures.svelte';
 	import Button from '#lib/ui/Button.svelte';
-	import { clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
+	import { areaShares, clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
 	import { pilotOptions as pilotOptions_, pilotValue } from '#lib/pilots.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -70,6 +69,8 @@
 			{ label: 'Landing', value: time(flight.landed_at) },
 			{ label: 'Air time', value: duration(flight.air_time_s), numeric: true },
 			{ label: 'Distance', value: distance(flight.distance_m), numeric: true },
+			// Only when the flight crossed an area.
+			...[areaShares(flight.areas, flight.air_time_s)].filter((fact) => fact !== null),
 			...(flight.metrics.max_altitude_m === undefined
 				? []
 				: [
@@ -212,12 +213,6 @@
 			</dl>
 		{/each}
 	</Column>
-	<!-- Under the map, as on a session's page; once the organisation has areas. -->
-	{#if data.areas.length > 0}
-		<Column narrow lg={11}>
-			<AreaFigures areas={flight.areas} airTime={flight.air_time_s} distanceM={flight.distance_m} />
-		</Column>
-	{/if}
 </Grid>
 
 <style>

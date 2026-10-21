@@ -5,7 +5,7 @@
 	suggested one, which should look alike.
 -->
 <script lang="ts" module>
-	import { clock, dateTime, distance, duration } from '#lib/format.js';
+	import { areaShares, clock, dateTime, distance, duration } from '#lib/format.js';
 
 	interface Flight {
 		takeoff_at: string;
@@ -14,6 +14,7 @@
 		distance_m: number;
 		pilot_name: string | null;
 		team_name: string | null;
+		areas: { name: string; air_time_s: number }[];
 	}
 
 	/** Distinct names in order of first appearance. */
@@ -70,6 +71,13 @@
 		},
 		{ label: 'Air time', value: duration(facts.airTime), numeric: true },
 		{ label: 'Distance', value: distance(distanceM), numeric: true },
+		// Only when the flights crossed an area.
+		...[
+			areaShares(
+				flights.flatMap((flight) => flight.areas),
+				facts.airTime
+			)
+		].filter((fact) => fact !== null),
 		{ label: 'Flights', value: String(flights.length), numeric: true }
 	]);
 </script>
