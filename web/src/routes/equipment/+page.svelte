@@ -2,8 +2,8 @@
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { KINDS, type Kind } from '#lib/equipment.js';
-	import { dateTime } from '#lib/format.js';
+	import { KINDS, type Kind, type Tab } from '#lib/equipment.js';
+	import { dateTime, health } from '#lib/format.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -16,11 +16,12 @@
 	let { data }: PageProps = $props();
 
 	type Row = (typeof data.drones)[number];
+	type BatteryRow = (typeof data.batteries)[number];
 
 	// Returning to a tab chosen here, SvelteKit loads the page for the URL it
 	// was opened with; the tab comes back with the history entry's state.
 	// svelte-ignore state_referenced_locally
-	let tab: Kind = $state(page.state.equipmentTab ?? data.tab);
+	let tab: Tab = $state(page.state.equipmentTab ?? data.tab);
 
 	const lastFlight: TableColumn<Row> = $derived({
 		key: 'last_flight_at',
@@ -58,9 +59,38 @@
 		]
 	});
 
+	// Their state at their latest flight; health is full capacity over design capacity.
+	const batteryColumns: TableColumn<BatteryRow>[] = $derived([
+		{ key: 'serial', header: 'Serial number', identifier: true },
+		{ key: 'name', header: 'Name' },
+		{
+			key: 'aircraft_serial',
+			header: 'Last drone',
+			identifier: true,
+			format: (item) => item.aircraft_name ?? item.aircraft_serial
+		},
+		{
+			key: 'cycles',
+			header: 'Cycles',
+			numeric: true,
+			format: (item) => item.cycles?.toLocaleString('en-US')
+		},
+		{
+			key: 'full_capacity_mah',
+			header: 'Health',
+			numeric: true,
+			format: (item) => health(item.full_capacity_mah, item.design_capacity_mah)
+		},
+		{
+			key: 'last_flight_at',
+			header: 'Last flight',
+			format: (item) => dateTime(item.last_flight_at, data.timeZone)
+		}
+	]);
+
 	/** The tab is kept in the URL, so the back button and breadcrumbs return to it. */
-	function select(next: Kind) {
-		replaceState(resolve(next === 'drones' ? '/equipment' : '/equipment?tab=controllers'), {
+	function select(next: Tab) {
+		replaceState(resolve(next === 'drones' ? '/equipment' : `/equipment?tab=${next}`), {
 			equipmentTab: next
 		});
 	}
@@ -81,38 +111,67 @@
 		<Tabs
 			tabs={[
 				{ value: 'drones', label: KINDS.drones.label },
-				{ value: 'controllers', label: KINDS.controllers.label }
+				{ value: 'controllers', label: KINDS.controllers.label },
+				{ value: 'batteries', label: 'Batteries' }
 			]}
 			bind:value={tab}
 			onchange={select}
 		>
-			{#snippet panel(kind)}
-				{@const rows = kind === 'drones' ? data.drones : data.controllers}
-				{#if rows.length === 0}
-					<EmptyState
-						title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
-						body={data.account?.role === 'member'
-							? 'Your team’s drones and remote controllers appear here once an admin assigns them to the team.'
-							: kind === 'drones'
-								? 'Drones appear here when flight logs that use them are imported.'
-								: 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with the code its screen shows.'}
-						action={kind === 'controllers' ? pair : undefined}
-					/>
+			{#snippet panel(value)}
+				{#if value === 'batteries'}
+					{@render batteries()}
 				{:else}
-					<DataTable
-						label={KINDS[kind].label}
-						columns={columns[kind]}
-						{rows}
-						rowKey={(item) => item.id}
-						rowHref={(item) => resolve('/equipment/[kind=kind]/[id]', { kind, id: item.id })}
-						toolbar={kind === 'controllers' ? pair : undefined}
-						summary="{rows.length} {(rows.length === 1
-							? KINDS[kind].one
-							: KINDS[kind].label
-						).toLowerCase()}"
-					/>
+					{@render equipment(value)}
 				{/if}
 			{/snippet}
 		</Tabs>
 	</Column>
 </Grid>
+
+{#snippet batteries()}
+	{#if data.batteries.length === 0}
+		<EmptyState
+			title="No batteries yet"
+			body={data.account?.role === 'member'
+				? 'Batteries appear here once your team flies with them.'
+				: 'Batteries appear here when flight logs that use them are imported.'}
+		/>
+	{:else}
+		<DataTable
+			label="Batteries"
+			columns={batteryColumns}
+			rows={data.batteries}
+			rowKey={(item) => item.id}
+			rowHref={(item) => resolve('/equipment/batteries/[id]', { id: item.id })}
+			summary="{data.batteries.length} {data.batteries.length === 1 ? 'battery' : 'batteries'}"
+		/>
+	{/if}
+{/snippet}
+
+{#snippet equipment(kind: Kind)}
+	{@const rows = kind === 'drones' ? data.drones : data.controllers}
+	{#if rows.length === 0}
+		<EmptyState
+			title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
+			body={data.account?.role === 'member'
+				? 'Your team’s drones and remote controllers appear here once an admin assigns them to the team.'
+				: kind === 'drones'
+					? 'Drones appear here when flight logs that use them are imported.'
+					: 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with the code its screen shows.'}
+			action={kind === 'controllers' ? pair : undefined}
+		/>
+	{:else}
+		<DataTable
+			label={KINDS[kind].label}
+			columns={columns[kind]}
+			{rows}
+			rowKey={(item) => item.id}
+			rowHref={(item) => resolve('/equipment/[kind=kind]/[id]', { kind, id: item.id })}
+			toolbar={kind === 'controllers' ? pair : undefined}
+			summary="{rows.length} {(rows.length === 1
+				? KINDS[kind].one
+				: KINDS[kind].label
+			).toLowerCase()}"
+		/>
+	{/if}
+{/snippet}

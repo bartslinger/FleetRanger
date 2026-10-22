@@ -11,7 +11,7 @@ declare global {
 		// interface PageData {}
 		interface PageState {
 			/** The Equipment page's tab, switched without loading the page. */
-			equipmentTab?: import('#lib/equipment.js').Kind;
+			equipmentTab?: import('#lib/equipment.js').Tab;
 			/** The session open over the Sessions cards, at its own URL without
 			 * loading its page. */
 			session?: string;
