@@ -1,5 +1,6 @@
 mod areas;
 mod auth;
+mod batteries;
 mod config;
 mod download;
 mod equipment;
@@ -202,6 +203,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .merge(mcp)
         .merge(areas::routes::router())
         .merge(auth::routes::router())
+        .merge(batteries::routes::router())
         .merge(download::router())
         .merge(events::router())
         .merge(flights::routes::router())

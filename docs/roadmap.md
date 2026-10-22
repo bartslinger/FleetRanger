@@ -6,6 +6,8 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Releases:** v0.4.0 and android-v0.2.1 run on the first organisation's server; the deploy dumps the database before changing the release. v0.4.0 reworked **Sessions**: the cards show a week or a month beside a map with all its tracks, each card with a **day strip** (the day with its flights and night, each flight's times on hover); **a session opens on the page itself** (the map flies to it, its facts replace the cards, its flights follow in a table, the arrows step through sessions across weeks and months with the filters kept); a track on the map opens its session, and in an open session points at its flight's row with its times. Tracks are **cyan** with a dot for takeoff and an X for landing; the street map follows the theme and the satellite or map choice is kept for the tab. Times carry no time-zone label. v0.3.0 brought areas and list filters.
 
+**In progress (branch `batteries`):** batteries in Equipment, with a page per battery, linked from each flight. See "Batteries" below.
+
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
 **Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
@@ -86,6 +88,17 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Areas on the flight and session pages, filters in the lists, seconds per area in MCP
 - [x] Redesign: one polygon per area, a list beside the map with Mapbox-style drawing tools, one Areas fact instead of a table
 - [x] Carbon review of the areas UI (open: a "Discard changes?" question when cancelling a changed drawing; no keyboard alternative for drawing, see design-system.md)
+
+## Batteries
+
+- [x] Parser: static battery information in version 14 logs
+- [x] Schema: batteries, and what each flight's log says about its battery
+- [x] Equipment › Batteries, and a page per battery with its capacity over time (Carbon Charts) and flights
+- [x] Carbon review of the battery UI (open: a title for the flights table, a note explaining Health)
+- [x] Parser: charge and cell records with an extra byte after the index (checked on all 3,611 logs of the first organisation)
+- [x] A flight's page links its battery
+- [ ] Release: the migration reprocesses every log once, with the stored DJI keys
+- [ ] Later: compress JavaScript and CSS in nginx (user's decision, 2026-10-22)
 
 ## Before production use
 

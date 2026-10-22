@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update batteries set name = $2 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a0e89292185290890701dfabb5847a51fd9a3b4cbf6f4b928946adf2fc375828"
+}

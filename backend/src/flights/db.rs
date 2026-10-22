@@ -207,6 +207,11 @@ pub struct FlightDetail {
     pub rc_id: Option<Uuid>,
     #[serde(skip)]
     pub rc_team_id: Option<Uuid>,
+    /// The battery's page, for linking: whoever sees the flight sees its
+    /// battery, but only through flights that aren't archived (see
+    /// batteries/db.rs), so None for an archived flight.
+    pub battery_id: Option<Uuid>,
+    pub battery_name: Option<String>,
     pub archived_at: Option<DateTime<Utc>>,
     /// The areas the track passes through, with the time (`air_time_s`) and
     /// distance (`distance_m`) in each, most time first. The rest of the
@@ -230,6 +235,10 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
                 (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id
+                 where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as "battery_id?",
+                (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id
+                 where fb.flight_id = flights.id and fb.slot = 0) as "battery_name?",
                 archived_at,
                 (select coalesce(jsonb_agg(jsonb_build_object(
                             'id', a.id, 'name', a.name,
@@ -271,6 +280,10 @@ pub async fn of_session(
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
                 (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id
+                 where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as "battery_id?",
+                (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id
+                 where fb.flight_id = flights.id and fb.slot = 0) as "battery_name?",
                 archived_at,
                 (select coalesce(jsonb_agg(jsonb_build_object(
                             'id', a.id, 'name', a.name,
@@ -312,6 +325,10 @@ pub async fn details(
                 (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
                 (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id
+                 where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as "battery_id?",
+                (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id
+                 where fb.flight_id = flights.id and fb.slot = 0) as "battery_name?",
                 archived_at,
                 (select coalesce(jsonb_agg(jsonb_build_object(
                             'id', a.id, 'name', a.name,

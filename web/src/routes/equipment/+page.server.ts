@@ -1,11 +1,12 @@
-import { get, type Equipment } from '#lib/server/backend.js';
-import { KINDS, parseKind } from '#lib/equipment.js';
+import { get, type Battery, type Equipment } from '#lib/server/backend.js';
+import { KINDS, parseTab } from '#lib/equipment.js';
 
 export async function load({ fetch, url }) {
-	// Both lists at once: they are short, and switching tabs needs no request.
-	const [drones, controllers] = await Promise.all([
+	// All lists at once: they are short, and switching tabs needs no request.
+	const [drones, controllers, batteries] = await Promise.all([
 		get<Equipment[]>(fetch, KINDS.drones.api),
-		get<Equipment[]>(fetch, KINDS.controllers.api)
+		get<Equipment[]>(fetch, KINDS.controllers.api),
+		get<Battery[]>(fetch, '/api/batteries')
 	]);
-	return { drones, controllers, tab: parseKind(url.searchParams.get('tab')) };
+	return { drones, controllers, batteries, tab: parseTab(url.searchParams.get('tab')) };
 }
