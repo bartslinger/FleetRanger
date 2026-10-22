@@ -2,10 +2,10 @@ use std::collections::HashSet;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
 use sqlx::types::Uuid;
+use sqlx::{PgConnection, PgPool};
 
-use super::flight::Flight;
+use super::flight::{BatteryUse, Flight};
 use crate::areas;
 
 pub struct PendingLog {
@@ -213,6 +213,7 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
             .fetch_one(&mut *tx)
             .await?;
             areas::db::compute_flight(&mut tx, saved.id).await?;
+            save_battery(&mut tx, saved.id, flight.battery.as_ref()).await?;
             saved.new
         }
         None => {
@@ -231,6 +232,54 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
     .await?;
     tx.commit().await?;
     Ok(new)
+}
+
+/// Registers the flight's battery if it's new, and replaces what the flight
+/// says about it.
+async fn save_battery(
+    tx: &mut PgConnection,
+    flight_id: Uuid,
+    battery: Option<&BatteryUse>,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        "delete from flight_batteries where flight_id = $1",
+        flight_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    let Some(battery) = battery else {
+        return Ok(());
+    };
+    sqlx::query!(
+        "insert into batteries (serial) values ($1) on conflict (serial) do nothing",
+        battery.serial,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        // Logs name one battery, so it's in slot 0; where a log of a drone
+        // with more batteries keeps the others' serials is still unknown.
+        "insert into flight_batteries (flight_id, slot, battery_id, charge_start_pct, charge_end_pct,
+                                      full_capacity_mah, design_capacity_mah, cycles,
+                                      temperature_min_c, temperature_max_c,
+                                      cell_voltage_min_v, cell_spread_max_v)
+         values ($1, 0, (select id from batteries where serial = $2), $3, $4, $5, $6, $7, $8,
+                 $9, $10, $11)",
+        flight_id,
+        battery.serial,
+        battery.charge_start_pct,
+        battery.charge_end_pct,
+        battery.full_capacity_mah,
+        battery.design_capacity_mah,
+        battery.cycles,
+        battery.temperature_min_c,
+        battery.temperature_max_c,
+        battery.cell_voltage_min_v,
+        battery.cell_spread_max_v,
+    )
+    .execute(&mut *tx)
+    .await?;
+    Ok(())
 }
 
 pub async fn mark_failed(db: &PgPool, id: Uuid, error: &str) -> sqlx::Result<()> {
@@ -352,6 +401,7 @@ mod tests {
             aircraft_serial: None,
             rc_serial: Some("TESTRC0003".to_owned()),
             track: json!({}),
+            battery: None,
             metrics: Metrics {
                 max_altitude_m: 10.0,
                 camera_serial: None,

@@ -21,6 +21,29 @@ pub struct Flight {
     /// GeoJSON LineString: [longitude, latitude, height above takeoff].
     pub track: Value,
     pub metrics: Metrics,
+    /// None if the log names no battery.
+    pub battery: Option<BatteryUse>,
+}
+
+/// What the battery's static record in a log says.
+#[derive(Default, Clone, Copy)]
+pub struct BatteryInfo {
+    pub design_capacity_mah: Option<i32>,
+    pub cycles: Option<i32>,
+}
+
+/// A battery on one flight; what the log doesn't report is None.
+pub struct BatteryUse {
+    pub serial: String,
+    pub charge_start_pct: Option<i16>,
+    pub charge_end_pct: Option<i16>,
+    pub full_capacity_mah: Option<i32>,
+    pub design_capacity_mah: Option<i32>,
+    pub cycles: Option<i32>,
+    pub temperature_min_c: Option<f32>,
+    pub temperature_max_c: Option<f32>,
+    pub cell_voltage_min_v: Option<f32>,
+    pub cell_spread_max_v: Option<f32>,
 }
 
 /// Display-only summaries, stored as JSON.
@@ -52,7 +75,7 @@ impl Serials {
 }
 
 /// The flight in a log, or `None` if the aircraft never left the ground.
-pub fn derive(frames: &[Frame], serials: Serials) -> Option<Flight> {
+pub fn derive(frames: &[Frame], serials: Serials, battery_info: BatteryInfo) -> Option<Flight> {
     let airborne: Vec<&Frame> = frames.iter().filter(|f| !f.osd.is_on_ground).collect();
     let (first, last) = (airborne.first()?, airborne.last()?);
 
@@ -91,12 +114,53 @@ pub fn derive(frames: &[Frame], serials: Serials) -> Option<Flight> {
         aircraft_serial: serials.aircraft,
         rc_serial: serials.rc,
         track: track(&airborne),
+        battery: serials
+            .battery
+            .clone()
+            .map(|serial| battery(&airborne, serial, battery_info)),
         metrics: Metrics {
             max_altitude_m: round(max_altitude_m, 1),
             camera_serial: serials.camera,
             battery_serial: serials.battery,
         },
     })
+}
+
+/// The battery's state from takeoff to landing. Frames before the battery's
+/// first report have 0 V; capacity and temperature come in one record, which
+/// older logs don't have; cells are left out while the parser estimates them
+/// from the total voltage, or while one hasn't reported yet (0 V).
+fn battery(airborne: &[&Frame], serial: String, info: BatteryInfo) -> BatteryUse {
+    let reported: Vec<_> = airborne
+        .iter()
+        .map(|f| &f.battery)
+        .filter(|b| b.voltage > 0.0)
+        .collect();
+    let with_capacity: Vec<_> = reported.iter().filter(|b| b.full_capacity > 0).collect();
+    let cells: Vec<(f32, f32)> = reported
+        .iter()
+        .filter(|b| !b.is_cell_voltage_estimated && b.cell_voltages.iter().all(|&v| v > 0.0))
+        .filter_map(|b| {
+            let min = b.cell_voltages.iter().copied().reduce(f32::min)?;
+            let max = b.cell_voltages.iter().copied().reduce(f32::max)?;
+            Some((min, max - min))
+        })
+        .collect();
+    let temperatures = with_capacity.iter().map(|b| b.temperature);
+    BatteryUse {
+        serial,
+        charge_start_pct: reported.first().map(|b| i16::from(b.charge_level)),
+        charge_end_pct: reported.last().map(|b| i16::from(b.charge_level)),
+        full_capacity_mah: with_capacity
+            .last()
+            .and_then(|b| i32::try_from(b.full_capacity).ok()),
+        design_capacity_mah: info.design_capacity_mah,
+        cycles: info.cycles,
+        temperature_min_c: temperatures.clone().reduce(f32::min),
+        temperature_max_c: temperatures.reduce(f32::max),
+        cell_voltage_min_v: cells.iter().map(|c| c.0).reduce(f32::min),
+        cell_spread_max_v: cells.iter().map(|c| c.1).reduce(f32::max),
+    }
 }
 
 /// One point per `TRACK_INTERVAL`, plus the last airborne position.
@@ -179,12 +243,12 @@ mod tests {
             frame(0.0, true, 0.0, 0.0, 0.0),
             frame(1.0, true, 0.0, 0.0, 0.0),
         ];
-        assert!(derive(&frames, Serials::default()).is_none());
+        assert!(derive(&frames, Serials::default(), BatteryInfo::default()).is_none());
     }
 
     #[test]
     fn times_distance_and_track() {
-        let flight = derive(&flight(60), Serials::default()).unwrap();
+        let flight = derive(&flight(60), Serials::default(), BatteryInfo::default()).unwrap();
         assert_eq!(flight.takeoff_at.timestamp_millis(), 100);
         assert_eq!(flight.landed_at.timestamp_millis(), 60_000);
         assert_eq!(flight.air_time_s, 59);
@@ -210,7 +274,7 @@ mod tests {
         for frame in frames.iter_mut().skip(51) {
             frame.custom.date_time += TimeDelta::seconds(30);
         }
-        let flight = derive(&frames, Serials::default()).unwrap();
+        let flight = derive(&frames, Serials::default(), BatteryInfo::default()).unwrap();
         assert_eq!(flight.air_time_s, 39);
     }
 
@@ -224,9 +288,56 @@ mod tests {
         let landing_at = frames[50].custom.date_time + TimeDelta::seconds(1);
         frames.insert(51, frame(0.0, true, 0.0, 0.0, 0.0));
         frames[51].custom.date_time = landing_at;
-        let flight = derive(&frames, Serials::default()).unwrap();
+        let flight = derive(&frames, Serials::default(), BatteryInfo::default()).unwrap();
         assert_eq!(flight.air_time_s, 9);
         assert_eq!((flight.landed_at - flight.takeoff_at).num_seconds(), 129);
+    }
+
+    /// Charge from the battery's first to its last report in the air; cells
+    /// only while all of them have reported and none is an estimate.
+    #[test]
+    fn battery_from_its_reports() {
+        let mut frames = flight(10);
+        for (i, frame) in frames.iter_mut().enumerate().skip(1).take(100) {
+            let battery = &mut frame.battery;
+            battery.voltage = 16.0;
+            battery.charge_level = 100 - (i / 10) as u8;
+            battery.full_capacity = 4_500;
+            battery.temperature = 30.0 + (i / 10) as f32;
+            battery.cell_voltages = vec![4.0, 3.9, 4.0, 4.0];
+        }
+        // No report yet: 0 V, and nothing else.
+        frames[1].battery = Default::default();
+        // One cell not reported yet, and cells estimated from the total.
+        frames[2].battery.cell_voltages[3] = 0.0;
+        frames[3].battery.cell_voltages = vec![3.0; 4];
+        frames[3].battery.is_cell_voltage_estimated = true;
+        let serials = Serials {
+            battery: Some("TESTBATTERY1".to_owned()),
+            ..Serials::default()
+        };
+        let info = BatteryInfo {
+            design_capacity_mah: Some(5_000),
+            cycles: Some(22),
+        };
+
+        let battery = derive(&frames, serials, info).unwrap().battery.unwrap();
+        assert_eq!(battery.serial, "TESTBATTERY1");
+        assert_eq!(
+            (battery.charge_start_pct, battery.charge_end_pct),
+            (Some(100), Some(90))
+        );
+        assert_eq!(battery.full_capacity_mah, Some(4_500));
+        assert_eq!(
+            (battery.design_capacity_mah, battery.cycles),
+            (Some(5_000), Some(22))
+        );
+        assert_eq!(
+            (battery.temperature_min_c, battery.temperature_max_c),
+            (Some(30.0), Some(40.0))
+        );
+        assert_eq!(battery.cell_voltage_min_v, Some(3.9));
+        assert!((battery.cell_spread_max_v.unwrap() - 0.1).abs() < 1e-6);
     }
 
     #[test]
@@ -234,8 +345,8 @@ mod tests {
         let mut frames = flight(10);
         frames[20].osd.latitude = 0.0;
         frames[20].osd.longitude = 0.0;
-        let with_gap = derive(&frames, Serials::default()).unwrap();
-        let without_gap = derive(&flight(10), Serials::default()).unwrap();
+        let with_gap = derive(&frames, Serials::default(), BatteryInfo::default()).unwrap();
+        let without_gap = derive(&flight(10), Serials::default(), BatteryInfo::default()).unwrap();
         // No jump to 0, 0: the distance bridges the missing fix in a straight line.
         assert!((with_gap.distance_m - without_gap.distance_m).abs() < 0.01);
     }
