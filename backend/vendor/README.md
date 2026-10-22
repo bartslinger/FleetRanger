@@ -96,3 +96,27 @@ three 16-byte AES blocks. In 253 logs (9 of version 11, 244 of version 14, three
 record then reads a model's design capacity (5,000 mAh for every Mavic 3 Enterprise battery,
 as specified), 15.4 V for the 4-cell batteries, and a charge cycle count that never
 goes down from one flight of a battery to its next (34 batteries; 152 times up by exactly 1).
+
+### Charge and cell records with an extra byte in version 14 logs
+
+In `src/record/smart_battery_group.rs`, `SmartBatteryDynamic` (charge, capacity, temperature)
+and `SmartBatterySingleVoltage` (cell voltages) skip a byte after `index` when a record has
+one. Unlike the static record, only some records do, mixed with ordinary ones in the same log,
+so the record itself has to tell: the byte is 0, and the fields after the index don't add up
+as written but do with it skipped. For a charge record, adding up means the remaining capacity
+is at most the full capacity and the charge percentage is that share of it (within 2 points);
+for a cell record, that the battery has cells. Anything else is read as before. Upstream read
+those records one byte early: 4,110 V and 3,225.6 °C instead of 16.056 V and 24.6 °C, and
+cell records with 0 cells, whose voltages were lost. Why DJI writes the byte is unknown, and
+DJI's own parser (FlightRecordParsingLib 1.0.6) doesn't know it either: its structs match
+upstream's. Versions 13 and lower are unchanged.
+
+**Evidence.** In 3,611 logs of the first organisation (167 of version 11, 3,444 of version 14,
+three models), checked on its server: the decrypted charge records are 137 or 139 bytes, and
+1,419 records in 290 logs are 140, a 139-byte record with a 0 inserted after the index (a
+fixed byte sequence later in the record sits one place further). All 8.3 million others add
+up as written and not with a byte skipped; all 1,419 add up only with it skipped, and then
+match the records around them (the same full capacity, temperature within 0.4 °C). The cell
+records with 0 cells, 77,278 in 2,490 logs of the Mavic 3 Enterprise and 61 of another model,
+are all one byte longer than their cells need, and their count follows the 0. Tests:
+`cargo test -p dji-log-parser`.
