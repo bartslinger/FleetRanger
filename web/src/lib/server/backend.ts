@@ -111,6 +111,10 @@ export interface FlightDetail {
 	/** The drone's and controller's pages; null where the user can't see them. */
 	aircraft_id: string | null;
 	rc_id: string | null;
+	/** The battery's page; null for an archived flight, as batteries are seen
+	 * through flights that aren't. */
+	battery_id: string | null;
+	battery_name: string | null;
 	/** Set for an archived flight. */
 	archived_at: string | null;
 	/** The areas its track passes through, most time first; the rest is outside all areas. */
