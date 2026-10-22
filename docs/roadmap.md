@@ -94,7 +94,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Parser: static battery information in version 14 logs
 - [x] Schema: batteries, and what each flight's log says about its battery
 - [x] Equipment › Batteries, and a page per battery with its capacity over time (Carbon Charts) and flights
-- [x] Carbon review of the battery UI (open: a title for the battery page's flights table)
+- [x] Carbon review of the battery UI
 - [x] Parser: charge and cell records with an extra byte after the index (checked on all 3,611 logs of the first organisation)
 - [x] A flight's page links its battery
 - [ ] Release: the migration reprocesses every log once, with the stored DJI keys
