@@ -40,7 +40,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **Roles** are one per user: member, all flights, or admin.
 - **Flights** have a team and an optional pilot. The team is the pilot's team at flight time. A flight with no pilot takes the remote controller's team, or else goes to an organisation-level queue. Changing a pilot's team does not move their past flights.
 - **Drones and remote controllers** belong to the organisation. Each can have a team and a current holder (a user). The holder is informational only and grants no access. They are registered automatically from the serials in imported logs; flights keep the serials as text.
-- **One table per kind of equipment** (`aircraft`, `remote_controllers`, later batteries), not one devices table: they share a few columns but will differ, for example controllers get enrollment and sync settings, and only a controller's team decides the team of a flight without a pilot.
+- **One table per kind of equipment** (`aircraft`, `remote_controllers`, `batteries`), not one devices table: they share a few columns but will differ, for example controllers get enrollment and sync settings, and only a controller's team decides the team of a flight without a pilot.
 - **Who sees a flight:**
   - its pilot
   - members of its team
@@ -93,6 +93,14 @@ User's decisions, 2026-10-21, unless marked as mine.
 - **The Areas page:** a list of the areas beside a map of them. Clicking an area selects it, clicking outside deselects it. The drawing tools are in a Mapbox-style toolbar under the zoom buttons: New area, Edit shape and Delete; the list's header also has New area, which becomes Cancel while drawing. A new area is named on the map, then appears in the list. Each row's menu has Edit shape, Rename and Delete. No instructions on the page.
 - **On flight and session maps**, areas are thin, solid, neutral outlines with their names, so the tracks stand out.
 - **How it's built** (my choices): boundaries are GeoJSON in `jsonb`, clipped and tested in Rust with the `geo` crate, without PostGIS. A flight's figures per area are stored in `flight_areas`: computed when the flight is processed, and for all flights in the same transaction that saves or deletes an area (a lock on `areas` keeps the two from crossing). A stretch of track between two points counts half for the area of each. Lists and MCP filter on areas flown: a flight passes with any time in one of the chosen areas, a session with such a flight. MCP totals can be grouped per area. The map uses Terra Draw; snapping to other areas within 12px is our own function (12px the user's choice), and Terra Draw's own pointer distance is 8px. Phones show the areas but don't edit them.
+
+## Batteries
+
+- **Batteries are equipment, read from the logs** (user's decisions, 2026-10-22): registered from the battery serial in each log, like drones and controllers, and listed in Equipment. They have a name and no team or holder (for now). No warning thresholds: the pages show what the logs say and leave the judgement to people.
+- **What a flight's log says about its battery is stored per flight** (`flight_batteries`, schema approved by the user, 2026-10-22): charge at takeoff and landing, full and design capacity, cycles, lowest and highest temperature, lowest cell voltage and the largest difference between cells. A battery's state now is that of its latest flight, so nothing is kept on the battery itself. Remaining capacity, highest current and lowest pack voltage are left out (user's decision) until a feature needs them.
+- **A flight can have several batteries**, one per slot (user's correction: drones with several batteries exist, the Mavic 3 Enterprise isn't one of them). Logs name one battery serial, so it goes in slot 0; where a log of a drone with more batteries keeps the others' serials is still unknown.
+- **The battery records come from the parser's battery group** (static, dynamic and cell voltages); see `backend/vendor/README.md` for what had to be fixed in version 14 logs. Adding the table reprocesses every log once, with the stored DJI keys.
+- **How** (my choices): a battery is visible to whoever sees one of its flights, with only those flights, so members see the batteries their teams flew; renaming a battery is for admins, since it has no team to decide which members may.
 
 ## List filters
 
