@@ -2,10 +2,10 @@ use std::collections::HashSet;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
 use sqlx::types::Uuid;
+use sqlx::{PgConnection, PgPool};
 
-use super::flight::Flight;
+use super::flight::{BatteryUse, Flight};
 use crate::areas;
 
 pub struct PendingLog {
@@ -139,10 +139,11 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
 /// are registered. A new flight gets the pilot chosen on the controller, if they
 /// are still active and in a team, and that pilot's team; without one, its
 /// controller's team unless that team is archived. Re-processing updates the
-/// flight in place, so its id, team and pilot stay the same.
-pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<()> {
+/// flight in place, so its id, team and pilot stay the same. Returns whether
+/// the flight is new.
+pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<bool> {
     let mut tx = db.begin().await?;
-    match flight {
+    let new = match flight {
         Some(flight) => {
             if let Some(serial) = &flight.aircraft_serial {
                 sqlx::query!(
@@ -161,7 +162,7 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 .execute(&mut *tx)
                 .await?;
             }
-            let flight_id = sqlx::query_scalar!(
+            let saved = sqlx::query!(
                 // The flight's team (user's decisions, 2026-10-19): the one chosen
                 // with the pilot on the controller; else the pilot's, if they're
                 // in one team; else the controller's; else the drone's.
@@ -197,7 +198,8 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                      rc_serial = excluded.rc_serial,
                      track = excluded.track,
                      metrics = excluded.metrics
-                 returning id",
+                 -- xmax is set on a row that \"on conflict\" updated rather than inserted.
+                 returning id, (xmax = 0) as \"new!\"",
                 raw_log_id,
                 flight.takeoff_at,
                 flight.landed_at,
@@ -210,14 +212,17 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
             )
             .fetch_one(&mut *tx)
             .await?;
-            areas::db::compute_flight(&mut tx, flight_id).await?;
+            areas::db::compute_flight(&mut tx, saved.id).await?;
+            save_battery(&mut tx, saved.id, flight.battery.as_ref()).await?;
+            saved.new
         }
         None => {
             sqlx::query!("delete from flights where raw_log_id = $1", raw_log_id)
                 .execute(&mut *tx)
                 .await?;
+            false
         }
-    }
+    };
     sqlx::query!(
         "update raw_logs set status = 'done', last_error = null, processed_at = now()
          where id = $1",
@@ -226,6 +231,54 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    Ok(new)
+}
+
+/// Registers the flight's battery if it's new, and replaces what the flight
+/// says about it.
+async fn save_battery(
+    tx: &mut PgConnection,
+    flight_id: Uuid,
+    battery: Option<&BatteryUse>,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        "delete from flight_batteries where flight_id = $1",
+        flight_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    let Some(battery) = battery else {
+        return Ok(());
+    };
+    sqlx::query!(
+        "insert into batteries (serial) values ($1) on conflict (serial) do nothing",
+        battery.serial,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        // Logs name one battery, so it's in slot 0; where a log of a drone
+        // with more batteries keeps the others' serials is still unknown.
+        "insert into flight_batteries (flight_id, slot, battery_id, charge_start_pct, charge_end_pct,
+                                      full_capacity_mah, design_capacity_mah, cycles,
+                                      temperature_min_c, temperature_max_c,
+                                      cell_voltage_min_v, cell_spread_max_v)
+         values ($1, 0, (select id from batteries where serial = $2), $3, $4, $5, $6, $7, $8,
+                 $9, $10, $11)",
+        flight_id,
+        battery.serial,
+        battery.charge_start_pct,
+        battery.charge_end_pct,
+        battery.full_capacity_mah,
+        battery.design_capacity_mah,
+        battery.cycles,
+        battery.temperature_min_c,
+        battery.temperature_max_c,
+        battery.cell_voltage_min_v,
+        battery.cell_spread_max_v,
+    )
+    .execute(&mut *tx)
+    .await?;
     Ok(())
 }
 
@@ -348,6 +401,7 @@ mod tests {
             aircraft_serial: None,
             rc_serial: Some("TESTRC0003".to_owned()),
             track: json!({}),
+            battery: None,
             metrics: Metrics {
                 max_altitude_m: 10.0,
                 camera_serial: None,
@@ -390,7 +444,7 @@ mod tests {
             .unwrap();
         assert_eq!(first, Stored::Added);
         let log = next_pending(&db).await.unwrap().unwrap();
-        save_result(&db, log.id, Some(&flight())).await.unwrap();
+        assert!(save_result(&db, log.id, Some(&flight())).await.unwrap());
         assert_eq!(pilot_and_team(&db, log.id).await, (Some(pilot), Some(team)));
 
         let second = save_upload(&db, &[2; 32], path, 20, Some(pilot), None)
@@ -399,6 +453,10 @@ mod tests {
         assert_eq!(second, Stored::Replaced);
         let again = next_pending(&db).await.unwrap().unwrap();
         assert_eq!(again.id, log.id, "the same log, to be processed again");
+        assert!(
+            !save_result(&db, log.id, Some(&flight())).await.unwrap(),
+            "the same flight, so it isn't placed in a session again"
+        );
         assert!(has_content(&db, &[2; 32]).await.unwrap());
         assert!(!has_content(&db, &[1; 32]).await.unwrap());
         let stored = stored_contents(&db, &[vec![1; 32], vec![2; 32]])

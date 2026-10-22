@@ -98,7 +98,14 @@
 					? resolve('/equipment/[kind=kind]/[id]', { kind: 'controllers', id: flight.rc_id })
 					: undefined
 			},
-			{ label: 'Battery', value: device(null, flight.metrics.battery_serial), numeric: true },
+			{
+				label: 'Battery',
+				value: device(flight.battery_name, flight.metrics.battery_serial),
+				numeric: true,
+				href: flight.battery_id
+					? resolve('/equipment/batteries/[id]', { id: flight.battery_id })
+					: undefined
+			},
 			{ label: 'Camera', value: device(null, flight.metrics.camera_serial), numeric: true }
 		]
 	]);

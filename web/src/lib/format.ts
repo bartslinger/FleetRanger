@@ -145,6 +145,17 @@ export function areaShares(
 	};
 }
 
+/** A battery's charge capacity: "4,230 mAh". */
+export function capacity(mah: number): string {
+	return `${mah.toLocaleString('en-US')}${NBSP}mAh`;
+}
+
+/** What a battery still holds, as a share of what it held new: "85%". */
+export function health(fullMah: number | null, designMah: number | null): string | null {
+	if (fullMah === null || !designMah) return null;
+	return `${Math.round((fullMah / designMah) * 100)}%`;
+}
+
 /** Kilometres with one decimal; "<0.1 km" rather than a misleading "0.0 km". */
 export function distance(metres: number): string {
 	if (metres < 50) return `<0.1${NBSP}km`;

@@ -17,10 +17,7 @@ use super::service::{self, Session};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    flights::{
-        self,
-        db::Filter,
-    },
+    flights::{self, db::Filter},
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;

@@ -9,12 +9,13 @@ use dji_log_parser::DJILog;
 use dji_log_parser::frame::records_to_frames;
 use dji_log_parser::keychain::KeychainFeaturePoint;
 use dji_log_parser::record::Record;
+use dji_log_parser::record::smart_battery_group::SmartBatteryGroup;
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 use tokio::time::Instant;
 
 use super::activity::{Activity, Stage};
-use super::flight::{self, Flight, Serials};
+use super::flight::{self, BatteryInfo, Flight, Serials};
 use super::{db, dji};
 use crate::sessions::{self, SessionGap};
 
@@ -123,8 +124,9 @@ async fn process_next(
     activity.stage(Stage::Saving);
     match processed {
         Ok(decoded) => {
-            db::save_result(db, log.id, decoded.flight.as_ref()).await?;
-            if decoded.flight.is_some() {
+            // Only a flight seen for the first time: processing a log again
+            // must not put a flight back that someone took out of its session.
+            if db::save_result(db, log.id, decoded.flight.as_ref()).await? {
                 sessions::db::place_upload(db, log.id, session_gap).await?;
             }
             match &decoded.flight {
@@ -249,9 +251,24 @@ fn decode(log: &DJILog, keychains: Option<Vec<Vec<KeychainFeaturePoint>>>) -> Pr
         return Err(format!("{failed} records failed to decode"));
     }
 
+    // The frames leave out the battery's static record.
+    let battery_info = records
+        .iter()
+        .find_map(|record| match record {
+            Record::SmartBatteryGroup(SmartBatteryGroup::SmartBatteryStatic(battery)) => {
+                Some(BatteryInfo {
+                    design_capacity_mah: i32::try_from(battery.designed_capacity)
+                        .ok()
+                        .filter(|&mah| mah > 0),
+                    cycles: Some(i32::from(battery.loop_times)),
+                })
+            }
+            _ => None,
+        })
+        .unwrap_or_default();
     let frames = records_to_frames(records, log.details.clone());
     Ok(Decoded {
-        flight: flight::derive(&frames, Serials::from_details(&log.details)),
+        flight: flight::derive(&frames, Serials::from_details(&log.details), battery_info),
         dji_total_time_s: log.details.total_time,
         dji_total_distance_m: log.details.total_distance,
     })

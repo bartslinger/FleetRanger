@@ -111,6 +111,10 @@ export interface FlightDetail {
 	/** The drone's and controller's pages; null where the user can't see them. */
 	aircraft_id: string | null;
 	rc_id: string | null;
+	/** The battery's page; null for an archived flight, as batteries are seen
+	 * through flights that aren't. */
+	battery_id: string | null;
+	battery_name: string | null;
 	/** Set for an archived flight. */
 	archived_at: string | null;
 	/** The areas its track passes through, most time first; the rest is outside all areas. */
@@ -203,6 +207,47 @@ export interface User {
 	archived_at: string | null;
 	/** Flights with this user as pilot. */
 	flights: number;
+}
+
+/** A battery, from `/api/batteries`: seen through the flights the user may
+ * see, with its state at the latest of them. */
+export interface Battery {
+	id: string;
+	serial: string;
+	name: string | null;
+	flights: number;
+	last_flight_at: string;
+	/** The drone of its latest flight; `aircraft_id` null if not registered. */
+	aircraft_id: string | null;
+	aircraft_serial: string | null;
+	aircraft_name: string | null;
+	cycles: number | null;
+	design_capacity_mah: number | null;
+	/** What it held at its latest flight that reported it. */
+	full_capacity_mah: number | null;
+}
+
+/** One flight of a battery, with what its log says about the battery. */
+export interface BatteryFlight {
+	flight_id: string;
+	takeoff_at: string;
+	air_time_s: number;
+	aircraft_serial: string | null;
+	aircraft_name: string | null;
+	charge_start_pct: number | null;
+	charge_end_pct: number | null;
+	full_capacity_mah: number | null;
+	design_capacity_mah: number | null;
+	cycles: number | null;
+	temperature_min_c: number | null;
+	temperature_max_c: number | null;
+	cell_voltage_min_v: number | null;
+	cell_spread_max_v: number | null;
+}
+
+/** A battery with its flights, newest first, from `/api/batteries/{id}`. */
+export interface BatteryDetail extends Battery {
+	flight_list: BatteryFlight[];
 }
 
 /** A drone or remote controller, from `/api/aircraft` or `/api/remote-controllers`. */
