@@ -80,3 +80,19 @@ text mapping trims.
 **Evidence.** In 9 version-11 logs, all 27 tips and warnings now decode to clean text ("Home
 Point recorded. Return-to-Home Altitude:50.0 m"); before, none did. In 35 version-14 logs the
 counts of these records are the same before and after (176, 677 and 18).
+
+### Static battery information in version 14 logs
+
+In `src/record/smart_battery_group.rs`, `SmartBatteryStatic` reads one more byte after `index`
+in version 14 logs. Upstream's layout fits version 11 logs exactly, but version 14 logs have a
+byte there, so upstream read every field after it one byte early: a 5,000 mAh battery's design
+capacity came out as 1,280,000 (5,000 × 256), its 22 charge cycles as 5,632, and its 15.4 V as
+3,942,400 mV. The byte is 0 in every log seen; what it means is unknown. Versions 12 and 13
+are unchanged, as no logs of those versions were available to check.
+
+**Evidence.** In version 11 logs the record is 41 bytes: its kind and exactly the 40 bytes of
+upstream's layout. In version 14 logs it is 48 bytes, that layout plus the one byte, padded to
+three 16-byte AES blocks. In 253 logs (9 of version 11, 244 of version 14, three models), every
+record then reads a model's design capacity (5,000 mAh for every Mavic 3 Enterprise battery,
+as specified), 15.4 V for the 4-cell batteries, and a charge cycle count that never
+goes down from one flight of a battery to its next (34 batteries; 152 times up by exactly 1).
