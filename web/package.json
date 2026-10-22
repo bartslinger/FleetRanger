@@ -20,6 +20,8 @@
 		"tokens": "node scripts/tokens.js && prettier --write src/lib/ui/tokens.css"
 	},
 	"devDependencies": {
+		"@carbon/charts": "1.27.21",
+		"@carbon/charts-svelte": "1.27.21",
 		"@carbon/icons": "11.90.0",
 		"@carbon/layout": "11.61.0",
 		"@carbon/themes": "11.83.0",
