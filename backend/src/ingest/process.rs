@@ -123,8 +123,9 @@ async fn process_next(
     activity.stage(Stage::Saving);
     match processed {
         Ok(decoded) => {
-            db::save_result(db, log.id, decoded.flight.as_ref()).await?;
-            if decoded.flight.is_some() {
+            // Only a flight seen for the first time: processing a log again
+            // must not put a flight back that someone took out of its session.
+            if db::save_result(db, log.id, decoded.flight.as_ref()).await? {
                 sessions::db::place_upload(db, log.id, session_gap).await?;
             }
             match &decoded.flight {

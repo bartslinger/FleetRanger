@@ -139,10 +139,11 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
 /// are registered. A new flight gets the pilot chosen on the controller, if they
 /// are still active and in a team, and that pilot's team; without one, its
 /// controller's team unless that team is archived. Re-processing updates the
-/// flight in place, so its id, team and pilot stay the same.
-pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<()> {
+/// flight in place, so its id, team and pilot stay the same. Returns whether
+/// the flight is new.
+pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<bool> {
     let mut tx = db.begin().await?;
-    match flight {
+    let new = match flight {
         Some(flight) => {
             if let Some(serial) = &flight.aircraft_serial {
                 sqlx::query!(
@@ -161,7 +162,7 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 .execute(&mut *tx)
                 .await?;
             }
-            let flight_id = sqlx::query_scalar!(
+            let saved = sqlx::query!(
                 // The flight's team (user's decisions, 2026-10-19): the one chosen
                 // with the pilot on the controller; else the pilot's, if they're
                 // in one team; else the controller's; else the drone's.
@@ -197,7 +198,8 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                      rc_serial = excluded.rc_serial,
                      track = excluded.track,
                      metrics = excluded.metrics
-                 returning id",
+                 -- xmax is set on a row that \"on conflict\" updated rather than inserted.
+                 returning id, (xmax = 0) as \"new!\"",
                 raw_log_id,
                 flight.takeoff_at,
                 flight.landed_at,
@@ -210,14 +212,16 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
             )
             .fetch_one(&mut *tx)
             .await?;
-            areas::db::compute_flight(&mut tx, flight_id).await?;
+            areas::db::compute_flight(&mut tx, saved.id).await?;
+            saved.new
         }
         None => {
             sqlx::query!("delete from flights where raw_log_id = $1", raw_log_id)
                 .execute(&mut *tx)
                 .await?;
+            false
         }
-    }
+    };
     sqlx::query!(
         "update raw_logs set status = 'done', last_error = null, processed_at = now()
          where id = $1",
@@ -226,7 +230,7 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(())
+    Ok(new)
 }
 
 pub async fn mark_failed(db: &PgPool, id: Uuid, error: &str) -> sqlx::Result<()> {
@@ -390,7 +394,7 @@ mod tests {
             .unwrap();
         assert_eq!(first, Stored::Added);
         let log = next_pending(&db).await.unwrap().unwrap();
-        save_result(&db, log.id, Some(&flight())).await.unwrap();
+        assert!(save_result(&db, log.id, Some(&flight())).await.unwrap());
         assert_eq!(pilot_and_team(&db, log.id).await, (Some(pilot), Some(team)));
 
         let second = save_upload(&db, &[2; 32], path, 20, Some(pilot), None)
@@ -399,6 +403,10 @@ mod tests {
         assert_eq!(second, Stored::Replaced);
         let again = next_pending(&db).await.unwrap().unwrap();
         assert_eq!(again.id, log.id, "the same log, to be processed again");
+        assert!(
+            !save_result(&db, log.id, Some(&flight())).await.unwrap(),
+            "the same flight, so it isn't placed in a session again"
+        );
         assert!(has_content(&db, &[2; 32]).await.unwrap());
         assert!(!has_content(&db, &[1; 32]).await.unwrap());
         let stored = stored_contents(&db, &[vec![1; 32], vec![2; 32]])
