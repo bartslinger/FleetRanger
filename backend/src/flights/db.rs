@@ -801,6 +801,24 @@ pub async fn pilots_in(
     .await
 }
 
+/// Whether all these flights exist and are in the scope.
+pub async fn all_visible(db: &PgPool, scope: &FlightScope, ids: &[Uuid]) -> sqlx::Result<bool> {
+    let visible = sqlx::query_scalar!(
+        r#"select count(*) as "count!" from flights
+           where id = any($1)
+             and ($2
+                  or pilot_id = $3
+                  or group_id = any($4))"#,
+        ids,
+        scope.all,
+        scope.user_id,
+        &scope.group_ids,
+    )
+    .fetch_one(db)
+    .await?;
+    Ok(usize::try_from(visible).is_ok_and(|visible| visible == ids.len()))
+}
+
 /// The group of each of these flights, or None if one of them doesn't exist.
 /// The visibility check is the policy's job, not this query's.
 pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
@@ -1294,7 +1312,7 @@ mod tests {
         let pilot = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         testing::join(&db, pilot, south).await;
         let flight = flight(&db, Some(north), Some(pilot)).await;
-        let session = sessions::db::split(&db, &[flight]).await.unwrap();
+        let session = sessions::db::split(&db, &[flight], None).await.unwrap();
         let state = async || -> (Option<Uuid>, Option<Uuid>, Option<Uuid>) {
             sqlx::query_as("select pilot_id, group_id, session_id from flights where id = $1")
                 .bind(flight)
@@ -1383,8 +1401,8 @@ mod tests {
             flight(&db, None, None).await,
             flight(&db, None, None).await,
         );
-        let kept = sessions::db::split(&db, &[a, b]).await.unwrap();
-        let emptied = sessions::db::split(&db, &[c]).await.unwrap();
+        let kept = sessions::db::split(&db, &[a, b], None).await.unwrap();
+        let emptied = sessions::db::split(&db, &[c], None).await.unwrap();
         let session_of = async |id: Uuid| -> Option<Uuid> {
             sqlx::query_scalar("select session_id from flights where id = $1")
                 .bind(id)

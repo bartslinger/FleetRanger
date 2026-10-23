@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select group_id from sessions where id = any($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "group_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "09443c0753ebec8696ad08583b40f737e08ba948b94da7690374aaa7ded904b1"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select f.id, f.pilot_id as \"pilot_id!\", f.team_id, f.takeoff_at, f.landed_at,\n                  l.received_at\n           from flights f\n           join raw_logs l on l.id = f.raw_log_id\n           where f.raw_log_id = $1 and f.session_id is null and f.archived_at is null\n             and f.pilot_id is not null and l.pilot_id is not null",
+  "query": "select f.id, f.pilot_id as \"pilot_id!\", f.group_id, f.takeoff_at, f.landed_at,\n                  l.received_at\n           from flights f\n           join raw_logs l on l.id = f.raw_log_id\n           where f.raw_log_id = $1 and f.session_id is null and f.archived_at is null\n             and f.pilot_id is not null and l.pilot_id is not null",
   "describe": {
     "columns": [
       {
@@ -27,12 +27,12 @@
       },
       {
         "ordinal": 2,
-        "name": "team_id",
+        "name": "group_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "flights",
-            "name": "team_id"
+            "name": "group_id"
           }
         }
       },
@@ -84,5 +84,5 @@
       false
     ]
   },
-  "hash": "3049e30e6eef20c51c84160ab3983764d3dfe5f159f64f3fd6ab992c2ef4a07a"
+  "hash": "0d4dbf374e5f970eda86c36b79db05cf865613dfc70f185d63165c10af3f8c0f"
 }
