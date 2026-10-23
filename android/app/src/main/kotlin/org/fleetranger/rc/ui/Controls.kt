@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -133,6 +134,8 @@ fun TextInput(
  * character goes into shows focus; when invalid, all boxes do in red. Label,
  * helper and error are the group's, as with [TextInput]. The value holds
  * only the code's characters: others, such as a pasted dash, are dropped.
+ * The keyboard's Done only closes the keyboard, as Android intends; the
+ * screen's button submits.
  */
 @Composable
 fun CodeInput(
@@ -146,11 +149,11 @@ fun CodeInput(
     helper: String? = null,
     invalid: String? = null,
     readOnly: Boolean = false,
-    onDone: () -> Unit = {},
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
+    // As wide as the boxes, so helper and error text wrap there.
+    Column(modifier.width(IntrinsicSize.Min), verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
         BasicText(label, style = Type.label02.copy(color = Colors.textSecondary))
         BasicTextField(
             value,
@@ -170,10 +173,16 @@ fun CodeInput(
                 keyboardType = KeyboardType.Ascii,
                 imeAction = ImeAction.Done,
             ),
-            keyboardActions = KeyboardActions(onDone = { onDone() }),
             interactionSource = interaction,
             decorationBox = { field ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Box {
+                    // The real field, invisible, under the boxes: it takes the
+                    // keyboard's input. First, so it keeps its place when the
+                    // error icon comes and goes: moved, it would be made anew.
+                    // At the top, with tiny text, so the cursor it scrolls into
+                    // view at every change lies within the boxes.
+                    Box(Modifier.size(1.dp)) { field() }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                     // Drawn from the value; the field itself is read out.
                     Row(
                         Modifier.clearAndSetSemantics {},
@@ -192,10 +201,7 @@ fun CodeInput(
                         }
                     }
                     if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
-                    // The real field, invisible: it takes the keyboard's input.
-                    // At the top, with tiny text, so the cursor it scrolls into
-                    // view at every change lies within the boxes.
-                    Box(Modifier.align(Alignment.Top).size(1.dp)) { field() }
+                    }
                 }
             },
         )
