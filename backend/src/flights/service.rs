@@ -182,11 +182,17 @@ pub async fn set_team(
     Ok(db::set_team(db, &ids, group_id).await?)
 }
 
-/// Archives a batch of flights, all or none: they leave their sessions and
-/// every list and total. Returns how many weren't archived yet.
+/// Archives a batch of flights, all or none: they leave every list and total.
+/// Only flights without a session can be archived, so archiving never changes
+/// a session, perhaps another group's. Returns how many weren't archived yet.
 pub async fn archive(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
     let ids = archivable(db, actor, ids).await?;
-    Ok(db::archive(db, &ids).await?)
+    db::archive(db, &ids).await?.ok_or_else(|| {
+        ApiError::Conflict(
+            "Flights in a session can’t be archived. Remove them from their session first."
+                .to_owned(),
+        )
+    })
 }
 
 /// Restores a batch of archived flights, without a session. Returns how many

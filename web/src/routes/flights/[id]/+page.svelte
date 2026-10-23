@@ -137,8 +137,8 @@
 				onsuccess={() => toast('Flight archived.')}
 			>
 				<p>
-					The flight is left out of Flights, sessions and totals, as if it hadn’t happened. It
-					leaves its session. You can restore it later.
+					The flight is left out of Flights and totals, as if it hadn’t happened. You can restore it
+					later.
 				</p>
 			</Modal>
 		{/if}

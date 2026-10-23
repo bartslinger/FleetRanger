@@ -356,8 +356,8 @@
 							{@render chosenFields(ids)}
 							<p>
 								{count(ids) === 1
-									? 'The flight is left out of Flights, sessions and totals, as if it hadn’t happened. It leaves its session.'
-									: `The ${count(ids)} flights are left out of Flights, sessions and totals, as if they hadn’t happened. They leave their sessions.`}
+									? 'The flight is left out of Flights and totals, as if it hadn’t happened.'
+									: `The ${count(ids)} flights are left out of Flights and totals, as if they hadn’t happened.`}
 								You can restore archived flights from Flights with Status: Archived.
 							</p>
 						</Modal>

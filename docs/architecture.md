@@ -110,7 +110,7 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 - **A session's group:** the flight's group when an upload starts one; made by hand, the creator chooses among the groups where they hold `sessions.edit`, with the flights' group preselected and no choice when there is one (until people find it confusing). A session can have no group, at organisation level.
 - **Changing a session's group is admin work**, and asks whether to move its flights to that group as well.
 - **Uploads are grouped per pilot and group:** an uploaded flight joins only a session of its own group, and a session it starts gets that group.
-- How (my choices): only flights the person sees go into a session. Made by hand without a group given (as the web app still does), a session gets the flights' group when they share one, else the organisation. A split keeps the session's group, and merging keeps the group of the session that remains. `sessions.edit` is checked on the sessions flights join and leave, not on the flights' groups; archiving a flight takes it out of its session with `flights.archive` alone.
+- How (my choices): only flights the person sees go into a session. Made by hand without a group given (as the web app still does), a session gets the flights' group when they share one, else the organisation. A split keeps the session's group, and merging keeps the group of the session that remains. `sessions.edit` is checked on the sessions flights join and leave, not on the flights' groups.
 
 **Equipment**
 
