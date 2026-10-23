@@ -254,11 +254,21 @@ pub async fn find_by_email(db: &PgPool, email: &str) -> sqlx::Result<Option<Uuid
         .await
 }
 
+/// Admin on the whole organisation, which the checks read, and the old role
+/// the admin pages still show until they manage groups (package 6).
 pub async fn make_admin(db: &PgPool, id: Uuid) -> sqlx::Result<()> {
+    let mut tx = db.begin().await?;
     sqlx::query!("update users set role = 'admin' where id = $1", id)
-        .execute(db)
+        .execute(&mut *tx)
         .await?;
-    Ok(())
+    sqlx::query!(
+        "insert into organisation_roles (user_id, role) values ($1, 'admin')
+         on conflict do nothing",
+        id,
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
 }
 
 pub async fn team_is_active(db: &PgPool, team_id: Uuid) -> sqlx::Result<bool> {
