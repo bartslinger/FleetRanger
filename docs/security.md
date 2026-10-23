@@ -47,24 +47,24 @@ flowchart LR
 
 ## From controller to server
 
-**Pairing.** The FleetRanger app is downloaded on the controller from the install's own download page. The controller shows a short code and a QR code. A logged-in user enters or scans it on their phone, sees which controller it is (model and serial) and approves it. Nobody logs in on the controller, which is shared.
+**Pairing.** The FleetRanger app is downloaded on the controller from the install's own download page. A logged-in user creates a pairing code in the web app and gives it to the pilot, who types it into the controller. Nobody logs in on the controller, which is shared, nor in the field.
 
 ```mermaid
 sequenceDiagram
-    participant RC as Remote controller
+    participant U as User (web app, logged in)
     participant S as FleetRanger server
-    participant U as User (phone, logged in)
-    RC->>S: Pairing request with SHA-256 of a token it generated
-    S-->>RC: Short code
-    RC->>RC: Shows code and QR code
-    U->>S: Enters code, approves the controller
-    RC->>S: Checks every few seconds
-    S-->>RC: Approved
+    participant RC as Remote controller
+    U->>S: Creates a pairing code
+    S-->>U: Code, valid for 1 hour to 7 days
+    U-->>RC: Gives the code to the pilot, who types it in
+    RC->>S: Code, serial and SHA-256 of a token it generated
+    S-->>RC: Paired, with the code's team
     Note over RC,S: From now on the controller authenticates with its token
 ```
 
 - The controller generates its own long random token and sends only its hash. The server stores only the hash.
-- A code stays valid only while the controller keeps showing it, and expires after an hour without approval.
+- A code pairs one controller and is deleted when it's used, revoked or expired. Its creator, or an admin, can revoke it until then.
+- A code is 8 characters (about 40 bits), so guessing has to be limited: a rate limit in nginx is planned (see "Limits and open items").
 - The token allows exactly two things: downloading the pilot list and uploading logs. It can't read flights or anything else.
 - Unpairing, on the controller or by an admin, stops the token immediately.
 
@@ -170,6 +170,7 @@ Every request is stored exactly as sent, with the response. An operator can chec
 
 - **DJI Pilot 2 itself** talks to DJI separately, for example for activation, no-fly zones and firmware updates. FleetRanger can't see or change that traffic, and this document doesn't cover it.
 - **Not built yet:**
+    - a rate limit on pairing attempts, in nginx;
     - an audit log of views and changes;
     - backups of the database and raw logs;
     - a vault that developers can't decrypt;

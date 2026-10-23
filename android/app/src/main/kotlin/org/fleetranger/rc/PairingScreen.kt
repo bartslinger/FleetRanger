@@ -64,7 +64,7 @@ data class Problem(val title: String, val text: String)
 /**
  * Pairs the controller with a code someone created in the web app: the pilot
  * types it here, and the controller pairs at once, nobody logging in. See
- * docs/pairing.md. Afterwards it says which team the controller joined, with
+ * "Clients" in docs/architecture.md. Afterwards it says which team the controller joined, with
  * a way to unpair straight away if that's wrong.
  *
  * Without a known server (an APK installed some other way), the address is
