@@ -74,16 +74,37 @@ fn on_all(
     }
 }
 
-/// Whether the actor may split or merge sessions holding flights of these
-/// groups: `sessions.edit` on every one of them. A session's own group
-/// decides this from package 4.
-pub fn change_sessions(grants: &Grants, flight_groups: &[Option<Uuid>]) -> ApiResult<()> {
+/// Whether the actor may change which flights are in sessions of these
+/// groups: `sessions.edit` on every session that changes, the ones flights
+/// join and the ones they leave. The flights' own groups don't count: a
+/// session never changes them.
+pub fn change_sessions(grants: &Grants, session_groups: &[Option<Uuid>]) -> ApiResult<()> {
     on_all(
         grants,
         Permission::SessionsEdit,
-        flight_groups,
+        session_groups,
         "You can only change sessions of your own teams.",
     )
+}
+
+/// Whether the actor may move a session from one group to another, or with
+/// None to the organisation: `sessions.move` on both, and to move its flights
+/// along, `flights.move` on their groups and the new one.
+///
+/// - `flight_groups`: the group of each of its flights, if they move along.
+pub fn move_session(
+    grants: &Grants,
+    from: Option<Uuid>,
+    to: Option<Uuid>,
+    flight_groups: Option<&[Option<Uuid>]>,
+) -> ApiResult<()> {
+    let session = grants.may_on_all(Permission::SessionsMove, &[from, to]);
+    let flights = flight_groups.is_none_or(|groups| move_flights(grants, groups, to).is_ok());
+    if session && flights {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden)
+    }
 }
 
 /// Whether the actor may make this change to a drone or controller they see:
@@ -215,16 +236,28 @@ mod tests {
         assert!(set(&member(&[]), &[None]).is_err());
     }
 
-    /// A member can't split or merge a session that holds another team's
-    /// flight, also when it was merged across teams by an admin.
+    /// A member changes only their own groups' sessions: a change that
+    /// touches another group's session, or one in the organisation, is
+    /// refused as a whole.
     #[test]
-    fn members_change_only_sessions_of_their_own_teams() {
+    fn members_change_only_sessions_of_their_own_groups() {
         let (own, second, other) = (A, C, B);
         let mine = member(&[own, second]);
         assert!(change_sessions(&mine, &[Some(own), Some(second)]).is_ok());
         assert!(change_sessions(&mine, &[Some(own), Some(other)]).is_err());
+        assert!(change_sessions(&mine, &[Some(own), None]).is_err());
         assert!(change_sessions(&member(&[]), &[Some(own)]).is_err());
         assert!(change_sessions(&all_flights(), &[Some(own)]).is_err());
         assert!(change_sessions(&admin(), &[Some(own), Some(other)]).is_ok());
+    }
+
+    /// Changing a session's group is admin work, also for an editor of both
+    /// groups.
+    #[test]
+    fn only_admins_move_sessions() {
+        let (own, other) = (A, B);
+        let mine = member(&[own, other]);
+        assert!(move_session(&mine, Some(own), Some(other), None).is_err());
+        assert!(move_session(&admin(), Some(own), None, Some(&[Some(other)])).is_ok());
     }
 }

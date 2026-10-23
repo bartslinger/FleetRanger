@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "insert into sessions default values returning id",
+  "query": "insert into sessions (group_id) values ($1) returning id",
   "describe": {
     "columns": [
       {
@@ -16,11 +16,13 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "e36fef066f73e7b809e82453a800f38790b294b3a14c2abd55404521caf0cb8e"
+  "hash": "0fbddc82d13e8785d5ed0a125e68e929ea2720b12ac699faecb6c567877936ed"
 }

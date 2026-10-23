@@ -16,7 +16,6 @@ pub enum Permission {
     SessionsEdit,
     EquipmentRename,
     FlightsMove,
-    #[expect(dead_code, reason = "changing a session's group comes with package 4")]
     SessionsMove,
     EquipmentMove,
     /// Unpairing controllers, and seeing and revoking others' pairing codes.
