@@ -36,7 +36,8 @@
 		ORGANISATION_ROLES.map((role) => ({
 			value: role,
 			label: ROLE_LABELS[role],
-			helper: ROLE_HELP[role],
+			helper:
+				role === 'admin' && data.lastAdmin ? 'The only admin keeps this role.' : ROLE_HELP[role],
 			disabled: role === 'admin' && data.lastAdmin
 		}))
 	);
@@ -188,6 +189,7 @@
 				rows={user.groups}
 				rowKey={(group) => group.id}
 				rowHref={(group) => resolve('/groups/[id]', { id: group.id })}
+				summary={`${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
 			/>
 		{/if}
 	</Column>

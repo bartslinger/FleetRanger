@@ -71,7 +71,9 @@
 	const moveError = $derived(form && 'moveError' in form ? form.moveError : undefined);
 	const deleteMessage = $derived(form && 'deleteMessage' in form ? form.deleteMessage : undefined);
 	const destination = $derived(
-		moveTo === ORGANISATION ? 'no group' : data.others.find((other) => other.id === moveTo)?.name
+		moveTo === ORGANISATION
+			? 'the organisation'
+			: data.others.find((other) => other.id === moveTo)?.name
 	);
 
 	const members = $derived(group.member_list.length);
@@ -92,34 +94,35 @@
 			title="Delete group"
 			label={group.name}
 			triggerKind="danger-tertiary"
-			submitLabel={holds ? 'Delete and move' : 'Delete group'}
+			submitLabel="Delete group"
 			danger
 			action="?/delete"
 			error={deleteMessage}
 			onsuccess={() =>
 				toast(
 					holds
-						? `Group ${group.name} deleted. Everything it held moved to ${destination}.`
+						? `Group ${group.name} deleted. Its contents are now in ${destination}.`
 						: `Group ${group.name} deleted.`
 				)}
 		>
 			{#if holds}
 				<p>
-					{group.name} holds {holds}. Choose where to move them; then the group is deleted and its
+					{group.name} holds {holds}. Choose where to move them. Then the group is deleted, and its
 					members lose their roles in it. The group and its memberships can’t be restored.
 				</p>
 				<Select
-					label="Move everything to"
+					label="Move contents to"
 					name="move_to"
-					placeholder="Choose a group or no group"
+					placeholder="Choose a destination"
 					options={[
 						...data.others.map((other) => ({ value: other.id, label: other.name })),
-						{ value: ORGANISATION, label: 'No group (organisation only)' }
+						{ value: ORGANISATION, label: 'Organisation, no group' }
 					]}
 					bind:value={moveTo}
 					error={moveError}
+					required
 					helper={moveTo === ORGANISATION
-						? 'Flights go to the queue; sessions, drones and controllers stay in the organisation without a group.'
+						? 'Flights wait for a group in the queue; sessions, drones and controllers belong to the organisation without a group.'
 						: undefined}
 				/>
 			{:else}
@@ -186,7 +189,7 @@
 			<EmptyState
 				title="Add the first member"
 				body="Members see or organise this group’s flights, sessions and equipment by their roles; pilots fly for it."
-				action={addMember}
+				action={data.candidates.length > 0 ? addMember : undefined}
 			/>
 		{:else}
 			<DataTable
@@ -198,7 +201,13 @@
 				{summary}
 			>
 				{#snippet toolbar()}
-					{#if data.candidates.length > 0}{@render addMember()}{/if}
+					<!-- Disabled, not hidden, when everyone is a member: that changes
+					     with a new user (Carbon's disabled states); the note says so. -->
+					{#if data.candidates.length > 0}
+						{@render addMember()}
+					{:else}
+						<Button disabled>Add member</Button>
+					{/if}
 				{/snippet}
 				{#snippet cell(member, column)}
 					{#if column.key === 'roles'}
@@ -236,6 +245,7 @@
 						</Modal>
 						<Modal
 							title="Remove member"
+							label={member.name}
 							triggerIcon={SubtractAlt}
 							triggerSize="md"
 							triggerLabel="Remove {member.name} from the group"
@@ -254,6 +264,9 @@
 					</span>
 				{/snippet}
 			</DataTable>
+			{#if data.candidates.length === 0}
+				<p class="note">Every user is a member already. New users are created on the Users page.</p>
+			{/if}
 		{/if}
 	</Column>
 </Grid>
@@ -293,5 +306,13 @@
 
 	.actions {
 		display: inline-flex;
+	}
+
+	.note {
+		margin: var(--cds-spacing-05) 0 0;
+		padding-inline: var(--cds-spacing-05);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
 	}
 </style>
