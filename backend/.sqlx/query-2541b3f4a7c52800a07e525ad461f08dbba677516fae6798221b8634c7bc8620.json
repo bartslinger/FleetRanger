@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "insert into users (name, role) values ($1, $2) returning id",
+  "query": "insert into users (name) values ($1) returning id",
   "describe": {
     "columns": [
       {
@@ -17,7 +17,6 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
         "Text"
       ]
     },
@@ -25,5 +24,5 @@
       false
     ]
   },
-  "hash": "a2e243748ce6b2db427d9c710cd8016f352a0e509499127b034673dbdbb030cd"
+  "hash": "2541b3f4a7c52800a07e525ad461f08dbba677516fae6798221b8634c7bc8620"
 }

@@ -1,16 +1,17 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::{PgConnection, PgPool};
+use sqlx::{PgConnection, PgPool, types::Json};
 use uuid::Uuid;
 
 #[derive(Serialize)]
 pub struct User {
     pub id: Uuid,
     pub name: String,
-    pub role: String,
-    /// The teams the user flies for, by name; none for users who don't fly.
-    pub team_ids: Vec<Uuid>,
-    pub team_names: Vec<String>,
+    /// Their roles on the whole organisation, in the order viewer, pilot,
+    /// editor, admin.
+    pub roles: Vec<String>,
+    /// The groups they are a member of, by name, with their roles there.
+    pub groups: Json<Vec<Membership>>,
     /// The login's email address; none if the user can't log in.
     pub email: Option<String>,
     pub last_login_at: Option<DateTime<Utc>>,
@@ -19,48 +20,47 @@ pub struct User {
     pub flights: i64,
 }
 
+#[derive(Serialize, serde::Deserialize)]
+pub struct Membership {
+    pub id: Uuid,
+    pub name: String,
+    pub roles: Vec<String>,
+}
+
 /// What an admin sets on a user.
 pub struct UserFields<'a> {
     pub name: &'a str,
-    pub role: &'a str,
-    pub team_ids: &'a [Uuid],
+    /// Roles on the whole organisation, as stored.
+    pub roles: &'a [String],
     /// Lowercase; None removes the login.
     pub email: Option<&'a str>,
 }
 
-/// Users by name, the archived ones only if asked for.
-pub async fn list(db: &PgPool, archived: bool) -> sqlx::Result<Vec<User>> {
-    sqlx::query_as!(
-        User,
-        r#"select u.id, u.name, u.role,
-                  array(select m.team_id from team_members m join teams t on t.id = m.team_id
-                        where m.user_id = u.id order by lower(t.name), t.id) as "team_ids!",
-                  array(select t.name from team_members m join teams t on t.id = m.team_id
-                        where m.user_id = u.id order by lower(t.name), t.id) as "team_names!",
-                  l.email as "email?",
-                  (select max(created_at) from login_sessions s where s.user_id = u.id)
-                      as last_login_at,
-                  u.archived_at,
-                  (select count(*) from flights f where f.pilot_id = u.id and f.archived_at is null)
-                      as "flights!"
-           from users u
-           left join logins l on l.user_id = u.id
-           where $1 or u.archived_at is null
-           order by lower(u.name), u.id"#,
-        archived,
-    )
-    .fetch_all(db)
-    .await
+/// Why a change was refused.
+pub enum Refused {
+    NotFound,
+    /// It would leave the organisation without an active admin.
+    LastAdmin,
 }
 
-pub async fn get(db: &PgPool, id: Uuid) -> sqlx::Result<Option<User>> {
+/// Users by name, the archived ones only if asked for; `id` narrows it to one.
+pub async fn list(db: &PgPool, archived: bool, id: Option<Uuid>) -> sqlx::Result<Vec<User>> {
     sqlx::query_as!(
         User,
-        r#"select u.id, u.name, u.role,
-                  array(select m.team_id from team_members m join teams t on t.id = m.team_id
-                        where m.user_id = u.id order by lower(t.name), t.id) as "team_ids!",
-                  array(select t.name from team_members m join teams t on t.id = m.team_id
-                        where m.user_id = u.id order by lower(t.name), t.id) as "team_names!",
+        r#"select u.id, u.name,
+                  array(select r.role from organisation_roles r where r.user_id = u.id
+                        order by array_position(array['viewer', 'pilot', 'editor', 'admin'],
+                                                r.role)) as "roles!",
+                  coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name,
+                                                                'roles', m.roles)
+                                             order by lower(g.name), g.id)
+                            from groups g
+                            join (select group_id,
+                                         array_agg(role order by array_position(
+                                             array['viewer', 'pilot', 'editor'], role)) as roles
+                                  from group_members where user_id = u.id
+                                  group by group_id) m on m.group_id = g.id),
+                           '[]') as "groups!: Json<Vec<Membership>>",
                   l.email as "email?",
                   (select max(created_at) from login_sessions s where s.user_id = u.id)
                       as last_login_at,
@@ -69,64 +69,81 @@ pub async fn get(db: &PgPool, id: Uuid) -> sqlx::Result<Option<User>> {
                       as "flights!"
            from users u
            left join logins l on l.user_id = u.id
-           where u.id = $1"#,
+           where ($1 or u.archived_at is null) and ($2::uuid is null or u.id = $2)
+           order by lower(u.name), u.id"#,
+        archived || id.is_some(),
         id,
     )
-    .fetch_optional(db)
+    .fetch_all(db)
     .await
 }
 
 pub async fn insert(db: &PgPool, fields: &UserFields<'_>) -> sqlx::Result<Uuid> {
     let mut tx = db.begin().await?;
     let id = sqlx::query_scalar!(
-        "insert into users (name, role) values ($1, $2) returning id",
+        "insert into users (name) values ($1) returning id",
         fields.name,
-        fields.role,
     )
     .fetch_one(&mut *tx)
     .await?;
-    set_teams(&mut tx, id, fields.team_ids).await?;
+    set_roles(&mut tx, id, fields.roles).await?;
     set_login(&mut tx, id, fields.email).await?;
     tx.commit().await?;
     Ok(id)
 }
 
-/// False if there is no such user.
-pub async fn update(db: &PgPool, id: Uuid, fields: &UserFields<'_>) -> sqlx::Result<bool> {
+pub async fn update(
+    db: &PgPool,
+    id: Uuid,
+    fields: &UserFields<'_>,
+) -> sqlx::Result<Result<(), Refused>> {
     let mut tx = db.begin().await?;
-    let updated = sqlx::query!(
-        "update users set name = $2, role = $3 where id = $1",
-        id,
-        fields.name,
-        fields.role,
-    )
-    .execute(&mut *tx)
-    .await?
-    .rows_affected()
+    let admins = lock_active_admins(&mut tx).await?;
+    let updated = sqlx::query!("update users set name = $2 where id = $1", id, fields.name)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
         == 1;
-    if updated {
-        // Past flights keep their team; only new flights follow the user.
-        set_teams(&mut tx, id, fields.team_ids).await?;
-        set_login(&mut tx, id, fields.email).await?;
+    if !updated {
+        return Ok(Err(Refused::NotFound));
     }
+    if admins == [id] && !fields.roles.iter().any(|role| role == "admin") {
+        return Ok(Err(Refused::LastAdmin));
+    }
+    set_roles(&mut tx, id, fields.roles).await?;
+    set_login(&mut tx, id, fields.email).await?;
     tx.commit().await?;
-    Ok(updated)
+    Ok(Ok(()))
 }
 
-/// Makes these the user's teams: the others are left, the new ones joined.
-async fn set_teams(db: &mut PgConnection, id: Uuid, team_ids: &[Uuid]) -> sqlx::Result<()> {
+/// The active admins, locked until the transaction ends, so two changes
+/// can't each take away an admin while the other one still counts.
+async fn lock_active_admins(db: &mut PgConnection) -> sqlx::Result<Vec<Uuid>> {
+    sqlx::query_scalar!(
+        "select r.user_id from organisation_roles r
+         join users u on u.id = r.user_id
+         where r.role = 'admin' and u.archived_at is null
+         order by r.user_id
+         for update of r, u",
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// Makes these the user's roles on the whole organisation.
+async fn set_roles(db: &mut PgConnection, id: Uuid, roles: &[String]) -> sqlx::Result<()> {
     sqlx::query!(
-        "delete from team_members where user_id = $1 and team_id <> all($2)",
+        "delete from organisation_roles where user_id = $1 and role <> all($2)",
         id,
-        team_ids,
+        roles,
     )
     .execute(&mut *db)
     .await?;
     sqlx::query!(
-        "insert into team_members (user_id, team_id) select $1, unnest($2::uuid[])
+        "insert into organisation_roles (user_id, role) select $1, unnest($2::text[])
          on conflict do nothing",
         id,
-        team_ids,
+        roles,
     )
     .execute(db)
     .await?;
@@ -183,9 +200,17 @@ async fn revoke_sessions(db: &mut PgConnection, id: Uuid) -> sqlx::Result<()> {
 }
 
 /// Archives a user, which also ends their login sessions, or restores them.
-/// False if there is no such user.
-pub async fn set_archived(db: &PgPool, id: Uuid, archived: bool) -> sqlx::Result<bool> {
+/// The last active admin isn't archived.
+pub async fn set_archived(
+    db: &PgPool,
+    id: Uuid,
+    archived: bool,
+) -> sqlx::Result<Result<(), Refused>> {
     let mut tx = db.begin().await?;
+    let admins = lock_active_admins(&mut tx).await?;
+    if archived && admins == [id] {
+        return Ok(Err(Refused::LastAdmin));
+    }
     let updated = sqlx::query!(
         "update users set archived_at = case when $2 then coalesce(archived_at, now()) end
          where id = $1",
@@ -196,14 +221,17 @@ pub async fn set_archived(db: &PgPool, id: Uuid, archived: bool) -> sqlx::Result
     .await?
     .rows_affected()
         == 1;
-    if updated && archived {
+    if !updated {
+        return Ok(Err(Refused::NotFound));
+    }
+    if archived {
         revoke_sessions(&mut tx, id).await?;
     }
     tx.commit().await?;
-    Ok(updated)
+    Ok(Ok(()))
 }
 
-/// Deletes a user without flights, with their team membership, login and login
+/// Deletes a user without flights, with their roles, login and login
 /// sessions, and clears them as holder of equipment. False if there is no such
 /// user or they have flights. The user's row is locked first, so a flight can't
 /// get this user in between: its foreign key check waits for the lock.
@@ -219,6 +247,8 @@ pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
     if deletable != Some(true) {
         return Ok(false);
     }
+    // Rows of teams, which go in the final migration; group memberships and
+    // roles go with the user.
     sqlx::query!("delete from team_members where user_id = $1", id)
         .execute(&mut *tx)
         .await?;
@@ -254,28 +284,14 @@ pub async fn find_by_email(db: &PgPool, email: &str) -> sqlx::Result<Option<Uuid
         .await
 }
 
-/// Admin on the whole organisation, which the checks read, and the old role
-/// the admin pages still show until they manage groups (package 6).
+/// Admin on the whole organisation.
 pub async fn make_admin(db: &PgPool, id: Uuid) -> sqlx::Result<()> {
-    let mut tx = db.begin().await?;
-    sqlx::query!("update users set role = 'admin' where id = $1", id)
-        .execute(&mut *tx)
-        .await?;
     sqlx::query!(
         "insert into organisation_roles (user_id, role) values ($1, 'admin')
          on conflict do nothing",
         id,
     )
-    .execute(&mut *tx)
+    .execute(db)
     .await?;
-    tx.commit().await
-}
-
-pub async fn team_is_active(db: &PgPool, team_id: Uuid) -> sqlx::Result<bool> {
-    sqlx::query_scalar!(
-        r#"select exists(select 1 from teams where id = $1 and archived_at is null) as "exists!""#,
-        team_id,
-    )
-    .fetch_one(db)
-    .await
+    Ok(())
 }
