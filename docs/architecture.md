@@ -123,6 +123,8 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 
 **Elsewhere**
 
+- **The word "team" goes entirely** (user's decision, 2026-10-23): from the API, the code, the web app, the controller app and the docs. New endpoints say "group" from the start; each step renames what it touches, so the API mixes both words only on the way.
+
 - **MCP has the user's own access, read only**, replacing "everyone counts as a member": an admin's assistant sees what the admin sees. The install-wide switch stays.
 - **Archiving flights stays** a soft delete, with `flights.archive`, for flights without a session. The web app may offer "Remove from session and archive" in one action to someone who holds both rights.
 - **Migrating changes nobody's access:** teams become groups, every team member becomes a member with Pilot and Editor, admins get Admin and the all-flights role Viewer on the whole organisation. Pilot lists are tidied by hand afterwards. Operations, never built, are dropped: merged sessions cover joint missions.
