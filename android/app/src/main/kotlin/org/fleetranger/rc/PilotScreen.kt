@@ -167,11 +167,8 @@ fun PilotScreen(
                     val pilot = choice?.pilot
                     ChoiceTiles(
                         title = pilot?.name ?: "Not in the list",
-                        detail = if (pilot == null) {
-                            "Set the pilot later in the logbook"
-                        } else {
-                            list.group(choice.groupId)?.name
-                        },
+                        // A pilot's tile names only the pilot (user's decision).
+                        detail = if (pilot == null) "Set the pilot later in the logbook" else null,
                         // Into the group screen, or straight to DJI Pilot 2.
                         launches = !choosesGroup,
                         onMain = { if (choosesGroup) step = Step.Group else fly() },
@@ -191,7 +188,7 @@ fun PilotScreen(
                     Heading("Which group are you flying for?", backButton)
                     ChoiceTiles(
                         title = list.group(choice!!.groupId)?.name.orEmpty(),
-                        detail = choice.pilot.name,
+                        detail = null,
                         launches = true,
                         onMain = fly,
                         other = "Other group",
@@ -309,18 +306,15 @@ private fun ChoiceTiles(
 /**
  * Everyone who flies, each once: the controller's group's pilots first, then
  * the others, and "Not in the list" unless it's on the first screen already.
- * Each tile names the pilot's own groups. Choosing a pilot goes on to the
- * group screen when they may fly for more than one group.
+ * Choosing a pilot goes on to the group screen when they may fly for more
+ * than one group.
  */
 @Composable
 private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, showNotListed: Boolean = true) {
     val (own, others) = list.pilots.partition { list.controllerGroup == null || list.controllerGroup in it.groups }
-    val groupNames = { pilot: Pilot ->
-        pilot.groups.mapNotNull { list.group(it)?.name }.joinToString(", ").ifEmpty { null }
-    }
     TileGrid {
         items(own, key = { it.id }) { pilot ->
-            Tile(pilot.name, groupNames(pilot)) { onChoose(pilot) }
+            Tile(pilot.name, detail = null) { onChoose(pilot) }
         }
         if (showNotListed) {
             item(key = "not-in-the-list") {
@@ -330,7 +324,7 @@ private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, showNotListed
         if (others.isNotEmpty()) {
             sectionHeading("Other pilots")
             items(others, key = { it.id }) { pilot ->
-                Tile(pilot.name, groupNames(pilot)) { onChoose(pilot) }
+                Tile(pilot.name, detail = null) { onChoose(pilot) }
             }
         }
     }
