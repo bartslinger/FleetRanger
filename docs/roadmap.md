@@ -103,7 +103,6 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 
 ## Before production use
 
-- [ ] Rate limit on pairing attempts in nginx (Ansible repo), against guessing pairing codes
 - [ ] Backups: PostgreSQL dumps and raw logs
 - [ ] Restrict development access to servers: a deploy user without sudo, or no access at all
 - [ ] External secrets (DJI app key, OIDC client secret) only in a vault that developers can't decrypt
