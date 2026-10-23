@@ -4,9 +4,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Now
 
-**Releases:** v0.4.0 and android-v0.2.1 run on the first organisation's server; the deploy dumps the database before changing the release. v0.4.0 reworked **Sessions**: the cards show a week or a month beside a map with all its tracks, each card with a **day strip** (the day with its flights and night, each flight's times on hover); **a session opens on the page itself** (the map flies to it, its facts replace the cards, its flights follow in a table, the arrows step through sessions across weeks and months with the filters kept); a track on the map opens its session, and in an open session points at its flight's row with its times. Tracks are **cyan** with a dot for takeoff and an X for landing; the street map follows the theme and the satellite or map choice is kept for the tab. Times carry no time-zone label. v0.3.0 brought areas and list filters.
-
-**v0.5.0 prepared** (images on the server, playbook to run): **batteries** in Equipment, with a page per battery (capacity over time, its flights), linked from each flight, and fixes in the parser's battery records. The release reprocesses every log once, with the stored DJI keys (about an hour on the server). nginx now also compresses JSON. See "Batteries" below.
+**Releases:** v0.5.0 and android-v0.2.1 run on the first organisation's server; the deploy dumps the database before changing the release. v0.5.0 brought **batteries** in Equipment, with a page per battery (capacity over time, its flights), linked from each flight, and fixes in the parser's battery records; it reprocessed all 3,611 logs without failures, and nginx now also compresses JSON. See "Batteries" below. v0.4.0 reworked **Sessions**: the cards show a week or a month beside a map with all its tracks, each card with a **day strip** (the day with its flights and night, each flight's times on hover); **a session opens on the page itself** (the map flies to it, its facts replace the cards, its flights follow in a table, the arrows step through sessions across weeks and months with the filters kept); a track on the map opens its session, and in an open session points at its flight's row with its times. Tracks are **cyan** with a dot for takeoff and an X for landing; the street map follows the theme and the satellite or map choice is kept for the tab. Times carry no time-zone label. v0.3.0 brought areas and list filters.
 
 **In progress: pairing reversed** (branch `pairing`): a user creates a code in the web app and the pilot types it into the controller, so nobody logs in in the field. See [pairing.md](pairing.md).
 
@@ -100,7 +98,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Carbon review of the battery UI
 - [x] Parser: charge and cell records with an extra byte after the index (checked on all 3,611 logs of the first organisation)
 - [x] A flight's page links its battery
-- [ ] Release v0.5.0: the migration reprocesses every log once, with the stored DJI keys
+- [x] Release v0.5.0: the migration reprocessed every log once, with the stored DJI keys
 - [x] Compression: scripts and styles turned out to be compressed already; nginx now also gzips JSON (Ansible)
 
 ## Before production use
