@@ -49,6 +49,7 @@ object Colors {
     val notificationBackgroundWarning = Color(0xFFFCF4D6)
     val notificationBackgroundError = Color(0xFFFFF1F1)
     val supportSuccess = Color(0xFF24A148)
+    val highlight = Color(0xFFD0E2FF)
     val notificationBackgroundSuccess = Color(0xFFDEFBE6)
 }
 
