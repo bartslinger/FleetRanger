@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select u.id, u.name,\n                  coalesce(array_agg(g.id order by lower(g.name), g.id) filter (where g.member),\n                           '{}') as \"groups!\",\n                  coalesce(array_agg(g.id order by lower(g.name), g.id) filter (where not g.member),\n                           '{}') as \"other_groups!\"\n           from users u\n           left join lateral (\n               select g.id, g.name,\n                      exists (select 1 from group_members m\n                              where m.user_id = u.id and m.group_id = g.id) as member\n               from groups g\n               where exists (select 1 from group_members m\n                             where m.user_id = u.id and m.group_id = g.id and m.role = any($1))\n                  or exists (select 1 from organisation_roles r\n                             where r.user_id = u.id and r.role = any($1))\n           ) g on true\n           where u.archived_at is null\n             and (exists (select 1 from group_members m\n                          where m.user_id = u.id and m.role = any($1))\n                  or exists (select 1 from organisation_roles r\n                             where r.user_id = u.id and r.role = any($1)))\n           group by u.id, u.name\n           order by lower(u.name), u.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "groups!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "other_groups!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "359464632a6ba75c4ebf785dfe62e91e8c3d2041f6a8fda8e51b3904be605326"
+}

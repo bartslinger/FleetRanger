@@ -597,9 +597,7 @@ fn api(error: ApiError) -> McpError {
     match error {
         ApiError::NotFound => invalid("Not found, or not visible to this user.".to_owned()),
         ApiError::Invalid(message) | ApiError::Conflict(message) => invalid(message),
-        ApiError::Unauthorized | ApiError::Forbidden => {
-            McpError::invalid_request("Not allowed for this user.", None)
-        }
+        ApiError::Forbidden => McpError::invalid_request("Not allowed for this user.", None),
         ApiError::Internal(error) => {
             tracing::error!(error = format!("{error:#}"), "MCP tool failed");
             McpError::internal_error("Something went wrong in FleetRanger.", None)

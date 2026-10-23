@@ -7,8 +7,6 @@ use axum::{
 };
 
 pub enum ApiError {
-    /// No valid credentials, e.g. an unknown controller token.
-    Unauthorized,
     /// The actor may not do this.
     Forbidden,
     NotFound,
@@ -30,7 +28,6 @@ impl From<sqlx::Error> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         match self {
-            Self::Unauthorized => StatusCode::UNAUTHORIZED.into_response(),
             Self::Forbidden => StatusCode::FORBIDDEN.into_response(),
             Self::NotFound => StatusCode::NOT_FOUND.into_response(),
             Self::Invalid(message) => (StatusCode::BAD_REQUEST, message).into_response(),

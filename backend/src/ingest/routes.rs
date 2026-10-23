@@ -3,9 +3,10 @@
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, FromRef, State},
+    extract::{DefaultBodyLimit, FromRef, Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{get, post},
+    middleware,
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -34,13 +35,25 @@ where
     LogDir: FromRef<S>,
     Changes: FromRef<S>,
 {
-    Router::new()
-        .route("/api/logs/processing", get(status))
+    // The controller's API, see "Clients" in docs/architecture.md.
+    let v1 = Router::new()
+        .route(
+            "/api/controller/v1/logs/{file_name}",
+            put(put_log).layer(DefaultBodyLimit::max(MAX_LOG_BYTES)),
+        )
+        .route("/api/controller/v1/logs/check", post(missing))
+        .route_layer(middleware::from_fn(crate::pairing::v1_errors));
+    // What android-v0.3.0 calls, until no controller reports it.
+    let v0 = Router::new()
         .route(
             "/api/controller/logs",
-            post(receive).layer(DefaultBodyLimit::max(MAX_LOG_BYTES)),
+            post(receive_v0).layer(DefaultBodyLimit::max(MAX_LOG_BYTES)),
         )
-        .route("/api/controller/logs/missing", post(missing))
+        .route("/api/controller/logs/missing", post(missing));
+    Router::new()
+        .route("/api/logs/processing", get(status))
+        .merge(v1)
+        .merge(v0)
 }
 
 #[derive(Deserialize)]
@@ -79,10 +92,48 @@ struct Received {
     result: Stored,
 }
 
-/// A log from a paired controller: the file itself as the body, with headers
-/// `X-File-Name` (its name on the controller), `X-SHA256` (hex) and, if a pilot
-/// was chosen, `X-Pilot-Id` with the group chosen with them, `X-Team-Id`.
-async fn receive(
+/// A log from a paired controller, put at its name on the controller: the
+/// file itself as the body, with headers `X-SHA256` (hex) and, if a pilot was
+/// chosen, `X-Pilot-Id` and `X-Group-Id`. 201 for a new log, 200 for a new
+/// version of one or a duplicate, so sending it again is harmless.
+async fn put_log(
+    controller: Controller,
+    State(db): State<PgPool>,
+    State(LogDir(log_dir)): State<LogDir>,
+    State(changes): State<Changes>,
+    Path(file_name): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> ApiResult<(StatusCode, Json<Received>)> {
+    let chosen = upload::Chosen {
+        pilot_id: id_header(&headers, "x-pilot-id")?,
+        group_id: id_header(&headers, "x-group-id")?,
+    };
+    let sha256 = text_header(&headers, "x-sha256");
+    let result = upload::receive(
+        &db,
+        &log_dir,
+        &controller,
+        &file_name,
+        sha256,
+        chosen,
+        &body,
+    )
+    .await?;
+    if result != Stored::Duplicate {
+        // A log waiting to be processed: admins see it come in.
+        changes.notify();
+    }
+    let status = match result {
+        Stored::Added => StatusCode::CREATED,
+        Stored::Replaced | Stored::Duplicate => StatusCode::OK,
+    };
+    Ok((status, Json(Received { result })))
+}
+
+/// android-v0.3.0's upload: the name in `X-File-Name`, and its `X-Team-Id`
+/// ignored, so the flight goes to the queue with its pilot.
+async fn receive_v0(
     controller: Controller,
     State(db): State<PgPool>,
     State(LogDir(log_dir)): State<LogDir>,
@@ -90,29 +141,39 @@ async fn receive(
     headers: HeaderMap,
     body: Bytes,
 ) -> ApiResult<(StatusCode, Json<Received>)> {
-    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
-    let file_name = header("x-file-name").unwrap_or_default();
-    let sha256 = header("x-sha256").unwrap_or_default();
-    let id = |name: &str| match header(name) {
-        Some(id) => id
-            .parse::<Uuid>()
-            .map(Some)
-            .map_err(|_| ApiError::Invalid(format!("{name} is not an id."))),
-        None => Ok(None),
-    };
     let chosen = upload::Chosen {
-        pilot_id: id("x-pilot-id")?,
-        group_id: id("x-team-id")?,
+        pilot_id: id_header(&headers, "x-pilot-id")?,
+        group_id: None,
     };
+    let file_name = text_header(&headers, "x-file-name");
+    let sha256 = text_header(&headers, "x-sha256");
     let result =
         upload::receive(&db, &log_dir, &controller, file_name, sha256, chosen, &body).await?;
     let status = match result {
         Stored::Duplicate => StatusCode::OK,
         Stored::Added | Stored::Replaced => {
-            // A log waiting to be processed: admins see it come in.
             changes.notify();
             StatusCode::CREATED
         }
     };
     Ok((status, Json(Received { result })))
+}
+
+fn text_header<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+}
+
+fn id_header(headers: &HeaderMap, name: &str) -> ApiResult<Option<Uuid>> {
+    match headers.get(name) {
+        Some(value) => value
+            .to_str()
+            .ok()
+            .and_then(|id| id.parse().ok())
+            .map(Some)
+            .ok_or_else(|| ApiError::Invalid(format!("{name} is not an id."))),
+        None => Ok(None),
+    }
 }

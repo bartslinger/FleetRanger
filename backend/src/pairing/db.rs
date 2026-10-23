@@ -3,6 +3,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::flights::db::GroupChoice;
 use crate::policy::{self, Permission, Scope};
 
 /// Adds a pairing code, and deletes expired ones. Returns its id, or None if
@@ -104,10 +105,9 @@ pub async fn revoke(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
 }
 
 /// A controller that just paired.
-#[derive(Serialize)]
 pub struct Paired {
-    /// The team it joined; None for none.
-    pub team: Option<String>,
+    /// The group it joined; None for the organisation.
+    pub group: Option<GroupChoice>,
 }
 
 /// Uses a code: it's deleted, and the controller with this serial (registered
@@ -133,9 +133,13 @@ pub async fn use_code(
     else {
         return Ok(None);
     };
-    let group = sqlx::query_scalar!("select name from groups where id = $1", group_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+    let group = sqlx::query_as!(
+        GroupChoice,
+        "select id, name from groups where id = $1",
+        group_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
     sqlx::query!(
         "insert into remote_controllers (serial, group_id, token_sha256)
          values ($1, $2, $3)
@@ -149,7 +153,7 @@ pub async fn use_code(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Some(Paired { team: group }))
+    Ok(Some(Paired { group }))
 }
 
 /// A paired controller, as it authenticates.
@@ -169,12 +173,19 @@ pub async fn by_token(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<A
     .await
 }
 
-/// A sync: the controller looked for logs on an allowed connection, now.
-pub async fn synced(db: &PgPool, id: Uuid, app_version: &str) -> sqlx::Result<()> {
+/// A controller's status: its app, and when it last looked for logs on an
+/// allowed connection (None for never).
+pub async fn status(
+    db: &PgPool,
+    id: Uuid,
+    app_version: &str,
+    last_sync: Option<DateTime<Utc>>,
+) -> sqlx::Result<()> {
     sqlx::query!(
-        "update remote_controllers set synced_at = now(), app_version = $2 where id = $1",
+        "update remote_controllers set synced_at = $3, app_version = $2 where id = $1",
         id,
         app_version,
+        last_sync,
     )
     .execute(db)
     .await?;
@@ -193,9 +204,53 @@ pub async fn unpair(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
     Ok(result.rows_affected() == 1)
 }
 
-/// A pilot as a controller offers them: once per group they are a pilot in
-/// (still called a team), until the controller chooses the group after the
-/// pilot (package 8).
+/// A pilot as a controller offers them, from v1 of its API: once, with the
+/// groups they're a member of and fly for, and the other groups where they
+/// hold `flights.fly_for` (every group, with it on the organisation).
+#[derive(Serialize)]
+pub struct Pilot {
+    pub id: Uuid,
+    pub name: String,
+    pub groups: Vec<Uuid>,
+    pub other_groups: Vec<Uuid>,
+}
+
+/// Active users who hold `flights.fly_for` anywhere, by name; their groups by
+/// name too.
+pub async fn pilots(db: &PgPool) -> sqlx::Result<Vec<Pilot>> {
+    sqlx::query_as!(
+        Pilot,
+        r#"select u.id, u.name,
+                  coalesce(array_agg(g.id order by lower(g.name), g.id) filter (where g.member),
+                           '{}') as "groups!",
+                  coalesce(array_agg(g.id order by lower(g.name), g.id) filter (where not g.member),
+                           '{}') as "other_groups!"
+           from users u
+           left join lateral (
+               select g.id, g.name,
+                      exists (select 1 from group_members m
+                              where m.user_id = u.id and m.group_id = g.id) as member
+               from groups g
+               where exists (select 1 from group_members m
+                             where m.user_id = u.id and m.group_id = g.id and m.role = any($1))
+                  or exists (select 1 from organisation_roles r
+                             where r.user_id = u.id and r.role = any($1))
+           ) g on true
+           where u.archived_at is null
+             and (exists (select 1 from group_members m
+                          where m.user_id = u.id and m.role = any($1))
+                  or exists (select 1 from organisation_roles r
+                             where r.user_id = u.id and r.role = any($1)))
+           group by u.id, u.name
+           order by lower(u.name), u.id"#,
+        &policy::roles_granting(Permission::FlightsFlyFor),
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// A pilot as android-v0.3.0 offers them: once per group they are a pilot in,
+/// which it still calls a team. Goes once no controller reports that version.
 #[derive(Serialize)]
 pub struct PilotChoice {
     pub id: Uuid,
@@ -259,7 +314,10 @@ mod tests {
         let paired = use_code(&db, "AAAA2222", "RC1", b"token-hash")
             .await
             .unwrap();
-        assert_eq!(paired.and_then(|p| p.team).as_deref(), Some("North"));
+        assert_eq!(
+            paired.and_then(|p| p.group).map(|g| g.name).as_deref(),
+            Some("North")
+        );
         assert!(
             use_code(&db, "AAAA2222", "RC2", b"other")
                 .await
@@ -301,5 +359,50 @@ mod tests {
 
         assert!(unpair(&db, controller.id).await.unwrap());
         assert!(by_token(&db, b"token-hash").await.unwrap().is_none());
+    }
+
+    /// The controller's pilot list holds only people who fly, each once: the
+    /// groups they're a member of and fly for first, then the others where
+    /// they may fly, which with Pilot on the organisation is every group.
+    #[sqlx::test]
+    async fn the_pilot_list_holds_who_flies_with_their_groups(db: PgPool) {
+        use crate::testing::{group, join, user};
+        let north = group(&db, "North").await;
+        let south = group(&db, "South").await;
+        let member = user(&db, "Test member pilot", &[]).await;
+        join(&db, member, north).await;
+        // Pilot on the organisation, and a viewer in South.
+        let everywhere = user(&db, "Test organisation pilot", &["pilot"]).await;
+        sqlx::query(
+            "insert into group_members (group_id, user_id, role) values ($1, $2, 'viewer')",
+        )
+        .bind(south)
+        .bind(everywhere)
+        .execute(&db)
+        .await
+        .unwrap();
+        user(&db, "Test admin", &["admin"]).await;
+        let viewer = user(&db, "Test viewer", &[]).await;
+        sqlx::query(
+            "insert into group_members (group_id, user_id, role) values ($1, $2, 'viewer')",
+        )
+        .bind(north)
+        .bind(viewer)
+        .execute(&db)
+        .await
+        .unwrap();
+
+        let pilots = pilots(&db).await.unwrap();
+        let found: Vec<_> = pilots
+            .iter()
+            .map(|p| (p.id, p.groups.clone(), p.other_groups.clone()))
+            .collect();
+        assert_eq!(
+            found,
+            vec![
+                (member, vec![north], vec![]),
+                (everywhere, vec![south], vec![north]),
+            ]
+        );
     }
 }

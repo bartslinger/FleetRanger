@@ -135,22 +135,38 @@ pub async fn pair(
         })
 }
 
-/// Whether a controller's token is paired.
-pub async fn paired(db: &PgPool, token_sha256: &[u8]) -> ApiResult<bool> {
-    Ok(db::by_token(db, token_sha256).await?.is_some())
+/// The pilots a controller offers, from v1 of its API: whoever holds
+/// `flights.fly_for` anywhere, once, with the groups to choose from after
+/// them. The controller shows its own group's pilots first, and keeps the
+/// list for when it's offline.
+#[derive(Serialize)]
+pub struct Pilots {
+    /// None when the controller is in the organisation.
+    pub controller_group: Option<Uuid>,
+    /// Every group, by name; empty when the organisation has none, and then
+    /// the controller asks for no group.
+    pub groups: Vec<flights::db::GroupChoice>,
+    pub pilots: Vec<db::Pilot>,
 }
 
-/// The pilots a controller offers: every active user who is a pilot in a
-/// group, once per group. The controller shows its own team first, and keeps
-/// the list for when it's offline.
+pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<Pilots> {
+    Ok(Pilots {
+        controller_group: controller.group_id,
+        groups: flights::db::group_choices(db).await?,
+        pilots: db::pilots(db).await?,
+    })
+}
+
+/// The pilots android-v0.3.0 offers: once per group they are a pilot in,
+/// which it calls a team. Its uploads go to the queue, whatever it chose.
 #[derive(Serialize)]
 pub struct PilotList {
-    /// The controller's team; None if it has none.
+    /// The controller's group, which it calls a team.
     pub team_id: Option<Uuid>,
     pub pilots: Vec<PilotChoice>,
 }
 
-pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
+pub async fn pilots_v0(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
     Ok(PilotList {
         team_id: controller.group_id,
         pilots: db::pilot_choices(db).await?,
