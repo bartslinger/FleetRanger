@@ -173,7 +173,7 @@ export interface FlightChoices {
 	own_team_ids: string[];
 	/** Admins change any flight and move flights between teams. */
 	admin: boolean;
-	/** Everyone who flies; asked with `?group=`, that team's own pilots first (`in_group`). */
+	/** Everyone who flies; asked with `?team=`, that team's own pilots first (`in_group`). */
 	pilots: { id: string; name: string; in_group: boolean }[];
 	teams: { id: string; name: string }[];
 }
