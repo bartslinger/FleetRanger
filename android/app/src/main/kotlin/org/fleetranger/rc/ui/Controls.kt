@@ -33,7 +33,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -54,6 +56,8 @@ fun TextInput(
     helper: String? = null,
     invalid: String? = null,
     enabled: Boolean = true,
+    /** Locked while the app works with the value, but still read out. */
+    readOnly: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     onDone: () -> Unit = {},
 ) {
@@ -65,6 +69,7 @@ fun TextInput(
             value,
             onValueChange,
             enabled = enabled,
+            readOnly = readOnly,
             singleLine = true,
             textStyle = Type.bodyCompact02.copy(color = Colors.textPrimary),
             cursorBrush = SolidColor(Colors.focus),
@@ -164,7 +169,13 @@ fun RadioButton(
  * app is doing right now, such as pairing.
  */
 @Composable
-fun InlineLoading(text: String, modifier: Modifier = Modifier) {
+fun InlineLoading(
+    text: String,
+    modifier: Modifier = Modifier,
+    /** The text and turning arc; on a coloured button, its text colour. */
+    color: Color? = null,
+    style: TextStyle = Type.bodyCompact02,
+) {
     val turning = rememberInfiniteTransition(label = "loading")
     val angle by turning.animateFloat(
         initialValue = 0f,
@@ -181,9 +192,13 @@ fun InlineLoading(text: String, modifier: Modifier = Modifier) {
         // interactive colour, turning.
         Canvas(Modifier.size(16.dp)) {
             val stroke = Stroke(width = 2.dp.toPx())
-            drawCircle(Colors.borderSubtle01, style = stroke, radius = size.minDimension / 2 - stroke.width / 2)
+            drawCircle(
+                color?.copy(alpha = 0.3f) ?: Colors.borderSubtle01,
+                style = stroke,
+                radius = size.minDimension / 2 - stroke.width / 2,
+            )
             drawArc(
-                Colors.interactive,
+                color ?: Colors.interactive,
                 startAngle = angle,
                 sweepAngle = 90f,
                 useCenter = false,
@@ -192,7 +207,7 @@ fun InlineLoading(text: String, modifier: Modifier = Modifier) {
                 style = stroke,
             )
         }
-        BasicText(text, style = Type.bodyCompact02.copy(color = Colors.textSecondary))
+        BasicText(text, style = style.copy(color = color ?: Colors.textSecondary))
     }
 }
 

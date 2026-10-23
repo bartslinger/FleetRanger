@@ -43,13 +43,18 @@ import androidx.compose.ui.unit.dp
  */
 enum class ButtonKind { Primary, Secondary, Tertiary, Ghost, Danger, DangerTertiary }
 
-/** Carbon's button, extra large (64dp), with its text at the top left. */
+/**
+ * Carbon's button, extra large (64dp), with its text at the top left. While
+ * `loading` is set, it shows that instead, with a spinner, and can't be tapped
+ * again until the action is done.
+ */
 @Composable
 fun Button(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     kind: ButtonKind = ButtonKind.Primary,
+    loading: String? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -82,7 +87,7 @@ fun Button(
             .height(64.dp)
             .background(background)
             .border(if (focused) 2.dp else 1.dp, border)
-            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
+            .clickable(interaction, indication = null, role = Role.Button, enabled = loading == null, onClick = onClick)
             .padding(
                 start = Spacing.s05,
                 end = if (ghost) Spacing.s05 else 64.dp,
@@ -90,7 +95,11 @@ fun Button(
             ),
         contentAlignment = if (ghost) Alignment.CenterStart else Alignment.TopStart,
     ) {
-        BasicText(text, style = Type.bodyCompact01.copy(color = foreground))
+        if (loading != null) {
+            InlineLoading(loading, color = foreground, style = Type.bodyCompact01)
+        } else {
+            BasicText(text, style = Type.bodyCompact01.copy(color = foreground))
+        }
     }
 }
 
@@ -207,8 +216,10 @@ fun InlineNotification(
             .height(IntrinsicSize.Min)
             .background(background)
             .border(1.dp, support.copy(alpha = 0.4f))
-            // Read out when it appears, like a live region on the web.
-            .semantics { liveRegion = LiveRegionMode.Polite },
+            // Read out when it appears, like role="alert" or "status" on the web.
+            .semantics {
+                liveRegion = if (kind == NotificationKind.Error) LiveRegionMode.Assertive else LiveRegionMode.Polite
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(support))
