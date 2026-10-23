@@ -5,6 +5,7 @@
 	import { dateTime } from '#lib/format.js';
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
+	import { ORGANISATION } from '#lib/groups.js';
 	import { may } from '#lib/permissions.js';
 	import {
 		GROUP_ROLE_HELP,
@@ -14,11 +15,11 @@
 		ROLE_LABELS,
 		roleList
 	} from '#lib/roles.js';
+	import type { OrganisationRole } from '#lib/server/backend.js';
 	import Button from '#lib/ui/Button.svelte';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
-	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
@@ -54,11 +55,31 @@
 		}))
 	);
 
-	type Membership = (typeof data.user.groups)[number];
+	// The organisation first, as the top group (user's decision); everyone is
+	// in it, so it has no Remove. "None" for no roles there (carbon-expert's
+	// suggestion: a blank cell doesn't read as intended).
+	interface Membership {
+		id: string;
+		name: string;
+		roles: OrganisationRole[];
+	}
+	const ORGANISATION_ROW = 'organisation';
+	const memberships: Membership[] = $derived([
+		{ id: ORGANISATION_ROW, name: ORGANISATION, roles: user.roles },
+		...user.groups
+	]);
 	const groupColumns: TableColumn<Membership>[] = [
 		{ key: 'name', header: 'Group' },
-		{ key: 'roles', header: 'Roles', wrap: true, format: (group) => roleList(group.roles) }
+		{
+			key: 'roles',
+			header: 'Roles',
+			wrap: true,
+			format: (group) => (group.roles.length > 0 ? roleList(group.roles) : 'None')
+		}
 	];
+	const organisationRolesMessage = $derived(
+		form && 'organisationRolesMessage' in form ? form.organisationRolesMessage : undefined
+	);
 
 	// Roles in groups, as on a group's page, from the user's side; each
 	// change applies at once, apart from the form (user's choice).
@@ -210,15 +231,6 @@
 					? 'You log in with this address.'
 					: 'To log in with the Google account for this address. Empty: no login.'}
 			/>
-			<CheckboxGroup
-				legend="Roles on the whole organisation"
-				name="role"
-				options={roleOptions}
-				value={user.roles}
-				helper="None for someone who only has roles in groups."
-			/>
-			<!-- A disabled checkbox isn't posted; Admin stays. -->
-			{#if data.lastAdmin}<input type="hidden" name="role" value="admin" />{/if}
 			<div class="buttons">
 				<Button type="submit" disabled={busy} fill>Save</Button>
 				<Button kind="secondary" href={previous.href} onclick={previous.onclick} fill>Cancel</Button
@@ -228,74 +240,100 @@
 	</Column>
 	<Column narrow>
 		<h2 class="section">Groups</h2>
-		{#if user.groups.length === 0}
-			<EmptyState
-				title="Not in any group"
-				body="Roles in a group decide what they can see and organise there."
-				action={addable.length > 0 ? addToGroup : undefined}
-			/>
-		{:else}
-			<DataTable
-				label="Groups"
-				columns={groupColumns}
-				rows={user.groups}
-				rowKey={(group) => group.id}
-				rowHref={(group) => resolve('/groups/[id]', { id: group.id })}
-				summary={`${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
-			>
-				{#snippet toolbar()}
-					<!-- Disabled, not hidden, when they're in every group: that changes
+		<DataTable
+			label="Groups"
+			columns={groupColumns}
+			rows={memberships}
+			rowKey={(group) => group.id}
+			rowHref={(group) =>
+				group.id === ORGANISATION_ROW
+					? resolve('/users')
+					: resolve('/groups/[id]', { id: group.id })}
+			summary={user.groups.length === 0
+				? 'In no group'
+				: `In ${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
+		>
+			{#snippet toolbar()}
+				<!-- Disabled, not hidden, when they're in every group: that changes
 					     with a new group (Carbon's disabled states), as on a group's page. -->
-					{#if addable.length > 0}
-						{@render addToGroup()}
-					{:else}
-						<Button disabled>Add to group</Button>
-					{/if}
-				{/snippet}
-				{#snippet rowAction(group)}
-					{#if manages(group.id)}
+				{#if addable.length > 0}
+					{@render addToGroup()}
+				{:else}
+					<Button disabled>Add to group</Button>
+				{/if}
+			{/snippet}
+			{#snippet rowAction(group)}
+				{#if group.id === ORGANISATION_ROW}
+					{#if may(data.account, 'users.manage', null)}
 						<span class="actions">
 							<Modal
 								title="Edit roles"
 								triggerIcon={Edit}
 								triggerSize="md"
-								triggerLabel="Edit roles in {group.name}"
-								label="{user.name} in {group.name}"
+								triggerLabel="Edit roles in the organisation"
+								label="{user.name} in the organisation"
 								submitLabel="Save"
-								action="?/groupRoles"
-								error={groupRolesMessage}
-								onsuccess={() => toast(`Roles in ${group.name} saved.`)}
+								action="?/organisationRoles"
+								error={organisationRolesMessage}
+								onsuccess={() => toast(`Roles in the organisation saved.`)}
 							>
-								<input type="hidden" name="group_id" value={group.id} />
 								<CheckboxGroup
 									legend="Roles"
 									name="role"
-									options={groupRoleOptions}
-									value={group.roles}
+									options={roleOptions}
+									value={user.roles}
+									helper="None for someone who only has roles in groups."
 								/>
+								<!-- A disabled checkbox isn't posted; Admin stays. -->
+								{#if data.lastAdmin}<input type="hidden" name="role" value="admin" />{/if}
 							</Modal>
-							<Modal
-								title="Remove from group"
-								label={user.name}
-								triggerIcon={SubtractAlt}
-								triggerSize="md"
-								triggerLabel="Remove {user.name} from {group.name}"
-								submitLabel="Remove from group"
-								action="?/leaveGroup"
-								error={leaveMessage}
-								onsuccess={() => toast(`${user.name} removed from ${group.name}.`)}
-							>
-								<input type="hidden" name="group_id" value={group.id} />
-								<p>
-									{user.name} loses their roles in {group.name}. Their flights stay as they are. You
-									can add them again later.
-								</p>
-							</Modal>
+							<!-- No Remove: everyone is in the organisation. The slot keeps the
+								     pencils in line (carbon-expert's suggestion). -->
+							<span class="slot" aria-hidden="true"></span>
 						</span>
 					{/if}
-				{/snippet}
-			</DataTable>
-		{/if}
+				{:else if manages(group.id)}
+					<span class="actions">
+						<Modal
+							title="Edit roles"
+							triggerIcon={Edit}
+							triggerSize="md"
+							triggerLabel="Edit roles in {group.name}"
+							label="{user.name} in {group.name}"
+							submitLabel="Save"
+							action="?/groupRoles"
+							error={groupRolesMessage}
+							onsuccess={() => toast(`Roles in ${group.name} saved.`)}
+						>
+							<input type="hidden" name="group_id" value={group.id} />
+							<CheckboxGroup
+								legend="Roles"
+								name="role"
+								options={groupRoleOptions}
+								value={group.roles}
+							/>
+						</Modal>
+						<Modal
+							title="Remove from group"
+							label={user.name}
+							triggerIcon={SubtractAlt}
+							triggerSize="md"
+							triggerLabel="Remove {user.name} from {group.name}"
+							submitLabel="Remove from group"
+							action="?/leaveGroup"
+							error={leaveMessage}
+							onsuccess={() => toast(`${user.name} removed from ${group.name}.`)}
+						>
+							<input type="hidden" name="group_id" value={group.id} />
+							<p>
+								{user.name} loses their roles in {group.name}. Their flights stay as they are. You
+								can add them again later.
+							</p>
+						</Modal>
+					</span>
+				{/if}
+			{/snippet}
+		</DataTable>
 	</Column>
 </Grid>
 
@@ -348,5 +386,10 @@
 
 	.actions {
 		display: inline-flex;
+	}
+
+	/* As wide as a md icon button. */
+	.slot {
+		inline-size: 2.5rem;
 	}
 </style>
