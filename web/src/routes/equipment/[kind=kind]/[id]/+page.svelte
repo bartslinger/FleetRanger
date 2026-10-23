@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { back } from '#lib/back.svelte.js';
 	import { KINDS } from '#lib/equipment.js';
-	import { dateTime } from '#lib/format.js';
+	import { dateTime, duration } from '#lib/format.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -30,20 +30,12 @@
 	// Save and Cancel go back to where the user came from, e.g. a flight's page.
 	const previous = back(() => list);
 
-	// Active teams and holders, plus the current ones if archived since. Members
-	// choose from their own team; admins from everyone.
+	// Active teams, plus the current one if archived since.
 	const teamOptions = $derived([
 		{ value: '', label: 'None' },
 		...data.teams.map((team) => ({ value: team.id, label: team.name })),
 		...(item.team_id && !data.teams.some((team) => team.id === item.team_id)
 			? [{ value: item.team_id, label: `${item.team_name} (archived)` }]
-			: [])
-	]);
-	const holderOptions = $derived([
-		{ value: '', label: 'None' },
-		...data.holders.map((user) => ({ value: user.id, label: user.name })),
-		...(item.holder_user_id && !data.holders.some((user) => user.id === item.holder_user_id)
-			? [{ value: item.holder_user_id, label: `${item.holder_name} (archived)` }]
 			: [])
 	]);
 	const flights = $derived(
@@ -108,23 +100,32 @@
 					</div>
 				{/if}
 			{/if}
+			<!-- Over all its flights, also those the user doesn't see. -->
+			<div>
+				<dt>Flights</dt>
+				<dd>{item.flights.toLocaleString('en-US')}</dd>
+			</div>
+			<div>
+				<dt>Air time</dt>
+				<dd>{duration(item.air_time_s)}</dd>
+			</div>
 			<div>
 				<dt>Last flight</dt>
 				<dd>
 					{item.last_flight_at ? dateTime(item.last_flight_at, data.timeZone) : 'None'}
 				</dd>
 			</div>
-			<!-- Who can't change them sees them here; members change only the holder. -->
+			{#if item.last_flight_at}
+				<div>
+					<dt>Last flown by</dt>
+					<dd>{item.last_pilot_name ?? 'Unknown pilot'}</dd>
+				</div>
+			{/if}
+			<!-- Who can't change it sees it here. -->
 			{#if data.edit !== 'all'}
 				<div>
 					<dt>Team</dt>
 					<dd>{item.team_name ?? 'None'}</dd>
-				</div>
-			{/if}
-			{#if data.edit === 'none'}
-				<div>
-					<dt>Holder</dt>
-					<dd>{item.holder_name ?? 'None'}</dd>
 				</div>
 			{/if}
 		</dl>
@@ -156,26 +157,11 @@
 					helper="For example the number painted on it."
 				/>
 				{#if data.edit === 'all'}
-					<Select
-						label="Team"
-						name="team_id"
-						options={teamOptions}
-						value={item.team_id ?? ''}
-						helper={data.kind === 'controllers'
-							? 'New flights from this controller without a pilot go to this team.'
-							: undefined}
-					/>
+					<Select label="Team" name="team_id" options={teamOptions} value={item.team_id ?? ''} />
 				{:else}
 					<!-- Unchanged: only admins move equipment between teams. -->
 					<input type="hidden" name="team_id" value={item.team_id ?? ''} />
 				{/if}
-				<Select
-					label="Holder"
-					name="holder_user_id"
-					options={holderOptions}
-					value={item.holder_user_id ?? ''}
-					helper="Who has it now. For information only; it gives no access."
-				/>
 				<div class="buttons">
 					<Button type="submit" disabled={busy} fill>Save</Button>
 					<Button kind="secondary" href={previous.href} onclick={previous.onclick} fill

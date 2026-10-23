@@ -108,33 +108,25 @@ pub fn move_session(
 }
 
 /// Whether the actor may make this change to a drone or controller they see:
-/// `equipment.rename` on its group for the name and holder, and
-/// `equipment.move` on both groups to move it. A holder from outside the
-/// item's group also needs `equipment.move` (my choice, as holders are
-/// dropped in package 5).
+/// `equipment.rename` on its group to rename it, and `equipment.move` on both
+/// groups to move it.
 ///
 /// - `item_group`, `new_group`: the item's group now and as entered.
-/// - `holder_groups`: for a holder, the groups they fly for; `None` for no
-///   holder.
+/// - `renames`: whether the name changes.
 pub fn change_equipment(
     grants: &Grants,
     item_group: Option<Uuid>,
     new_group: Option<Uuid>,
-    holder_groups: Option<&[Uuid]>,
+    renames: bool,
 ) -> ApiResult<()> {
-    let moves = grants.may(Permission::EquipmentMove, item_group);
-    if !grants.may(Permission::EquipmentRename, item_group)
-        || (new_group != item_group && !(moves && grants.may(Permission::EquipmentMove, new_group)))
-    {
-        return Err(ApiError::Forbidden);
+    let renaming = !renames || grants.may(Permission::EquipmentRename, item_group);
+    let moving = new_group == item_group
+        || grants.may_on_all(Permission::EquipmentMove, &[item_group, new_group]);
+    if renaming && moving {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden)
     }
-    let from_its_group = |groups: &[Uuid]| item_group.is_some_and(|group| groups.contains(&group));
-    if !moves && holder_groups.is_some_and(|groups| !from_its_group(groups)) {
-        return Err(ApiError::Invalid(
-            "Choose someone of the equipment’s team.".to_owned(),
-        ));
-    }
-    Ok(())
 }
 
 /// Whether the actor may make this change, such as setting the pilot or
@@ -198,25 +190,20 @@ mod tests {
         .unwrap()
     }
 
+    /// An editor renames their own groups' equipment, not another group's
+    /// that they see through a flight; moving is admin work, on both groups.
+    /// Saving without a change needs nothing.
     #[test]
-    fn member_changes_name_and_holder_of_own_teams_equipment_only() {
+    fn editors_rename_own_groups_equipment_and_admins_move_it() {
         let (own, second, other) = (A, C, B);
         let mine = member(&[own, second]);
-        let change =
-            |item, new, holder: Option<&[Uuid]>| change_equipment(&mine, item, new, holder);
-        assert!(change(Some(own), Some(own), None).is_ok());
-        assert!(change(Some(second), Some(second), Some(&[own, second])).is_ok());
-        // Not its team, not a holder from elsewhere, not other equipment.
-        assert!(change(Some(own), None, None).is_err());
-        assert!(change(Some(own), Some(own), Some(&[other])).is_err());
-        assert!(change(Some(own), Some(own), Some(&[second])).is_err());
-        assert!(change(Some(own), Some(own), Some(&[])).is_err());
-        assert!(change(Some(other), Some(other), None).is_err());
-        // No team and team-less equipment: still not theirs.
-        let see = Permission::EquipmentRead;
-        assert!(!member(&[]).may(see, None));
-        assert!(all_flights().may(see, Some(other)));
-        assert!(change_equipment(&all_flights(), None, None, None).is_err());
+        assert!(change_equipment(&mine, Some(own), Some(own), true).is_ok());
+        assert!(change_equipment(&mine, Some(other), Some(other), true).is_err());
+        assert!(change_equipment(&mine, None, None, true).is_err());
+        assert!(change_equipment(&mine, Some(other), Some(other), false).is_ok());
+        assert!(change_equipment(&mine, Some(own), Some(second), false).is_err());
+        assert!(change_equipment(&admin(), Some(own), None, true).is_ok());
+        assert!(change_equipment(&all_flights(), None, None, true).is_err());
     }
 
     /// A member of two groups sets the pilot of both groups' flights, but

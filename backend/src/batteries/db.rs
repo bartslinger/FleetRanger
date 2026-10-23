@@ -1,6 +1,8 @@
 //! A battery is seen through flights: whoever sees one of its flights sees the
-//! battery, with the flights they see. The visibility condition is the one in
-//! the flight queries (see flights/db.rs); keep it in step.
+//! battery, with the flights they see. Its figures (flights, cycles, capacity)
+//! count all its flights: they describe the battery's wear. The visibility
+//! condition is the one in the flight queries (see flights/db.rs); keep it in
+//! step.
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -9,7 +11,7 @@ use uuid::Uuid;
 
 use crate::policy::FlightScope;
 
-/// A battery with its state at its latest flight in the scope.
+/// A battery with its state at its latest flight.
 #[derive(Serialize)]
 pub struct Battery {
     pub id: Uuid,
@@ -54,14 +56,11 @@ pub async fn list(
 ) -> sqlx::Result<Vec<Battery>> {
     sqlx::query_as!(
         Battery,
-        r#"with seen as (
-               select fb.*, f.takeoff_at, f.aircraft_serial
+        r#"with flown as (
+               select fb.*, f.takeoff_at, f.aircraft_serial, f.pilot_id, f.group_id
                from flight_batteries fb
                join flights f on f.id = fb.flight_id
                where f.archived_at is null
-                 and ($1
-                      or f.pilot_id = $2
-                      or f.group_id = any($4))
            )
            select b.id, b.serial, b.name,
                   count(*) as "flights!",
@@ -69,18 +68,23 @@ pub async fn list(
                   a.id as "aircraft_id?", latest.aircraft_serial as "aircraft_serial?",
                   a.name as "aircraft_name?",
                   latest.cycles, latest.design_capacity_mah,
-                  (select full_capacity_mah from seen
+                  (select full_capacity_mah from flown
                    where battery_id = b.id and full_capacity_mah is not null
                    order by takeoff_at desc limit 1) as "full_capacity_mah?"
            from batteries b
-           join seen s on s.battery_id = b.id
+           join flown s on s.battery_id = b.id
            cross join lateral (
-               select aircraft_serial, cycles, design_capacity_mah from seen
+               select aircraft_serial, cycles, design_capacity_mah from flown
                where battery_id = b.id
                order by takeoff_at desc limit 1
            ) latest
            left join aircraft a on a.serial = latest.aircraft_serial
-           where $3::uuid is null or b.id = $3
+           where ($3::uuid is null or b.id = $3)
+             and exists (select 1 from flown v
+                         where v.battery_id = b.id
+                           and ($1
+                                or v.pilot_id = $2
+                                or v.group_id = any($4)))
            group by b.id, latest.aircraft_serial, latest.cycles, latest.design_capacity_mah,
                     a.id, a.name
            order by lower(coalesce(b.name, b.serial)), b.id"#,
@@ -118,6 +122,31 @@ pub async fn flights(
         scope.user_id,
         id,
         &scope.group_ids,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// What the battery held at a flight, for the chart over all its flights;
+/// nothing else about the flight, which the user may not see.
+#[derive(Serialize)]
+pub struct CapacityReading {
+    pub takeoff_at: DateTime<Utc>,
+    pub full_capacity_mah: i32,
+}
+
+/// The full charge capacity at each of a battery's flights that reported it,
+/// oldest first.
+pub async fn capacity_readings(db: &PgPool, id: Uuid) -> sqlx::Result<Vec<CapacityReading>> {
+    sqlx::query_as!(
+        CapacityReading,
+        r#"select f.takeoff_at, fb.full_capacity_mah as "full_capacity_mah!"
+           from flight_batteries fb
+           join flights f on f.id = fb.flight_id
+           where fb.battery_id = $1 and f.archived_at is null
+             and fb.full_capacity_mah is not null
+           order by f.takeoff_at, f.id"#,
+        id,
     )
     .fetch_all(db)
     .await
@@ -173,8 +202,8 @@ mod tests {
         flight
     }
 
-    /// A member sees a battery through their team's flights only, and its
-    /// state as of the latest of those.
+    /// A member sees a battery through their team's flights only, with only
+    /// those flights, but its figures over all its flights.
     #[sqlx::test]
     async fn members_see_batteries_through_their_teams_flights(db: PgPool) {
         let north = crate::testing::team(&db, "North").await;
@@ -200,7 +229,7 @@ mod tests {
         assert_eq!(seen.len(), 1);
         assert_eq!(
             (seen[0].id, seen[0].flights, seen[0].cycles),
-            (shared, 1, Some(10))
+            (shared, 2, Some(11))
         );
         let flights: Vec<Uuid> = flights(&db, &member, shared)
             .await

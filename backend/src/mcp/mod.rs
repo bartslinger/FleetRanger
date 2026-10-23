@@ -464,7 +464,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "The drones and controllers the user can see, with team, holder and last flight; controllers also with whether they're paired, when they last synced and their app version."
+        description = "The drones and controllers the user can see, with team, number of flights, air time in seconds, last flight and who flew it, counted over all their flights; controllers also with whether they're paired, when they last synced and their app version."
     )]
     async fn list_equipment(
         &self,
