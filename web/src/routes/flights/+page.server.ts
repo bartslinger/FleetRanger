@@ -1,5 +1,6 @@
 import { TIME_ZONE } from '$app/env/private';
 import { parsePilot } from '#lib/pilots.js';
+import { sessionGroup } from '#lib/groups.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
@@ -59,15 +60,6 @@ async function flightIds(
 	return { ids };
 }
 
-/** The group a new session gets, if the form chose one: an id, or
- * "organisation" for none. Without it, the backend gives the flights'
- * group when they share one. */
-function sessionGroup(form: FormData): { group_id?: string | null } {
-	const group = form.get('group_id');
-	if (group === null || group === '') return {};
-	return { group_id: group === 'organisation' ? null : String(group) };
-}
-
 export const actions = {
 	setPilot: async ({ fetch, request, url }) => {
 		const form = await request.formData();
@@ -94,7 +86,9 @@ export const actions = {
 		const form = await request.formData();
 		const flights = await flightIds(fetch, url, form);
 		if ('message' in flights) return fail(409, { newSessionMessage: flights.message });
-		const body = { flight_ids: flights.ids, ...sessionGroup(form) };
+		const group = sessionGroup(form);
+		if (!group) return fail(400, { newSessionMessage: 'Choose a group for the session.' });
+		const body = { flight_ids: flights.ids, ...group };
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions', body);
 		if (!result.ok) return fail(result.status, { newSessionMessage: result.message });
 		return { session: result.data.id };

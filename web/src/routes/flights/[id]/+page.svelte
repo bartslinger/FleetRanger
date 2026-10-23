@@ -4,7 +4,8 @@
 	import Button from '#lib/ui/Button.svelte';
 	import { areaShares, clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
 	import { anywhere, may } from '#lib/permissions.js';
-	import { offered, pilotOptions as pilotOptions_, sharedGroup } from '#lib/pilots.js';
+	import { groupOptions as groupChoices, sharedGroup } from '#lib/groups.js';
+	import { offered, pilotOptions as pilotOptions_ } from '#lib/pilots.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
@@ -36,14 +37,9 @@
 
 	// Moving needs flights.move on its group and the one it goes to.
 	const canMove = $derived(may(data.account, 'flights.move', flight.group_id));
-	const groupOptions = $derived([
-		...data.choices.groups
-			.filter((group) => may(data.account, 'flights.move', group.id))
-			.map((group) => ({ value: group.id, label: group.name })),
-		...(may(data.account, 'flights.move', null)
-			? [{ value: '', label: 'No group (organisation queue)' }]
-			: [])
-	]);
+	const groupOptions = $derived(
+		groupChoices(data.account, 'flights.move', data.choices.groups, 'No group (organisation queue)')
+	);
 	function groupSet(result: Record<string, unknown> | undefined) {
 		const group = (result?.groupName as string | null) ?? 'the organisation queue';
 		toast(`Flight moved to ${group}.`);

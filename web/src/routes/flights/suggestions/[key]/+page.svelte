@@ -16,7 +16,8 @@
 	import { resolve } from '$app/paths';
 	import { dateTime, day, distance, duration, timeSpan } from '#lib/format.js';
 	import { may } from '#lib/permissions.js';
-	import { sharedGroup } from '#lib/pilots.js';
+	import { sessionGroupChoice, sharedGroup } from '#lib/groups.js';
+	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -78,7 +79,12 @@
 	// the session sessions.edit on the group it gets, the flights' own.
 	const mayChange = (flight: Row) => may(data.account, 'flights.set_pilot', flight.group_id);
 	const canSetPilots = $derived(chosen.every(mayChange));
-	const canChange = $derived(may(data.account, 'sessions.edit', sharedGroup(chosen)?.id ?? null));
+	// The session's group: chosen where the user may edit sessions, the
+	// flights' own preselected.
+	const groupChoice = $derived(
+		sessionGroupChoice(data.account, data.choices.groups, sharedGroup(chosen))
+	);
+	const canChange = $derived(groupChoice.options.length > 0);
 
 	// After creating: the flights left out are a suggestion to look at next,
 	// otherwise the next one in the list.
@@ -155,6 +161,10 @@
 	let busy = $state(false);
 </script>
 
+{#snippet groupSelect()}
+	<SessionGroupField choice={groupChoice} form="create-session" />
+{/snippet}
+
 {#snippet pilotPencil(flight: Row)}
 	{#if mayChange(flight)}
 		<IconButton
@@ -186,6 +196,7 @@
 				total={data.suggestion.total}
 			/>
 			<form
+				id="create-session"
 				method="POST"
 				{action}
 				use:enhance={() => {
@@ -206,6 +217,9 @@
 					<input type="hidden" name="flight_id" value={flight.id} />
 				{/each}
 				<input type="hidden" name="then" value={then} />
+				{#if groupChoice.options.length === 1}
+					<SessionGroupField choice={groupChoice} />
+				{/if}
 				<Button type="submit" disabled={busy || chosen.length === 0 || !canChange}
 					>Create session</Button
 				>
@@ -251,7 +265,7 @@
 	{:else if !canChange}
 		<Column narrow>
 			<InlineNotification kind="info" title="You can’t create this session">
-				You can’t edit sessions of this group. Ask an admin.
+				Making sessions needs the Editor role in a group. Ask an admin for it.
 			</InlineNotification>
 		</Column>
 	{/if}
@@ -266,7 +280,13 @@
 	</Column>
 	<!-- On phones below the table, which then follows the map. -->
 	<Column lg={5} smOrder={1}>
-		<SessionFacts flights={shown} timeZone={data.timeZone}>
+		<!-- With a choice, the group it gets is chosen by the facts it describes
+		     (carbon-expert's advice), so Create session stays one click. -->
+		<SessionFacts
+			flights={shown}
+			timeZone={data.timeZone}
+			groupField={groupChoice.options.length > 1 ? groupSelect : undefined}
+		>
 			{#snippet pilotAction()}
 				{#if canSetPilots && chosen.length > 0}
 					<IconButton

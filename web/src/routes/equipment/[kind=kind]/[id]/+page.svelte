@@ -33,7 +33,7 @@
 	// Where the user may move it, and where it is now.
 	const groupOptions = $derived([
 		...(data.toOrganisation || item.group_id === null
-			? [{ value: '', label: 'None (organisation)' }]
+			? [{ value: '', label: 'Whole organisation' }]
 			: []),
 		...data.groups.map((group) => ({ value: group.id, label: group.name })),
 		...(item.group_id && !data.groups.some((group) => group.id === item.group_id)
@@ -127,7 +127,7 @@
 			{#if !data.move}
 				<div>
 					<dt>Group</dt>
-					<dd>{item.group_name ?? 'None (organisation)'}</dd>
+					<dd>{item.group_name ?? 'Whole organisation'}</dd>
 				</div>
 			{/if}
 		</dl>
