@@ -4,7 +4,7 @@
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
 	import { back } from '#lib/back.svelte.js';
-	import { GROUP_ROLE_HELP, GROUP_ROLES, ROLE_LABELS } from '#lib/roles.js';
+	import { GROUP_ROLE_HELP, GROUP_ROLES, ROLE_LABELS, roleList } from '#lib/roles.js';
 	import Button from '#lib/ui/Button.svelte';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -15,7 +15,6 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
-	import Tag from '#lib/ui/Tag.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
@@ -33,16 +32,22 @@
 
 	type Member = (typeof data.group.member_list)[number];
 
-	const columns: TableColumn<Member>[] = [
-		{ key: 'name', header: 'Name' },
-		{ key: 'roles', header: 'Roles', wrap: true },
-		{ key: 'email', header: 'Login', wideOnly: true }
-	];
-
 	// Pilot first, so who flies is in the same place on every row.
 	const ordered = (roles: Member['roles']) => [
 		...roles.filter((role) => role === 'pilot'),
 		...roles.filter((role) => role !== 'pilot')
+	];
+
+	// Roles as text, as on the Users pages (user's choice over tags).
+	const columns: TableColumn<Member>[] = [
+		{ key: 'name', header: 'Name' },
+		{
+			key: 'roles',
+			header: 'Roles',
+			wrap: true,
+			format: (member) => roleList(ordered(member.roles))
+		},
+		{ key: 'email', header: 'Login', wideOnly: true }
 	];
 
 	const roleOptions = GROUP_ROLES.map((role) => ({
@@ -209,19 +214,6 @@
 						<Button disabled>Add member</Button>
 					{/if}
 				{/snippet}
-				{#snippet cell(member, column)}
-					{#if column.key === 'roles'}
-						<span class="tags">
-							{#each ordered(member.roles) as role (role)}
-								<Tag type={role === 'pilot' ? 'blue' : 'gray'}>{ROLE_LABELS[role]}</Tag>
-							{/each}
-						</span>
-					{:else if column.key === 'email'}
-						{member.email ?? 'No login'}
-					{:else}
-						{member.name}
-					{/if}
-				{/snippet}
 				{#snippet rowAction(member)}
 					<span class="actions">
 						<Modal
@@ -295,13 +287,6 @@
 		font-size: var(--cds-heading-03-font-size);
 		font-weight: var(--cds-heading-03-font-weight);
 		line-height: var(--cds-heading-03-line-height);
-	}
-
-	/* Tags 8px apart, wrapping on narrow screens. */
-	.tags {
-		display: inline-flex;
-		flex-wrap: wrap;
-		gap: var(--cds-spacing-03);
 	}
 
 	.actions {
