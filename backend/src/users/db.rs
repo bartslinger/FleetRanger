@@ -232,9 +232,9 @@ pub async fn set_archived(
 }
 
 /// Deletes a user without flights, with their roles, login and login
-/// sessions, and clears them as holder of equipment. False if there is no such
-/// user or they have flights. The user's row is locked first, so a flight can't
-/// get this user in between: its foreign key check waits for the lock.
+/// sessions. False if there is no such user or they have flights. The user's
+/// row is locked first, so a flight can't get this user in between: its
+/// foreign key check waits for the lock.
 pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
     let deletable = sqlx::query_scalar!(
@@ -247,29 +247,13 @@ pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
     if deletable != Some(true) {
         return Ok(false);
     }
-    // Rows of teams, which go in the final migration; group memberships and
-    // roles go with the user.
-    sqlx::query!("delete from team_members where user_id = $1", id)
-        .execute(&mut *tx)
-        .await?;
+    // Group memberships and roles go with the user.
     sqlx::query!("delete from login_sessions where user_id = $1", id)
         .execute(&mut *tx)
         .await?;
     sqlx::query!("delete from logins where user_id = $1", id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query!(
-        "update aircraft set holder_user_id = null where holder_user_id = $1",
-        id
-    )
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query!(
-        "update remote_controllers set holder_user_id = null where holder_user_id = $1",
-        id
-    )
-    .execute(&mut *tx)
-    .await?;
     sqlx::query!("delete from users where id = $1", id)
         .execute(&mut *tx)
         .await?;

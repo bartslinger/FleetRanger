@@ -107,7 +107,7 @@
 		goto(href({ ...data.state, ...change, page: 1 }), { reset: false });
 	}
 
-	// Batch actions: admins change any flight, members those of their own team.
+	// Batch actions change the flights the user's permissions allow.
 	let selected: string[] = $state([]);
 
 	// Kept in the browser's history, so going back from a flight's page
