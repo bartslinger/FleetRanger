@@ -93,7 +93,7 @@ pub async fn get(
     };
     let ids: Vec<Uuid> = groups[index].iter().map(|flight| flight.id).collect();
     let mut flights = flights::details(db, &policy::flight_scope(actor), &ids).await?;
-    link_equipment(db, actor, &mut flights).await?;
+    link_equipment(actor, &mut flights);
     Ok(Some(SuggestionPage {
         key: ids[0],
         flights,

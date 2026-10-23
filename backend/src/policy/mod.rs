@@ -86,15 +86,6 @@ pub fn flight_scope(actor: &Actor) -> FlightScope {
     FlightScope::new(actor.user_id, &actor.grants)
 }
 
-// A member can be in several teams (user's decision, 2026-10-19): what's
-// theirs is what belongs to any of them. `own_teams` is that list, empty for
-// someone in no team.
-
-/// Whether a flight's (or item's) team is one of the member's.
-fn among(own_teams: &[Uuid], team: Option<Uuid>) -> bool {
-    team.is_some_and(|team| own_teams.contains(&team))
-}
-
 /// The check on every group involved. Someone who holds the permission
 /// nowhere is forbidden; someone who holds it elsewhere gets `refusal`.
 fn on_all(
@@ -124,45 +115,34 @@ pub fn change_sessions(grants: &Grants, flight_groups: &[Option<Uuid>]) -> ApiRe
     )
 }
 
-/// Whether the actor sees a drone or controller of this team: admins and the
-/// all-flights role every one, members those of their own teams.
-pub fn see_equipment(role: Role, own_teams: &[Uuid], item_team: Option<Uuid>) -> bool {
-    match role {
-        Role::Admin | Role::AllFlights => true,
-        Role::Member => among(own_teams, item_team),
-    }
-}
-
-/// Whether the actor may make this change to a drone or controller they see.
-/// Admins change everything. Members change the name and holder of their
-/// teams' equipment, with a holder from the item's team; not its team. The
-/// all-flights role only views.
+/// Whether the actor may make this change to a drone or controller they see:
+/// `equipment.rename` on its group for the name and holder, and
+/// `equipment.move` on both groups to move it. A holder from outside the
+/// item's group also needs `equipment.move` (my choice, as holders are
+/// dropped in package 5).
 ///
-/// - `item_team`, `new_team`: the item's team now and as entered.
-/// - `holder_teams`: for a holder, the teams they're an active user in;
-///   `None` for no holder.
+/// - `item_group`, `new_group`: the item's group now and as entered.
+/// - `holder_groups`: for a holder, the groups they fly for; `None` for no
+///   holder.
 pub fn change_equipment(
-    role: Role,
-    own_teams: &[Uuid],
-    item_team: Option<Uuid>,
-    new_team: Option<Uuid>,
-    holder_teams: Option<&[Uuid]>,
+    grants: &Grants,
+    item_group: Option<Uuid>,
+    new_group: Option<Uuid>,
+    holder_groups: Option<&[Uuid]>,
 ) -> ApiResult<()> {
-    match role {
-        Role::Admin => Ok(()),
-        Role::AllFlights => Err(ApiError::Forbidden),
-        Role::Member => {
-            if !see_equipment(role, own_teams, item_team) || new_team != item_team {
-                return Err(ApiError::Forbidden);
-            }
-            if holder_teams.is_some_and(|teams| !among(teams, item_team)) {
-                return Err(ApiError::Invalid(
-                    "Choose someone of the equipment’s team.".to_owned(),
-                ));
-            }
-            Ok(())
-        }
+    let moves = grants.may(Permission::EquipmentMove, item_group);
+    if !grants.may(Permission::EquipmentRename, item_group)
+        || (new_group != item_group && !(moves && grants.may(Permission::EquipmentMove, new_group)))
+    {
+        return Err(ApiError::Forbidden);
     }
+    let from_its_group = |groups: &[Uuid]| item_group.is_some_and(|group| groups.contains(&group));
+    if !moves && holder_groups.is_some_and(|groups| !from_its_group(groups)) {
+        return Err(ApiError::Invalid(
+            "Choose someone of the equipment’s team.".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 /// What happens to the flights' team when their pilot is set.
@@ -272,21 +252,22 @@ mod tests {
     #[test]
     fn member_changes_name_and_holder_of_own_teams_equipment_only() {
         let (own, second, other) = (A, C, B);
-        let member = |item, new, holder: Option<&[Uuid]>| {
-            change_equipment(Role::Member, &[own, second], item, new, holder)
-        };
-        assert!(member(Some(own), Some(own), None).is_ok());
-        assert!(member(Some(second), Some(second), Some(&[own, second])).is_ok());
+        let mine = member(&[own, second]);
+        let change =
+            |item, new, holder: Option<&[Uuid]>| change_equipment(&mine, item, new, holder);
+        assert!(change(Some(own), Some(own), None).is_ok());
+        assert!(change(Some(second), Some(second), Some(&[own, second])).is_ok());
         // Not its team, not a holder from elsewhere, not other equipment.
-        assert!(member(Some(own), None, None).is_err());
-        assert!(member(Some(own), Some(own), Some(&[other])).is_err());
-        assert!(member(Some(own), Some(own), Some(&[second])).is_err());
-        assert!(member(Some(own), Some(own), Some(&[])).is_err());
-        assert!(member(Some(other), Some(other), None).is_err());
+        assert!(change(Some(own), None, None).is_err());
+        assert!(change(Some(own), Some(own), Some(&[other])).is_err());
+        assert!(change(Some(own), Some(own), Some(&[second])).is_err());
+        assert!(change(Some(own), Some(own), Some(&[])).is_err());
+        assert!(change(Some(other), Some(other), None).is_err());
         // No team and team-less equipment: still not theirs.
-        assert!(!see_equipment(Role::Member, &[], None));
-        assert!(see_equipment(Role::AllFlights, &[], Some(other)));
-        assert!(change_equipment(Role::AllFlights, &[], None, None, None).is_err());
+        let see = Permission::EquipmentRead;
+        assert!(!member(&[]).may(see, None));
+        assert!(all_flights().may(see, Some(other)));
+        assert!(change_equipment(&all_flights(), None, None, None).is_err());
     }
 
     /// A member of two teams changes the flights of both, also moving them

@@ -18,6 +18,9 @@ pub struct Equipment {
     pub serial: String,
     pub name: Option<String>,
     pub team_id: Option<Uuid>,
+    /// Its team's group, with the same id; decides who sees it.
+    #[serde(skip)]
+    pub group_id: Option<Uuid>,
     pub team_name: Option<String>,
     pub holder_user_id: Option<Uuid>,
     pub holder_name: Option<String>,
@@ -44,7 +47,7 @@ pub async fn list(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Equipment>> {
         Kind::Aircraft => {
             sqlx::query_as!(
                 Equipment,
-                r#"select e.id, e.serial, e.name, e.team_id, t.name as "team_name?",
+                r#"select e.id, e.serial, e.name, e.team_id, e.group_id, t.name as "team_name?",
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
                            where f.aircraft_serial = e.serial and f.archived_at is null)
@@ -63,7 +66,7 @@ pub async fn list(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Equipment>> {
         Kind::RemoteController => {
             sqlx::query_as!(
                 Equipment,
-                r#"select e.id, e.serial, e.name, e.team_id, t.name as "team_name?",
+                r#"select e.id, e.serial, e.name, e.team_id, e.group_id, t.name as "team_name?",
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
                            where f.rc_serial = e.serial and f.archived_at is null)
@@ -86,7 +89,7 @@ pub async fn get(db: &PgPool, kind: Kind, id: Uuid) -> sqlx::Result<Option<Equip
         Kind::Aircraft => {
             sqlx::query_as!(
                 Equipment,
-                r#"select e.id, e.serial, e.name, e.team_id, t.name as "team_name?",
+                r#"select e.id, e.serial, e.name, e.team_id, e.group_id, t.name as "team_name?",
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
                            where f.aircraft_serial = e.serial and f.archived_at is null)
@@ -106,7 +109,7 @@ pub async fn get(db: &PgPool, kind: Kind, id: Uuid) -> sqlx::Result<Option<Equip
         Kind::RemoteController => {
             sqlx::query_as!(
                 Equipment,
-                r#"select e.id, e.serial, e.name, e.team_id, t.name as "team_name?",
+                r#"select e.id, e.serial, e.name, e.team_id, e.group_id, t.name as "team_name?",
                           e.holder_user_id, p.name as "holder_name?",
                           (select max(takeoff_at) from flights f
                            where f.rc_serial = e.serial and f.archived_at is null)
@@ -125,7 +128,8 @@ pub async fn get(db: &PgPool, kind: Kind, id: Uuid) -> sqlx::Result<Option<Equip
     }
 }
 
-/// False if there is no such item.
+/// Sets the team and with it the group, which has the same id. False if
+/// there is no such item.
 pub async fn update(
     db: &PgPool,
     kind: Kind,
@@ -135,7 +139,7 @@ pub async fn update(
     let result = match kind {
         Kind::Aircraft => {
             sqlx::query!(
-                "update aircraft set name = $2, team_id = $3, holder_user_id = $4
+                "update aircraft set name = $2, team_id = $3, group_id = $3, holder_user_id = $4
                  where id = $1",
                 id,
                 fields.name,
@@ -147,7 +151,7 @@ pub async fn update(
         }
         Kind::RemoteController => {
             sqlx::query!(
-                "update remote_controllers set name = $2, team_id = $3, holder_user_id = $4
+                "update remote_controllers set name = $2, team_id = $3, group_id = $3, holder_user_id = $4
                  where id = $1",
                 id,
                 fields.name,
@@ -170,10 +174,10 @@ pub async fn user_is_active(db: &PgPool, user_id: Uuid) -> sqlx::Result<bool> {
     .await
 }
 
-pub async fn team_is_active(db: &PgPool, team_id: Uuid) -> sqlx::Result<bool> {
+pub async fn group_exists(db: &PgPool, group_id: Uuid) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
-        r#"select exists(select 1 from teams where id = $1 and archived_at is null) as "exists!""#,
-        team_id,
+        r#"select exists(select 1 from groups where id = $1) as "exists!""#,
+        group_id,
     )
     .fetch_one(db)
     .await

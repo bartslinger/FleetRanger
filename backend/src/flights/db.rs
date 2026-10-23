@@ -207,10 +207,10 @@ pub struct FlightDetail {
     /// policy doesn't let the actor see them (see `flights::service`).
     pub aircraft_id: Option<Uuid>,
     #[serde(skip)]
-    pub aircraft_team_id: Option<Uuid>,
+    pub aircraft_group_id: Option<Uuid>,
     pub rc_id: Option<Uuid>,
     #[serde(skip)]
-    pub rc_team_id: Option<Uuid>,
+    pub rc_group_id: Option<Uuid>,
     /// The battery's page, for linking: whoever sees the flight sees its
     /// battery, but only through flights that aren't archived (see
     /// batteries/db.rs), so None for an archived flight.
@@ -236,9 +236,9 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
                 team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?",
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
-                (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
+                (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_group_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
-                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                (select r.group_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_group_id?",
                 (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id
                  where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as "battery_id?",
                 (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id
@@ -282,9 +282,9 @@ pub async fn of_session(
                 team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?",
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
-                (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
+                (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_group_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
-                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                (select r.group_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_group_id?",
                 (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id
                  where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as "battery_id?",
                 (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id
@@ -328,9 +328,9 @@ pub async fn details(
                 team_id, (select t.name from teams t where t.id = flights.team_id) as "team_name?",
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
-                (select a.team_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_team_id?",
+                (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_group_id?",
                 (select r.id from remote_controllers r where r.serial = flights.rc_serial) as "rc_id?",
-                (select r.team_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_team_id?",
+                (select r.group_id from remote_controllers r where r.serial = flights.rc_serial) as "rc_group_id?",
                 (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id
                  where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as "battery_id?",
                 (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id
@@ -808,16 +808,6 @@ pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Opt
         .fetch_all(db)
         .await?;
     Ok((groups.len() == ids.len()).then_some(groups))
-}
-
-/// The teams the user flies for; none for someone who doesn't fly.
-pub async fn own_teams(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
-    sqlx::query_scalar!(
-        "select team_id from team_members where user_id = $1 order by team_id",
-        user_id
-    )
-    .fetch_all(db)
-    .await
 }
 
 /// The groups an active user flies for (`flights.fly_for` through their

@@ -158,7 +158,7 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<Session> {
     if flights.is_empty() {
         return Err(ApiError::NotFound);
     }
-    flights::service::link_equipment(db, actor, &mut flights).await?;
+    flights::service::link_equipment(actor, &mut flights);
     Ok(Session { id, flights })
 }
 
