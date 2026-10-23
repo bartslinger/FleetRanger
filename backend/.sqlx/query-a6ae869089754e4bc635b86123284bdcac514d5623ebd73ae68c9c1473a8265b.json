@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "with seen as (\n               select fb.*, f.takeoff_at, f.aircraft_serial\n               from flight_batteries fb\n               join flights f on f.id = fb.flight_id\n               where f.archived_at is null\n                 and ($1\n                      or f.pilot_id = $2\n                      or f.team_id in (select team_id from team_members where user_id = $2))\n           )\n           select b.id, b.serial, b.name,\n                  count(*) as \"flights!\",\n                  max(s.takeoff_at) as \"last_flight_at!\",\n                  a.id as \"aircraft_id?\", latest.aircraft_serial as \"aircraft_serial?\",\n                  a.name as \"aircraft_name?\",\n                  latest.cycles, latest.design_capacity_mah,\n                  (select full_capacity_mah from seen\n                   where battery_id = b.id and full_capacity_mah is not null\n                   order by takeoff_at desc limit 1) as \"full_capacity_mah?\"\n           from batteries b\n           join seen s on s.battery_id = b.id\n           cross join lateral (\n               select aircraft_serial, cycles, design_capacity_mah from seen\n               where battery_id = b.id\n               order by takeoff_at desc limit 1\n           ) latest\n           left join aircraft a on a.serial = latest.aircraft_serial\n           where $3::uuid is null or b.id = $3\n           group by b.id, latest.aircraft_serial, latest.cycles, latest.design_capacity_mah,\n                    a.id, a.name\n           order by lower(coalesce(b.name, b.serial)), b.id",
+  "query": "with seen as (\n               select fb.*, f.takeoff_at, f.aircraft_serial\n               from flight_batteries fb\n               join flights f on f.id = fb.flight_id\n               where f.archived_at is null\n                 and ($1\n                      or f.pilot_id = $2\n                      or f.group_id = any($4))\n           )\n           select b.id, b.serial, b.name,\n                  count(*) as \"flights!\",\n                  max(s.takeoff_at) as \"last_flight_at!\",\n                  a.id as \"aircraft_id?\", latest.aircraft_serial as \"aircraft_serial?\",\n                  a.name as \"aircraft_name?\",\n                  latest.cycles, latest.design_capacity_mah,\n                  (select full_capacity_mah from seen\n                   where battery_id = b.id and full_capacity_mah is not null\n                   order by takeoff_at desc limit 1) as \"full_capacity_mah?\"\n           from batteries b\n           join seen s on s.battery_id = b.id\n           cross join lateral (\n               select aircraft_serial, cycles, design_capacity_mah from seen\n               where battery_id = b.id\n               order by takeoff_at desc limit 1\n           ) latest\n           left join aircraft a on a.serial = latest.aircraft_serial\n           where $3::uuid is null or b.id = $3\n           group by b.id, latest.aircraft_serial, latest.cycles, latest.design_capacity_mah,\n                    a.id, a.name\n           order by lower(coalesce(b.name, b.serial)), b.id",
   "describe": {
     "columns": [
       {
@@ -114,7 +114,8 @@
       "Left": [
         "Bool",
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -131,5 +132,5 @@
       null
     ]
   },
-  "hash": "a242484bc80e05f585b499e6a600e0a2290e4a0d0360ce34360db7ac47ee793c"
+  "hash": "a6ae869089754e4bc635b86123284bdcac514d5623ebd73ae68c9c1473a8265b"
 }

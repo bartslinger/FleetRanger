@@ -201,6 +201,10 @@ mod tests {
         let viewer = grants(&[(None, "viewer")]);
         assert!(viewer.may_on_all(Permission::FlightsRead, &[Some(NORTH), None]));
         assert!(!viewer.anywhere(Permission::FlightsArchive));
-        assert!(!viewer.without_organisation_roles().anywhere(Permission::FlightsRead));
+        assert!(
+            !viewer
+                .without_organisation_roles()
+                .anywhere(Permission::FlightsRead)
+        );
     }
 }

@@ -101,7 +101,7 @@ pub async fn totals(
                where f.archived_at is null
                  and ($1
                       or f.pilot_id = $2
-                      or f.team_id in (select team_id from team_members where user_id = $2))
+                      or f.group_id = any($14))
                  and ($3::text[] is null or f.aircraft_serial = any($3))
                  and ($4::text[] is null or f.rc_serial = any($4))
                  and ($5::timestamptz is null or f.takeoff_at >= $5)
@@ -127,6 +127,7 @@ pub async fn totals(
         group_by.as_str(),
         time_zone,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -156,7 +157,7 @@ pub async fn area_totals(
            where f.archived_at is null
              and ($1
                   or f.pilot_id = $2
-                  or f.team_id in (select team_id from team_members where user_id = $2))
+                  or f.group_id = any($12))
              and ($3::text[] is null or f.aircraft_serial = any($3))
              and ($4::text[] is null or f.rc_serial = any($4))
              and ($5::timestamptz is null or f.takeoff_at >= $5)
@@ -177,6 +178,7 @@ pub async fn area_totals(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -247,8 +249,8 @@ mod tests {
         let takeoff: DateTime<Utc> = takeoff.parse().unwrap();
         sqlx::query(
             "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
-                                  track, team_id, archived_at)
-             values ($1, $2, $2, 60, 100.4, '{}', $3, case when $4 then now() end)",
+                                  track, team_id, group_id, archived_at)
+             values ($1, $2, $2, 60, 100.4, '{}', $3, $3, case when $4 then now() end)",
         )
         .bind(raw_log)
         .bind(takeoff)
@@ -264,32 +266,16 @@ mod tests {
     /// flights of another team don't count for a member.
     #[sqlx::test]
     async fn totals_per_month_in_the_time_zone(db: PgPool) {
-        let north = insert_id(
-            &db,
-            "insert into teams (name) values ('North') returning id",
-        )
-        .await;
-        let south = insert_id(
-            &db,
-            "insert into teams (name) values ('South') returning id",
-        )
-        .await;
+        let north = crate::testing::team(&db, "North").await;
+        let south = crate::testing::team(&db, "South").await;
         let member = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
-            .bind(member)
-            .bind(north)
-            .execute(&db)
-            .await
-            .unwrap();
+        crate::testing::join(&db, member, north).await;
         flight(&db, north, "2026-09-30T12:00:00Z", false).await;
         flight(&db, north, "2026-09-30T23:30:00Z", false).await;
         flight(&db, north, "2026-09-30T12:00:00Z", true).await;
         flight(&db, south, "2026-09-30T12:00:00Z", false).await;
 
-        let scope = FlightScope {
-            all: false,
-            user_id: member,
-        };
+        let scope = crate::testing::scope(&db, member).await;
         let months = totals(
             &db,
             &scope,

@@ -112,7 +112,10 @@ pub async fn roles(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<(Option<Uuid>
     )
     .fetch_all(db)
     .await?;
-    Ok(rows.into_iter().map(|row| (row.group_id, row.role)).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.group_id, row.role))
+        .collect())
 }
 
 pub async fn revoke_session(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<()> {

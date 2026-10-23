@@ -124,7 +124,7 @@ pub async fn list(
          from flights
          where ($5
                 or pilot_id = $6
-                or team_id in (select team_id from team_members where user_id = $6))
+                or group_id = any($18))
            and ($7::text[] is null or aircraft_serial = any($7))
            and ($8::text[] is null or rc_serial = any($8))
            and ($9::bool is null or (session_id is not null) = $9)
@@ -174,6 +174,7 @@ pub async fn list(
         filter.unknown_pilot,
         filter.archived,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -250,10 +251,11 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
          where id = $1
            and ($2
                 or pilot_id = $3
-                or team_id in (select team_id from team_members where user_id = $3))"#,
+                or group_id = any($4))"#,
         id,
         scope.all,
         scope.user_id,
+        &scope.group_ids,
     )
     .fetch_optional(db)
     .await
@@ -295,11 +297,12 @@ pub async fn of_session(
          where session_id = $1
            and ($2
                 or pilot_id = $3
-                or team_id in (select team_id from team_members where user_id = $3))
+                or group_id = any($4))
          order by takeoff_at, id"#,
         session_id,
         scope.all,
         scope.user_id,
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -340,11 +343,12 @@ pub async fn details(
          where id = any($1)
            and ($2
                 or pilot_id = $3
-                or team_id in (select team_id from team_members where user_id = $3))
+                or group_id = any($4))
          order by takeoff_at, id"#,
         ids,
         scope.all,
         scope.user_id,
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -357,7 +361,7 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
            from flights
            where ($1
                   or pilot_id = $2
-                  or team_id in (select team_id from team_members where user_id = $2))
+                  or group_id = any($14))
              and ($3::text[] is null or aircraft_serial = any($3))
              and ($4::text[] is null or rc_serial = any($4))
              and ($5::bool is null or (session_id is not null) = $5)
@@ -382,6 +386,7 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
         filter.unknown_pilot,
         filter.archived,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_one(db)
     .await
@@ -395,7 +400,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
            from flights
            where ($1
                   or pilot_id = $2
-                  or team_id in (select team_id from team_members where user_id = $2))
+                  or group_id = any($14))
              and ($3::text[] is null or aircraft_serial = any($3))
              and ($4::text[] is null or rc_serial = any($4))
              and ($5::bool is null or (session_id is not null) = $5)
@@ -421,6 +426,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
         filter.unknown_pilot,
         filter.archived,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -457,7 +463,7 @@ pub async fn neighbours(
                from flights
                where ($3
                       or pilot_id = $4
-                      or team_id in (select team_id from team_members where user_id = $4))
+                      or group_id = any($17))
                  and ($5::text[] is null or aircraft_serial = any($5))
                  and ($6::text[] is null or rc_serial = any($6))
                  and ($7::bool is null or (session_id is not null) = $7)
@@ -508,6 +514,7 @@ pub async fn neighbours(
         filter.unknown_pilot,
         filter.archived,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_optional(db)
     .await
@@ -537,7 +544,7 @@ pub async fn aircraft_of(
            where f.aircraft_serial is not null
              and ($1
                   or f.pilot_id = $2
-                  or f.team_id in (select team_id from team_members where user_id = $2))
+                  or f.group_id = any($14))
              and (f.aircraft_serial = any(coalesce($3::text[], '{}'))
                   or (($4::text[] is null or f.rc_serial = any($4))
                       and ($5::bool is null or (f.session_id is not null) = $5)
@@ -566,6 +573,7 @@ pub async fn aircraft_of(
         filter.unknown_pilot,
         filter.archived,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -586,7 +594,7 @@ pub async fn controllers_of(
            where f.rc_serial is not null
              and ($1
                   or f.pilot_id = $2
-                  or f.team_id in (select team_id from team_members where user_id = $2))
+                  or f.group_id = any($14))
              and (f.rc_serial = any(coalesce($3::text[], '{}'))
                   or (($4::text[] is null or f.aircraft_serial = any($4))
                       and ($5::bool is null or (f.session_id is not null) = $5)
@@ -615,6 +623,7 @@ pub async fn controllers_of(
         filter.unknown_pilot,
         filter.archived,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -642,7 +651,7 @@ pub async fn teams_in(
            left join teams t on t.id = f.team_id
            where ($1
                   or f.pilot_id = $2
-                  or f.team_id in (select team_id from team_members where user_id = $2))
+                  or f.group_id = any($14))
              and (f.team_id = any(coalesce($3::uuid[], '{}'))
                   or ($4 and f.team_id is null)
                   or (($5::text[] is null or f.aircraft_serial = any($5))
@@ -671,6 +680,7 @@ pub async fn teams_in(
         filter.unknown_pilot,
         filter.archived,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -701,7 +711,7 @@ pub async fn areas_in(
                   where fa.area_id = a.id
                     and ($1
                          or f.pilot_id = $2
-                         or f.team_id in (select team_id from team_members where user_id = $2))
+                         or f.group_id = any($14))
                     and ($4::text[] is null or f.aircraft_serial = any($4))
                     and ($5::text[] is null or f.rc_serial = any($5))
                     and ($6::bool is null or (f.session_id is not null) = $6)
@@ -725,6 +735,7 @@ pub async fn areas_in(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.archived,
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -752,7 +763,7 @@ pub async fn pilots_in(
            left join users u on u.id = f.pilot_id
            where ($1
                   or f.pilot_id = $2
-                  or f.team_id in (select team_id from team_members where user_id = $2))
+                  or f.group_id = any($14))
              and (f.pilot_id = any(coalesce($3::uuid[], '{}'))
                   or ($4 and f.pilot_id is null)
                   or (($5::text[] is null or f.aircraft_serial = any($5))
@@ -781,6 +792,7 @@ pub async fn pilots_in(
         filter.queue,
         filter.archived,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -965,8 +977,10 @@ pub async fn team_choices(db: &PgPool) -> sqlx::Result<Vec<TeamChoice>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing;
 
-    /// Adds a flight with the given team and pilot, returning its id.
+    /// Adds a flight with the given team (and its group) and pilot, returning
+    /// its id.
     async fn flight(db: &PgPool, team: Option<Uuid>, pilot: Option<Uuid>) -> Uuid {
         let raw_log: Uuid = sqlx::query_scalar(
             "insert into raw_logs (sha256, path, size_bytes)
@@ -978,8 +992,8 @@ mod tests {
         .unwrap();
         sqlx::query_scalar(
             "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
-                                  track, team_id, pilot_id)
-             values ($1, now(), now(), 0, 0, '{}', $2, $3)
+                                  track, team_id, group_id, pilot_id)
+             values ($1, now(), now(), 0, 0, '{}', $2, $2, $3)
              returning id",
         )
         .bind(raw_log)
@@ -1024,26 +1038,13 @@ mod tests {
     /// flights of their current team; not other teams or the queue.
     #[sqlx::test]
     async fn member_sees_own_and_team_flights(db: PgPool) {
-        let north = insert_id(
-            &db,
-            "insert into teams (name) values ('North') returning id",
-        )
-        .await;
-        let south = insert_id(
-            &db,
-            "insert into teams (name) values ('South') returning id",
-        )
-        .await;
+        let north = testing::team(&db, "North").await;
+        let south = testing::team(&db, "South").await;
         let me = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         let teammate = insert_id(&db, "insert into users (name) values ('B') returning id").await;
         let other = insert_id(&db, "insert into users (name) values ('C') returning id").await;
         for (pilot, team) in [(me, north), (teammate, north), (other, south)] {
-            sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
-                .bind(pilot)
-                .bind(team)
-                .execute(&db)
-                .await
-                .unwrap();
+            testing::join(&db, pilot, team).await;
         }
 
         let mut expected = vec![
@@ -1058,14 +1059,12 @@ mod tests {
         flight(&db, None, None).await;
         expected.sort();
 
-        let member = FlightScope {
-            all: false,
-            user_id: me,
-        };
+        let member = testing::scope(&db, me).await;
         assert_eq!(visible(&db, &member).await, expected);
         let everything = FlightScope {
             all: true,
             user_id: me,
+            group_ids: Vec::new(),
         };
         assert_eq!(visible(&db, &everything).await.len(), 7);
     }
@@ -1104,6 +1103,7 @@ mod tests {
         let scope = FlightScope {
             all: true,
             user_id: Uuid::nil(),
+            group_ids: Vec::new(),
         };
         let keys = [
             SortKey::TakeoffAt,
@@ -1249,6 +1249,7 @@ mod tests {
         let scope = FlightScope {
             all: true,
             user_id: Uuid::nil(),
+            group_ids: Vec::new(),
         };
         let serials = |devices: Vec<Device>| -> Vec<String> {
             devices.into_iter().map(|device| device.serial).collect()
@@ -1287,17 +1288,10 @@ mod tests {
     #[sqlx::test]
     async fn user_without_team_sees_nothing(db: PgPool) {
         let user = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let team = insert_id(
-            &db,
-            "insert into teams (name) values ('North') returning id",
-        )
-        .await;
+        let team = testing::team(&db, "North").await;
         flight(&db, Some(team), None).await;
         flight(&db, None, None).await;
-        let member = FlightScope {
-            all: false,
-            user_id: user,
-        };
+        let member = testing::scope(&db, user).await;
         assert!(visible(&db, &member).await.is_empty());
     }
 
@@ -1305,23 +1299,10 @@ mod tests {
     /// also when moving to the queue.
     #[sqlx::test]
     async fn moving_clears_pilots_from_other_teams(db: PgPool) {
-        let north = insert_id(
-            &db,
-            "insert into teams (name) values ('North') returning id",
-        )
-        .await;
-        let south = insert_id(
-            &db,
-            "insert into teams (name) values ('South') returning id",
-        )
-        .await;
+        let north = testing::team(&db, "North").await;
+        let south = testing::team(&db, "South").await;
         let pilot = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
-            .bind(pilot)
-            .bind(south)
-            .execute(&db)
-            .await
-            .unwrap();
+        testing::join(&db, pilot, south).await;
         let flight = flight(&db, Some(north), Some(pilot)).await;
         let pilot_of = async || -> Option<Uuid> {
             sqlx::query_scalar("select pilot_id from flights where id = $1")
@@ -1379,6 +1360,7 @@ mod tests {
         let everything = FlightScope {
             all: true,
             user_id: Uuid::nil(),
+            group_ids: Vec::new(),
         };
         let listed = async |archived: bool| -> Vec<Uuid> {
             let filter = Filter {

@@ -134,6 +134,7 @@ async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) ->
         Err((status, error)) => return challenge(&gate.metadata, status, error),
     };
     actor.role = Role::Member;
+    actor.grants = actor.grants.without_organisation_roles();
     let mut request = Request::from_parts(parts, body);
     request.extensions_mut().insert(actor);
     next.run(request).await
