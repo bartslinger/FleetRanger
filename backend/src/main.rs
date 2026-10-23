@@ -7,6 +7,7 @@ mod equipment;
 mod error;
 mod events;
 mod flights;
+mod groups;
 mod health;
 mod ingest;
 mod mcp;
@@ -14,7 +15,6 @@ mod oauth;
 mod pairing;
 mod policy;
 mod sessions;
-mod teams;
 #[cfg(test)]
 mod testing;
 mod users;
@@ -209,10 +209,10 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         .merge(download::router())
         .merge(events::router())
         .merge(flights::routes::router())
+        .merge(groups::routes::router())
         .merge(ingest::routes::router())
         .merge(pairing::routes::router())
         .merge(sessions::routes::router())
-        .merge(teams::routes::router())
         .merge(equipment::routes::router())
         .merge(users::routes::router())
         .layer(middleware::from_fn_with_state(

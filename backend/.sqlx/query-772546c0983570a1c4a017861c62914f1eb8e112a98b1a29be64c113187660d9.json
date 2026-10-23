@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select not exists(select 1 from flights where group_id = $1)\n                  and not exists(select 1 from sessions where group_id = $1)\n                  and not exists(select 1 from aircraft where group_id = $1)\n                  and not exists(select 1 from remote_controllers where group_id = $1)\n           as \"empty!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "empty!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "772546c0983570a1c4a017861c62914f1eb8e112a98b1a29be64c113187660d9"
+}

@@ -184,13 +184,35 @@ export interface FlightPage {
 	total: number;
 }
 
-/** A team, from `/api/teams`. */
-export interface Team {
+/** A role in a group; Admin only on the whole organisation. */
+export type GroupRole = 'viewer' | 'pilot' | 'editor';
+export type OrganisationRole = GroupRole | 'admin';
+
+/** A group, from `/api/groups`. */
+export interface Group {
 	id: string;
 	name: string;
-	archived_at: string | null;
-	/** Users in the team that aren't archived. */
+	/** Members who aren't archived. */
 	members: number;
+	/** What it holds; only a group without any of these can be deleted. */
+	flights: number;
+	sessions: number;
+	drones: number;
+	controllers: number;
+}
+
+/** A member who isn't archived, with their roles in the group. */
+export interface Member {
+	user_id: string;
+	name: string;
+	email: string | null;
+	/** In the order viewer, pilot, editor. */
+	roles: GroupRole[];
+}
+
+/** A group with its members, from `/api/groups/{id}`. */
+export interface GroupDetail extends Group {
+	member_list: Member[];
 }
 
 /** A user as admins manage them, from `/api/users`. */
