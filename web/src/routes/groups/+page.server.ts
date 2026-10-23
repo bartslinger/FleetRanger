@@ -1,8 +1,16 @@
 import { fail } from '@sveltejs/kit';
-import { get, send, type Group, type GroupDetail } from '#lib/server/backend.js';
+import { get, send, type Group, type GroupDetail, type User } from '#lib/server/backend.js';
 
 export async function load({ fetch }) {
-	return { groups: await get<Group[]>(fetch, '/api/groups') };
+	const [groups, users, unassigned] = await Promise.all([
+		get<Group[]>(fetch, '/api/groups'),
+		get<User[]>(fetch, '/api/users'),
+		get<{ total: number }>(fetch, '/api/flights?group=none&size=1')
+	]);
+	// The organisation, shown as the top group: all users are its members,
+	// and it holds the flights in no group.
+	const organisation = { members: users.length, flights: unassigned.total };
+	return { groups, organisation };
 }
 
 export const actions = {

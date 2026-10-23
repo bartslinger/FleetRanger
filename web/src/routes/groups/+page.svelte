@@ -2,7 +2,6 @@
 	import { resolve } from '$app/paths';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
-	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
@@ -12,7 +11,21 @@
 
 	let { data, form }: PageProps = $props();
 
-	type Row = (typeof data.groups)[number];
+	interface Row {
+		id: string;
+		name: string;
+		members: number;
+		flights: number;
+	}
+
+	const ORGANISATION_ROW = 'organisation';
+	// The organisation first, as the top group (user's decision): its members
+	// are all users, so it opens Users; it is told apart by its name alone
+	// (carbon-expert's suggestion).
+	const rows: Row[] = $derived([
+		{ id: ORGANISATION_ROW, name: 'Organisation, all users', ...data.organisation },
+		...data.groups
+	]);
 
 	const count = (value: number) => value.toLocaleString('en-US');
 	const columns: TableColumn<Row>[] = [
@@ -38,25 +51,36 @@
 
 <Grid>
 	<Column narrow>
+		<DataTable
+			label="Groups"
+			{columns}
+			{rows}
+			rowKey={(group) => group.id}
+			rowHref={(group) =>
+				group.id === ORGANISATION_ROW
+					? resolve('/users')
+					: resolve('/groups/[id]', { id: group.id })}
+			summary={`${count(data.groups.length)} ${data.groups.length === 1 ? 'group' : 'groups'} in the organisation`}
+		>
+			{#snippet toolbar()}
+				{@render newGroup()}
+			{/snippet}
+		</DataTable>
 		{#if data.groups.length === 0}
-			<EmptyState
-				title="No groups yet"
-				body="Groups hold flights, sessions and equipment, and give their members roles there. A small organisation doesn't need them: without groups, everything is in the organisation."
-				action={newGroup}
-			/>
-		{:else}
-			<DataTable
-				label="Groups"
-				{columns}
-				rows={data.groups}
-				rowKey={(group) => group.id}
-				rowHref={(group) => resolve('/groups/[id]', { id: group.id })}
-				summary={`${count(data.groups.length)} ${data.groups.length === 1 ? 'group' : 'groups'}`}
-			>
-				{#snippet toolbar()}
-					{@render newGroup()}
-				{/snippet}
-			</DataTable>
+			<p class="note">
+				Groups hold flights, sessions and equipment, and give their members roles there. A small
+				organisation doesn't need them: without groups, everything is in the organisation.
+			</p>
 		{/if}
 	</Column>
 </Grid>
+
+<style>
+	.note {
+		margin: var(--cds-spacing-05) 0 0;
+		padding-inline: var(--cds-spacing-05);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
+	}
+</style>
