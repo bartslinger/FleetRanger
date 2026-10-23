@@ -45,6 +45,17 @@ pub fn require_admin(actor: &Actor) -> ApiResult<()> {
     }
 }
 
+/// Whether the actor sees everyone's open pairing codes: admins do; others
+/// see their own. Any user may create one; see docs/pairing.md.
+pub fn all_pairing_codes(actor: &Actor) -> bool {
+    actor.role == Role::Admin
+}
+
+/// Whether the actor may revoke a pairing code: its creator and admins.
+pub fn revoke_pairing_code(actor: &Actor, created_by: Uuid) -> bool {
+    actor.user_id == created_by || all_pairing_codes(actor)
+}
+
 /// Which flights an actor sees, as the parameters of the visibility condition
 /// in the flight queries: every flight, or the actor's own flights and those of
 /// the actor's team.

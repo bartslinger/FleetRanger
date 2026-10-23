@@ -1,9 +1,9 @@
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, Approved, Waiting};
+use super::db::{self, OpenCode, Paired};
 use super::{Controller, parse_sha256};
 use crate::{
     auth::Actor,
@@ -16,66 +16,114 @@ use crate::{
 /// random byte maps onto them evenly.
 const CODE_ALPHABET: &[u8; 32] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const CODE_LENGTH: usize = 8;
-/// How long a request stays valid after the controller last checked on it.
-/// While its pairing screen is open, the controller checks every few seconds,
-/// so its code stays the same; once it's off, the request soon expires.
-const REQUEST_LIFETIME: Duration = Duration::minutes(1);
+/// How long a code may stay valid, chosen by whoever creates it. Longer gives
+/// more time for guessing.
+const MAX_HOURS: i64 = 7 * 24;
 
-/// What a controller shows while it waits for a user to approve it.
+/// A code just created, to give to the pilot.
 #[derive(Serialize)]
-pub struct Started {
+pub struct Created {
+    pub id: Uuid,
     pub code: String,
+    pub team: Option<String>,
+    pub expires_at: DateTime<Utc>,
 }
 
-/// Where a controller's token stands.
-pub enum Check {
-    Paired,
-    /// Still waiting for approval; checking kept the request alive.
-    Waiting,
-    /// Neither: unpaired, or the request expired. The controller starts over.
-    Unknown,
-}
-
-/// A controller asks to pair. It sends the SHA-256 of a token it generated,
-/// which becomes its token once a user approves. Needs no login.
-pub async fn start(
+/// Creates a single-use code that pairs a controller, valid for `hours`. Any
+/// user may; the controller joins one of their teams, the one they choose if
+/// they're in several, or none when they have none.
+pub async fn create(
     db: &PgPool,
-    serial: &str,
-    model: &str,
-    token_sha256_hex: &str,
-) -> ApiResult<Started> {
-    let serial = serial.trim();
-    let model = model.trim();
-    if serial.is_empty() || serial.len() > 64 || model.is_empty() || model.len() > 100 {
-        return Err(ApiError::Invalid(
-            "Send the controller's serial and model.".to_owned(),
-        ));
+    actor: &Actor,
+    team: Option<Uuid>,
+    hours: i64,
+) -> ApiResult<Created> {
+    if !(1..=MAX_HOURS).contains(&hours) {
+        return Err(ApiError::Invalid(format!(
+            "A code is valid for 1 to {MAX_HOURS} hours."
+        )));
     }
-    let token_sha256 = parse_sha256(token_sha256_hex)
-        .ok_or_else(|| ApiError::Invalid("Send the token's SHA-256 in hex.".to_owned()))?;
-    let expires_at = Utc::now() + REQUEST_LIFETIME;
+    let teams = flights::db::teams_of_user(db, actor.user_id).await?;
+    let team = match (team, teams.as_slice()) {
+        (_, []) => None,
+        (Some(id), teams) => Some(
+            teams
+                .iter()
+                .find(|team| team.id == id)
+                .ok_or_else(|| ApiError::Invalid("Choose one of your teams.".to_owned()))?,
+        ),
+        (None, [team]) => Some(team),
+        (None, _) => {
+            return Err(ApiError::Invalid(
+                "Choose the team the controller joins.".to_owned(),
+            ));
+        }
+    };
+    let expires_at = Utc::now() + Duration::hours(hours);
     // A taken code is unlikely (32^8 codes); try a few times.
     for _ in 0..5 {
         let code = random_code();
-        if db::add_request(db, &code, &token_sha256, serial, model, expires_at).await? {
-            return Ok(Started { code });
+        if let Some(id) =
+            db::add_code(db, &code, actor.user_id, team.map(|t| t.id), expires_at).await?
+        {
+            return Ok(Created {
+                id,
+                code,
+                team: team.map(|t| t.name.clone()),
+                expires_at,
+            });
         }
     }
     Err(ApiError::Internal(anyhow::anyhow!("no free pairing code")))
 }
 
-/// What a controller learns when it checks its token, which it does every few
-/// seconds while it waits for approval.
-pub async fn check(db: &PgPool, token_sha256: &[u8]) -> ApiResult<Check> {
-    if db::by_token(db, token_sha256).await?.is_some() {
-        return Ok(Check::Paired);
+/// The codes the actor may see and revoke that can still be used.
+pub async fn open_codes(db: &PgPool, actor: &Actor) -> ApiResult<Vec<OpenCode>> {
+    let created_by = (!policy::all_pairing_codes(actor)).then_some(actor.user_id);
+    Ok(db::open_codes(db, created_by).await?)
+}
+
+/// Revokes a code, so it can't pair a controller any more.
+pub async fn revoke(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
+    let created_by = db::code_creator(db, id).await?.ok_or(ApiError::NotFound)?;
+    if !policy::revoke_pairing_code(actor, created_by) {
+        return Err(ApiError::NotFound);
     }
-    let seconds = REQUEST_LIFETIME.as_seconds_f64();
-    Ok(if db::keep_waiting(db, token_sha256, seconds).await? {
-        Check::Waiting
-    } else {
-        Check::Unknown
-    })
+    db::revoke(db, id).await?;
+    Ok(())
+}
+
+/// A controller pairs with a code it was given. It sends the SHA-256 of a
+/// token it generated, which becomes its token. Needs no login: the code is
+/// the proof.
+pub async fn pair(
+    db: &PgPool,
+    code: &str,
+    serial: &str,
+    token_sha256_hex: &str,
+) -> ApiResult<Paired> {
+    let serial = serial.trim();
+    if serial.is_empty() || serial.len() > 64 {
+        return Err(ApiError::Invalid(
+            "Send the controller's serial.".to_owned(),
+        ));
+    }
+    let token_sha256 = parse_sha256(token_sha256_hex)
+        .ok_or_else(|| ApiError::Invalid("Send the token's SHA-256 in hex.".to_owned()))?;
+    db::use_code(db, &normalize(code), serial, &token_sha256)
+        .await?
+        .ok_or_else(|| {
+            ApiError::Invalid(
+                "This code doesn’t pair a controller: it may have been used, revoked or have \
+                 expired. Ask for a new one."
+                    .to_owned(),
+            )
+        })
+}
+
+/// Whether a controller's token is paired.
+pub async fn paired(db: &PgPool, token_sha256: &[u8]) -> ApiResult<bool> {
+    Ok(db::by_token(db, token_sha256).await?.is_some())
 }
 
 /// The pilots a controller offers: every active user in a team. The controller
@@ -94,48 +142,10 @@ pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList
     })
 }
 
-/// The controllers waiting to be paired, so the web app can tell users. Any
-/// user may pair a controller, so any user sees them; approving needs the code.
-pub async fn waiting(db: &PgPool, _actor: &Actor) -> ApiResult<Vec<Waiting>> {
-    Ok(db::waiting(db).await?)
-}
-
-/// The teams a controller the actor approves can join: theirs. One of them is
-/// chosen when there are several.
+/// The teams a controller paired with the actor's code can join: theirs. One
+/// of them is chosen when there are several.
 pub async fn teams(db: &PgPool, actor: &Actor) -> ApiResult<Vec<flights::db::TeamChoice>> {
     Ok(flights::db::teams_of_user(db, actor.user_id).await?)
-}
-
-/// Approves a request: the controller is paired and joins the approver's team,
-/// the one they choose if they're in several, or no team when they have none.
-/// Any user may pair a controller; see "Clients" in docs/architecture.md.
-pub async fn approve(
-    db: &PgPool,
-    actor: &Actor,
-    code: &str,
-    team: Option<Uuid>,
-) -> ApiResult<Approved> {
-    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
-    let team = match (team, own_teams.as_slice()) {
-        (_, []) => None,
-        (Some(team), teams) if teams.contains(&team) => Some(team),
-        (Some(_), _) => return Err(ApiError::Invalid("Choose one of your teams.".to_owned())),
-        (None, [team]) => Some(*team),
-        (None, _) => {
-            return Err(ApiError::Invalid(
-                "Choose the team the controller joins.".to_owned(),
-            ));
-        }
-    };
-    db::approve(db, &normalize(code), team)
-        .await?
-        .ok_or_else(|| {
-            ApiError::Invalid(
-                "No controller is waiting with this code. Check the code on the controller’s \
-                 screen."
-                    .to_owned(),
-            )
-        })
 }
 
 /// Unpairs a controller from the web app. Admins only; a controller can also

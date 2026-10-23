@@ -1,9 +1,9 @@
-//! Pairing API: the controller asks to pair and later unpairs itself; a user
-//! approves; an admin can unpair a controller.
+//! Pairing API: a user creates and revokes codes; a controller pairs with one
+//! and later unpairs itself; an admin can unpair a controller.
 
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, Query, State},
+    extract::{FromRef, Path, State},
     http::{HeaderMap, StatusCode},
     routing::{delete, get, post},
 };
@@ -13,13 +13,12 @@ use uuid::Uuid;
 
 use super::{
     Controller,
-    db::{self, Approved, Waiting},
-    service::{self, Check, PilotList, Started},
+    db::{self, OpenCode, Paired},
+    service::{self, Created, PilotList},
 };
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    events::Changes,
     flights::db::TeamChoice,
 };
 
@@ -27,61 +26,66 @@ pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     PgPool: FromRef<S>,
-    Changes: FromRef<S>,
 {
     Router::new()
-        .route("/api/pairing", get(waiting).post(start))
+        .route("/api/pairing-codes", get(open_codes).post(create))
+        .route("/api/pairing-codes/{id}", delete(revoke))
         .route("/api/pairing/teams", get(teams))
-        .route("/api/pairing/{code}/approve", post(approve))
         .route("/api/controller", get(me).delete(unpair_self))
+        .route("/api/controller/pairing", post(pair))
         .route("/api/controller/pilots", get(pilots))
         .route("/api/controller/sync", post(synced))
         .route("/api/remote-controllers/{id}/pairing", delete(unpair))
 }
 
 #[derive(Deserialize)]
-struct Start {
-    serial: String,
-    model: String,
-    /// Hex.
-    token_sha256: String,
+struct Create {
+    /// The creator's team the controller joins, if they're in several.
+    team: Option<Uuid>,
+    /// How long the code stays valid.
+    hours: i64,
 }
 
-async fn start(
+async fn create(
+    actor: Actor,
     State(db): State<PgPool>,
-    State(changes): State<Changes>,
-    Json(body): Json<Start>,
-) -> ApiResult<Json<Started>> {
-    let started = service::start(&db, &body.serial, &body.model, &body.token_sha256).await?;
-    changes.notify();
-    Ok(Json(started))
+    Json(body): Json<Create>,
+) -> ApiResult<Json<Created>> {
+    Ok(Json(
+        service::create(&db, &actor, body.team, body.hours).await?,
+    ))
 }
 
-async fn waiting(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<Waiting>>> {
-    Ok(Json(service::waiting(&db, &actor).await?))
+async fn open_codes(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<OpenCode>>> {
+    Ok(Json(service::open_codes(&db, &actor).await?))
 }
 
-/// The teams a controller the actor approves can join.
+async fn revoke(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    service::revoke(&db, &actor, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The teams a controller paired with the actor's code can join.
 async fn teams(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<TeamChoice>>> {
     Ok(Json(service::teams(&db, &actor).await?))
 }
 
 #[derive(Deserialize)]
-struct ApproveQuery {
-    /// The approver's team the controller joins, if they're in several.
-    team: Option<Uuid>,
+struct Pair {
+    code: String,
+    serial: String,
+    /// Hex.
+    token_sha256: String,
 }
 
-async fn approve(
-    actor: Actor,
-    State(db): State<PgPool>,
-    State(changes): State<Changes>,
-    Path(code): Path<String>,
-    Query(query): Query<ApproveQuery>,
-) -> ApiResult<Json<Approved>> {
-    let approved = service::approve(&db, &actor, &code, query.team).await?;
-    changes.notify();
-    Ok(Json(approved))
+async fn pair(State(db): State<PgPool>, Json(body): Json<Pair>) -> ApiResult<Json<Paired>> {
+    Ok(Json(
+        service::pair(&db, &body.code, &body.serial, &body.token_sha256).await?,
+    ))
 }
 
 #[derive(Serialize)]
@@ -89,14 +93,14 @@ struct Me {
     paired: bool,
 }
 
-/// For the controller to check its token: paired, still waiting for approval
-/// (which keeps its request alive), or unknown (401): it starts over.
+/// For the controller to check its token: paired, or unknown (401), when it
+/// was unpaired and has to pair again.
 async fn me(State(db): State<PgPool>, headers: HeaderMap) -> ApiResult<Json<Me>> {
     let hash = super::token_hash(&headers).ok_or(ApiError::Unauthorized)?;
-    match service::check(&db, &hash).await? {
-        Check::Paired => Ok(Json(Me { paired: true })),
-        Check::Waiting => Ok(Json(Me { paired: false })),
-        Check::Unknown => Err(ApiError::Unauthorized),
+    if service::paired(&db, &hash).await? {
+        Ok(Json(Me { paired: true }))
+    } else {
+        Err(ApiError::Unauthorized)
     }
 }
 
