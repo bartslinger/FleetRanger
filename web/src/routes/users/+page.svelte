@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import Edit from '@carbon/icons/es/edit/16.js';
 	import { ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS, roleList } from '#lib/roles.js';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -26,12 +27,19 @@
 		return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
 	}
 
-	// The status column only while archived users are shown.
+	// As a group's members (the organisation is the top group, user's
+	// decision): name, roles, then the rest; the status column only while
+	// archived users are shown.
 	const columns: TableColumn<Row>[] = $derived([
 		{ key: 'name', header: 'Name' },
-		{ key: 'email', header: 'Login' },
-		{ key: 'roles', header: 'Roles', wrap: true, format: (user) => roleList(user.roles) || null },
+		{
+			key: 'roles',
+			header: 'Roles',
+			wrap: true,
+			format: (user) => roleList(user.roles) || null
+		},
 		{ key: 'groups', header: 'Groups', wrap: true, format: groupNames },
+		{ key: 'email', header: 'Login', wideOnly: true },
 		...(data.archived
 			? [
 					{
@@ -48,6 +56,19 @@
 		label: ROLE_LABELS[role],
 		helper: ROLE_HELP[role]
 	}));
+
+	// The last active admin keeps Admin, as on the user's page.
+	const admins = $derived(
+		data.users.filter((user) => user.archived_at === null && user.roles.includes('admin'))
+	);
+	const lastAdmin = (user: Row) => admins.length === 1 && admins[0].id === user.id;
+	const rolesOf = (user: Row) =>
+		roleOptions.map((option) =>
+			option.value === 'admin' && lastAdmin(user)
+				? { ...option, helper: 'The only admin keeps this role.', disabled: true }
+				: option
+		);
+	const rolesMessage = $derived(form && 'rolesMessage' in form ? form.rolesMessage : undefined);
 
 	function showArchived(show: boolean) {
 		goto(resolve(show ? '/users?archived' : '/users'), {
@@ -114,8 +135,33 @@
 						name="role"
 						options={roleOptions}
 						value={[]}
-						helper="None for someone who only has roles in groups. Add them to groups on a group’s page."
+						helper="None for someone who only has roles in groups. Add them to groups on their page."
 					/>
+				</Modal>
+			{/snippet}
+			{#snippet rowAction(user)}
+				<!-- As a group's members' Edit roles; archiving stays on the user's page. -->
+				<Modal
+					title="Edit roles"
+					triggerIcon={Edit}
+					triggerSize="md"
+					triggerLabel="Edit roles of {user.name}"
+					label="{user.name} in the organisation"
+					submitLabel="Save"
+					action="?/roles"
+					error={rolesMessage}
+					onsuccess={() => toast(`Roles of ${user.name} saved.`)}
+				>
+					<input type="hidden" name="user_id" value={user.id} />
+					<CheckboxGroup
+						legend="Roles"
+						name="role"
+						options={rolesOf(user)}
+						value={user.roles}
+						helper="None for someone who only has roles in groups."
+					/>
+					<!-- A disabled checkbox isn't posted; Admin stays. -->
+					{#if lastAdmin(user)}<input type="hidden" name="role" value="admin" />{/if}
 				</Modal>
 			{/snippet}
 		</DataTable>
