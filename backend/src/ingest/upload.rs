@@ -18,7 +18,8 @@ use crate::{
 /// Who was chosen on the controller before the log was written.
 pub struct Chosen {
     pub pilot_id: Option<Uuid>,
-    /// The team the pilot was chosen with.
+    /// The group chosen with the pilot (still called a team on the
+    /// controller).
     pub team_id: Option<Uuid>,
 }
 

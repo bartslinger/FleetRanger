@@ -6,7 +6,10 @@ use sqlx::types::Uuid;
 use sqlx::{PgConnection, PgPool};
 
 use super::flight::{BatteryUse, Flight};
-use crate::areas;
+use crate::{
+    areas,
+    policy::{self, Permission},
+};
 
 pub struct PendingLog {
     pub id: Uuid,
@@ -74,22 +77,23 @@ pub async fn stored_contents(db: &PgPool, sha256s: &[Vec<u8>]) -> sqlx::Result<H
     Ok(stored.into_iter().collect())
 }
 
-/// Registers an uploaded log at its path, with the pilot chosen on the
-/// controller (ignored if there's no such user). A log already at that path is
-/// a previous version: it's replaced and processed again.
+/// Registers an uploaded log at its path, with the pilot and group chosen on
+/// the controller (each ignored if there's no such user or group; whether
+/// they count is decided when the log is processed). A log already at that
+/// path is a previous version: it's replaced and processed again.
 pub async fn save_upload(
     db: &PgPool,
     sha256: &[u8],
     path: &str,
     size_bytes: i64,
     pilot_id: Option<Uuid>,
-    team_id: Option<Uuid>,
+    group_id: Option<Uuid>,
 ) -> sqlx::Result<Stored> {
-    // The team only with a pilot who is in it.
+    // A group's id is its team's, which the column still refers to.
     let replaced = sqlx::query_scalar!(
         r#"insert into raw_logs (sha256, path, size_bytes, pilot_id, team_id)
            values ($1, $2, $3, (select id from users where id = $4),
-                   (select team_id from team_members where user_id = $4 and team_id = $5))
+                   (select id from groups where id = $5))
            on conflict (path) do update set
                sha256 = excluded.sha256,
                size_bytes = excluded.size_bytes,
@@ -106,7 +110,7 @@ pub async fn save_upload(
         path,
         size_bytes,
         pilot_id,
-        team_id,
+        group_id,
     )
     .fetch_one(db)
     .await?;
@@ -137,10 +141,10 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
 /// Saves the flight found in a raw log, or removes an earlier one if the log turned
 /// out to have none, and marks the log done. Unknown drone and controller serials
 /// are registered. A new flight gets the pilot chosen on the controller, if they
-/// are still active and in a team, and that pilot's team; without one, its
-/// controller's team unless that team is archived. Re-processing updates the
-/// flight in place, so its id, team and pilot stay the same. Returns whether
-/// the flight is new.
+/// are still active and fly somewhere, and the group chosen with them if they
+/// fly for it; any other flight goes to the organisation's queue.
+/// Re-processing updates the flight in place, so its id, group and pilot stay
+/// the same. Returns whether the flight is new.
 pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<bool> {
     let mut tx = db.begin().await?;
     let new = match flight {
@@ -163,36 +167,35 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 .await?;
             }
             let saved = sqlx::query!(
-                // The flight's team (user's decisions, 2026-10-19): the one chosen
-                // with the pilot on the controller; else the pilot's, if they're
-                // in one team; else the controller's; else the drone's.
-                "with pilot_teams as (
-                     select u.id, m.team_id from raw_logs l
+                // The flight's group is only ever the one chosen with the pilot on
+                // the controller, where the pilot holds flights.fly_for (on the
+                // group or the organisation); the controller's and drone's groups
+                // play no part (user's decisions, 2026-10-23).
+                "with pilot as (
+                     select u.id from raw_logs l
                      join users u on u.id = l.pilot_id and u.archived_at is null
-                     join team_members m on m.user_id = u.id
-                     join teams t on t.id = m.team_id and t.archived_at is null
                      where l.id = $1
+                       and (exists (select 1 from group_members m
+                                    where m.user_id = u.id and m.role = any($10))
+                            or exists (select 1 from organisation_roles r
+                                       where r.user_id = u.id and r.role = any($10)))
                  ),
                  chosen as (
-                     select coalesce((select p.team_id from pilot_teams p
-                                      join raw_logs l on l.team_id = p.team_id
-                                      where l.id = $1),
-                                     (select (array_agg(team_id))[1] from pilot_teams
-                                      having count(*) = 1),
-                                     (select r.team_id from remote_controllers r
-                                      join teams t on t.id = r.team_id
-                                      where r.serial = $7 and t.archived_at is null),
-                                     (select a.team_id from aircraft a
-                                      join teams t on t.id = a.team_id
-                                      where a.serial = $6 and t.archived_at is null)) as team_id
+                     select l.team_id as group_id from raw_logs l, pilot p
+                     where l.id = $1
+                       and (exists (select 1 from group_members m
+                                    where m.user_id = p.id and m.group_id = l.team_id
+                                      and m.role = any($10))
+                            or exists (select 1 from organisation_roles r
+                                       where r.user_id = p.id and r.role = any($10)))
                  )
-                 -- The team's group has its id; package 4 chooses the group itself.
+                 -- The group's team has its id, until teams are dropped.
                  insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
                                       aircraft_serial, rc_serial, track, metrics,
                                       pilot_id, team_id, group_id)
                  values ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-                         (select distinct id from pilot_teams),
-                         (select team_id from chosen), (select team_id from chosen))
+                         (select id from pilot),
+                         (select group_id from chosen), (select group_id from chosen))
                  on conflict (raw_log_id) do update set
                      takeoff_at = excluded.takeoff_at,
                      landed_at = excluded.landed_at,
@@ -213,6 +216,7 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 flight.rc_serial,
                 flight.track,
                 serde_json::to_value(&flight.metrics)?,
+                &policy::roles_granting(Permission::FlightsFlyFor),
             )
             .fetch_one(&mut *tx)
             .await?;
@@ -414,16 +418,16 @@ mod tests {
         }
     }
 
-    async fn pilot_and_team(db: &PgPool, raw_log: Uuid) -> (Option<Uuid>, Option<Uuid>) {
-        sqlx::query_as("select pilot_id, team_id from flights where raw_log_id = $1")
+    async fn pilot_and_group(db: &PgPool, raw_log: Uuid) -> (Option<Uuid>, Option<Uuid>) {
+        sqlx::query_as("select pilot_id, group_id from flights where raw_log_id = $1")
             .bind(raw_log)
             .fetch_one(db)
             .await
             .unwrap()
     }
 
-    /// An upload's flight gets the pilot chosen on the controller, with the
-    /// pilot's team; a new version of the log replaces it and keeps the flight.
+    /// An upload's flight gets the pilot chosen on the controller; a new
+    /// version of the log replaces it and keeps the flight.
     #[sqlx::test]
     async fn uploads_bring_their_pilot_and_replace_earlier_versions(db: PgPool) {
         let team = crate::testing::team(&db, "North").await;
@@ -434,15 +438,18 @@ mod tests {
         crate::testing::join(&db, pilot, team).await;
         let path = "raw/TESTRC0003/FlightRecord/DJIFlightRecord_test.txt";
 
-        let first = save_upload(&db, &[1; 32], path, 10, Some(pilot), None)
+        let first = save_upload(&db, &[1; 32], path, 10, Some(pilot), Some(team))
             .await
             .unwrap();
         assert_eq!(first, Stored::Added);
         let log = next_pending(&db).await.unwrap().unwrap();
         assert!(save_result(&db, log.id, Some(&flight())).await.unwrap());
-        assert_eq!(pilot_and_team(&db, log.id).await, (Some(pilot), Some(team)));
+        assert_eq!(
+            pilot_and_group(&db, log.id).await,
+            (Some(pilot), Some(team))
+        );
 
-        let second = save_upload(&db, &[2; 32], path, 20, Some(pilot), None)
+        let second = save_upload(&db, &[2; 32], path, 20, Some(pilot), Some(team))
             .await
             .unwrap();
         assert_eq!(second, Stored::Replaced);
@@ -464,11 +471,11 @@ mod tests {
         );
     }
 
-    /// A pilot in two teams: the flight belongs to the team chosen with them on
-    /// the controller; without one, or with a team they're not in, to the
-    /// controller's team.
+    /// A pilot in two groups: the flight belongs to the group chosen with them
+    /// on the controller; without one, or with a group they don't fly for, it
+    /// goes to the queue, whatever the controller's group.
     #[sqlx::test]
-    async fn the_flights_team_is_the_one_chosen_on_the_controller(db: PgPool) {
+    async fn the_flights_group_is_only_the_one_chosen_on_the_controller(db: PgPool) {
         use crate::testing::team;
         let (north, south, base, other) = (
             team(&db, "North").await,
@@ -483,11 +490,14 @@ mod tests {
         for team in [north, south] {
             crate::testing::join(&db, pilot, team).await;
         }
-        sqlx::query("insert into remote_controllers (serial, team_id) values ('TESTRC0003', $1)")
-            .bind(base)
-            .execute(&db)
-            .await
-            .unwrap();
+        sqlx::query(
+            "insert into remote_controllers (serial, team_id, group_id)
+             values ('TESTRC0003', $1, $1)",
+        )
+        .bind(base)
+        .execute(&db)
+        .await
+        .unwrap();
 
         let mut processed = Vec::new();
         for (n, chosen) in [Some(south), None, Some(other)].into_iter().enumerate() {
@@ -498,14 +508,14 @@ mod tests {
                 .unwrap();
             let log = next_pending(&db).await.unwrap().unwrap();
             save_result(&db, log.id, Some(&flight())).await.unwrap();
-            processed.push(pilot_and_team(&db, log.id).await);
+            processed.push(pilot_and_group(&db, log.id).await);
         }
         assert_eq!(
             processed,
             [
                 (Some(pilot), Some(south)),
-                (Some(pilot), Some(base)),
-                (Some(pilot), Some(base))
+                (Some(pilot), None),
+                (Some(pilot), None)
             ]
         );
     }
