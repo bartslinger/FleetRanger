@@ -186,7 +186,7 @@ fun PilotScreen(
                 }
                 Step.Groups -> {
                     val pilot = stepPilot!!
-                    Heading("Which group is this flight for?", backButton)
+                    Heading("Which group are you flying for?", backButton)
                     GroupList(
                         list,
                         list.groupsFor(pilot),
