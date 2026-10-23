@@ -263,8 +263,11 @@ export interface Equipment {
 	flights: number;
 	air_time_s: number;
 	last_flight_at: string | null;
-	/** Who flew its last flight; null without flights or a pilot. */
+	/** Who flew its last flight; null without flights or a pilot, or when the
+	 * user doesn't see that flight. */
 	last_pilot_name: string | null;
+	/** Its last flight has a pilot, but the user doesn't see that flight. */
+	last_pilot_hidden: boolean;
 	/** Whether a controller is paired with the install; null for drones. */
 	paired: boolean | null;
 	/** When a controller last synced, also without logs; null for drones and never. */
