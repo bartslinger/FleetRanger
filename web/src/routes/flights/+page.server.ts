@@ -59,6 +59,15 @@ async function flightIds(
 	return { ids };
 }
 
+/** The group a new session gets, if the form chose one: an id, or
+ * "organisation" for none. Without it, the backend gives the flights'
+ * group when they share one. */
+function sessionGroup(form: FormData): { group_id?: string | null } {
+	const group = form.get('group_id');
+	if (group === null || group === '') return {};
+	return { group_id: group === 'organisation' ? null : String(group) };
+}
+
 export const actions = {
 	setPilot: async ({ fetch, request, url }) => {
 		const form = await request.formData();
@@ -85,7 +94,7 @@ export const actions = {
 		const form = await request.formData();
 		const flights = await flightIds(fetch, url, form);
 		if ('message' in flights) return fail(409, { newSessionMessage: flights.message });
-		const body = { flight_ids: flights.ids };
+		const body = { flight_ids: flights.ids, ...sessionGroup(form) };
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions', body);
 		if (!result.ok) return fail(result.status, { newSessionMessage: result.message });
 		return { session: result.data.id };
@@ -103,7 +112,8 @@ export const actions = {
 		const form = await request.formData();
 		const flights = await flightIds(fetch, url, form);
 		if ('message' in flights) return fail(409, { archiveMessage: flights.message });
-		const body = { flight_ids: flights.ids };
+		// With both rights, flights in a session leave it in the same step.
+		const body = { flight_ids: flights.ids, leave_sessions: form.get('leave_sessions') === 'true' };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/archive', body);
 		if (!result.ok) return fail(result.status, { archiveMessage: result.message });
 		return { changed: result.data.changed };

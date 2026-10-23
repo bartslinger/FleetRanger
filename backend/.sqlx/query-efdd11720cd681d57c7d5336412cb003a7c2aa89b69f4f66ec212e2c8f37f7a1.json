@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                group_id,\n                (select g.name from groups g where g.id = flights.group_id) as \"group_name?\",\n                track, metrics,\n                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_id?\",\n                (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_group_id?\",\n                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_id?\",\n                (select r.group_id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_group_id?\",\n                (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as \"battery_id?\",\n                (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0) as \"battery_name?\",\n                archived_at,\n                (select coalesce(jsonb_agg(jsonb_build_object(\n                            'id', a.id, 'name', a.name,\n                            'air_time_s', fa.air_time_s, 'distance_m', fa.distance_m)\n                            order by fa.air_time_s desc, lower(a.name), a.id), '[]')\n                 from flight_areas fa join areas a on a.id = fa.area_id\n                 where fa.flight_id = flights.id) as \"areas!\"\n         from flights\n         where id = $1\n           and ($2\n                or pilot_id = $3\n                or group_id = any($4))",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                group_id,\n                (select g.name from groups g where g.id = flights.group_id) as \"group_name?\",\n                session_id,\n                track, metrics,\n                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_id?\",\n                (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_group_id?\",\n                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_id?\",\n                (select r.group_id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_group_id?\",\n                (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as \"battery_id?\",\n                (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0) as \"battery_name?\",\n                archived_at,\n                (select coalesce(jsonb_agg(jsonb_build_object(\n                            'id', a.id, 'name', a.name,\n                            'air_time_s', fa.air_time_s, 'distance_m', fa.distance_m)\n                            order by fa.air_time_s desc, lower(a.name), a.id), '[]')\n                 from flight_areas fa join areas a on a.id = fa.area_id\n                 where fa.flight_id = flights.id) as \"areas!\"\n         from flights\n         where id = any($1)\n           and ($2\n                or pilot_id = $3\n                or group_id = any($4))\n         order by takeoff_at, id",
   "describe": {
     "columns": [
       {
@@ -128,6 +128,17 @@
       },
       {
         "ordinal": 13,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
         "name": "track",
         "type_info": "Jsonb",
         "origin": {
@@ -138,7 +149,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "metrics",
         "type_info": "Jsonb",
         "origin": {
@@ -149,43 +160,43 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "aircraft_id?",
         "type_info": "Uuid",
         "origin": "Expression"
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "aircraft_group_id?",
         "type_info": "Uuid",
         "origin": "Expression"
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "rc_id?",
         "type_info": "Uuid",
         "origin": "Expression"
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "rc_group_id?",
         "type_info": "Uuid",
         "origin": "Expression"
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "battery_id?",
         "type_info": "Uuid",
         "origin": "Expression"
       },
       {
-        "ordinal": 20,
+        "ordinal": 21,
         "name": "battery_name?",
         "type_info": "Text",
         "origin": "Expression"
       },
       {
-        "ordinal": 21,
+        "ordinal": 22,
         "name": "archived_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -196,7 +207,7 @@
         }
       },
       {
-        "ordinal": 22,
+        "ordinal": 23,
         "name": "areas!",
         "type_info": "Jsonb",
         "origin": "Expression"
@@ -204,7 +215,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
+        "UuidArray",
         "Bool",
         "Uuid",
         "UuidArray"
@@ -224,6 +235,7 @@
       null,
       true,
       null,
+      true,
       false,
       false,
       null,
@@ -236,5 +248,5 @@
       null
     ]
   },
-  "hash": "926e5545be42d4321fdb07453196ec3696ea42474750f90b891017ffdb581533"
+  "hash": "efdd11720cd681d57c7d5336412cb003a7c2aa89b69f4f66ec212e2c8f37f7a1"
 }

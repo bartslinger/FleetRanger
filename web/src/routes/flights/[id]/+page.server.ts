@@ -40,8 +40,10 @@ export const actions = {
 		return { groupName: flight.group_name };
 	},
 	/** Archives the flight, as the logbook's batch action does. */
-	archive: async ({ fetch, params }) => {
-		const body = { flight_ids: [params.id] };
+	archive: async ({ fetch, params, request }) => {
+		const form = await request.formData();
+		// With both rights, a flight in a session leaves it in the same step.
+		const body = { flight_ids: [params.id], leave_sessions: form.get('leave_sessions') === 'true' };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/archive', body);
 		if (!result.ok) return fail(result.status, { archiveMessage: result.message });
 		return { archived: true };
