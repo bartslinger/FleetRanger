@@ -102,6 +102,19 @@ pub async fn use_session(
     .await
 }
 
+/// The user's roles: per group, and with no group on the whole organisation.
+pub async fn roles(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<(Option<Uuid>, String)>> {
+    let rows = sqlx::query!(
+        r#"select group_id as "group_id?", role as "role!" from group_members where user_id = $1
+           union all
+           select null, role from organisation_roles where user_id = $1"#,
+        user_id,
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().map(|row| (row.group_id, row.role)).collect())
+}
+
 pub async fn revoke_session(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<()> {
     sqlx::query!(
         "update login_sessions set revoked_at = now()

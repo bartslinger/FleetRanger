@@ -85,6 +85,7 @@ pub async fn bearer(
     Ok(Bearer::Valid(Actor {
         user_id: access.user_id,
         role,
+        grants: crate::auth::grants(db, access.user_id).await?,
         // The audit log will name the connection here rather than a login session.
         login_session_id: access.grant_id,
         ip: crate::auth::client_ip(&parts.headers, peer),

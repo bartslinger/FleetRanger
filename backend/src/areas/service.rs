@@ -125,13 +125,14 @@ pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::policy::Role;
+    use crate::policy::{Grants, Role};
     use serde_json::json;
 
     fn admin() -> Actor {
         Actor {
             user_id: Uuid::nil(),
             role: Role::Admin,
+            grants: Grants::from_stored([(None, "admin".to_owned())]).unwrap(),
             login_session_id: Uuid::nil(),
             ip: [127, 0, 0, 1].into(),
             email: String::new(),
