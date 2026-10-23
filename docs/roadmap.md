@@ -82,9 +82,8 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - [x] 4. Flights and sessions: pilot and group independent, the queue, a session's owner and the checks on every session that changes
 - [x] 5. Equipment: seen through its flights, figures over all flights, pairing into a group, holders out
 - [x] 6. Web admin pages: groups with their members and roles, organisation-wide roles (Carbon expert before and after)
-- [ ] 7. Web app elsewhere: groups instead of teams, pilot lists, a session's owner, moving flights and sessions
+- [ ] 7. Web app elsewhere, together with MCP (user's choice, 2026-10-23): groups instead of teams, pilot lists, a session's owner, moving flights and sessions; MCP with the user's own access, read only
 - [ ] 8. Controller app: the group after the pilot, with "Other group"; older apps' flights go to the queue
-- [ ] 9. MCP: the user's own access, read only
 - [ ] 10. Final migration and release: teams and holders dropped; server and app released together. Check first that the server still has no all-flights user in a team: the fill would give them Editor there.
 
 ## Public website (fleetranger.org)
