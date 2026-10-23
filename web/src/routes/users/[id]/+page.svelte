@@ -56,8 +56,7 @@
 	);
 
 	// The organisation first, as the top group (user's decision); everyone is
-	// in it, so it has no Remove. "None" for no roles there (carbon-expert's
-	// suggestion: a blank cell doesn't read as intended).
+	// in it, so it has no Remove. No roles there: the table's "—" for empty cells.
 	interface Membership {
 		id: string;
 		name: string;
@@ -74,7 +73,7 @@
 			key: 'roles',
 			header: 'Roles',
 			wrap: true,
-			format: (group) => (group.roles.length > 0 ? roleList(group.roles) : 'None')
+			format: (group) => roleList(group.roles) || null
 		}
 	];
 	const organisationRolesMessage = $derived(
