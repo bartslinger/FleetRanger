@@ -54,7 +54,7 @@
 			format: (flight) => distance(flight.distance_m)
 		},
 		{ key: 'pilot_name', header: 'Pilot' },
-		{ key: 'team_name', header: 'Team' },
+		{ key: 'group_name', header: 'Group' },
 		{
 			key: 'aircraft_serial',
 			header: 'Drone',
@@ -134,19 +134,19 @@
 	const canChange = $derived(data.choices.admin || data.choices.own_team_ids.length > 0);
 	const changeable = (flight: Row) =>
 		data.choices.admin ||
-		(flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id));
+		(flight.group_id !== null && data.choices.own_team_ids.includes(flight.group_id));
 
 	const pilotChoices = $derived(pilotOptions(data.choices));
-	const teamOptions = $derived([
-		...data.choices.teams.map((team) => ({ value: team.id, label: team.name })),
-		{ value: '', label: 'No team (organisation queue)' }
+	const groupOptions = $derived([
+		...data.choices.groups.map((group) => ({ value: group.id, label: group.name })),
+		{ value: '', label: 'No group (organisation queue)' }
 	]);
 
 	const flights = (count: number) => `${count} ${count === 1 ? 'flight' : 'flights'}`;
 
 	// Dialogs opened from the batch bar's overflow menu, which gets focus back.
 	let pilotOpen = $state(false);
-	let teamOpen = $state(false);
+	let groupOpen = $state(false);
 	let addOpen = $state(false);
 	let removeOpen = $state(false);
 	let archiveOpen = $state(false);
@@ -208,7 +208,7 @@
 				filters={data.state}
 				none={{ ...data.state, ...none }}
 				devices={data.devices}
-				admin={data.choices.admin}
+				groupFilter={data.choices.admin}
 				{filtering}
 				ownCount={Number(data.state.withoutSession) + Number(data.state.archived)}
 				onchange={filter}
@@ -338,7 +338,7 @@
 								{ label: 'Remove from session', onselect: () => (removeOpen = true) },
 								{ label: 'Set pilot', onselect: () => (pilotOpen = true) },
 								...(data.choices.admin
-									? [{ label: 'Move to team', onselect: () => (teamOpen = true) }]
+									? [{ label: 'Move to group', onselect: () => (groupOpen = true) }]
 									: []),
 								{ label: 'Archive', onselect: () => (archiveOpen = true) }
 							]}
@@ -397,26 +397,22 @@
 						>
 							{@render chosenFields(ids)}
 							<Select label="Pilot" name="pilot" options={pilotChoices} />
-							<p class="help">
-								{data.choices.admin
-									? 'The flights move to the pilot’s team. With Unknown, they keep their team.'
-									: 'Choose Unknown for a flight that wasn’t flown by someone in your team. It stays in your team.'}
-							</p>
+							<p class="help">The flights keep their group.</p>
 						</Modal>
 						{#if data.choices.admin}
 							<Modal
-								title="Move to team"
+								title="Move to group"
 								submitLabel="Move"
-								action="?/setTeam"
-								error={form && 'teamMessage' in form ? form.teamMessage : undefined}
+								action="?/setGroup"
+								error={form && 'groupMessage' in form ? form.groupMessage : undefined}
 								onsuccess={() => done(`${flights(count(ids))} changed.`)}
 								trigger={false}
-								bind:open={teamOpen}
+								bind:open={groupOpen}
 								returnFocus={() => overflow ?? undefined}
 							>
 								{@render chosenFields(ids)}
-								<Select label="Team" name="team_id" options={teamOptions} />
-								<p class="help">A pilot who isn’t in the new team is cleared.</p>
+								<Select label="Group" name="group_id" options={groupOptions} />
+								<p class="help">The flights keep their pilot and session.</p>
 							</Modal>
 						{/if}
 					{/if}

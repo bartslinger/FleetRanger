@@ -30,13 +30,9 @@
 	// Save and Cancel go back to where the user came from, e.g. a flight's page.
 	const previous = back(() => list);
 
-	// Active teams, plus the current one if archived since.
-	const teamOptions = $derived([
-		{ value: '', label: 'None' },
-		...data.teams.map((team) => ({ value: team.id, label: team.name })),
-		...(item.team_id && !data.teams.some((team) => team.id === item.team_id)
-			? [{ value: item.team_id, label: `${item.team_name} (archived)` }]
-			: [])
+	const groupOptions = $derived([
+		{ value: '', label: 'None (organisation)' },
+		...data.groups.map((group) => ({ value: group.id, label: group.name }))
 	]);
 	const flights = $derived(
 		`${resolve('/flights')}${filtered(data.kind === 'drones' ? { drone: item.serial } : { controller: item.serial })}`
@@ -124,8 +120,8 @@
 			<!-- Who can't change it sees it here. -->
 			{#if data.edit !== 'all'}
 				<div>
-					<dt>Team</dt>
-					<dd>{item.team_name ?? 'None'}</dd>
+					<dt>Group</dt>
+					<dd>{item.group_name ?? 'None (organisation)'}</dd>
 				</div>
 			{/if}
 		</dl>
@@ -157,10 +153,15 @@
 					helper="For example the number painted on it."
 				/>
 				{#if data.edit === 'all'}
-					<Select label="Team" name="team_id" options={teamOptions} value={item.team_id ?? ''} />
+					<Select
+						label="Group"
+						name="group_id"
+						options={groupOptions}
+						value={item.group_id ?? ''}
+					/>
 				{:else}
-					<!-- Unchanged: only admins move equipment between teams. -->
-					<input type="hidden" name="team_id" value={item.team_id ?? ''} />
+					<!-- Unchanged: moving needs equipment.move on both groups. -->
+					<input type="hidden" name="group_id" value={item.group_id ?? ''} />
 				{/if}
 				<div class="buttons">
 					<Button type="submit" disabled={busy} fill>Save</Button>

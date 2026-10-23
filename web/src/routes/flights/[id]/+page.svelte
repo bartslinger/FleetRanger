@@ -21,10 +21,10 @@
 	const flight = $derived(data.flight);
 	const archived = $derived(flight.archived_at !== null);
 
-	// Setting the pilot: admins on any flight, members on their team's.
+	// Setting the pilot: admins on any flight, members on their group's.
 	const canSetPilot = $derived(
 		data.choices.admin ||
-			(flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id))
+			(flight.group_id !== null && data.choices.own_team_ids.includes(flight.group_id))
 	);
 	const pilotOptions = $derived(pilotOptions_(data.choices));
 	// "That was me": an unknown pilot starts as the viewer, if they fly.
@@ -33,13 +33,13 @@
 		return pilotOptions.some((option) => option.value === user) ? user : '';
 	});
 
-	const teamOptions = $derived([
-		...data.choices.teams.map((team) => ({ value: team.id, label: team.name })),
-		{ value: '', label: 'No team (organisation queue)' }
+	const groupOptions = $derived([
+		...data.choices.groups.map((group) => ({ value: group.id, label: group.name })),
+		{ value: '', label: 'No group (organisation queue)' }
 	]);
-	function teamSet(result: Record<string, unknown> | undefined) {
-		const team = (result?.teamName as string | null) ?? 'the organisation queue';
-		toast(`Flight moved to ${team}.`);
+	function groupSet(result: Record<string, unknown> | undefined) {
+		const group = (result?.groupName as string | null) ?? 'the organisation queue';
+		toast(`Flight moved to ${group}.`);
 	}
 
 	function pilotSet(result: Record<string, unknown> | undefined) {
@@ -57,7 +57,7 @@
 	const groups = $derived([
 		[
 			{ label: 'Pilot', value: flight.pilot_name ?? 'Unknown' },
-			{ label: 'Team', value: flight.team_name ?? 'None (organisation queue)' }
+			{ label: 'Group', value: flight.group_name ?? 'None (organisation queue)' }
 		],
 		[
 			{ label: 'Takeoff', value: time(flight.takeoff_at) },
@@ -164,7 +164,7 @@
 						<dd
 							class:numeric={fact.numeric}
 							class:editable={(fact.label === 'Pilot' && canSetPilot) ||
-								(fact.label === 'Team' && data.choices.admin)}
+								(fact.label === 'Group' && data.choices.admin)}
 						>
 							<!-- The drone's and controller's pages, for who may see them. -->
 							{#if 'href' in fact && fact.href}
@@ -182,26 +182,26 @@
 									onsuccess={pilotSet}
 								>
 									<Select label="Pilot" name="pilot" options={pilotOptions} value={pilotChoice} />
-									<p class="help">The flight keeps its team.</p>
+									<p class="help">The flight keeps its group.</p>
 								</Modal>
 							{/if}
-							<!-- Admins only, as Move to team in Flights. -->
-							{#if fact.label === 'Team' && data.choices.admin}
+							<!-- As Move to group in Flights. -->
+							{#if fact.label === 'Group' && data.choices.admin}
 								<Modal
-									title="Move to team"
+									title="Move to group"
 									triggerIcon={Edit}
 									submitLabel="Move"
-									action="?/setTeam"
-									error={form?.teamMessage}
-									onsuccess={teamSet}
+									action="?/setGroup"
+									error={form?.groupMessage}
+									onsuccess={groupSet}
 								>
 									<Select
-										label="Team"
-										name="team_id"
-										options={teamOptions}
-										value={flight.team_id ?? ''}
+										label="Group"
+										name="group_id"
+										options={groupOptions}
+										value={flight.group_id ?? ''}
 									/>
-									<p class="help">A pilot who isn’t in the new team is cleared.</p>
+									<p class="help">The flight keeps its pilot and session.</p>
 								</Modal>
 							{/if}
 						</dd>

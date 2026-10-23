@@ -168,8 +168,8 @@ mod tests {
         sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
     }
 
-    /// A flight of the team with the battery, taking off `hours` ago.
-    async fn flight(db: &PgPool, team: Uuid, battery: Uuid, hours: i32, cycles: i32) -> Uuid {
+    /// A flight of the group with the battery, taking off `hours` ago.
+    async fn flight(db: &PgPool, group: Uuid, battery: Uuid, hours: i32, cycles: i32) -> Uuid {
         let raw_log = id(
             db,
             "insert into raw_logs (sha256, path, size_bytes)
@@ -185,7 +185,7 @@ mod tests {
         )
         .bind(raw_log)
         .bind(hours)
-        .bind(team)
+        .bind(group)
         .fetch_one(db)
         .await
         .unwrap();
@@ -202,10 +202,10 @@ mod tests {
         flight
     }
 
-    /// A member sees a battery through their team's flights only, with only
+    /// A member sees a battery through their group's flights only, with only
     /// those flights, but its figures over all its flights.
     #[sqlx::test]
-    async fn members_see_batteries_through_their_teams_flights(db: PgPool) {
+    async fn members_see_batteries_through_their_groups_flights(db: PgPool) {
         let north = crate::testing::group(&db, "North").await;
         let south = crate::testing::group(&db, "South").await;
         let me = id(&db, "insert into users (name) values ('A') returning id").await;

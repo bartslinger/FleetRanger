@@ -47,7 +47,7 @@ export function parse(params: URLSearchParams, timeZone: string): SessionListSta
 		pilots: list(params.get('pilot')),
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
-		teams: list(params.get('team')),
+		groups: list(params.get('group')),
 		areas: list(params.get('area')),
 		from: isDay(from) ? from : null,
 		to: isDay(from) && isDay(to) && to > from ? to : null
@@ -64,7 +64,7 @@ export function query(state: SessionListState, session?: string): string {
 	if (state.pilots.length > 0) params.set('pilot', state.pilots.join(','));
 	if (state.drones.length > 0) params.set('drone', state.drones.join(','));
 	if (state.controllers.length > 0) params.set('controller', state.controllers.join(','));
-	if (state.teams.length > 0) params.set('team', state.teams.join(','));
+	if (state.groups.length > 0) params.set('group', state.groups.join(','));
 	if (state.areas.length > 0) params.set('area', state.areas.join(','));
 	if (state.page > 1) params.set('page', String(state.page));
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
@@ -86,7 +86,7 @@ export function apiFilters(state: Filters, timeZone: string): URLSearchParams {
 	if (state.pilots.length > 0) api.set('pilot', state.pilots.join(','));
 	if (state.drones.length > 0) api.set('aircraft', state.drones.join(','));
 	if (state.controllers.length > 0) api.set('controller', state.controllers.join(','));
-	if (state.teams.length > 0) api.set('team', state.teams.join(','));
+	if (state.groups.length > 0) api.set('group', state.groups.join(','));
 	if (state.areas.length > 0) api.set('area', state.areas.join(','));
 	if (state.from) {
 		api.set('from', startOfDay(state.from, timeZone).toISOString());

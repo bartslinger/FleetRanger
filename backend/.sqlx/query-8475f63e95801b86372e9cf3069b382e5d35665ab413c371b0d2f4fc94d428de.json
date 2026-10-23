@@ -1,0 +1,51 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select s.group_id as \"id?\", g.name as \"name?\"\n           from sessions s\n           left join groups g on g.id = s.group_id\n           where s.group_id = any(coalesce($3::uuid[], '{}'))\n              or ($4 and s.group_id is null)\n              or exists (\n                  select 1 from flights f\n                  where f.session_id = s.id\n                    and ($1 or f.pilot_id = $2 or f.group_id = any($12))\n                    and f.archived_at is null\n                    and ($5::text[] is null or f.aircraft_serial = any($5))\n                    and ($6::text[] is null or f.rc_serial = any($6))\n                    and ($7::timestamptz is null or f.takeoff_at >= $7)\n                    and ($8::timestamptz is null or f.takeoff_at < $8)\n                    and ($9::uuid[] is null or f.pilot_id = any($9)\n                         or ($10 and f.pilot_id is null))\n                    and ($11::uuid[] is null or exists (select 1 from flight_areas fa\n                                                        where fa.flight_id = f.id\n                                                          and fa.area_id = any($11))))\n           group by s.group_id, g.name\n           order by lower(g.name) nulls last",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "UuidArray",
+        "Bool",
+        "TextArray",
+        "TextArray",
+        "Timestamptz",
+        "Timestamptz",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "8475f63e95801b86372e9cf3069b382e5d35665ab413c371b0d2f4fc94d428de"
+}

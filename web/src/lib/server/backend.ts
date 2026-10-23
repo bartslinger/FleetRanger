@@ -20,8 +20,8 @@ export interface FlightSummary {
 	pilot_id: string | null;
 	pilot_name: string | null;
 	/** Null: in the organisation's queue. */
-	team_id: string | null;
-	team_name: string | null;
+	group_id: string | null;
+	group_name: string | null;
 	/** Set for an archived flight: left out everywhere but the archived filter. */
 	archived_at: string | null;
 }
@@ -59,12 +59,14 @@ export interface Device {
 	name: string | null;
 }
 
-/** `GET /api/flights/devices`: the equipment of the flights the user sees. */
+/** `GET /api/flights/devices`: the equipment, groups, pilots and areas of the
+ * flights the user sees. */
 export interface Devices {
 	aircraft: Device[];
 	controllers: Device[];
-	/** No id: the flights without a team (the organisation queue). */
-	teams: { id: string | null; name: string | null }[];
+	/** No id: the flights without a group (the organisation queue); with
+	 * `session=any`, the sessions' own groups, no id for the organisation. */
+	groups: { id: string | null; name: string | null }[];
 	/** No id: the flights without a pilot. */
 	pilots: { id: string | null; name: string | null }[];
 	areas: { id: string; name: string }[];
@@ -100,8 +102,8 @@ export interface FlightDetail {
 	pilot_id: string | null;
 	pilot_name: string | null;
 	/** Null: in the organisation's queue. */
-	team_id: string | null;
-	team_name: string | null;
+	group_id: string | null;
+	group_name: string | null;
 	track: Track;
 	metrics: {
 		max_altitude_m?: number;
@@ -131,8 +133,10 @@ export interface SessionSummary {
 	distance_m: number;
 	/** Names in alphabetical order. */
 	pilots: string[];
-	teams: string[];
-	team_ids: string[];
+	/** The session's own group, which decides who changes it; null for the
+	 * organisation. Its flights may be in other groups. */
+	group_id: string | null;
+	group_name: string | null;
 	/** Each visible flight's times and takeoff point, in takeoff order: the day strip. */
 	flight_times: DayStripFlight[];
 }
@@ -146,6 +150,9 @@ export interface SessionPage {
 /** A session with its visible flights in takeoff order, from `GET /api/sessions/{id}`. */
 export interface Session {
 	id: string;
+	/** Its own group; null for the organisation. */
+	group_id: string | null;
+	group_name: string | null;
 	flights: FlightDetail[];
 }
 
@@ -169,13 +176,21 @@ export interface Neighbours {
 
 /** What the logged-in account can change in the logbook, from `GET /api/flights/choices`. */
 export interface FlightChoices {
-	/** The teams whose flights a member can change. */
+	/** The groups whose flights a member can change. */
 	own_team_ids: string[];
-	/** Admins change any flight and move flights between teams. */
+	/** Admins change any flight and move flights between groups. */
 	admin: boolean;
-	/** Everyone who flies; asked with `?team=`, that team's own pilots first (`in_group`). */
-	pilots: { id: string; name: string; in_group: boolean }[];
-	teams: { id: string; name: string }[];
+	/** Everyone who flies, by name, with the groups they fly for as a member. */
+	pilots: Pilot[];
+	groups: { id: string; name: string }[];
+}
+
+/** Someone who can be a flight's pilot. */
+export interface Pilot {
+	id: string;
+	name: string;
+	/** The groups where they are a member with Pilot. */
+	group_ids: string[];
 }
 
 /** One page of `GET /api/flights`. */
@@ -279,8 +294,9 @@ export interface Equipment {
 	id: string;
 	serial: string;
 	name: string | null;
-	team_id: string | null;
-	team_name: string | null;
+	/** Null: directly in the organisation. */
+	group_id: string | null;
+	group_name: string | null;
 	/** Over all its flights, also those the user doesn't see. */
 	flights: number;
 	air_time_s: number;
@@ -309,8 +325,8 @@ export interface PairingCode {
 	id: string;
 	code: string;
 	created_by: string;
-	/** The team the controller joins; null for none. */
-	team: string | null;
+	/** The group the controller joins; null for the organisation. */
+	group: string | null;
 	created_at: string;
 	expires_at: string;
 }

@@ -90,7 +90,7 @@
 	]);
 
 	// Admin pages only for admins; the backend refuses everyone else anyway.
-	// Equipment for everyone: members see their team's.
+	// Equipment for everyone: members see their group's.
 	const nav: NavItem[] = $derived([
 		{ href: resolve('/sessions'), label: 'Sessions', icon: FlightRoster },
 		{ href: resolve('/flights'), label: 'Flights', icon: Notebook },

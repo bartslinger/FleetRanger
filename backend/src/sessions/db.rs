@@ -7,7 +7,10 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{LATE_UPLOAD_HOURS, SessionGap};
-use crate::{flights::db::Filter, policy::FlightScope};
+use crate::{
+    flights::db::{Filter, GroupOption},
+    policy::FlightScope,
+};
 
 // A session is visible when one of its flights is, and only the visible
 // flights count. The visibility condition is the one in the flight queries
@@ -24,9 +27,10 @@ pub struct SessionSummary {
     pub distance_m: f64,
     /// Names, in alphabetical order; empty if none.
     pub pilots: Vec<String>,
-    pub teams: Vec<String>,
-    /// So the web app offers merging only where the policy allows it.
-    pub team_ids: Vec<Uuid>,
+    /// The session's own group, which decides who changes it; None for the
+    /// organisation. Its flights may be in other groups.
+    pub group_id: Option<Uuid>,
+    pub group_name: Option<String>,
     /// Each visible flight's `takeoff_at`, `landed_at`, `air_time_s` and
     /// takeoff point (`from`, [lon, lat, alt]), in takeoff order: the web
     /// app's day strip, with day and night where the session was flown.
@@ -44,7 +48,9 @@ pub struct Window {
 }
 
 // The Sessions list's filters are the logbook's: a session passes when one of
-// its visible flights does. Its numbers stay those of all its visible flights.
+// its visible flights does, except that the group filter is on the session's
+// own group (user's decision, 2026-10-23). Its numbers stay those of all its
+// visible flights.
 
 /// One page of the sessions in the scope that pass the filter (and have a
 /// flight in the window, if given), newest first.
@@ -66,16 +72,17 @@ pub async fn list(
                 sum(f.air_time_s)::bigint as "air_time_s!",
                 sum(f.distance_m) as "distance_m!",
                 array_remove(array_agg(distinct u.name), null) as "pilots!",
-                array_remove(array_agg(distinct gr.name), null) as "teams!",
-                array_remove(array_agg(distinct f.group_id), null) as "team_ids!",
+                s.group_id,
+                gr.name as "group_name?",
                 jsonb_agg(jsonb_build_object('takeoff_at', f.takeoff_at, 'landed_at', f.landed_at,
                                              'air_time_s', f.air_time_s,
                                              'from', f.track->'coordinates'->0,
                                              'track', case when $16 then f.track->'coordinates' end)
                           order by f.takeoff_at) as "flight_times!"
          from flights f
+         join sessions s on s.id = f.session_id
          left join users u on u.id = f.pilot_id
-         left join groups gr on gr.id = f.group_id
+         left join groups gr on gr.id = s.group_id
          where f.session_id is not null
            and ($1
                 or f.pilot_id = $2
@@ -93,14 +100,16 @@ pub async fn list(
                  and ($8::text[] is null or g.rc_serial = any($8))
                  and ($9::timestamptz is null or g.takeoff_at >= $9)
                  and ($10::timestamptz is null or g.takeoff_at < $10)
-                 and ($11::uuid[] is null or g.group_id = any($11)
-                      or ($12 and g.group_id is null))
+                 and ($11::uuid[] is null
+                      or g.session_id in (select id from sessions
+                                          where group_id = any($11)
+                                             or ($12 and group_id is null)))
                  and ($13::uuid[] is null or g.pilot_id = any($13)
                       or ($14 and g.pilot_id is null))
                  and ($15::uuid[] is null or exists (select 1 from flight_areas fa
                                                      where fa.flight_id = g.id
                                                        and fa.area_id = any($15))))
-         group by f.session_id
+         group by f.session_id, s.group_id, gr.name
          order by min(f.takeoff_at) desc, f.session_id
          limit $3 offset $4"#,
         scope.all,
@@ -113,7 +122,7 @@ pub async fn list(
         filter.rc_serials.as_deref(),
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -151,8 +160,10 @@ pub async fn count(
                    and ($6::text[] is null or g.rc_serial = any($6))
                    and ($7::timestamptz is null or g.takeoff_at >= $7)
                    and ($8::timestamptz is null or g.takeoff_at < $8)
-                   and ($9::uuid[] is null or g.group_id = any($9)
-                        or ($10 and g.group_id is null))
+                   and ($9::uuid[] is null
+                        or g.session_id in (select id from sessions
+                                            where group_id = any($9)
+                                               or ($10 and group_id is null)))
                    and ($11::uuid[] is null or g.pilot_id = any($11)
                         or ($12 and g.pilot_id is null))
                    and ($13::uuid[] is null or exists (select 1 from flight_areas fa
@@ -166,7 +177,7 @@ pub async fn count(
         filter.rc_serials.as_deref(),
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -215,8 +226,10 @@ pub async fn neighbours(
                        and ($5::text[] is null or g.rc_serial = any($5))
                        and ($6::timestamptz is null or g.takeoff_at >= $6)
                        and ($7::timestamptz is null or g.takeoff_at < $7)
-                       and ($8::uuid[] is null or g.group_id = any($8)
-                            or ($9 and g.group_id is null))
+                       and ($8::uuid[] is null
+                            or g.session_id in (select id from sessions
+                                                where group_id = any($8)
+                                                   or ($9 and group_id is null)))
                        and ($10::uuid[] is null or g.pilot_id = any($10)
                             or ($11 and g.pilot_id is null))
                        and ($12::uuid[] is null or exists (select 1 from flight_areas fa
@@ -243,7 +256,7 @@ pub async fn neighbours(
         filter.rc_serials.as_deref(),
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -276,6 +289,74 @@ pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Opt
         .fetch_all(db)
         .await?;
     Ok((groups.len() == ids.len()).then_some(groups))
+}
+
+/// A session's own group, by id and name; None for the organisation.
+#[derive(Serialize)]
+pub struct OwnGroup {
+    pub group_id: Option<Uuid>,
+    pub group_name: Option<String>,
+}
+
+/// The group of a session, or None if it doesn't exist.
+pub async fn own_group(db: &PgPool, id: Uuid) -> sqlx::Result<Option<OwnGroup>> {
+    sqlx::query_as!(
+        OwnGroup,
+        r#"select s.group_id, g.name as "group_name?"
+           from sessions s left join groups g on g.id = s.group_id
+           where s.id = $1"#,
+        id
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// The sessions' groups to offer in the Sessions list's filter, as
+/// `flights::db::groups_in` offers the flights' groups: those of sessions
+/// with a visible flight passing the other filters, and the chosen ones.
+pub async fn groups_in(
+    db: &PgPool,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Vec<GroupOption>> {
+    sqlx::query_as!(
+        GroupOption,
+        r#"select s.group_id as "id?", g.name as "name?"
+           from sessions s
+           left join groups g on g.id = s.group_id
+           where s.group_id = any(coalesce($3::uuid[], '{}'))
+              or ($4 and s.group_id is null)
+              or exists (
+                  select 1 from flights f
+                  where f.session_id = s.id
+                    and ($1 or f.pilot_id = $2 or f.group_id = any($12))
+                    and f.archived_at is null
+                    and ($5::text[] is null or f.aircraft_serial = any($5))
+                    and ($6::text[] is null or f.rc_serial = any($6))
+                    and ($7::timestamptz is null or f.takeoff_at >= $7)
+                    and ($8::timestamptz is null or f.takeoff_at < $8)
+                    and ($9::uuid[] is null or f.pilot_id = any($9)
+                         or ($10 and f.pilot_id is null))
+                    and ($11::uuid[] is null or exists (select 1 from flight_areas fa
+                                                        where fa.flight_id = f.id
+                                                          and fa.area_id = any($11))))
+           group by s.group_id, g.name
+           order by lower(g.name) nulls last"#,
+        scope.all,
+        scope.user_id,
+        filter.group_ids.as_deref(),
+        filter.queue,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.from,
+        filter.to,
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
+        filter.area_ids.as_deref(),
+        &scope.group_ids,
+    )
+    .fetch_all(db)
+    .await
 }
 
 /// The groups of the sessions these flights are in, once each; flights
@@ -826,7 +907,7 @@ mod tests {
         );
     }
 
-    /// A session merged across teams shows each team only its own flights,
+    /// A session merged across groups shows each group only its own flights,
     /// in the list and the session's flights alike; outsiders see nothing.
     #[sqlx::test]
     async fn sessions_show_only_visible_flights(db: PgPool) {
@@ -836,14 +917,14 @@ mod tests {
         let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
         let outsider = insert_id(&db, "insert into users (name) values ('C') returning id").await;
         let session = insert_id(&db, "insert into sessions default values returning id").await;
-        for (pilot, team, takeoff, landed) in
+        for (pilot, group, takeoff, landed) in
             [(a, north, "08:00", "08:20"), (b, south, "08:30", "08:50")]
         {
-            crate::testing::join(&db, pilot, team).await;
+            crate::testing::join(&db, pilot, group).await;
             let flight = flight(&db, pilot, takeoff, landed).await;
             sqlx::query("update flights set group_id = $2, session_id = $3 where id = $1")
                 .bind(flight)
-                .bind(team)
+                .bind(group)
                 .bind(session)
                 .execute(&db)
                 .await

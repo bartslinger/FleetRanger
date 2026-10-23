@@ -22,14 +22,14 @@
 	const created = $derived(form && 'created' in form ? form.created : undefined);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
 	const revokeMessage = $derived(form && 'revokeMessage' in form ? form.revokeMessage : undefined);
-	const teamError = $derived(form && 'teamError' in form ? form.teamError : undefined);
+	const groupError = $derived(form && 'groupError' in form ? form.groupError : undefined);
 
 	// Where the controller can go. With one choice it is taken without
 	// asking; with several, nobody gets one by default.
 	const destinations = $derived([
-		...data.destinations.teams.map((team) => ({ value: team.id, label: team.name })),
+		...data.destinations.groups.map((group) => ({ value: group.id, label: group.name })),
 		...(data.destinations.organisation
-			? [{ value: 'organisation', label: 'No team (organisation)' }]
+			? [{ value: 'organisation', label: 'No group (organisation)' }]
 			: [])
 	]);
 
@@ -41,7 +41,7 @@
 	// and its time, so Revoke stays in view.
 	const columns: TableColumn<PairingCode>[] = $derived([
 		{ key: 'code', header: 'Code', identifier: true, format: (row) => shown(row.code) },
-		{ key: 'team', header: 'Team', wideOnly: true, format: (row) => row.team ?? 'No team' },
+		{ key: 'group', header: 'Group', wideOnly: true, format: (row) => row.group ?? 'No group' },
 		...(data.account?.role === 'admin'
 			? [
 					{
@@ -72,7 +72,7 @@
 		{#if destinations.length === 0}
 			<EmptyState
 				title="You can’t pair controllers yet"
-				body="Pairing needs the Pilot or Editor role in a team. Ask an admin for one."
+				body="Pairing needs the Pilot or Editor role in a group. Ask an admin for one."
 			/>
 		{:else}
 			<form
@@ -90,15 +90,15 @@
 				{#if destinations.length > 1}
 					<!-- A prompt rather than a default (Carbon's empty option). -->
 					<Select
-						label="Team"
-						name="team_id"
+						label="Group"
+						name="group_id"
 						options={destinations}
-						placeholder="Choose a team"
-						error={teamError}
-						helper="The controller joins this team."
+						placeholder="Choose a group"
+						error={groupError}
+						helper="The controller joins this group."
 					/>
 				{:else}
-					<input type="hidden" name="team_id" value={destinations[0].value} />
+					<input type="hidden" name="group_id" value={destinations[0].value} />
 				{/if}
 				<Select
 					label="Valid for"
@@ -120,9 +120,9 @@
 			<div class="created">
 				<InlineNotification kind="success" title="Code created">
 					<p>
-						{created.team
-							? `The controller joins ${created.team}.`
-							: 'The controller joins the organisation, in no team.'}
+						{created.group
+							? `The controller joins ${created.group}.`
+							: 'The controller joins the organisation, in no group.'}
 						Valid until {until(created.expires_at)}.
 					</p>
 				</InlineNotification>

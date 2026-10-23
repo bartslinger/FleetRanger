@@ -24,13 +24,9 @@ pub struct Equipment {
     pub id: Uuid,
     pub serial: String,
     pub name: Option<String>,
-    /// Its group, still called a team in the API until the web app moves
-    /// over (package 7).
-    pub team_id: Option<Uuid>,
-    /// Its group, which decides who changes it.
-    #[serde(skip)]
+    /// Its group, which decides who changes it; None for the organisation.
     pub group_id: Option<Uuid>,
-    pub team_name: Option<String>,
+    pub group_name: Option<String>,
     /// Over all its flights that aren't archived.
     pub flights: i64,
     pub air_time_s: i64,
@@ -80,8 +76,8 @@ pub async fn list(
                        where archived_at is null and aircraft_serial is not null
                        order by aircraft_serial, takeoff_at desc, id desc
                    )
-                   select e.id, e.serial, e.name, e.group_id as team_id, e.group_id,
-                          g.name as "team_name?",
+                   select e.id, e.serial, e.name, e.group_id,
+                          g.name as "group_name?",
                           coalesce(s.flights, 0) as "flights!",
                           coalesce(s.air_time_s, 0) as "air_time_s!",
                           s.last_flight_at as "last_flight_at?",
@@ -130,8 +126,8 @@ pub async fn list(
                        where archived_at is null and rc_serial is not null
                        order by rc_serial, takeoff_at desc, id desc
                    )
-                   select e.id, e.serial, e.name, e.group_id as team_id, e.group_id,
-                          g.name as "team_name?",
+                   select e.id, e.serial, e.name, e.group_id,
+                          g.name as "group_name?",
                           coalesce(s.flights, 0) as "flights!",
                           coalesce(s.air_time_s, 0) as "air_time_s!",
                           s.last_flight_at as "last_flight_at?",

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select c.id, c.code, u.name as created_by, g.name as \"team?\", c.created_at, c.expires_at\n           from pairing_codes c\n           join users u on u.id = c.created_by\n           left join groups g on g.id = c.group_id\n           where c.expires_at > now()\n             and ($2 or c.created_by = $1 or c.group_id = any($3))\n           order by c.expires_at, c.id",
+  "query": "select c.id, c.code, u.name as created_by, g.name as \"group?\", c.created_at, c.expires_at\n           from pairing_codes c\n           join users u on u.id = c.created_by\n           left join groups g on g.id = c.group_id\n           where c.expires_at > now()\n             and ($2 or c.created_by = $1 or c.group_id = any($3))\n           order by c.expires_at, c.id",
   "describe": {
     "columns": [
       {
@@ -38,7 +38,7 @@
       },
       {
         "ordinal": 3,
-        "name": "team?",
+        "name": "group?",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -86,5 +86,5 @@
       false
     ]
   },
-  "hash": "6ccf60c1d8754c764649fe09c2ebe49b0a4988e6618bf2689f40dc1edfb1abb8"
+  "hash": "88059df1213754e97a1636097150bed1dc94c63da6a3d601507f7f23c454abaa"
 }

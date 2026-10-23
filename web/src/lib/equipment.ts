@@ -1,4 +1,4 @@
-// The two kinds of equipment with a team, as tabs and in paths
+// The two kinds of equipment with a group, as tabs and in paths
 // (/equipment/drones/…). Batteries have a tab and pages of their own.
 
 export type Kind = 'drones' | 'controllers';

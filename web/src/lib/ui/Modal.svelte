@@ -2,7 +2,7 @@
 	@component
 	Carbon's small transactional modal around a form, opened by its own trigger
 	button: "New pilot" opens "New pilot" with Cancel and Create, and "Archive
-	team" opens a confirmation with Cancel and Archive team. The form posts
+	user" opens a confirmation with Cancel and Archive user. The form posts
 	to a SvelteKit form action. On success the modal closes and the page data
 	reloads; on a rejected change it stays open and shows `error`.
 

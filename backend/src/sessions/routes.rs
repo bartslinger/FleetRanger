@@ -33,7 +33,7 @@ where
         .route("/api/sessions/{id}", get(show))
         .route("/api/sessions/{id}/neighbours", get(neighbours))
         .route("/api/sessions/{id}/flights", post(add))
-        .route("/api/sessions/{id}/team", post(set_group))
+        .route("/api/sessions/{id}/group", post(set_group))
         .route("/api/sessions/merge", post(merge))
         .route("/api/sessions/split", post(split))
         .route("/api/sessions/remove", post(remove))
@@ -83,10 +83,10 @@ struct Flights {
 #[derive(Deserialize)]
 struct NewSession {
     flight_ids: Vec<Uuid>,
-    /// The session's group (still called a team), null for the organisation;
-    /// left out, the flights' group when they share one.
+    /// The session's group, null for the organisation; left out, the
+    /// flights' group when they share one.
     #[serde(default, deserialize_with = "given")]
-    team_id: Option<Option<Uuid>>,
+    group_id: Option<Option<Uuid>>,
 }
 
 /// A field that was given, even as null.
@@ -102,27 +102,27 @@ async fn create(
     State(db): State<PgPool>,
     Json(change): Json<NewSession>,
 ) -> ApiResult<Json<Changed>> {
-    let id = service::create(&db, &actor, &change.flight_ids, change.team_id).await?;
+    let id = service::create(&db, &actor, &change.flight_ids, change.group_id).await?;
     Ok(Json(Changed { id }))
 }
 
 #[derive(Deserialize)]
 struct GroupChange {
     /// None: the organisation.
-    team_id: Option<Uuid>,
+    group_id: Option<Uuid>,
     /// Moves the session's flights to the group as well.
     #[serde(default)]
     move_flights: bool,
 }
 
-/// Moves a session to another group (still called a team).
+/// Moves a session to another group.
 async fn set_group(
     actor: Actor,
     State(db): State<PgPool>,
     Path(id): Path<Uuid>,
     Json(change): Json<GroupChange>,
 ) -> ApiResult<Json<Changed>> {
-    service::set_group(&db, &actor, id, change.team_id, change.move_flights).await?;
+    service::set_group(&db, &actor, id, change.group_id, change.move_flights).await?;
     Ok(Json(Changed { id }))
 }
 
@@ -174,8 +174,9 @@ struct FilterQuery {
     aircraft: Option<String>,
     /// Controller serials, comma-separated.
     controller: Option<String>,
-    /// Team ids, comma-separated; `none` for flights without a team.
-    team: Option<String>,
+    /// The sessions' own groups' ids, comma-separated; `none` for sessions
+    /// in the organisation.
+    group: Option<String>,
     /// Pilots' user ids, comma-separated; `none` for flights without a pilot.
     pilot: Option<String>,
     /// Takeoff at or after this instant.
@@ -191,7 +192,7 @@ impl FilterQuery {
         flights::routes::filter(
             &self.aircraft,
             &self.controller,
-            &self.team,
+            &self.group,
             &self.pilot,
             &self.area,
             self.from,

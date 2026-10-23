@@ -155,21 +155,21 @@ async fn all(
 struct Open {
     flights: Vec<FlightSummary>,
     landed_at: DateTime<Utc>,
-    team_id: Option<Uuid>,
+    group_id: Option<Uuid>,
 }
 
-/// Groups flights given in takeoff order. A flight joins a group when it took
-/// off less than `gap` after the group's last landing and has the group's
-/// team (user's decisions, 2026-10-19). Flights without a team are a team of
-/// their own: they're often another team's, still to be sorted out. Pilots
-/// don't keep flights apart: a session can have several, and the list's
-/// filters (e.g. a team's drones) leave out others flying at the same time.
-/// So two teams flying the same evening make two groups.
+/// Groups flights given in takeoff order into suggestions. A flight joins a
+/// suggestion when it took off less than `gap` after its last landing and is
+/// in its group (user's decisions, 2026-10-19). Flights without a group are a
+/// group of their own: they're often another group's, still to be sorted
+/// out. Pilots don't keep flights apart: a session can have several, and the
+/// list's filters (e.g. a group's drones) leave out others flying at the same
+/// time. So two groups flying the same evening make two suggestions.
 fn group(flights: Vec<FlightSummary>, gap: Duration) -> Vec<Vec<FlightSummary>> {
     let mut groups: Vec<Open> = Vec::new();
     for flight in flights {
         let joins = groups.iter_mut().find(|open| {
-            flight.takeoff_at - open.landed_at < gap && open.team_id == flight.team_id
+            flight.takeoff_at - open.landed_at < gap && open.group_id == flight.group_id
         });
         match joins {
             Some(open) => {
@@ -178,7 +178,7 @@ fn group(flights: Vec<FlightSummary>, gap: Duration) -> Vec<Vec<FlightSummary>> 
             }
             None => groups.push(Open {
                 landed_at: flight.landed_at,
-                team_id: flight.team_id,
+                group_id: flight.group_id,
                 flights: vec![flight],
             }),
         }
@@ -190,7 +190,7 @@ fn group(flights: Vec<FlightSummary>, gap: Duration) -> Vec<Vec<FlightSummary>> 
 mod tests {
     use super::*;
 
-    fn flight(minute: i64, team: Option<Uuid>, pilot: Option<Uuid>) -> FlightSummary {
+    fn flight(minute: i64, group: Option<Uuid>, pilot: Option<Uuid>) -> FlightSummary {
         let takeoff_at = DateTime::UNIX_EPOCH + Duration::minutes(minute);
         FlightSummary {
             id: Uuid::from_u128(minute.unsigned_abs().into()),
@@ -204,8 +204,8 @@ mod tests {
             rc_name: None,
             pilot_id: pilot,
             pilot_name: None,
-            team_id: team,
-            team_name: None,
+            group_id: group,
+            group_name: None,
             archived_at: None,
         }
     }
@@ -222,11 +222,11 @@ mod tests {
             .collect()
     }
 
-    /// Two teams flying the same evening stay apart, and so do flights
-    /// without a team; pilots, known or not, don't; and a long break starts
+    /// Two groups flying the same evening stay apart, and so do flights
+    /// without a group; pilots, known or not, don't; and a long break starts
     /// a new suggestion.
     #[test]
-    fn teams_and_breaks_keep_suggestions_apart() {
+    fn groups_and_breaks_keep_suggestions_apart() {
         let (north, south) = (Some(Uuid::from_u128(1)), Some(Uuid::from_u128(2)));
         let (anna, ben) = (Some(Uuid::from_u128(3)), Some(Uuid::from_u128(4)));
         let flights = vec![

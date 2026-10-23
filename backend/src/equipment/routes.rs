@@ -38,14 +38,14 @@ where
 #[derive(Deserialize)]
 struct Body {
     name: Option<String>,
-    team_id: Option<Uuid>,
+    group_id: Option<Uuid>,
 }
 
 impl From<Body> for EquipmentInput {
     fn from(body: Body) -> Self {
         Self {
             name: body.name,
-            team_id: body.team_id,
+            group_id: body.group_id,
         }
     }
 }

@@ -25,7 +25,8 @@ const MAX_HOURS: i64 = 7 * 24;
 pub struct Created {
     pub id: Uuid,
     pub code: String,
-    pub team: Option<String>,
+    /// The group the controller joins; None for the organisation.
+    pub group: Option<String>,
     pub expires_at: DateTime<Utc>,
 }
 
@@ -35,7 +36,7 @@ pub struct Created {
 pub async fn create(
     db: &PgPool,
     actor: &Actor,
-    team: Option<Uuid>,
+    group: Option<Uuid>,
     hours: i64,
 ) -> ApiResult<Created> {
     if !actor.grants.anywhere(Permission::ControllersPair) {
@@ -46,17 +47,17 @@ pub async fn create(
             "A code is valid for 1 to {MAX_HOURS} hours."
         )));
     }
-    if !actor.grants.may(Permission::ControllersPair, team) {
+    if !actor.grants.may(Permission::ControllersPair, group) {
         return Err(ApiError::Invalid(
-            "Choose one of your teams for the controller.".to_owned(),
+            "Choose one of your groups for the controller.".to_owned(),
         ));
     }
-    let team = match team {
+    let group = match group {
         Some(id) => Some(
             flights::db::groups_named(db, &[id])
                 .await?
                 .pop()
-                .ok_or_else(|| ApiError::Invalid("Choose an existing team.".to_owned()))?,
+                .ok_or_else(|| ApiError::Invalid("Choose an existing group.".to_owned()))?,
         ),
         None => None,
     };
@@ -68,7 +69,7 @@ pub async fn create(
             db,
             &code,
             actor.user_id,
-            team.as_ref().map(|t| t.id),
+            group.as_ref().map(|g| g.id),
             expires_at,
         )
         .await?
@@ -76,7 +77,7 @@ pub async fn create(
             return Ok(Created {
                 id,
                 code,
-                team: team.map(|t| t.name),
+                group: group.map(|g| g.name),
                 expires_at,
             });
         }
@@ -162,19 +163,19 @@ pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList
 /// 2026-10-23).
 #[derive(Serialize)]
 pub struct Destinations {
-    pub teams: Vec<flights::db::TeamChoice>,
+    pub groups: Vec<flights::db::GroupChoice>,
     pub organisation: bool,
 }
 
-pub async fn teams(db: &PgPool, actor: &Actor) -> ApiResult<Destinations> {
+pub async fn destinations(db: &PgPool, actor: &Actor) -> ApiResult<Destinations> {
     let pair = actor.grants.scope(Permission::ControllersPair);
-    let teams = if pair.all {
+    let groups = if pair.all {
         flights::db::group_choices(db).await?
     } else {
         flights::db::groups_named(db, &pair.groups).await?
     };
     Ok(Destinations {
-        teams,
+        groups,
         organisation: pair.all,
     })
 }
