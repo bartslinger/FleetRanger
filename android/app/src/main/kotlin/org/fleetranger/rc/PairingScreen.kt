@@ -64,7 +64,7 @@ data class Problem(val title: String, val text: String)
 /**
  * Pairs the controller with a code someone created in the web app: the pilot
  * types it here, and the controller pairs at once, nobody logging in. See
- * "Clients" in docs/architecture.md. Afterwards it says which team the controller joined, with
+ * "Clients" in docs/architecture.md. Afterwards it says which group the controller joined, with
  * a way to unpair straight away if that's wrong.
  *
  * Without a known server (an APK installed some other way), the address is
@@ -81,7 +81,7 @@ fun Pairing(
 ) {
     val scope = rememberCoroutineScope()
     var form by remember { mutableStateOf(PairingForm()) }
-    // The team the controller joined (empty for none); null until it's paired.
+    // The group the controller joined (empty for none); null until it's paired.
     var pairedWith by rememberSaveable { mutableStateOf<String?>(null) }
     var unpairing by remember { mutableStateOf(false) }
 
@@ -104,9 +104,9 @@ fun Pairing(
         typedUrl?.let(onServer)
         scope.launch {
             form = try {
-                val team = withContext(Dispatchers.IO) { server.pair(code) }
+                val group = withContext(Dispatchers.IO) { server.pair(code) }
                 onPaired()
-                pairedWith = team.orEmpty()
+                pairedWith = group.orEmpty()
                 PairingForm()
             } catch (refused: Server.Refused) {
                 form.copy(busy = false, codeError = refused.message)
@@ -208,9 +208,9 @@ fun PairingScreen(
                 NotificationKind.Success,
                 title = "Paired",
                 text = if (pairedWith.isEmpty()) {
-                    "This controller is paired, without a team. An admin can choose its team."
+                    "This controller is in the organisation, without a group."
                 } else {
-                    "This controller is paired with $pairedWith."
+                    "This controller is in the group $pairedWith."
                 },
                 modifier = width,
             )
@@ -280,5 +280,5 @@ private fun PairingScreenPreview() {
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun PairedPreview() {
-    PairingScreen(PairingForm(), needsAddress = false, pairedWith = "Test team", serial = "TESTRC0001")
+    PairingScreen(PairingForm(), needsAddress = false, pairedWith = "Test group", serial = "TESTRC0001")
 }
