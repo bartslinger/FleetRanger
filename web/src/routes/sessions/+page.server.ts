@@ -56,6 +56,20 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
 		return { pilotId: pilot.pilot_id, changed: result.data.changed };
 	},
+	/** Moves the open session to another group, and its flights if asked. */
+	setGroup: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const id = String(form.get('session_id') ?? '');
+		const group = String(form.get('group_id') ?? '');
+		const body = {
+			group_id: group === '' ? null : group,
+			move_flights: form.get('move_flights') === 'true'
+		};
+		const path = `/api/sessions/${encodeURIComponent(id)}/group`;
+		const result = await send<{ id: string }>(fetch, 'POST', path, body);
+		if (!result.ok) return fail(result.status, { groupMessage: result.message });
+		return { moved: body.move_flights };
+	},
 	split: async ({ fetch, request }) => {
 		const form = await request.formData();
 		const body = { flight_ids: form.getAll('flight_id').map(String) };

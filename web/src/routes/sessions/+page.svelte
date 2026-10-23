@@ -4,6 +4,9 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { anywhere, may, readsSeveralGroups } from '#lib/permissions.js';
+	import { groupOptions as groupChoices, WHOLE_ORGANISATION } from '#lib/groups.js';
+	import Checkbox from '#lib/ui/Checkbox.svelte';
+	import Select from '#lib/ui/Select.svelte';
 	import SessionFacts, { sessionGroup } from '#lib/SessionFacts.svelte';
 	import PilotDialog from '#lib/PilotDialog.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
@@ -341,6 +344,40 @@
 		openSession !== null && may(data.account, 'sessions.edit', openSession.group_id)
 	);
 	const flightsLabel = (count: number) => plural(count, 'flight');
+
+	// Moving the open session to another group: sessions.move on both, and
+	// to move its flights along, flights.move on theirs and the new one.
+	const canMoveSession = $derived(
+		openSession !== null && may(data.account, 'sessions.move', openSession.group_id)
+	);
+	// The chosen group, starting at the session's own.
+	let moveTo = $derived(openSession?.group_id ?? '');
+	const moveOptions = $derived.by(() => {
+		const options = groupChoices(
+			data.account,
+			'sessions.move',
+			data.choices.groups,
+			WHOLE_ORGANISATION
+		);
+		const current = openSession?.group_id ?? '';
+		return options.some((option) => option.value === current)
+			? options
+			: [...options, { value: current, label: openSession ? sessionGroup(openSession) : '' }];
+	});
+	const canMoveFlights = $derived(
+		openFlights.every((flight) => may(data.account, 'flights.move', flight.group_id)) &&
+			may(data.account, 'flights.move', moveTo || null)
+	);
+	/** The flights the user sees that aren't in the chosen group yet. */
+	const othersThere = $derived(
+		openFlights.filter((flight) => flight.group_id !== (moveTo || null)).length
+	);
+	function sessionMoved(result: Record<string, unknown> | undefined) {
+		const name = moveOptions.find((option) => option.value === moveTo)?.label ?? '';
+		toast(
+			result?.moved ? `Session and its flights moved to ${name}.` : `Session moved to ${name}.`
+		);
+	}
 	function moved(count: number) {
 		selectedFlights = [];
 		toast(`${flightsLabel(count)} moved to a new session.`);
@@ -680,6 +717,40 @@
 											/>
 										{/if}
 									{/snippet}
+									{#snippet groupAction()}
+										{#if canMoveSession}
+											<!-- carbon-expert's advice: the session only by default; moving
+											     its flights too only for who may. -->
+											<Modal
+												title="Move to group"
+												triggerIcon={Edit}
+												submitLabel="Move"
+												action="?/setGroup"
+												error={form && 'groupMessage' in form ? form.groupMessage : undefined}
+												onsuccess={sessionMoved}
+											>
+												<input type="hidden" name="session_id" value={openSession?.id} />
+												<Select
+													label="Group"
+													name="group_id"
+													options={moveOptions}
+													bind:value={moveTo}
+												/>
+												{#if canMoveFlights && othersThere > 0}
+													<Checkbox
+														label="Also move its flights to this group"
+														name="move_flights"
+														value="true"
+													/>
+													<p class="help">
+														{othersThere === 1
+															? `1 of its ${flightsLabel(openFlights.length)} is in another group.`
+															: `${othersThere} of its ${flightsLabel(openFlights.length)} are in other groups.`}
+													</p>
+												{/if}
+											</Modal>
+										{/if}
+									{/snippet}
 								</SessionFacts>
 							</div>
 						</div>
@@ -845,6 +916,15 @@
 />
 
 <style>
+	/* Helper text under the checkbox in Move to group. */
+	.help {
+		margin-top: calc(-1 * var(--cds-spacing-03));
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-helper-text-01-font-size);
+		line-height: var(--cds-helper-text-01-line-height);
+		letter-spacing: var(--cds-helper-text-01-letter-spacing);
+	}
+
 	/* Each month under its heading, which stays in view while its cards
 	   scroll; tiles 2px apart, as in Carbon's tile groups. */
 	/* minmax(0, 1fr), here and in the view: as wide as the column, never as
