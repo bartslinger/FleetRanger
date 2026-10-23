@@ -5,7 +5,7 @@ import {
 	send,
 	type Equipment,
 	type FlightChoices,
-	type Team
+	type Group
 } from '#lib/server/backend.js';
 import { KINDS } from '#lib/equipment.js';
 
@@ -13,7 +13,7 @@ export async function load({ fetch, locals, params }) {
 	const item = await get<Equipment>(fetch, `${KINDS[params.kind].api}/${params.id}`);
 	const role = locals.account?.role;
 	if (role === 'admin') {
-		const teams = await get<Team[]>(fetch, '/api/teams');
+		const teams = await get<Group[]>(fetch, '/api/groups');
 		return { kind: params.kind, item, edit: 'all' as const, teams };
 	}
 	if (role === 'member' && item.team_id) {

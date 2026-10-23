@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update teams set name = $2 where id = $1",
+  "query": "update groups set name = $2 where id = $1",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "888969923533aef0b12fbc19ac944ac1d0c49c466718da775d88873a69dac7da"
+  "hash": "409838f93df148e96f50c81171a9673e339f94cbb6f7c05dcb3b6c2453b03b44"
 }

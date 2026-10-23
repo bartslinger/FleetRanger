@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with flights as (update flights set group_id = $2 where group_id = $1),\n              sessions as (update sessions set group_id = $2 where group_id = $1),\n              aircraft as (update aircraft set group_id = $2 where group_id = $1),\n              controllers as (update remote_controllers set group_id = $2 where group_id = $1),\n              logs as (update raw_logs set group_id = $2 where group_id = $1)\n         update pairing_codes set group_id = $2 where group_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1e14fbb9f843f1cb698e9bd21c3b05f005604bb0c5eae8040757a9385f02ef42"
+}

@@ -7,7 +7,7 @@ mod grants;
 
 use uuid::Uuid;
 
-pub use grants::{Grants, Permission, Scope, roles_granting};
+pub use grants::{Grants, Permission, Role, Scope, roles_granting};
 
 use crate::{
     auth::Actor,
