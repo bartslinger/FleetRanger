@@ -164,7 +164,6 @@
 	.created {
 		display: flex;
 		flex-direction: column;
-		align-items: flex-start;
 		gap: var(--cds-spacing-05);
 		margin-top: var(--cds-spacing-07);
 	}

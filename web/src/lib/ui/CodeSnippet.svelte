@@ -1,7 +1,8 @@
 <!--
 	@component
 	Carbon's single-line code snippet: a read-only value to copy or read out,
-	such as a pairing code, with a copy button that confirms with "Copied".
+	such as a pairing code, as wide as the form it belongs to (up to Carbon's
+	768px), with a copy button that confirms with "Copied to clipboard".
 -->
 <script lang="ts">
 	import Copy from '@carbon/icons/es/copy/16.js';
@@ -15,8 +16,9 @@
 
 	let { code, label }: Props = $props();
 
-	/** How long the button says "Copied", as Carbon's feedback tooltip. */
+	/** How long the button confirms the copy, as Carbon's feedback tooltip. */
 	const COPIED_MS = 2000;
+	const COPIED = 'Copied to clipboard';
 	let copied = $state(false);
 
 	async function copy() {
@@ -30,23 +32,27 @@
 	<code>{code}</code>
 	<IconButton
 		icon={Copy}
-		label={copied ? 'Copied' : 'Copy'}
-		name={copied ? 'Copied' : `Copy ${label}`}
+		label={copied ? COPIED : 'Copy'}
+		name={copied ? COPIED : `Copy ${label}`}
 		size="md"
 		onclick={copy}
 	/>
-	<span class="visually-hidden" aria-live="polite">{copied ? 'Copied' : ''}</span>
+	<span class="visually-hidden" aria-live="polite">{copied ? COPIED : ''}</span>
 </div>
 
 <style>
 	.snippet {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
-		max-width: 100%;
+		justify-content: space-between;
+		width: 100%;
+		max-width: 48rem;
 		min-height: 2.5rem;
 		background: var(--cds-layer-01);
 	}
 
+	/* code-02 rather than Carbon's code-01: the code is read out and typed
+	   on another device, so it's a size larger on purpose. */
 	code {
 		overflow-x: auto;
 		padding: 0 var(--cds-spacing-05);
