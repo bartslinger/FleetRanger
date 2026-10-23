@@ -120,15 +120,12 @@
 					name="move_to"
 					placeholder="Choose a destination"
 					options={[
-						...data.others.map((other) => ({ value: other.id, label: other.name })),
-						{ value: ORGANISATION, label: 'Organisation, no group' }
+						{ value: ORGANISATION, label: 'Organisation' },
+						...data.others.map((other) => ({ value: other.id, label: other.name }))
 					]}
 					bind:value={moveTo}
 					error={moveError}
 					required
-					helper={moveTo === ORGANISATION
-						? 'Flights wait for a group in the queue; sessions, drones and controllers belong to the organisation without a group.'
-						: undefined}
 				/>
 			{:else}
 				<p>

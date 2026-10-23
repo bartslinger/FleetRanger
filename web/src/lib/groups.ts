@@ -30,8 +30,8 @@ export function sessionGroupChoice(
 	groups: { id: string; name: string }[],
 	flights: Grouped[]
 ): { options: { value: string; label: string }[]; value: string } {
-	const options = groupOptions(account, 'sessions.edit', groups, WHOLE_ORGANISATION).map(
-		(option) => (option.value === '' ? { ...option, value: 'organisation' } : option)
+	const options = groupOptions(account, 'sessions.edit', groups).map((option) =>
+		option.value === '' ? { ...option, value: 'organisation' } : option
 	);
 	// Flights all in no group (the queue) share the organisation.
 	const shared =
@@ -55,25 +55,24 @@ export function sessionGroup(form: FormData): { group_id?: string | null } | nul
 	return { group_id: group === 'organisation' ? null : String(group) };
 }
 
-/** What sits in no group belongs to the whole organisation (the
- * carbon-expert's wording: "None" or "No group" read as nobody's). */
-export const WHOLE_ORGANISATION = 'Whole organisation';
+/** What sits in no group is in the organisation, shown as the top group
+ * (user's decision): one word everywhere. */
+export const ORGANISATION = 'Organisation';
 
 /**
- * The groups to choose, by name, then the organisation as `none` says it.
+ * The organisation first, as the top group, then the groups to choose, by name.
  *
  * - `groups`: the groups the user may choose from (`/api/flights/choices`).
  */
 export function groupOptions(
 	account: Account | null | undefined,
 	permission: Permission,
-	groups: { id: string; name: string }[],
-	none: string
+	groups: { id: string; name: string }[]
 ): { value: string; label: string }[] {
 	return [
+		...(may(account, permission, null) ? [{ value: '', label: ORGANISATION }] : []),
 		...groups
 			.filter((group) => may(account, permission, group.id))
-			.map((group) => ({ value: group.id, label: group.name })),
-		...(may(account, permission, null) ? [{ value: '', label: none }] : [])
+			.map((group) => ({ value: group.id, label: group.name }))
 	];
 }

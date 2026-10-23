@@ -9,7 +9,7 @@
 -->
 <script lang="ts" module>
 	import { dayMonth } from '#lib/format.js';
-	import { WHOLE_ORGANISATION } from '#lib/groups.js';
+	import { ORGANISATION } from '#lib/groups.js';
 	import type { Device, Devices } from '#lib/server/backend.js';
 
 	export interface Filters {
@@ -19,8 +19,7 @@
 		drones: string[];
 		/** Controller serials; all if empty. */
 		controllers: string[];
-		/** Group ids, "none" for no group (the queue; for sessions, the
-		 * organisation); all if empty. */
+		/** Group ids, "none" for what is in no group (the organisation); all if empty. */
 		groups: string[];
 		/** Area ids: flights with time in any of them; all if empty. */
 		areas: string[];
@@ -57,11 +56,7 @@
 	 * The filters' names, for a later page's breadcrumb: "12 Oct–14 Oct",
 	 * "Drone-1, Drone-2", …
 	 */
-	export function filterNames(
-		filters: Filters,
-		devices: Devices,
-		noGroup = NO_GROUP_QUEUE
-	): string[] {
+	export function filterNames(filters: Filters, devices: Devices): string[] {
 		const names = (known: Device[], serials: string[]) =>
 			serials
 				.map((serial) => known.find((device) => device.serial === serial)?.name ?? serial)
@@ -78,7 +73,7 @@
 			...(filters.drones.length > 0 ? [names(devices.aircraft, filters.drones)] : []),
 			...(filters.controllers.length > 0 ? [names(devices.controllers, filters.controllers)] : []),
 			...(filters.groups.length > 0
-				? [filters.groups.map((id) => groupName(devices, id, noGroup)).join(', ')]
+				? [filters.groups.map((id) => groupName(devices, id)).join(', ')]
 				: []),
 			...(filters.areas.length > 0
 				? [
@@ -90,14 +85,9 @@
 		];
 	}
 
-	/** The group filter's choice for flights in no group. */
-	export const NO_GROUP_QUEUE = 'No group (queue)';
-	/** The group filter's choice for sessions in no group. */
-	export const NO_GROUP_ORGANISATION = WHOLE_ORGANISATION;
-
-	function groupName(devices: Devices, id: string, noGroup: string) {
+	function groupName(devices: Devices, id: string) {
 		return id === 'none'
-			? noGroup
+			? ORGANISATION
 			: (devices.groups.find((group) => group.id === id)?.name ?? 'Unknown group');
 	}
 
@@ -122,7 +112,6 @@
 		none,
 		devices,
 		groupFilter,
-		noGroup = NO_GROUP_QUEUE,
 		filtering,
 		ownCount = 0,
 		onchange,
@@ -138,8 +127,6 @@
 		/** Whether to offer the group filter: only to someone who sees more
 		 * than one group's flights. */
 		groupFilter: boolean;
-		/** The group filter's choice for no group. */
-		noGroup?: string;
 		/** Whether any filter is applied, the list's own too: Clear filters. */
 		filtering: boolean;
 		/** How many of the list's own filters are applied. */
@@ -178,10 +165,10 @@
 		}))
 	);
 	const groupOptions = $derived(
-		devices.groups.map((group) => ({
-			value: group.id ?? 'none',
-			label: group.name ?? noGroup
-		}))
+		// What has no group is in the organisation, the top group: first.
+		[...devices.groups]
+			.sort((a, b) => Number(a.id !== null) - Number(b.id !== null))
+			.map((group) => ({ value: group.id ?? 'none', label: group.name ?? ORGANISATION }))
 	);
 	const areaOptions = $derived(devices.areas.map((area) => ({ value: area.id, label: area.name })));
 </script>
