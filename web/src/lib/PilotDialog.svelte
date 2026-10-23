@@ -6,7 +6,8 @@
 	batch bar; the same rules as the flight page's.
 -->
 <script lang="ts">
-	import { offered, pilotOptions, sharedGroup } from '#lib/pilots.js';
+	import { sharedGroup } from '#lib/groups.js';
+	import { offered, pilotOptions } from '#lib/pilots.js';
 	import Modal from '#lib/ui/Modal.svelte';
 	import Select from '#lib/ui/Select.svelte';
 

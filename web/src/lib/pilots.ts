@@ -9,21 +9,6 @@ interface Choices {
 
 type Option = { value: string; label: string };
 
-/** A group's id and name, as flights carry them. */
-interface Group {
-	group_id: string | null;
-	group_name: string | null;
-}
-
-/** The group these flights share, or null when they have several or none. */
-export function sharedGroup(flights: Group[]): { id: string; name: string } | null {
-	const [first] = flights;
-	if (!first?.group_id || flights.some((flight) => flight.group_id !== first.group_id)) {
-		return null;
-	}
-	return { id: first.group_id, name: first.group_name ?? '' };
-}
-
 /**
  * The options of a pilot field: Unknown first, then, for flights of one
  * group, that group's own pilots under its name and the others after them

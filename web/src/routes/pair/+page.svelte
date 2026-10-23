@@ -30,7 +30,7 @@
 	const destinations = $derived([
 		...data.destinations.groups.map((group) => ({ value: group.id, label: group.name })),
 		...(data.destinations.organisation
-			? [{ value: 'organisation', label: 'No group (organisation)' }]
+			? [{ value: 'organisation', label: 'Whole organisation' }]
 			: [])
 	]);
 

@@ -9,6 +9,7 @@
 -->
 <script lang="ts" module>
 	import { dayMonth } from '#lib/format.js';
+	import { WHOLE_ORGANISATION } from '#lib/groups.js';
 	import type { Device, Devices } from '#lib/server/backend.js';
 
 	export interface Filters {
@@ -92,7 +93,7 @@
 	/** The group filter's choice for flights in no group. */
 	export const NO_GROUP_QUEUE = 'No group (queue)';
 	/** The group filter's choice for sessions in no group. */
-	export const NO_GROUP_ORGANISATION = 'No group (organisation)';
+	export const NO_GROUP_ORGANISATION = WHOLE_ORGANISATION;
 
 	function groupName(devices: Devices, id: string, noGroup: string) {
 		return id === 'none'

@@ -22,7 +22,9 @@
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import { dateTime, distance, duration } from '#lib/format.js';
 	import { anywhere, may, readsSeveralGroups, type Permission } from '#lib/permissions.js';
-	import { pilotOptions, sharedGroup } from '#lib/pilots.js';
+	import { groupOptions as groupChoices, sessionGroupChoice, sharedGroup } from '#lib/groups.js';
+	import SessionGroupField from '#lib/SessionGroupField.svelte';
+	import { pilotOptions } from '#lib/pilots.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
 	import Suggestions from './Suggestions.svelte';
@@ -166,10 +168,10 @@
 			? { id: group.id, name: group.name ?? '' }
 			: null;
 	}
-	const groupOptions = $derived([
-		...data.choices.groups.map((group) => ({ value: group.id, label: group.name })),
-		{ value: '', label: 'No group (organisation queue)' }
-	]);
+	// Where the user may move flights to.
+	const groupOptions = $derived(
+		groupChoices(data.account, 'flights.move', data.choices.groups, 'No group (organisation queue)')
+	);
 
 	const flights = (count: number) => `${count} ${count === 1 ? 'flight' : 'flights'}`;
 
@@ -342,6 +344,9 @@
 								The {flights(count(ids))} become one new session. Flights that are in a session leave
 								it.
 							</p>
+							<SessionGroupField
+								choice={sessionGroupChoice(data.account, data.choices.groups, batchGroup(ids))}
+							/>
 						</Modal>
 						<span class="wide-only">
 							<Modal
