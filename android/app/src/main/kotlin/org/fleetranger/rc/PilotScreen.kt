@@ -58,7 +58,7 @@ private enum class Step {
     /** "Who's flying?": the pilot's tile and "Other pilot". */
     First,
     Pilots,
-    /** "Which group are you flying for?": the group's tile and "Other group". */
+    /** "Log flights under": the group's tile and "Other group". */
     Group,
     Groups,
 }
@@ -67,7 +67,7 @@ private enum class Step {
  * "Who's flying?": the pilot's tile opens DJI Pilot 2, and says so. The last
  * pilot is there already with their group, so the same again is one tap.
  * For a pilot who may fly for more than one group, the tile leads on to
- * "Which group are you flying for?", built the same way: their last group's
+ * "Log flights under", built the same way: their last group's
  * tile opens DJI Pilot 2, and "Other group" the list of their groups (user's
  * decision, 2026-10-23: two taps then, and changing the group doesn't go
  * through "Other pilot"). Anyone else is chosen through "Other pilot" and the
@@ -193,7 +193,7 @@ fun PilotScreen(
                     PilotList(list, choosePilot, showNotListed = current == null || choice != null)
                 }
                 Step.Group -> {
-                    Heading("Which group are you flying for?", backButton)
+                    Heading("Log flights under", backButton)
                     ChoiceTiles(
                         title = list.group(choice!!.groupId)?.name.orEmpty(),
                         detail = null,
