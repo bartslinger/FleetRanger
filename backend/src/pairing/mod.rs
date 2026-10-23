@@ -18,8 +18,8 @@ use uuid::Uuid;
 pub struct Controller {
     pub id: Uuid,
     pub serial: String,
-    /// The team its flights without a pilot go to; its pilots come first.
-    pub team_id: Option<Uuid>,
+    /// Its group; its pilots come first.
+    pub group_id: Option<Uuid>,
 }
 
 impl<S> FromRequestParts<S> for Controller
@@ -41,7 +41,7 @@ where
         Ok(Self {
             id: controller.id,
             serial: controller.serial,
-            team_id: controller.team_id,
+            group_id: controller.group_id,
         })
     }
 }

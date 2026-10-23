@@ -1,0 +1,149 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with flown as (\n                       select aircraft_serial as serial, count(*) as flights,\n                              sum(air_time_s)::bigint as air_time_s,\n                              max(takeoff_at) as last_flight_at\n                       from flights\n                       where archived_at is null and aircraft_serial is not null\n                       group by aircraft_serial\n                   ), last as (\n                       select distinct on (aircraft_serial) aircraft_serial as serial, pilot_id,\n                              ($4 or pilot_id = $5 or group_id = any($6)) as seen\n                       from flights\n                       where archived_at is null and aircraft_serial is not null\n                       order by aircraft_serial, takeoff_at desc, id desc\n                   )\n                   select e.id, e.serial, e.name, e.group_id as team_id, e.group_id,\n                          g.name as \"team_name?\",\n                          coalesce(s.flights, 0) as \"flights!\",\n                          coalesce(s.air_time_s, 0) as \"air_time_s!\",\n                          s.last_flight_at as \"last_flight_at?\",\n                          case when l.seen then p.name end as \"last_pilot_name?\",\n                          coalesce(l.pilot_id is not null and not l.seen, false)\n                              as \"last_pilot_hidden!\",\n                          null::bool as \"paired?\",\n                          null::timestamptz as \"synced_at?\",\n                          null::text as \"app_version?\"\n                   from aircraft e\n                   left join groups g on g.id = e.group_id\n                   left join flown s on s.serial = e.serial\n                   left join last l on l.serial = e.serial\n                   left join users p on p.id = l.pilot_id\n                   where ($1::uuid is null or e.id = $1)\n                     and ($2 or e.group_id = any($3)\n                          or exists (select 1 from flights f\n                                     where f.aircraft_serial = e.serial\n                                       and f.archived_at is null\n                                       and ($4 or f.pilot_id = $5 or f.group_id = any($6))))\n                   order by lower(coalesce(e.name, e.serial)), e.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "aircraft",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "aircraft",
+            "name": "serial"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "aircraft",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "team_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "aircraft",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "aircraft",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "team_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "flights!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "air_time_s!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_flight_at?",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "last_pilot_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "last_pilot_hidden!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "paired?",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "synced_at?",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "app_version?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "UuidArray",
+        "Bool",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "bb8c93f444e88e2608253e7c32f55147d46ec7c6ff0cb86e3a4c38478a97d6ac"
+}

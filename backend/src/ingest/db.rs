@@ -89,16 +89,15 @@ pub async fn save_upload(
     pilot_id: Option<Uuid>,
     group_id: Option<Uuid>,
 ) -> sqlx::Result<Stored> {
-    // A group's id is its team's, which the column still refers to.
     let replaced = sqlx::query_scalar!(
-        r#"insert into raw_logs (sha256, path, size_bytes, pilot_id, team_id)
+        r#"insert into raw_logs (sha256, path, size_bytes, pilot_id, group_id)
            values ($1, $2, $3, (select id from users where id = $4),
                    (select id from groups where id = $5))
            on conflict (path) do update set
                sha256 = excluded.sha256,
                size_bytes = excluded.size_bytes,
                pilot_id = excluded.pilot_id,
-               team_id = excluded.team_id,
+               group_id = excluded.group_id,
                received_at = now(),
                status = 'pending',
                attempts = 0,
@@ -181,21 +180,19 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                                        where r.user_id = u.id and r.role = any($10)))
                  ),
                  chosen as (
-                     select l.team_id as group_id from raw_logs l, pilot p
+                     select l.group_id from raw_logs l, pilot p
                      where l.id = $1
                        and (exists (select 1 from group_members m
-                                    where m.user_id = p.id and m.group_id = l.team_id
+                                    where m.user_id = p.id and m.group_id = l.group_id
                                       and m.role = any($10))
                             or exists (select 1 from organisation_roles r
                                        where r.user_id = p.id and r.role = any($10)))
                  )
-                 -- The group's team has its id, until teams are dropped.
                  insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
                                       aircraft_serial, rc_serial, track, metrics,
-                                      pilot_id, team_id, group_id)
+                                      pilot_id, group_id)
                  values ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-                         (select id from pilot),
-                         (select group_id from chosen), (select group_id from chosen))
+                         (select id from pilot), (select group_id from chosen))
                  on conflict (raw_log_id) do update set
                      takeoff_at = excluded.takeoff_at,
                      landed_at = excluded.landed_at,
@@ -430,7 +427,7 @@ mod tests {
     /// version of the log replaces it and keeps the flight.
     #[sqlx::test]
     async fn uploads_bring_their_pilot_and_replace_earlier_versions(db: PgPool) {
-        let team = crate::testing::team(&db, "North").await;
+        let team = crate::testing::group(&db, "North").await;
         let pilot: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
             .fetch_one(&db)
             .await
@@ -476,12 +473,12 @@ mod tests {
     /// goes to the queue, whatever the controller's group.
     #[sqlx::test]
     async fn the_flights_group_is_only_the_one_chosen_on_the_controller(db: PgPool) {
-        use crate::testing::team;
+        use crate::testing::group;
         let (north, south, base, other) = (
-            team(&db, "North").await,
-            team(&db, "South").await,
-            team(&db, "Base").await,
-            team(&db, "Other").await,
+            group(&db, "North").await,
+            group(&db, "South").await,
+            group(&db, "Base").await,
+            group(&db, "Other").await,
         );
         let pilot: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
             .fetch_one(&db)
@@ -490,14 +487,11 @@ mod tests {
         for team in [north, south] {
             crate::testing::join(&db, pilot, team).await;
         }
-        sqlx::query(
-            "insert into remote_controllers (serial, team_id, group_id)
-             values ('TESTRC0003', $1, $1)",
-        )
-        .bind(base)
-        .execute(&db)
-        .await
-        .unwrap();
+        sqlx::query("insert into remote_controllers (serial, group_id) values ('TESTRC0003', $1)")
+            .bind(base)
+            .execute(&db)
+            .await
+            .unwrap();
 
         let mut processed = Vec::new();
         for (n, chosen) in [Some(south), None, Some(other)].into_iter().enumerate() {

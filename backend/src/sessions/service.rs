@@ -287,8 +287,8 @@ mod tests {
                  values (sha256(gen_random_uuid()::text::bytea), gen_random_uuid()::text, 0)
                  returning id)
              insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
-                                  track, team_id, group_id)
-             select id, now(), now(), 0, 0, '{}', $1, $1 from log
+                                  track, group_id)
+             select id, now(), now(), 0, 0, '{}', $1 from log
              returning id",
         )
         .bind(group)
@@ -303,8 +303,8 @@ mod tests {
     /// the organisation when they have several.
     #[sqlx::test]
     async fn changes_need_every_session_that_changes(db: PgPool) {
-        let north = testing::team(&db, "North").await;
-        let south = testing::team(&db, "South").await;
+        let north = testing::group(&db, "North").await;
+        let south = testing::group(&db, "South").await;
         let editor: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
             .fetch_one(&db)
             .await

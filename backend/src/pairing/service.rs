@@ -151,7 +151,7 @@ pub struct PilotList {
 
 pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
     Ok(PilotList {
-        team_id: controller.team_id,
+        team_id: controller.group_id,
         pilots: db::pilot_choices(db).await?,
     })
 }

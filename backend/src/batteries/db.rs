@@ -179,8 +179,8 @@ mod tests {
         .await;
         let flight: Uuid = sqlx::query_scalar(
             "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
-                                  track, team_id, group_id)
-             values ($1, now() - make_interval(hours => $2), now(), 0, 0, '{}', $3, $3)
+                                  track, group_id)
+             values ($1, now() - make_interval(hours => $2), now(), 0, 0, '{}', $3)
              returning id",
         )
         .bind(raw_log)
@@ -206,8 +206,8 @@ mod tests {
     /// those flights, but its figures over all its flights.
     #[sqlx::test]
     async fn members_see_batteries_through_their_teams_flights(db: PgPool) {
-        let north = crate::testing::team(&db, "North").await;
-        let south = crate::testing::team(&db, "South").await;
+        let north = crate::testing::group(&db, "North").await;
+        let south = crate::testing::group(&db, "South").await;
         let me = id(&db, "insert into users (name) values ('A') returning id").await;
         crate::testing::join(&db, me, north).await;
         let shared = id(

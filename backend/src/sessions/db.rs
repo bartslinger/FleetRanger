@@ -66,8 +66,8 @@ pub async fn list(
                 sum(f.air_time_s)::bigint as "air_time_s!",
                 sum(f.distance_m) as "distance_m!",
                 array_remove(array_agg(distinct u.name), null) as "pilots!",
-                array_remove(array_agg(distinct t.name), null) as "teams!",
-                array_remove(array_agg(distinct f.team_id), null) as "team_ids!",
+                array_remove(array_agg(distinct gr.name), null) as "teams!",
+                array_remove(array_agg(distinct f.group_id), null) as "team_ids!",
                 jsonb_agg(jsonb_build_object('takeoff_at', f.takeoff_at, 'landed_at', f.landed_at,
                                              'air_time_s', f.air_time_s,
                                              'from', f.track->'coordinates'->0,
@@ -75,7 +75,7 @@ pub async fn list(
                           order by f.takeoff_at) as "flight_times!"
          from flights f
          left join users u on u.id = f.pilot_id
-         left join teams t on t.id = f.team_id
+         left join groups gr on gr.id = f.group_id
          where f.session_id is not null
            and ($1
                 or f.pilot_id = $2
@@ -93,8 +93,8 @@ pub async fn list(
                  and ($8::text[] is null or g.rc_serial = any($8))
                  and ($9::timestamptz is null or g.takeoff_at >= $9)
                  and ($10::timestamptz is null or g.takeoff_at < $10)
-                 and ($11::uuid[] is null or g.team_id = any($11)
-                      or ($12 and g.team_id is null))
+                 and ($11::uuid[] is null or g.group_id = any($11)
+                      or ($12 and g.group_id is null))
                  and ($13::uuid[] is null or g.pilot_id = any($13)
                       or ($14 and g.pilot_id is null))
                  and ($15::uuid[] is null or exists (select 1 from flight_areas fa
@@ -151,8 +151,8 @@ pub async fn count(
                    and ($6::text[] is null or g.rc_serial = any($6))
                    and ($7::timestamptz is null or g.takeoff_at >= $7)
                    and ($8::timestamptz is null or g.takeoff_at < $8)
-                   and ($9::uuid[] is null or g.team_id = any($9)
-                        or ($10 and g.team_id is null))
+                   and ($9::uuid[] is null or g.group_id = any($9)
+                        or ($10 and g.group_id is null))
                    and ($11::uuid[] is null or g.pilot_id = any($11)
                         or ($12 and g.pilot_id is null))
                    and ($13::uuid[] is null or exists (select 1 from flight_areas fa
@@ -215,8 +215,8 @@ pub async fn neighbours(
                        and ($5::text[] is null or g.rc_serial = any($5))
                        and ($6::timestamptz is null or g.takeoff_at >= $6)
                        and ($7::timestamptz is null or g.takeoff_at < $7)
-                       and ($8::uuid[] is null or g.team_id = any($8)
-                            or ($9 and g.team_id is null))
+                       and ($8::uuid[] is null or g.group_id = any($8)
+                            or ($9 and g.group_id is null))
                        and ($10::uuid[] is null or g.pilot_id = any($10)
                             or ($11 and g.pilot_id is null))
                        and ($12::uuid[] is null or exists (select 1 from flight_areas fa
@@ -419,9 +419,8 @@ pub async fn set_group(
     .rows_affected()
         == 1;
     if found && with_flights {
-        // A group's team has its id, until teams are dropped.
         sqlx::query!(
-            "update flights set team_id = $2, group_id = $2 where session_id = $1",
+            "update flights set group_id = $2 where session_id = $1",
             id,
             group_id
         )
@@ -574,7 +573,7 @@ mod tests {
         received: &str,
     ) -> Uuid {
         let flight = flight(db, pilot, takeoff, landed).await;
-        sqlx::query("update flights set team_id = $2, group_id = $2 where id = $1")
+        sqlx::query("update flights set group_id = $2 where id = $1")
             .bind(flight)
             .bind(group)
             .execute(db)
@@ -662,8 +661,8 @@ mod tests {
     #[sqlx::test]
     async fn uploads_group_per_group(db: PgPool) {
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let north = crate::testing::team(&db, "North").await;
-        let south = crate::testing::team(&db, "South").await;
+        let north = crate::testing::group(&db, "North").await;
+        let south = crate::testing::group(&db, "South").await;
         let first = upload_for(&db, a, Some(north), "08:00", "08:20", "21:00").await;
         let other_group = upload_for(&db, a, Some(south), "08:30", "08:50", "21:00").await;
         let same_group = upload_for(&db, a, Some(north), "09:00", "09:20", "21:00").await;
@@ -831,8 +830,8 @@ mod tests {
     /// in the list and the session's flights alike; outsiders see nothing.
     #[sqlx::test]
     async fn sessions_show_only_visible_flights(db: PgPool) {
-        let north = crate::testing::team(&db, "North").await;
-        let south = crate::testing::team(&db, "South").await;
+        let north = crate::testing::group(&db, "North").await;
+        let south = crate::testing::group(&db, "South").await;
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
         let outsider = insert_id(&db, "insert into users (name) values ('C') returning id").await;
@@ -842,15 +841,13 @@ mod tests {
         {
             crate::testing::join(&db, pilot, team).await;
             let flight = flight(&db, pilot, takeoff, landed).await;
-            sqlx::query(
-                "update flights set team_id = $2, group_id = $2, session_id = $3 where id = $1",
-            )
-            .bind(flight)
-            .bind(team)
-            .bind(session)
-            .execute(&db)
-            .await
-            .unwrap();
+            sqlx::query("update flights set group_id = $2, session_id = $3 where id = $1")
+                .bind(flight)
+                .bind(team)
+                .bind(session)
+                .execute(&db)
+                .await
+                .unwrap();
         }
 
         let all = Filter::default();
