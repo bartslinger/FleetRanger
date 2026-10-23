@@ -80,8 +80,8 @@ async fn show(
 
 #[derive(Deserialize)]
 struct ChoicesQuery {
-    /// The flights' group, whose own pilots come first.
-    group: Option<Uuid>,
+    /// The flights' group (still called a team), whose own pilots come first.
+    team: Option<Uuid>,
 }
 
 async fn choices(
@@ -89,7 +89,7 @@ async fn choices(
     State(db): State<PgPool>,
     Query(query): Query<ChoicesQuery>,
 ) -> ApiResult<Json<service::Choices>> {
-    Ok(Json(service::choices(&db, &actor, query.group).await?))
+    Ok(Json(service::choices(&db, &actor, query.team).await?))
 }
 
 #[derive(Serialize)]
