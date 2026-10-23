@@ -10,12 +10,19 @@ export const ROLE_LABELS: Record<OrganisationRole, string> = {
 	admin: 'Admin'
 };
 
-/** What each role allows, for helper text beside the choice. */
+/** What each role allows on the whole organisation, for helper text. */
 export const ROLE_HELP: Record<OrganisationRole, string> = {
-	viewer: 'Sees the flights, sessions and equipment.',
-	pilot: 'Flies: appears in pilot lists and pairs controllers. Sees their own flights.',
-	editor: 'Sees and organises: sets pilots, archives flights, edits sessions, names equipment.',
-	admin: 'Manages users, groups, equipment, areas and log processing. Doesn’t fly.'
+	viewer: 'Sees all flights, sessions and equipment.',
+	pilot: 'Flies for every group: appears in all pilot lists and pairs controllers.',
+	editor: 'Sees and organises everything: sets pilots, archives flights, edits sessions.',
+	admin: 'Manages users, groups, equipment and areas. Doesn’t fly without Pilot.'
+};
+
+/** What each role allows in a group. */
+export const GROUP_ROLE_HELP: Record<GroupRole, string> = {
+	viewer: 'Sees the group’s flights, sessions and equipment.',
+	pilot: 'Flies for the group: appears in its pilot lists and pairs controllers.',
+	editor: 'Sees and organises the group’s work: sets pilots, edits sessions.'
 };
 
 export const GROUP_ROLES: GroupRole[] = ['viewer', 'pilot', 'editor'];

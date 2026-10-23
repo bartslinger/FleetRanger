@@ -97,7 +97,7 @@
 		...(data.account?.role === 'admin'
 			? [
 					{ href: resolve('/users'), label: 'Users', icon: UserMultiple },
-					{ href: resolve('/teams'), label: 'Teams', icon: Events },
+					{ href: resolve('/groups'), label: 'Groups', icon: Events },
 					{ href: resolve('/areas'), label: 'Areas', icon: Area }
 				]
 			: []),
