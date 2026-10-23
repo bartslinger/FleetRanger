@@ -49,50 +49,99 @@ import org.fleetranger.rc.ui.WarningNotification
 /** Every tile in the list the same height, whether or not it has a second line. */
 private val TILE_HEIGHT = 104.dp
 
-/** "Not in the list", as chosen from the list, apart from any pilot's key. */
+/** "Not in the list", as chosen from the list, apart from any choice's key. */
 private const val NOT_LISTED = "not-listed"
+
+/** Which part of the screen shows. */
+private enum class Step {
+    /** The pilot's tile and "Other pilot". */
+    First,
+    Pilots,
+    /** The group step: the pilot's own groups, with "Other group". */
+    Groups,
+    OtherGroups,
+}
 
 /**
  * "Who's flying?": the pilot's tile opens DJI Pilot 2, and says so. The last
- * pilot is there already, so the same pilot again is one tap. Anyone else is
- * chosen through "Other pilot" and the list, which goes back to this screen
- * with them on the tile, so a different pilot or team is a step more, on
- * purpose (user's decision, 2026-10-20). Without a last pilot (a new
- * controller, or that pilot was removed) the list shows straight away, and
- * choosing goes to this screen too. A choice in the list counts at once,
- * also if DJI Pilot 2 is opened some other way (user's request, 2026-10-20).
+ * pilot is there already with their group, so the same again is one tap.
+ * Anyone else is chosen through "Other pilot" and the list, then the group
+ * step when there's more than one group to choose (see "Flights and pilots"
+ * in docs/architecture.md), which goes back to this screen with them on the
+ * tile, so a different pilot or group is a step more, on purpose (user's
+ * decision, 2026-10-20). Without a last pilot (a new controller, or that
+ * pilot was removed) the list shows straight away, and choosing goes to this
+ * screen too. A choice counts at once, also if DJI Pilot 2 is opened some
+ * other way (user's request, 2026-10-20).
  */
 @Composable
 fun PilotScreen(
     list: PilotList,
-    last: Pilot?,
+    last: Choice?,
     opensAtStartup: Boolean,
-    onChoose: (Pilot?) -> Unit,
-    onSelect: (Pilot?) -> Unit,
+    onChoose: (Choice?) -> Unit,
+    onSelect: (Choice?) -> Unit,
     onOpenStartupSettings: () -> Unit,
     onSettings: () -> Unit,
     syncStatus: SyncStatus? = null,
     update: Server.AppVersion? = null,
     onUpdate: () -> Unit = {},
 ) {
-    var choosing by rememberSaveable { mutableStateOf(false) }
-    // Who was chosen in the list, by key; null for the last pilot.
+    var step by rememberSaveable { mutableStateOf(Step.First) }
+    // Who was chosen, by key; null for the last choice.
     var chosenKey by rememberSaveable { mutableStateOf<String?>(null) }
-    // The pilot on the tile: the one chosen, or else the last. A pilot in a
+    // The pilot whose group is being chosen.
+    var stepPilotId by rememberSaveable { mutableStateOf<String?>(null) }
+    // The choice on the tile: the one made, or else the last. A choice in a
     // Pick, so "Not in the list" (no pilot) can be on the tile too.
     val current: Pick? = when (val key = chosenKey) {
         NOT_LISTED -> Pick(null)
         null -> last?.let(::Pick)
-        else -> list.pilots.find { it.key == key }?.let(::Pick) ?: last?.let(::Pick)
+        else -> {
+            val pilotId = key.substringBefore(':')
+            val groupId = key.substringAfter(':', "").ifEmpty { null }
+            list.pilots.find { it.id == pilotId }?.let { list.choice(it, groupId) }?.let(::Pick)
+                ?: last?.let(::Pick)
+        }
+    }
+    val stepPilot = list.pilots.find { it.id == stepPilotId }
+    // Without a choice on the tile, the list is the first thing to show.
+    val shown = when {
+        step == Step.First && current == null -> Step.Pilots
+        (step == Step.Groups || step == Step.OtherGroups) && stepPilot == null -> Step.Pilots
+        else -> step
     }
     val settingsButton: @Composable () -> Unit = {
         Button("Settings", onSettings, kind = ButtonKind.Ghost)
     }
-    BackHandler(enabled = choosing && current != null) { choosing = false }
-    val choose: (Pilot?) -> Unit = { pilot ->
-        onSelect(pilot)
-        chosenKey = pilot?.key ?: NOT_LISTED
-        choosing = false
+    val choose: (Choice?) -> Unit = { choice ->
+        onSelect(choice)
+        chosenKey = choice?.key ?: NOT_LISTED
+        step = Step.First
+    }
+    val choosePilot: (Pilot?) -> Unit = { pilot ->
+        if (pilot == null) {
+            choose(null)
+        } else {
+            val choice = list.choice(pilot, null)
+            if (choice != null) {
+                choose(choice)
+            } else {
+                stepPilotId = pilot.id
+                step = Step.Groups
+            }
+        }
+    }
+    val back: () -> Unit = {
+        step = when (shown) {
+            Step.OtherGroups -> Step.Groups
+            Step.Groups -> Step.Pilots
+            else -> Step.First
+        }
+    }
+    BackHandler(enabled = shown != Step.First && !(shown == Step.Pilots && current == null)) { back() }
+    val backButton: @Composable () -> Unit = {
+        Button("Back", back, kind = ButtonKind.Ghost)
     }
 
     Column(
@@ -114,35 +163,49 @@ fun PilotScreen(
             )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s05)) {
-            if (current != null && !choosing) {
-                Heading("Who’s flying?", settingsButton)
-                CurrentPilot(
-                    current,
-                    onFly = {
-                        onChoose(current.pilot)
-                        chosenKey = null
-                    },
-                    onOther = { choosing = true },
-                )
-            } else if (current != null) {
-                Heading("Other pilot") {
-                    Button("Back", { choosing = false }, kind = ButtonKind.Ghost)
+            when (shown) {
+                Step.First -> {
+                    Heading("Who’s flying?", settingsButton)
+                    CurrentPilot(
+                        current!!,
+                        detail = current.choice?.let { list.group(it.groupId)?.name },
+                        onFly = {
+                            onChoose(current.choice)
+                            chosenKey = null
+                        },
+                        onOther = { step = Step.Pilots },
+                    )
                 }
-                // The one on the first screen is there already.
-                PilotList(
-                    list.copy(pilots = list.pilots.filter { it != current.pilot }),
-                    choose,
-                    showNotListed = current.pilot != null,
-                )
-            } else {
-                Heading("Who’s flying?", settingsButton)
-                PilotList(list, choose)
+                Step.Pilots -> {
+                    if (current == null) {
+                        Heading("Who’s flying?", settingsButton)
+                    } else {
+                        Heading("Other pilot", backButton)
+                    }
+                    PilotList(list, choosePilot, showNotListed = current == null || current.choice != null)
+                }
+                Step.Groups -> {
+                    val pilot = stepPilot!!
+                    Heading("Which group is this flight for?", backButton)
+                    GroupList(
+                        list,
+                        list.groupsFor(pilot),
+                        onChoose = { choose(Choice(pilot, it)) },
+                        // Their own groups first; the other ones on request.
+                        others = if (pilot.groups.isEmpty()) 0 else pilot.otherGroups.size,
+                        onOthers = { step = Step.OtherGroups },
+                    )
+                }
+                Step.OtherGroups -> {
+                    val pilot = stepPilot!!
+                    Heading("Other group", backButton)
+                    GroupList(list, pilot.otherGroups, onChoose = { choose(Choice(pilot, it)) })
+                }
             }
         }
-        // Not on "Other pilot", which needs the room for the list; the first
-        // screen shows it. An update shares the row, so it takes no height.
-        val choosingOther = current != null && choosing
-        if ((syncStatus != null || update != null) && !choosingOther) {
+        // Only on the first screen, as the lists need the room. An update
+        // shares the row, so it takes no height.
+        if ((syncStatus != null || update != null) && shown == Step.First) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (syncStatus != null) SyncLine(syncStatus, onSettings)
                 Spacer(Modifier.weight(1f))
@@ -196,13 +259,17 @@ private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
     }
 }
 
-/** Who flies: a pilot, or none for "Not in the list". */
-private data class Pick(val pilot: Pilot?)
+/** Who flies: a pilot with their group, or none for "Not in the list". */
+private data class Pick(val choice: Choice?)
 
-/** The pilot on the tile, in one tap to DJI Pilot 2; or another one. */
+/**
+ * The pilot on the tile, in one tap to DJI Pilot 2; or another one. The
+ * group is the tile's second line (carbon-expert's suggestion), none when
+ * the organisation has no groups.
+ */
 @Composable
-private fun CurrentPilot(current: Pick, onFly: () -> Unit, onOther: () -> Unit) {
-    val pilot = current.pilot
+private fun CurrentPilot(current: Pick, detail: String?, onFly: () -> Unit, onOther: () -> Unit) {
+    val pilot = current.choice?.pilot
     // Carbon's wide gutter: a gloved tap mustn't hit the wrong one.
     // 144dp when there's room, at least 96dp with the startup warning above.
     Row(
@@ -211,7 +278,7 @@ private fun CurrentPilot(current: Pick, onFly: () -> Unit, onOther: () -> Unit) 
     ) {
         ClickableTile(
             title = pilot?.name ?: "Not in the list",
-            detail = pilot?.teamName ?: "Set the pilot later in the logbook",
+            detail = if (pilot == null) "Set the pilot later in the logbook" else detail,
             action = "Open DJI Pilot 2",
             icon = CarbonIcons.Launch,
             onClick = onFly,
@@ -229,53 +296,85 @@ private fun CurrentPilot(current: Pick, onFly: () -> Unit, onOther: () -> Unit) 
 }
 
 /**
- * Everyone: the controller's team, then other teams, and "Not in the list"
- * unless it's on the first screen already. Choosing only chooses.
+ * Everyone who flies, each once: the controller's group's pilots first, then
+ * the others, and "Not in the list" unless it's on the first screen already.
+ * Each tile names the pilot's own groups. Choosing a pilot goes on to the
+ * group step when there's a group to choose.
  */
 @Composable
 private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, showNotListed: Boolean = true) {
-    val (team, others) = list.pilots.partition { list.teamId == null || it.teamId == list.teamId }
-    val state = rememberLazyGridState()
-    Box {
-    // Carbon's narrow gutter between tiles, for gloves.
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 200.dp),
-        state = state,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.s05),
-        verticalArrangement = Arrangement.spacedBy(Spacing.s05),
-    ) {
-        // The team shows on every tile: the flights belong to the one chosen.
-        items(team, key = { it.key }) { pilot ->
-            PilotTile(pilot, detail = pilot.teamName, onChoose)
+    val (own, others) = list.pilots.partition { list.controllerGroup == null || list.controllerGroup in it.groups }
+    val groupNames = { pilot: Pilot ->
+        pilot.groups.mapNotNull { list.group(it)?.name }.joinToString(", ").ifEmpty { null }
+    }
+    TileGrid {
+        items(own, key = { it.id }) { pilot ->
+            Tile(pilot.name, groupNames(pilot)) { onChoose(pilot) }
         }
         if (showNotListed) {
             item(key = "not-in-the-list") {
-                ClickableTile(
-                    title = "Not in the list",
-                    detail = "Set the pilot later in the logbook",
-                    onClick = { onChoose(null) },
-                    modifier = Modifier.height(TILE_HEIGHT),
-                )
+                Tile("Not in the list", "Set the pilot later in the logbook") { onChoose(null) }
             }
         }
         if (others.isNotEmpty()) {
-            sectionHeading("Other teams")
-            items(others, key = { it.key }) { pilot ->
-                PilotTile(pilot, detail = pilot.teamName, onChoose)
+            sectionHeading("Other pilots")
+            items(others, key = { it.id }) { pilot ->
+                Tile(pilot.name, groupNames(pilot)) { onChoose(pilot) }
             }
         }
     }
-    // While more pilots are below, the list fades out at the bottom, so it's
-    // clear it scrolls.
-    if (state.canScrollForward) {
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(48.dp)
-                .background(Brush.verticalGradient(listOf(Colors.background.copy(alpha = 0f), Colors.background))),
-        )
+}
+
+/**
+ * Groups to choose from, by name, and "Other group" for `others` more,
+ * which opens a list of its own (carbon-expert's advice: tiles don't reveal
+ * more in place).
+ */
+@Composable
+private fun GroupList(
+    list: PilotList,
+    groupIds: List<String>,
+    onChoose: (String) -> Unit,
+    others: Int = 0,
+    onOthers: () -> Unit = {},
+) {
+    TileGrid {
+        items(groupIds, key = { it }) { id ->
+            Tile(list.group(id)?.name.orEmpty(), detail = null) { onChoose(id) }
+        }
+        if (others > 0) {
+            item(key = "other-group") {
+                Tile("Other group", if (others == 1) "1 more group" else "$others more groups", onOthers)
+            }
+        }
     }
+}
+
+/**
+ * Tiles in a scrolling grid, with Carbon's narrow gutter between them, for
+ * gloves. While more are below, the list fades out at the bottom, so it's
+ * clear it scrolls.
+ */
+@Composable
+private fun TileGrid(content: LazyGridScope.() -> Unit) {
+    val state = rememberLazyGridState()
+    Box {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 200.dp),
+            state = state,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s05),
+            verticalArrangement = Arrangement.spacedBy(Spacing.s05),
+            content = content,
+        )
+        if (state.canScrollForward) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(Brush.verticalGradient(listOf(Colors.background.copy(alpha = 0f), Colors.background))),
+            )
+        }
     }
 }
 
@@ -312,29 +411,33 @@ private fun Heading(text: String, action: @Composable () -> Unit = {}) {
 }
 
 @Composable
-private fun PilotTile(pilot: Pilot, detail: String?, onChoose: (Pilot?) -> Unit) {
+private fun Tile(title: String, detail: String?, onClick: () -> Unit) {
     ClickableTile(
-        title = pilot.name,
+        title = title,
         detail = detail,
-        onClick = { onChoose(pilot) },
+        onClick = onClick,
         modifier = Modifier.height(TILE_HEIGHT),
     )
 }
 
-private val previewPilots = listOf(
-    Pilot("a", "Test pilot A", "north", "Test team North"),
-    Pilot("b", "Test pilot B", "north", "Test team North"),
-    Pilot("c", "Test pilot C", "south", "Test team South"),
+private val previewList = PilotList(
+    controllerGroup = "north",
+    groups = listOf(Group("north", "Test group North"), Group("south", "Test group South"), Group("west", "Test group West")),
+    pilots = listOf(
+        Pilot("a", "Test pilot A", listOf("north"), emptyList()),
+        Pilot("b", "Test pilot B", listOf("north", "south"), listOf("west")),
+        Pilot("c", "Test pilot C", emptyList(), listOf("north", "south", "west")),
+    ),
 )
 
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun LastPilotPreview() {
-    PilotScreen(PilotList("north", previewPilots), previewPilots[1], true, {}, {}, {}, {})
+    PilotScreen(previewList, Choice(previewList.pilots[1], "south"), true, {}, {}, {}, {})
 }
 
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun PilotListPreview() {
-    PilotScreen(PilotList("north", previewPilots), last = null, true, {}, {}, {}, {})
+    PilotScreen(previewList, last = null, true, {}, {}, {}, {})
 }
