@@ -127,6 +127,12 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 - **Archiving flights stays** a soft delete, with `flights.archive`.
 - **Migrating changes nobody's access:** teams become groups, every team member becomes a member with Pilot and Editor, admins get Admin and the all-flights role Viewer on the whole organisation. Pilot lists are tidied by hand afterwards. Operations, never built, are dropped: merged sessions cover joint missions.
 
+**Storage** (schema approved by the user, 2026-10-23; the shape is my proposal)
+
+- **`groups`, `group_members` and `organisation_roles`**, with a nullable `group_id` on flights, sessions, drones and controllers: null is directly in the organisation (for flights, the queue). A group with anything in it can't be deleted.
+- **A membership is one row per role** (`group_id`, `user_id`, `role`), so a membership always has a role and a check is a plain `role in (…)`. Roles are text with a check constraint (Viewer, Pilot, Editor in groups; also Admin on the organisation) until organisations define their own.
+- **Teams became groups with the same ids** (migration 0018), so the remaining team columns (`raw_logs`, `pairing_codes`) move over without a lookup. A session got its flights' group when they all had one team; a session of mixed teams or with queue flights went to the organisation (none existed). Archived teams would have become ordinary groups (none existed).
+
 ## Sessions and operations
 
 - **Sessions exist for reporting:** they summarise several flights as one thing.
