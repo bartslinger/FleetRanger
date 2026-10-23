@@ -15,7 +15,7 @@ import org.json.JSONObject
 
 /**
  * The FleetRanger install this controller belongs to: its address, and the
- * token the controller uses once it paired with a code. See docs/pairing.md and "Clients" in
+ * token the controller uses once it paired with a code. See "Clients" in
  * docs/architecture.md. Calls block, so run them off the main thread.
  */
 class Server(private val context: Context) {

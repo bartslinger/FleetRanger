@@ -46,7 +46,8 @@ pub fn require_admin(actor: &Actor) -> ApiResult<()> {
 }
 
 /// Whether the actor sees everyone's open pairing codes: admins do; others
-/// see their own. Any user may create one; see docs/pairing.md.
+/// see their own. Any user may create one; see "Clients" in
+/// docs/architecture.md.
 pub fn all_pairing_codes(actor: &Actor) -> bool {
     actor.role == Role::Admin
 }

@@ -1,5 +1,5 @@
 -- Pairing with a code a user creates in the web app, which the pilot types into
--- the controller; see docs/pairing.md. It replaces controllers asking to pair
+-- the controller; see "Clients" in docs/architecture.md. It replaces controllers asking to pair
 -- and a user approving them. The controller still generates its own token and
 -- sends only its hash, which becomes `remote_controllers.token_sha256`.
 
