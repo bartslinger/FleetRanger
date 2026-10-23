@@ -70,7 +70,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Pairing: linking a (new) controller to the organisation, for whoever may pair in a group, with unpairing and the download page
 - [x] Pairing with a code created in the web app and typed into the controller, replacing the approval flow
 - [~] Onboarding asks which logs to upload (all, or from a date that starts at today, with the number of logs each covers); today's until chosen
-- [ ] Stay in landscape when the controller is turned (the app rotates with it now)
+- [x] Stays in landscape when the controller is turned
 
 ## Groups and roles
 

@@ -401,10 +401,11 @@ private fun Heading(text: String, action: @Composable () -> Unit = {}) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // A long heading wraps rather than pushing the action off the screen.
         BasicText(
             text,
             style = Type.heading04.copy(color = Colors.textPrimary),
-            modifier = Modifier.semantics { heading() },
+            modifier = Modifier.weight(1f, fill = false).semantics { heading() },
         )
         action()
     }
