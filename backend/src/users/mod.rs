@@ -1,5 +1,5 @@
-//! Users: everyone, pilots, viewers and admins. A user flies for a team, can
-//! log in, or both.
+//! Users: everyone, pilots, viewers and admins. A user has roles in groups or
+//! on the whole organisation, can log in, or both.
 
 mod db;
 pub mod routes;
@@ -30,17 +30,17 @@ pub async fn add(db: &PgPool, email: &str, name: &str, admin: bool) -> Result<()
         }
         return Ok(());
     }
-    let role = if admin { "admin" } else { "member" };
+    let roles = if admin {
+        vec!["admin".to_owned()]
+    } else {
+        Vec::new()
+    };
     let fields = UserFields {
         name,
-        role,
-        team_ids: &[],
+        roles: &roles,
         email: Some(&email),
     };
-    let id = db::insert(db, &fields).await?;
-    if admin {
-        db::make_admin(db, id).await?;
-    }
-    tracing::info!(email, role, "user added; the login is tied on first use");
+    db::insert(db, &fields).await?;
+    tracing::info!(email, admin, "user added; the login is tied on first use");
     Ok(())
 }

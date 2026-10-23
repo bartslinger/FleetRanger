@@ -1,0 +1,93 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select u.id, u.name,\n                  array(select r.role from organisation_roles r where r.user_id = u.id\n                        order by array_position(array['viewer', 'pilot', 'editor', 'admin'],\n                                                r.role)) as \"roles!\",\n                  coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name,\n                                                                'roles', m.roles)\n                                             order by lower(g.name), g.id)\n                            from groups g\n                            join (select group_id,\n                                         array_agg(role order by array_position(\n                                             array['viewer', 'pilot', 'editor'], role)) as roles\n                                  from group_members where user_id = u.id\n                                  group by group_id) m on m.group_id = g.id),\n                           '[]') as \"groups!: Json<Vec<Membership>>\",\n                  l.email as \"email?\",\n                  (select max(created_at) from login_sessions s where s.user_id = u.id)\n                      as last_login_at,\n                  u.archived_at,\n                  (select count(*) from flights f where f.pilot_id = u.id and f.archived_at is null)\n                      as \"flights!\"\n           from users u\n           left join logins l on l.user_id = u.id\n           where ($1 or u.archived_at is null) and ($2::uuid is null or u.id = $2)\n           order by lower(u.name), u.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "roles!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "groups!: Json<Vec<Membership>>",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "email?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_login_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "archived_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "archived_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "flights!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      false,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "86889e87272ff001a90a0643c0a9ee3c3cb016b0083fc1389cc0a5351bc80774"
+}

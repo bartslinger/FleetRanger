@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into organisation_roles (user_id, role) select $1, unnest($2::text[])\n         on conflict do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0ff1b7b31a922bf1a594cba4f651aa634f67f012b688ba17d1bdf963c7a03c3b"
+}

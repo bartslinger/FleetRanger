@@ -219,10 +219,10 @@ export interface GroupDetail extends Group {
 export interface User {
 	id: string;
 	name: string;
-	role: 'member' | 'all_flights' | 'admin';
-	/** The teams the user flies for, by name. */
-	team_ids: string[];
-	team_names: string[];
+	/** Roles on the whole organisation, in the order viewer, pilot, editor, admin. */
+	roles: OrganisationRole[];
+	/** The groups they are a member of, by name, with their roles there. */
+	groups: { id: string; name: string; roles: GroupRole[] }[];
 	/** The login's email; null if the user can't log in. */
 	email: string | null;
 	last_login_at: string | null;
