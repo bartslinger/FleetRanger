@@ -58,15 +58,15 @@ sequenceDiagram
     S-->>U: Code, valid for 1 hour to 7 days
     U-->>RC: Gives the code to the pilot, who types it in
     RC->>S: Code, serial and SHA-256 of a token it generated
-    S-->>RC: Paired, with the code's team
+    S-->>RC: Paired, with the code's group
     Note over RC,S: From now on the controller authenticates with its token
 ```
 
 - The controller generates its own long random token and sends only its hash. The server stores only the hash.
-- A code pairs one controller and is deleted when it's used, revoked or expired. Its creator, or an admin, can revoke it until then.
+- A code pairs one controller and is deleted when it's used, revoked or expired. Its creator, or whoever manages the group's controllers, can revoke it until then.
 - A code is 8 characters (about 40 bits), so guessing is limited: nginx allows 10 pairing attempts a minute per address (with a burst of 5), as it does for OAuth registration. There is no limit across all addresses (the user's decision, 2026-10-23), so many addresses together could guess faster; a successful guess yields a controller token, which can read the pilot list and upload logs but not read flights, and the code's rightful user finds it used.
 - The token allows exactly two things: downloading the pilot list and uploading logs. It can't read flights or anything else.
-- Unpairing, on the controller or by an admin, stops the token immediately.
+- Unpairing, on the controller or by whoever manages the group's controllers, stops the token immediately.
 
 **Uploads.**
 - Uploads use HTTPS to the install's public address, nothing else.
@@ -81,16 +81,18 @@ sequenceDiagram
 - There is no open sign-up. An admin gives a user a login by email. The first login with that verified address ties it to the provider's permanent subject ID, and later logins match on that ID only. So a reassigned or renamed address can't take over a login.
 - Login sessions are a random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. The database stores only its SHA-256 hash. Sessions expire after 30 days without use and can be revoked immediately; archiving a user or removing their login revokes them.
 
-**Roles.** Each user has one role:
+**Roles.** An organisation can be divided into groups, which hold flights, sessions, drones and controllers; what isn't in a group is directly in the organisation. A user gets roles in groups, on the whole organisation, or both, and holds what their roles together allow:
 
 | Role | Sees | Changes |
 |---|---|---|
-| Member | Their own flights and those of their teams | Pilot and session of their teams' flights; name and holder of their teams' equipment |
-| All flights | Every flight | Nothing |
-| Admin | Everything | Users, teams, equipment, any flight |
+| Viewer | The flights and equipment | Nothing |
+| Pilot | Their own flights | Nothing; is offered as a pilot and pairs controllers |
+| Editor | The flights and equipment | Pilot, session and archiving of flights; names of equipment; pairs controllers |
+| Admin (whole organisation only) | Everything | Users, roles, groups, equipment, areas, any flight |
 
+- A pilot always sees their own flights. Equipment is also seen by whoever sees one of its flights.
 - Every access decision goes through one policy module in the backend. Service functions take the acting user, so a handler can't skip the check.
-- Users and teams are archived, never deleted, so history keeps referring to them. An archived user can't log in.
+- Users with flights are archived, never deleted, so history keeps referring to them. An archived user can't log in. A group can be deleted only once it's empty.
 
 ## Data on the server
 
@@ -99,7 +101,7 @@ sequenceDiagram
 | Raw logs, as uploaded | Files on disk | Nobody through the app; only the server's operators |
 | Flights: times, distance, track (one point per second), serials | PostgreSQL | Per the roles above |
 | DJI key requests and responses, exactly as sent and received (API key left out) | PostgreSQL | Only the server's operators |
-| Users, teams, equipment | PostgreSQL | Names to members; management to admins |
+| Users, groups, roles, equipment | PostgreSQL | Names to users; management to admins |
 | Login data: email, provider subject ID, session hashes | PostgreSQL, apart from the rest | Only the server's operators |
 
 - Raw logs are kept so that flights can be re-derived when the parser improves. They are never offered for download.
