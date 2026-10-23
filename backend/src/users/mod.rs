@@ -37,7 +37,10 @@ pub async fn add(db: &PgPool, email: &str, name: &str, admin: bool) -> Result<()
         team_ids: &[],
         email: Some(&email),
     };
-    db::insert(db, &fields).await?;
+    let id = db::insert(db, &fields).await?;
+    if admin {
+        db::make_admin(db, id).await?;
+    }
     tracing::info!(email, role, "user added; the login is tied on first use");
     Ok(())
 }

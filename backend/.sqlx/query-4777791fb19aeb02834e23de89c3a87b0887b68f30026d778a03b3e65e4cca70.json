@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into organisation_roles (user_id, role) values ($1, 'admin')\n         on conflict do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4777791fb19aeb02834e23de89c3a87b0887b68f30026d778a03b3e65e4cca70"
+}
