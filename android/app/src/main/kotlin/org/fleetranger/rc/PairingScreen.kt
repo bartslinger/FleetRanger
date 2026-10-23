@@ -2,11 +2,9 @@ package org.fleetranger.rc
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -20,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -36,7 +33,6 @@ import kotlinx.coroutines.withContext
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.ButtonKind
 import org.fleetranger.rc.ui.Colors
-import org.fleetranger.rc.ui.InlineLoading
 import org.fleetranger.rc.ui.InlineNotification
 import org.fleetranger.rc.ui.LabelledCode
 import org.fleetranger.rc.ui.NotificationKind
@@ -55,9 +51,12 @@ data class PairingForm(
     val code: String = "",
     val codeError: String? = null,
     /** Not about a field, such as FleetRanger being out of reach. */
-    val problem: String? = null,
+    val problem: Problem? = null,
     val busy: Boolean = false,
 )
+
+/** What went wrong, and what to do about it. */
+data class Problem(val title: String, val text: String)
 
 /**
  * Pairs the controller with a code someone created in the web app: the pilot
@@ -69,7 +68,14 @@ data class PairingForm(
  * asked for too; it's kept only if FleetRanger answers there.
  */
 @Composable
-fun Pairing(server: Server, serverUrl: String?, onServer: (String?) -> Unit, onPaired: () -> Unit) {
+fun Pairing(
+    server: Server,
+    serverUrl: String?,
+    onServer: (String?) -> Unit,
+    /** As soon as the controller is paired, before the pilot continues. */
+    onPaired: () -> Unit,
+    onContinue: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var form by remember { mutableStateOf(PairingForm()) }
     // The team the controller joined (empty for none); null until it's paired.
@@ -77,6 +83,8 @@ fun Pairing(server: Server, serverUrl: String?, onServer: (String?) -> Unit, onP
     var unpairing by remember { mutableStateOf(false) }
 
     fun pair() {
+        // Done on the keyboard while already pairing.
+        if (form.busy) return
         val typedUrl = if (serverUrl == null) serverAddress(form.address) else null
         if (serverUrl == null && typedUrl == null) {
             form = form.copy(addressError = "Enter an address such as example.fleetranger.org.")
@@ -93,6 +101,7 @@ fun Pairing(server: Server, serverUrl: String?, onServer: (String?) -> Unit, onP
         scope.launch {
             form = try {
                 val team = withContext(Dispatchers.IO) { server.pair(code) }
+                onPaired()
                 pairedWith = team.orEmpty()
                 PairingForm()
             } catch (refused: Server.Refused) {
@@ -108,7 +117,7 @@ fun Pairing(server: Server, serverUrl: String?, onServer: (String?) -> Unit, onP
                 } else {
                     form.copy(
                         busy = false,
-                        problem = "Can’t reach FleetRanger. Check the Wi-Fi connection and try again.",
+                        problem = Problem("Can’t reach FleetRanger", "Check the Wi-Fi connection and try again."),
                     )
                 }
             }
@@ -129,8 +138,14 @@ fun Pairing(server: Server, serverUrl: String?, onServer: (String?) -> Unit, onP
             unpairing = false
             pairedWith = null
             form = PairingForm(
-                problem = if (reached) null else "Unpaired here, but FleetRanger couldn’t be reached. " +
-                    "Ask an admin to unpair this controller in Equipment.",
+                problem = if (reached) {
+                    null
+                } else {
+                    Problem(
+                        "Unpaired only on this controller",
+                        "FleetRanger couldn’t be reached. Ask an admin to unpair this controller in Equipment.",
+                    )
+                },
             )
         }
     }
@@ -144,7 +159,7 @@ fun Pairing(server: Server, serverUrl: String?, onServer: (String?) -> Unit, onP
         onAddressChange = { form = form.copy(address = it, addressError = null) },
         onCodeChange = { form = form.copy(code = it.uppercase(), codeError = null) },
         onPair = ::pair,
-        onContinue = onPaired,
+        onContinue = onContinue,
         onUnpair = ::unpair,
     )
 }
@@ -187,15 +202,14 @@ fun PairingScreen(
                 },
                 modifier = width,
             )
-            if (unpairing) {
-                Box(Modifier.height(64.dp), contentAlignment = Alignment.CenterStart) {
-                    InlineLoading("Unpairing…")
-                }
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s01)) {
-                    Button("Continue", onContinue)
-                    Button("Unpair", onUnpair, kind = ButtonKind.Secondary)
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s01)) {
+                Button("Continue", { if (!unpairing) onContinue() })
+                Button(
+                    "Unpair",
+                    onUnpair,
+                    kind = ButtonKind.Secondary,
+                    loading = if (unpairing) "Unpairing…" else null,
+                )
             }
         } else {
             if (needsAddress) {
@@ -206,7 +220,7 @@ fun PairingScreen(
                     modifier = width,
                     helper = "The address you open FleetRanger at in a browser, such as example.fleetranger.org.",
                     invalid = form.addressError,
-                    enabled = !form.busy,
+                    readOnly = form.busy,
                     keyboardOptions = KeyboardOptions(
                         autoCorrectEnabled = false,
                         keyboardType = KeyboardType.Uri,
@@ -221,7 +235,7 @@ fun PairingScreen(
                 modifier = width,
                 helper = "8 letters and digits, from Pair a controller in FleetRanger’s web app.",
                 invalid = form.codeError,
-                enabled = !form.busy,
+                readOnly = form.busy,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Characters,
                     autoCorrectEnabled = false,
@@ -231,15 +245,9 @@ fun PairingScreen(
                 onDone = onPair,
             )
             form.problem?.let {
-                InlineNotification(NotificationKind.Error, title = "Not paired", text = it, modifier = width)
+                InlineNotification(NotificationKind.Error, title = it.title, text = it.text, modifier = width)
             }
-            if (form.busy) {
-                Box(Modifier.height(64.dp), contentAlignment = Alignment.CenterStart) {
-                    InlineLoading("Pairing…")
-                }
-            } else {
-                Button("Pair", onPair)
-            }
+            Button("Pair", onPair, loading = if (form.busy) "Pairing…" else null)
         }
         LabelledCode("Serial number", serial)
     }

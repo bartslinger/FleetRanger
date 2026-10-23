@@ -97,10 +97,13 @@ class MainActivity : ComponentActivity() {
                     server.url = url
                     serverUrl = url
                 }, onPaired = {
-                    // Until someone chooses, only today's logs upload.
+                    // Until someone chooses, only today's logs upload. Set
+                    // at once, so the choice still comes if the app is left
+                    // before Continue.
                     sync.syncFrom = LocalDate.now()
                     onboarding().edit().putBoolean("choose_logs", true).apply()
                     choosingLogs = true
+                }, onContinue = {
                     paired = true
                     refreshPilots()
                     startUploads()
