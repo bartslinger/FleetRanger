@@ -66,6 +66,10 @@ User's decisions, 2026-10-23, unless marked as mine. They replaced teams, the th
 - **Roles in groups are managed from both sides** (user's decision, 2026-10-23): a group's page adds members and edits their roles, and a user's page adds them to groups and edits their roles there, the same way: a dialog per change that applies at once, apart from the page's form.
 - **Groups aren't archived, for now.** Only an empty group can be deleted; otherwise "Delete group" first moves its flights, sessions and equipment to another group or the organisation in one step, which needs `groups.manage` and the move permissions on both sides. Its memberships go with it. Archiving can come if reports per group over past years need it.
 - **Nested groups come later:** a role on a group will cover its subgroups. To begin with, groups are a flat list.
+- **The UI shows the organisation as the top group** (user's decisions, 2026-10-23), with the same patterns as a group; the schema stays as it is (`organisation_roles`, null `group_id`):
+  - **Its members are all users:** the Users list is the organisation's member list, its roles column the roles on the organisation; "New user" adds a member. The navigation keeps "Users" and "Groups"; the Groups list starts with the organisation ("Organisation, all users"), linking to Users.
+  - **A user's page lists the organisation as the first of their groups**, its roles edited as a group's are; the form keeps name and email. The last admin keeps Admin there.
+  - **What has no group is in "Organisation"**, one word everywhere: pickers ("Move to group", a session's group) start with it, a flight's group shows it, and the group filter offers it. "Queue" goes from the UI; uploads that still need a group are that filter.
 
 **Permissions**, built-in roles (my proposal from the decisions):
 
