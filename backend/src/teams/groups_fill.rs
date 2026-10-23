@@ -69,7 +69,10 @@ async fn differ(db: &PgPool, items: &str, before: &str, after: &str) -> Vec<Stri
         "select u.name || ' ' || i.label from users u cross join ({items}) i
          where coalesce(({before}), false) <> coalesce(({after}), false) order by 1"
     );
-    sqlx::query_scalar(sqlx::AssertSqlSafe(sql)).fetch_all(db).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_all(db)
+        .await
+        .unwrap()
 }
 
 const OWN_TEAM: &str = "i.team_id in (select team_id from team_members where user_id = u.id)";
@@ -86,12 +89,18 @@ async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
     // Seeing a flight: its pilot, its team, or all flights.
     let before = format!("u.role in ('all_flights', 'admin') or i.pilot_id = u.id or {OWN_TEAM}");
     let after = format!("i.pilot_id = u.id or {}", holds(READS, "i.group_id"));
-    assert_eq!(differ(&db, flights, &before, &after).await, Vec::<String>::new());
+    assert_eq!(
+        differ(&db, flights, &before, &after).await,
+        Vec::<String>::new()
+    );
 
     // Changing a flight (pilot, archiving): its team's members and admins.
     let before = format!("u.role = 'admin' or (u.role = 'member' and {OWN_TEAM})");
     let after = holds(CHANGES, "i.group_id");
-    assert_eq!(differ(&db, flights, &before, &after).await, Vec::<String>::new());
+    assert_eq!(
+        differ(&db, flights, &before, &after).await,
+        Vec::<String>::new()
+    );
 
     // Changing a session: members of all its flights' teams, and admins.
     // A session of mixed teams goes to the organisation, so it's left out
@@ -103,7 +112,10 @@ async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
                       select 1 from flights f where f.session_id = i.id and (f.team_id is null
                           or f.team_id not in (select team_id from team_members where user_id = u.id))))";
     let after = holds(CHANGES, "i.group_id");
-    assert_eq!(differ(&db, sessions, before, &after).await, Vec::<String>::new());
+    assert_eq!(
+        differ(&db, sessions, before, &after).await,
+        Vec::<String>::new()
+    );
 
     let mixed: Option<uuid::Uuid> = sqlx::query_scalar(
         "select group_id from sessions where id = '00000000-0000-0000-0000-000000000002'",
@@ -118,11 +130,17 @@ async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
                      union all select serial, team_id, group_id from remote_controllers";
     let before = format!("u.role in ('all_flights', 'admin') or {OWN_TEAM}");
     let after = holds(READS, "i.group_id");
-    assert_eq!(differ(&db, equipment, &before, &after).await, Vec::<String>::new());
+    assert_eq!(
+        differ(&db, equipment, &before, &after).await,
+        Vec::<String>::new()
+    );
 
     // Flying for a team: its members.
     let teams = "select name as label, id as team_id from teams";
     let after = "exists (select 1 from group_members m
                          where m.user_id = u.id and m.group_id = i.team_id and m.role = 'pilot')";
-    assert_eq!(differ(&db, teams, OWN_TEAM, after).await, Vec::<String>::new());
+    assert_eq!(
+        differ(&db, teams, OWN_TEAM, after).await,
+        Vec::<String>::new()
+    );
 }
