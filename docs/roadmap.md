@@ -8,7 +8,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **v0.6.0 and android-v0.3.0 prepared: pairing reversed.** A user creates a code in the web app ("Pair a controller", valid 1 hour to 7 days, revocable) and the pilot types it into the controller, one box per character, so nobody logs in in the field; nginx limits pairing attempts per address. Server and app go out together: controllers already paired keep working, an older app that isn't paired needs the new one. See "Clients" in [architecture.md](architecture.md).
 
-**Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replace teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replace the three fixed roles. The design is settled, see "Groups and roles" in [architecture.md](architecture.md); the work is split into the packages under "Groups and roles" below, each done in a session of its own. Packages 1 to 4 are done: groups sit beside teams, every access check asks for a permission on the groups tables, a flight's pilot and group are independent, uploads without a chosen group go to the queue, and a session's own group decides who changes it. Until the admin pages manage groups (package 6), changes to teams and roles there don't change anyone's access. Serving several organisations from one install follows after.
+**Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replace teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replace the three fixed roles. The design is settled, see "Groups and roles" in [architecture.md](architecture.md); the work is split into the packages under "Groups and roles" below, each done in a session of its own. Packages 1 to 5 are done: groups sit beside teams, every access check asks for a permission on the groups tables, a flight's pilot and group are independent, uploads without a chosen group go to the queue, a session's own group decides who changes it, only flights without a session are archived, equipment is also seen through its flights with figures over all of them, pairing puts a controller in a group the creator chooses, and holders are gone from the app. Until the admin pages manage groups (package 6), changes to teams and roles there don't change anyone's access. Serving several organisations from one install follows after.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -67,7 +67,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Launching DJI Pilot 2
 - [x] Syncing finished logs over approved Wi-Fi networks, any Wi-Fi or any connection
 - [x] Uploading only the logs the server lacks (asked by hash before uploading)
-- [x] Pairing: linking a (new) controller to the organisation, which any user can do, with unpairing and the download page
+- [x] Pairing: linking a (new) controller to the organisation, for whoever may pair in a group, with unpairing and the download page
 - [x] Pairing with a code created in the web app and typed into the controller, replacing the approval flow
 - [~] Onboarding asks which logs to upload (all, or from a date that starts at today, with the number of logs each covers); today's until chosen
 - [ ] Stay in landscape when the controller is turned (the app rotates with it now)
@@ -80,7 +80,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - [x] 2. Schema proposal and first migration: groups, memberships with roles, organisation-wide roles and a group on flights, sessions, drones and controllers, filled from teams (the final SQL approved by the user)
 - [x] 3. Permission checks: permissions and built-in roles in code, the check and the list filter, on the new tables, with today's behaviour (the access tests unchanged)
 - [x] 4. Flights and sessions: pilot and group independent, the queue, a session's owner and the checks on every session that changes
-- [ ] 5. Equipment: seen through its flights, figures over all flights, pairing into a group, holders out
+- [x] 5. Equipment: seen through its flights, figures over all flights, pairing into a group, holders out
 - [ ] 6. Web admin pages: groups with their members and roles, organisation-wide roles (Carbon expert before and after)
 - [ ] 7. Web app elsewhere: groups instead of teams, pilot lists, a session's owner, moving flights and sessions
 - [ ] 8. Controller app: the group after the pilot, with "Other group"; older apps' flights go to the queue
