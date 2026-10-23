@@ -9,7 +9,8 @@
 	interface Props {
 		legend: string;
 		name: string;
-		options: { value: string; label: string }[];
+		/** `helper`: what this option means, below its label. */
+		options: { value: string; label: string; helper?: string }[];
 		/** The values checked at first. */
 		value: string[];
 		helper?: string;
@@ -29,6 +30,7 @@
 				checked={value.includes(option.value)}
 			/>
 		</div>
+		{#if option.helper}<p class="helper option-helper">{option.helper}</p>{/if}
 	{/each}
 	{#if helper}<p class="helper">{helper}</p>{/if}
 </fieldset>
@@ -64,6 +66,12 @@
 		.option {
 			min-height: 2.75rem;
 		}
+	}
+
+	/* Under the option's label: past the 20px box and its 10px gap. */
+	.helper.option-helper {
+		margin-top: calc(-1 * var(--cds-spacing-02));
+		padding-inline-start: 1.875rem;
 	}
 
 	.helper {
