@@ -1,6 +1,7 @@
 package org.fleetranger.rc
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -178,10 +181,18 @@ fun PairingScreen(
     onContinue: () -> Unit = {},
     onUnpair: () -> Unit = {},
 ) {
+    // Clearing focus closes the keyboard: on a tap outside the fields, and on
+    // pairing, so what comes of it isn't hidden behind the keyboard.
+    val focus = LocalFocusManager.current
+    val pair = {
+        focus.clearFocus()
+        onPair()
+    }
     Column(
         Modifier
             .fillMaxSize()
             .background(Colors.background)
+            .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } }
             .verticalScroll(rememberScrollState())
             .padding(horizontal = Spacing.s07, vertical = Spacing.s06),
         verticalArrangement = Arrangement.spacedBy(Spacing.s05),
@@ -238,12 +249,11 @@ fun PairingScreen(
                 helper = "8 letters and digits, from Pair a controller in FleetRanger’s web app.",
                 invalid = form.codeError,
                 readOnly = form.busy,
-                onDone = onPair,
             )
             form.problem?.let {
                 InlineNotification(NotificationKind.Error, title = it.title, text = it.text, modifier = width)
             }
-            Button("Pair", onPair, loading = if (form.busy) "Pairing…" else null)
+            Button("Pair", pair, loading = if (form.busy) "Pairing…" else null)
         }
         LabelledCode("Serial number", serial)
     }
