@@ -1,84 +1,147 @@
 <script lang="ts">
+	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
 	import { enhance } from '$app/forms';
+	import { dateTime } from '#lib/format.js';
+	import type { PairingCode } from '#lib/server/backend.js';
 	import Button from '#lib/ui/Button.svelte';
-	import Select from '#lib/ui/Select.svelte';
+	import CodeSnippet from '#lib/ui/CodeSnippet.svelte';
 	import Column from '#lib/ui/Column.svelte';
+	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
+	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
+	import IconButton from '#lib/ui/IconButton.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
-	import TextInput from '#lib/ui/TextInput.svelte';
+	import Select from '#lib/ui/Select.svelte';
+	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 
 	let busy = $state(false);
-	const paired = $derived(form && 'paired' in form ? form.paired : undefined);
+	const created = $derived(form && 'created' in form ? form.created : undefined);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
-	// The code typed, kept after a rejected attempt; else the one from the QR code.
-	const code = $derived(form && 'code' in form ? form.code : data.code);
+	const revokeMessage = $derived(form && 'revokeMessage' in form ? form.revokeMessage : undefined);
+
+	/** KDW49TXR as KDW4-9TXR, easier to read out and type; the controller takes either. */
+	const shown = (code: string) => `${code.slice(0, 4)}-${code.slice(4)}`;
+	const until = (iso: string) => dateTime(iso, data.timeZone);
+
+	// Admins see everyone's codes, so who made each. On phones only the code
+	// and its time, so Revoke stays in view.
+	const columns: TableColumn<PairingCode>[] = $derived([
+		{ key: 'code', header: 'Code', identifier: true, format: (row) => shown(row.code) },
+		{ key: 'team', header: 'Team', wideOnly: true, format: (row) => row.team ?? 'No team' },
+		...(data.account?.role === 'admin'
+			? [
+					{
+						key: 'created_by',
+						header: 'Created by',
+						wideOnly: true
+					} satisfies TableColumn<PairingCode>
+				]
+			: []),
+		{ key: 'expires_at', header: 'Valid until', format: (row) => until(row.expires_at) }
+	]);
+
+	const validity = [
+		{ value: '1', label: '1 hour' },
+		{ value: '24', label: '24 hours' },
+		{ value: '72', label: '3 days' },
+		{ value: '168', label: '7 days' }
+	];
 </script>
 
 <PageHeader
 	title="Pair a controller"
-	description="Link a remote controller to FleetRanger, so it can offer your pilots and upload its flight logs."
+	description="Create a code for the pilot to type into the controller. It pairs one controller, then stops working."
 />
 
 <Grid>
 	<Column lg={8}>
-		{#if paired}
-			<InlineNotification kind="success" title="Controller paired">
-				{paired.model} ({paired.serial}) continues by itself.
-			</InlineNotification>
-		{:else}
-			{#if data.pairing.length > 0}
-				<h2 class="waiting-heading">Waiting to be paired</h2>
-				<ul class="waiting">
-					{#each data.pairing as controller (controller.serial)}
-						<li>
-							{controller.model}
-							<span class="identifier">{controller.serial}</span>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			<form
-				class="form"
-				method="POST"
-				action="?/pair"
-				use:enhance={() => {
-					busy = true;
-					return async ({ update }) => {
-						busy = false;
-						await update({ reset: false });
-					};
-				}}
-			>
-				{#if message}
-					<InlineNotification kind="error" title={message} />
-				{/if}
-				<TextInput
-					label="Code"
-					name="code"
-					value={code}
-					helper="Shown on the controller, e.g. KDW4-9TXR"
-					autocomplete="off"
-					autocapitalize="characters"
-					spellcheck="false"
-					required
+		<form
+			class="form"
+			method="POST"
+			action="?/create"
+			use:enhance={() => {
+				busy = true;
+				return async ({ update }) => {
+					busy = false;
+					await update({ reset: false });
+				};
+			}}
+		>
+			<!-- The controller joins the creator's team: which one, if they're in several. -->
+			{#if data.teams.length > 1}
+				<Select
+					label="Team"
+					name="team_id"
+					options={data.teams.map((team) => ({ value: team.id, label: team.name }))}
+					helper="The controller joins this team. Its flights without a chosen team go to it."
 				/>
-				<!-- The controller joins the approver's team: which one, if they're in several. -->
-				{#if data.teams.length > 1}
-					<Select
-						label="Team"
-						name="team_id"
-						options={data.teams.map((team) => ({ value: team.id, label: team.name }))}
-						helper="The controller joins this team. Its flights without a chosen team go to it."
-					/>
-				{/if}
-				<div class="buttons">
-					<Button type="submit" disabled={busy}>Pair controller</Button>
-				</div>
-			</form>
+			{/if}
+			<Select
+				label="Valid for"
+				name="hours"
+				value="24"
+				options={validity}
+				helper="After this, an unused code stops working."
+			/>
+			{#if message}
+				<InlineNotification kind="error" title={message} />
+			{/if}
+			<div class="buttons">
+				<Button type="submit" disabled={busy}>Create code</Button>
+			</div>
+		</form>
+
+		{#if created}
+			<div class="created">
+				<InlineNotification kind="success" title="Code created">
+					<p>
+						{created.team
+							? `The controller joins ${created.team}.`
+							: 'The controller joins no team.'}
+						Valid until {until(created.expires_at)}.
+					</p>
+				</InlineNotification>
+				<CodeSnippet code={shown(created.code)} label="pairing code" />
+			</div>
+		{/if}
+
+		<h2 class="heading">Open codes</h2>
+		{#if revokeMessage}
+			<InlineNotification kind="error" title={revokeMessage} />
+		{/if}
+		{#if data.codes.length === 0}
+			<EmptyState
+				title="No open codes"
+				body="Codes you create appear here until they’re used or expire."
+			/>
+		{:else}
+			<DataTable label="Open pairing codes" {columns} rows={data.codes} rowKey={(row) => row.id}>
+				{#snippet rowAction(row)}
+					<form
+						method="POST"
+						action="?/revoke"
+						use:enhance={() =>
+							async ({ result, update }) => {
+								await update();
+								if (result.type === 'success') toast(`Code ${shown(row.code)} revoked.`);
+							}}
+					>
+						<input type="hidden" name="id" value={row.id} />
+						<IconButton
+							icon={SubtractAlt}
+							label="Revoke"
+							name="Revoke code {shown(row.code)}"
+							size="md"
+							onclick={(event: MouseEvent) =>
+								(event.currentTarget as HTMLElement).closest('form')?.requestSubmit()}
+						/>
+					</form>
+				{/snippet}
+			</DataTable>
 		{/if}
 	</Column>
 </Grid>
@@ -98,28 +161,22 @@
 		margin-top: var(--cds-spacing-05);
 	}
 
-	.waiting-heading {
-		margin: 0 0 var(--cds-spacing-05);
-		font-size: var(--cds-heading-compact-01-font-size);
-		font-weight: var(--cds-heading-compact-01-font-weight);
-		line-height: var(--cds-heading-compact-01-line-height);
-		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
+	.created {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--cds-spacing-05);
+		margin-top: var(--cds-spacing-07);
 	}
 
-	.waiting {
-		display: grid;
-		gap: var(--cds-spacing-03);
-		margin: 0 0 var(--cds-spacing-07);
-		padding: 0;
-		list-style: none;
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
+	.created p {
+		margin: 0;
 	}
 
-	.identifier {
-		display: block;
-		color: var(--cds-text-secondary);
-		font-variant-numeric: tabular-nums slashed-zero;
+	.heading {
+		margin: var(--cds-spacing-09) 0 var(--cds-spacing-05);
+		font-size: var(--cds-heading-03-font-size);
+		font-weight: var(--cds-heading-03-font-weight);
+		line-height: var(--cds-heading-03-line-height);
 	}
 </style>

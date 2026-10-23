@@ -65,7 +65,7 @@
 			>
 				<p>
 					The controller stops uploading flight logs and can’t download the pilot list. Its flights
-					stay as they are. To use it again, pair it again from the controller.
+					stay as they are. To use it again, pair it again with a new pairing code.
 				</p>
 			</Modal>
 		{/if}

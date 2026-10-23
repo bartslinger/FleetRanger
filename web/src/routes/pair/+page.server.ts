@@ -1,28 +1,37 @@
 import { fail } from '@sveltejs/kit';
-import { get, send } from '#lib/server/backend.js';
+import { get, remove, send, type PairingCode } from '#lib/server/backend.js';
 
-// A controller shows a code, and a QR code linking here with it (?code=…).
-// Entering the code pairs the controller: the code identifies it.
+// Any user creates a single-use code here, which the pilot types into the
+// controller; see docs/pairing.md.
 
-export async function load({ fetch, url }) {
+export async function load({ fetch }) {
 	return {
-		code: url.searchParams.get('code')?.trim() ?? '',
-		// The approver's teams: the controller joins one, chosen if several.
-		teams: await get<{ id: string; name: string }[]>(fetch, '/api/pairing/teams')
+		// The creator's teams: the controller joins one, chosen if several.
+		teams: await get<{ id: string; name: string }[]>(fetch, '/api/pairing/teams'),
+		// Theirs, or everyone's for admins.
+		codes: await get<PairingCode[]>(fetch, '/api/pairing-codes')
 	};
 }
 
 export const actions = {
-	pair: async ({ fetch, request }) => {
+	create: async ({ fetch, request }) => {
 		const form = await request.formData();
-		const code = String(form.get('code') ?? '').trim();
 		const team = String(form.get('team_id') ?? '');
-		const result = await send<{ serial: string; model: string }>(
+		const hours = Number(form.get('hours'));
+		const result = await send<{ code: string; team: string | null; expires_at: string }>(
 			fetch,
 			'POST',
-			`/api/pairing/${encodeURIComponent(code)}/approve${team ? `?team=${encodeURIComponent(team)}` : ''}`
+			'/api/pairing-codes',
+			{ team: team || null, hours }
 		);
-		if (!result.ok) return fail(result.status, { message: result.message, code });
-		return { paired: result.data };
+		if (!result.ok) return fail(result.status, { message: result.message });
+		return { created: result.data };
+	},
+	revoke: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const result = await remove(fetch, `/api/pairing-codes/${encodeURIComponent(id)}`);
+		if (!result.ok) return fail(result.status, { revokeMessage: result.message });
+		return { revoked: String(form.get('code') ?? '') };
 	}
 };
