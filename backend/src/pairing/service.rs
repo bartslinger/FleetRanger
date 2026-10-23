@@ -85,12 +85,17 @@ pub async fn open_codes(db: &PgPool, actor: &Actor) -> ApiResult<Vec<OpenCode>> 
 
 /// Revokes a code, so it can't pair a controller any more.
 pub async fn revoke(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
-    let created_by = db::code_creator(db, id).await?.ok_or(ApiError::NotFound)?;
+    // Used or expired just now, before the page caught up.
+    let gone = || ApiError::Conflict("This code was used or has expired.".to_owned());
+    let created_by = db::code_creator(db, id).await?.ok_or_else(gone)?;
     if !policy::revoke_pairing_code(actor, created_by) {
         return Err(ApiError::NotFound);
     }
-    db::revoke(db, id).await?;
-    Ok(())
+    if db::revoke(db, id).await? {
+        Ok(())
+    } else {
+        Err(gone())
+    }
 }
 
 /// A controller pairs with a code it was given. It sends the SHA-256 of a
