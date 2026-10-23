@@ -37,6 +37,28 @@ object CarbonIcons {
         "M26,28H6a2.0027,2.0027,0,0,1-2-2V6A2.0027,2.0027,0,0,1,6,4H16V6H6V26H26V16h2V26A2.0027,2.0027,0,0,1,26,28Z",
         "M20 2 20 4 26.586 4 18 12.586 19.414 14 28 5.414 28 12 30 12 30 2 20 2z",
     )
+    /** A pilot, on their tile. */
+    val User = icon(
+        "user",
+        32f,
+        "M16,4a5,5,0,1,1-5,5,5,5,0,0,1,5-5m0-2a7,7,0,1,0,7,7A7,7,0,0,0,16,2Z",
+        "M26,30H24V25a5,5,0,0,0-5-5H13a5,5,0,0,0-5,5v5H6V25a7,7,0,0,1,7-7h6a7,7,0,0,1,7,7Z",
+    )
+    /**
+     * A group, on its tile: a part of the organisation, not people, so it
+     * doesn't look like a pilot's icon (user's choice).
+     */
+    val Enterprise = icon(
+        "enterprise",
+        32f,
+        "M8 8H10V12H8z",
+        "M8 14H10V18H8z",
+        "M14 8H16V12H14z",
+        "M14 14H16V18H14z",
+        "M8 20H10V24H8z",
+        "M14 20H16V24H14z",
+        "M30,14a2,2,0,0,0-2-2H22V4a2,2,0,0,0-2-2H4A2,2,0,0,0,2,4V30H30ZM4,4H20V28H4ZM22,28V14h6V28Z",
+    )
     val ArrowLeft = icon("arrow--left", 32f, "M14 26 15.41 24.59 7.83 17 28 17 28 15 7.83 15 15.41 7.41 14 6 4 16 14 26z")
     val TrashCan = icon(
         "trash-can",

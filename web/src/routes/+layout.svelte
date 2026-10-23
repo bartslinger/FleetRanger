@@ -2,7 +2,7 @@
 	import '#lib/ui/base.css';
 	import Area from '@carbon/icons/es/area/16.js';
 	import Drone from '@carbon/icons/es/drone/16.js';
-	import Events from '@carbon/icons/es/events/16.js';
+	import Enterprise from '@carbon/icons/es/enterprise/16.js';
 	import FlightRoster from '@carbon/icons/es/flight--roster/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
 	import CheckmarkFilled from '@carbon/icons/es/checkmark--filled/20.js';
@@ -100,7 +100,7 @@
 			? [{ href: resolve('/users'), label: 'Users', icon: UserMultiple }]
 			: []),
 		...(may(data.account, 'groups.manage', null)
-			? [{ href: resolve('/groups'), label: 'Groups', icon: Events }]
+			? [{ href: resolve('/groups'), label: 'Groups', icon: Enterprise }]
 			: []),
 		...(may(data.account, 'areas.manage', null)
 			? [{ href: resolve('/areas'), label: 'Areas', icon: Area }]

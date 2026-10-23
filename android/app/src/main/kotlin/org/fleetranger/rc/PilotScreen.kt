@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -177,6 +178,7 @@ fun PilotScreen(
                         },
                         // Into the group screen, or straight to DJI Pilot 2.
                         launches = !choosesGroup,
+                        leading = if (pilot != null) CarbonIcons.User else null,
                         onMain = { if (choosesGroup) step = Step.Group else fly() },
                         other = "Other pilot",
                         onOther = { step = Step.Pilots },
@@ -196,6 +198,7 @@ fun PilotScreen(
                         title = list.group(choice!!.groupId)?.name.orEmpty(),
                         detail = null,
                         launches = true,
+                        leading = CarbonIcons.Enterprise,
                         onMain = fly,
                         other = "Other group",
                         onOther = { step = Step.Groups },
@@ -280,6 +283,8 @@ private fun ChoiceTiles(
     title: String,
     detail: String?,
     launches: Boolean,
+    /** What the main tile is: a pilot or a group; none for "Not in the list". */
+    leading: ImageVector?,
     onMain: () -> Unit,
     other: String,
     onOther: () -> Unit,
@@ -295,6 +300,8 @@ private fun ChoiceTiles(
             detail = detail,
             action = if (launches) "Open DJI Pilot 2" else null,
             icon = if (launches) CarbonIcons.Launch else CarbonIcons.ArrowRight,
+            leading = leading,
+            leadingSize = 32.dp,
             onClick = onMain,
             // Carbon's heading-05 is regular; semibold on purpose, to read outdoors.
             titleStyle = Type.heading05.copy(color = Colors.textPrimary, fontWeight = FontWeight.SemiBold),
@@ -320,7 +327,7 @@ private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, showNotListed
     val (own, others) = list.pilots.partition { list.controllerGroup == null || list.controllerGroup in it.groups }
     TileGrid {
         items(own, key = { it.id }) { pilot ->
-            Tile(pilot.name, detail = null) { onChoose(pilot) }
+            Tile(pilot.name, detail = null, CarbonIcons.User) { onChoose(pilot) }
         }
         if (showNotListed) {
             item(key = "not-in-the-list") {
@@ -330,7 +337,7 @@ private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, showNotListed
         if (others.isNotEmpty()) {
             sectionHeading("Other pilots")
             items(others, key = { it.id }) { pilot ->
-                Tile(pilot.name, detail = null) { onChoose(pilot) }
+                Tile(pilot.name, detail = null, CarbonIcons.User) { onChoose(pilot) }
             }
         }
     }
@@ -347,13 +354,13 @@ private fun GroupList(list: PilotList, choice: Choice, onChoose: (String) -> Uni
     val others = choice.pilot.otherGroups.filter { it != choice.groupId }
     TileGrid {
         items(own, key = { it }) { id ->
-            Tile(list.group(id)?.name.orEmpty(), detail = null) { onChoose(id) }
+            Tile(list.group(id)?.name.orEmpty(), detail = null, CarbonIcons.Enterprise) { onChoose(id) }
         }
         if (others.isNotEmpty()) {
             // Only apart from their own groups; without any, it's one list.
             if (choice.pilot.groups.isNotEmpty()) sectionHeading("Other groups")
             items(others, key = { it }) { id ->
-                Tile(list.group(id)?.name.orEmpty(), detail = null) { onChoose(id) }
+                Tile(list.group(id)?.name.orEmpty(), detail = null, CarbonIcons.Enterprise) { onChoose(id) }
             }
         }
     }
@@ -421,11 +428,12 @@ private fun Heading(text: String, action: @Composable () -> Unit = {}) {
 }
 
 @Composable
-private fun Tile(title: String, detail: String?, onClick: () -> Unit) {
+private fun Tile(title: String, detail: String?, leading: ImageVector? = null, onClick: () -> Unit) {
     ClickableTile(
         title = title,
         detail = detail,
         onClick = onClick,
+        leading = leading,
         modifier = Modifier.height(TILE_HEIGHT),
     )
 }
