@@ -3,15 +3,27 @@
 	import { resolve } from '$app/paths';
 	import { back } from '#lib/back.svelte.js';
 	import { dateTime } from '#lib/format.js';
-	import { ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS, roleList } from '#lib/roles.js';
+	import Edit from '@carbon/icons/es/edit/16.js';
+	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
+	import { may } from '#lib/permissions.js';
+	import {
+		GROUP_ROLE_HELP,
+		GROUP_ROLES,
+		ORGANISATION_ROLES,
+		ROLE_HELP,
+		ROLE_LABELS,
+		roleList
+	} from '#lib/roles.js';
 	import Button from '#lib/ui/Button.svelte';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
+	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
+	import Select from '#lib/ui/Select.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
@@ -47,7 +59,44 @@
 		{ key: 'name', header: 'Group' },
 		{ key: 'roles', header: 'Roles', wrap: true, format: (group) => roleList(group.roles) }
 	];
+
+	// Roles in groups, as on a group's page, from the user's side; each
+	// change applies at once, apart from the form (user's choice).
+	const groupRoleOptions = GROUP_ROLES.map((role) => ({
+		value: role,
+		label: ROLE_LABELS[role],
+		helper: GROUP_ROLE_HELP[role]
+	}));
+	const manages = (group: string) => may(data.account, 'groups.manage', group);
+	const addable = $derived(data.otherGroups.filter((group) => manages(group.id)));
+	const groupRolesMessage = $derived(
+		form && 'groupRolesMessage' in form ? form.groupRolesMessage : undefined
+	);
+	const leaveMessage = $derived(form && 'leaveMessage' in form ? form.leaveMessage : undefined);
+	let addedTo = $state('');
+	const addedName = $derived(data.otherGroups.find((group) => group.id === addedTo)?.name);
 </script>
+
+{#snippet addToGroup()}
+	<Modal
+		title="Add to group"
+		label={user.name}
+		submitLabel="Add"
+		action="?/groupRoles"
+		error={groupRolesMessage}
+		onsuccess={() => toast(`${user.name} added to ${addedName ?? 'the group'}.`)}
+	>
+		<Select
+			label="Group"
+			name="group_id"
+			placeholder="Choose a group"
+			options={addable.map((group) => ({ value: group.id, label: group.name }))}
+			bind:value={addedTo}
+			required
+		/>
+		<CheckboxGroup legend="Roles" name="role" options={groupRoleOptions} value={[]} />
+	</Modal>
+{/snippet}
 
 <PageHeader
 	title={user.name}
@@ -180,9 +229,12 @@
 	<Column narrow>
 		<h2 class="section">Groups</h2>
 		{#if user.groups.length === 0}
-			<p class="note">Not in any group. Members are added on a group’s page.</p>
+			<EmptyState
+				title="Not in any group"
+				body="Roles in a group let them see or organise its flights, sessions and equipment; pilots fly for it."
+				action={addable.length > 0 ? addToGroup : undefined}
+			/>
 		{:else}
-			<p class="note">Roles in a group are changed on the group’s page.</p>
 			<DataTable
 				label="Groups"
 				columns={groupColumns}
@@ -190,7 +242,60 @@
 				rowKey={(group) => group.id}
 				rowHref={(group) => resolve('/groups/[id]', { id: group.id })}
 				summary={`${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
-			/>
+			>
+				{#snippet toolbar()}
+					<!-- Disabled, not hidden, when they're in every group: that changes
+					     with a new group (Carbon's disabled states), as on a group's page. -->
+					{#if addable.length > 0}
+						{@render addToGroup()}
+					{:else}
+						<Button disabled>Add to group</Button>
+					{/if}
+				{/snippet}
+				{#snippet rowAction(group)}
+					{#if manages(group.id)}
+						<span class="actions">
+							<Modal
+								title="Edit roles"
+								triggerIcon={Edit}
+								triggerSize="md"
+								triggerLabel="Edit roles in {group.name}"
+								label="{user.name} in {group.name}"
+								submitLabel="Save"
+								action="?/groupRoles"
+								error={groupRolesMessage}
+								onsuccess={() => toast(`Roles in ${group.name} saved.`)}
+							>
+								<input type="hidden" name="group_id" value={group.id} />
+								<CheckboxGroup
+									legend="Roles"
+									name="role"
+									options={groupRoleOptions}
+									value={group.roles}
+								/>
+							</Modal>
+							<Modal
+								title="Remove from group"
+								label={user.name}
+								triggerIcon={SubtractAlt}
+								triggerSize="md"
+								triggerLabel="Remove {user.name} from {group.name}"
+								submitLabel="Remove from group"
+								danger
+								action="?/leaveGroup"
+								error={leaveMessage}
+								onsuccess={() => toast(`${user.name} removed from ${group.name}.`)}
+							>
+								<input type="hidden" name="group_id" value={group.id} />
+								<p>
+									{user.name} loses their roles in {group.name}. Their flights stay as they are. You
+									can add them again later.
+								</p>
+							</Modal>
+						</span>
+					{/if}
+				{/snippet}
+			</DataTable>
 		{/if}
 	</Column>
 </Grid>
@@ -234,7 +339,7 @@
 
 	.section {
 		margin-top: var(--cds-spacing-07);
-		margin-bottom: var(--cds-spacing-03);
+		margin-bottom: var(--cds-spacing-05);
 		/* The column has no gutter; line up with the table's text. */
 		padding-inline: var(--cds-spacing-05);
 		font-size: var(--cds-heading-03-font-size);
@@ -242,11 +347,7 @@
 		line-height: var(--cds-heading-03-line-height);
 	}
 
-	.note {
-		margin: 0 0 var(--cds-spacing-05);
-		padding-inline: var(--cds-spacing-05);
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
+	.actions {
+		display: inline-flex;
 	}
 </style>
