@@ -36,25 +36,38 @@ data class PilotList(
 ) {
     fun group(id: String?): Group? = groups.find { it.id == id }
 
-    /**
-     * The groups to choose from for this pilot: their own, or else the ones
-     * they may fly for; none when the organisation has no groups.
-     */
-    fun groupsFor(pilot: Pilot): List<String> = pilot.groups.ifEmpty { pilot.otherGroups }
+    /** Every group this pilot may fly for: their own first. */
+    private fun groupsFor(pilot: Pilot): List<String> = pilot.groups + pilot.otherGroups
 
     /**
-     * The choice for this pilot and group, if it can still be made: the group
-     * one they may fly for, or picked by itself when they may fly for only
-     * one (a single group of their own with others they may fly for still
-     * gets the step, for "Other group"; user's decision, 2026-10-23). Null
-     * when a group has to be chosen.
+     * Whether the pilot chooses a group, on a screen of its own after the
+     * pilot: when they may fly for more than one (user's decision,
+     * 2026-10-23). Otherwise the one is picked by itself.
+     */
+    fun choosesGroup(pilot: Pilot): Boolean = groupsFor(pilot).size > 1
+
+    /**
+     * The choice for this pilot and group, if it can still be made: a group
+     * they may fly for; with no groups in the organisation, none.
      */
     fun choice(pilot: Pilot, groupId: String?): Choice? {
         if (groups.isEmpty()) return Choice(pilot, null)
-        if (groupId != null && (groupId in pilot.groups || groupId in pilot.otherGroups)) {
-            return Choice(pilot, groupId)
-        }
-        return (pilot.groups + pilot.otherGroups).singleOrNull()?.let { Choice(pilot, it) }
+        if (groupId != null && groupId in groupsFor(pilot)) return Choice(pilot, groupId)
+        return null
+    }
+
+    /**
+     * This pilot with the group to offer first: `groupId` if they may still
+     * fly for it, else the controller's group if they may, else their first
+     * own group, else the first they may fly for.
+     */
+    fun choiceFor(pilot: Pilot, groupId: String?): Choice {
+        if (groups.isEmpty()) return Choice(pilot, null)
+        val all = groupsFor(pilot)
+        val group = groupId?.takeIf { it in all }
+            ?: controllerGroup?.takeIf { it in all }
+            ?: all.firstOrNull()
+        return Choice(pilot, group)
     }
 
     companion object {
@@ -153,15 +166,15 @@ class Pilots(context: Context) {
     }
 
     /**
-     * The pilot chosen last, with their group, if they can still be chosen:
-     * with a group they may fly for still, or else the only one they may.
+     * The pilot chosen last, if they can still be chosen, with their group,
+     * or another to offer first if they can't fly for that one any more.
      */
     fun last(): Choice? {
         val value = choices.all.maxByOrNull { (time, _) -> time.toLong() }?.value as String?
         if (value == null || value == NOT_IN_THE_LIST) return null
         val (pilotId, groupId) = parse(value)
         val list = current
-        return list.pilots.find { it.id == pilotId }?.let { list.choice(it, groupId) }
+        return list.pilots.find { it.id == pilotId }?.let { list.choiceFor(it, groupId) }
     }
 
     private companion object {

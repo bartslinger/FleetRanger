@@ -54,25 +54,28 @@ private const val NOT_LISTED = "not-listed"
 
 /** Which part of the screen shows. */
 private enum class Step {
-    /** The pilot's tile and "Other pilot". */
+    /** "Who's flying?": the pilot's tile and "Other pilot". */
     First,
     Pilots,
-    /** The group step: the pilot's own groups, with "Other group". */
+    /** "Which group are you flying for?": the group's tile and "Other group". */
+    Group,
     Groups,
-    OtherGroups,
 }
 
 /**
  * "Who's flying?": the pilot's tile opens DJI Pilot 2, and says so. The last
  * pilot is there already with their group, so the same again is one tap.
- * Anyone else is chosen through "Other pilot" and the list, then the group
- * step when there's more than one group to choose (see "Flights and pilots"
- * in docs/architecture.md), which goes back to this screen with them on the
- * tile, so a different pilot or group is a step more, on purpose (user's
- * decision, 2026-10-20). Without a last pilot (a new controller, or that
- * pilot was removed) the list shows straight away, and choosing goes to this
- * screen too. A choice counts at once, also if DJI Pilot 2 is opened some
- * other way (user's request, 2026-10-20).
+ * For a pilot who may fly for more than one group, the tile leads on to
+ * "Which group are you flying for?", built the same way: their last group's
+ * tile opens DJI Pilot 2, and "Other group" the list of their groups (user's
+ * decision, 2026-10-23: two taps then, and changing the group doesn't go
+ * through "Other pilot"). Anyone else is chosen through "Other pilot" and the
+ * list, which goes back to this screen with them on the tile, or on to the
+ * group screen, so a different pilot or group is a step more, on purpose
+ * (user's decision, 2026-10-20). Without a last pilot (a new controller, or
+ * that pilot was removed) the list shows straight away. A choice counts at
+ * once, also if DJI Pilot 2 is opened some other way (user's request,
+ * 2026-10-20).
  */
 @Composable
 fun PilotScreen(
@@ -90,9 +93,7 @@ fun PilotScreen(
     var step by rememberSaveable { mutableStateOf(Step.First) }
     // Who was chosen, by key; null for the last choice.
     var chosenKey by rememberSaveable { mutableStateOf<String?>(null) }
-    // The pilot whose group is being chosen.
-    var stepPilotId by rememberSaveable { mutableStateOf<String?>(null) }
-    // The choice on the tile: the one made, or else the last. A choice in a
+    // The choice on the tiles: the one made, or else the last. A choice in a
     // Pick, so "Not in the list" (no pilot) can be on the tile too.
     val current: Pick? = when (val key = chosenKey) {
         NOT_LISTED -> Pick(null)
@@ -100,46 +101,43 @@ fun PilotScreen(
         else -> {
             val pilotId = key.substringBefore(':')
             val groupId = key.substringAfter(':', "").ifEmpty { null }
-            list.pilots.find { it.id == pilotId }?.let { list.choice(it, groupId) }?.let(::Pick)
+            list.pilots.find { it.id == pilotId }?.let { list.choiceFor(it, groupId) }?.let(::Pick)
                 ?: last?.let(::Pick)
         }
     }
-    val stepPilot = list.pilots.find { it.id == stepPilotId }
+    val choice = current?.choice
+    val choosesGroup = choice != null && list.choosesGroup(choice.pilot)
     // Without a choice on the tile, the list is the first thing to show.
     val shown = when {
-        step == Step.First && current == null -> Step.Pilots
-        (step == Step.Groups || step == Step.OtherGroups) && stepPilot == null -> Step.Pilots
+        current == null -> Step.Pilots
+        (step == Step.Group || step == Step.Groups) && !choosesGroup -> Step.First
         else -> step
     }
     val settingsButton: @Composable () -> Unit = {
         Button("Settings", onSettings, kind = ButtonKind.Ghost)
     }
-    val choose: (Choice?) -> Unit = { choice ->
-        onSelect(choice)
-        chosenKey = choice?.key ?: NOT_LISTED
-        step = Step.First
+    val select: (Choice?) -> Unit = { selected ->
+        onSelect(selected)
+        chosenKey = selected?.key ?: NOT_LISTED
     }
     val choosePilot: (Pilot?) -> Unit = { pilot ->
         if (pilot == null) {
-            choose(null)
+            select(null)
+            step = Step.First
         } else {
-            val choice = list.choice(pilot, null)
-            if (choice != null) {
-                choose(choice)
-            } else {
-                stepPilotId = pilot.id
-                step = Step.Groups
-            }
+            // The same pilot again keeps their group.
+            select(list.choiceFor(pilot, choice?.takeIf { it.pilot.id == pilot.id }?.groupId))
+            step = if (list.choosesGroup(pilot)) Step.Group else Step.First
         }
+    }
+    val fly: () -> Unit = {
+        onChoose(choice)
+        chosenKey = null
     }
     val back: () -> Unit = {
-        step = when (shown) {
-            Step.OtherGroups -> Step.Groups
-            Step.Groups -> Step.Pilots
-            else -> Step.First
-        }
+        step = if (shown == Step.Groups) Step.Group else Step.First
     }
-    BackHandler(enabled = shown != Step.First && !(shown == Step.Pilots && current == null)) { back() }
+    BackHandler(enabled = shown != Step.First && current != null) { back() }
     val backButton: @Composable () -> Unit = {
         Button("Back", back, kind = ButtonKind.Ghost)
     }
@@ -166,13 +164,18 @@ fun PilotScreen(
             when (shown) {
                 Step.First -> {
                     Heading("Who’s flying?", settingsButton)
-                    CurrentPilot(
-                        current!!,
-                        detail = current.choice?.let { list.group(it.groupId)?.name },
-                        onFly = {
-                            onChoose(current.choice)
-                            chosenKey = null
+                    val pilot = choice?.pilot
+                    ChoiceTiles(
+                        title = pilot?.name ?: "Not in the list",
+                        detail = if (pilot == null) {
+                            "Set the pilot later in the logbook"
+                        } else {
+                            list.group(choice.groupId)?.name
                         },
+                        // Into the group screen, or straight to DJI Pilot 2.
+                        launches = !choosesGroup,
+                        onMain = { if (choosesGroup) step = Step.Group else fly() },
+                        other = "Other pilot",
                         onOther = { step = Step.Pilots },
                     )
                 }
@@ -182,24 +185,25 @@ fun PilotScreen(
                     } else {
                         Heading("Other pilot", backButton)
                     }
-                    PilotList(list, choosePilot, showNotListed = current == null || current.choice != null)
+                    PilotList(list, choosePilot, showNotListed = current == null || choice != null)
                 }
-                Step.Groups -> {
-                    val pilot = stepPilot!!
+                Step.Group -> {
                     Heading("Which group are you flying for?", backButton)
-                    GroupList(
-                        list,
-                        list.groupsFor(pilot),
-                        onChoose = { choose(Choice(pilot, it)) },
-                        // Their own groups first; the other ones on request.
-                        others = if (pilot.groups.isEmpty()) 0 else pilot.otherGroups.size,
-                        onOthers = { step = Step.OtherGroups },
+                    ChoiceTiles(
+                        title = list.group(choice!!.groupId)?.name.orEmpty(),
+                        detail = choice.pilot.name,
+                        launches = true,
+                        onMain = fly,
+                        other = "Other group",
+                        onOther = { step = Step.Groups },
                     )
                 }
-                Step.OtherGroups -> {
-                    val pilot = stepPilot!!
-                    Heading("Other groups", backButton)
-                    GroupList(list, pilot.otherGroups, onChoose = { choose(Choice(pilot, it)) })
+                Step.Groups -> {
+                    Heading("Other group", backButton)
+                    GroupList(list, choice!!) {
+                        select(Choice(choice.pilot, it))
+                        step = Step.Group
+                    }
                 }
             }
         }
@@ -263,13 +267,20 @@ private fun SyncLine(status: SyncStatus, onSettings: () -> Unit) {
 private data class Pick(val choice: Choice?)
 
 /**
- * The pilot on the tile, in one tap to DJI Pilot 2; or another one. The
- * group is the tile's second line (carbon-expert's suggestion), none when
- * the organisation has no groups.
+ * The choice so far in a big tile, and another one beside it: the pilot and
+ * "Other pilot", or the group and "Other group". A tile that opens DJI Pilot
+ * 2 says so with the Launch icon; one that leads to the next screen has the
+ * arrow and no action text (carbon-expert's suggestion).
  */
 @Composable
-private fun CurrentPilot(current: Pick, detail: String?, onFly: () -> Unit, onOther: () -> Unit) {
-    val pilot = current.choice?.pilot
+private fun ChoiceTiles(
+    title: String,
+    detail: String?,
+    launches: Boolean,
+    onMain: () -> Unit,
+    other: String,
+    onOther: () -> Unit,
+) {
     // Carbon's wide gutter: a gloved tap mustn't hit the wrong one.
     // 144dp when there's room, at least 96dp with the startup warning above.
     Row(
@@ -277,17 +288,17 @@ private fun CurrentPilot(current: Pick, detail: String?, onFly: () -> Unit, onOt
         horizontalArrangement = Arrangement.spacedBy(Spacing.s07),
     ) {
         ClickableTile(
-            title = pilot?.name ?: "Not in the list",
-            detail = if (pilot == null) "Set the pilot later in the logbook" else detail,
-            action = "Open DJI Pilot 2",
-            icon = CarbonIcons.Launch,
-            onClick = onFly,
+            title = title,
+            detail = detail,
+            action = if (launches) "Open DJI Pilot 2" else null,
+            icon = if (launches) CarbonIcons.Launch else CarbonIcons.ArrowRight,
+            onClick = onMain,
             // Carbon's heading-05 is regular; semibold on purpose, to read outdoors.
             titleStyle = Type.heading05.copy(color = Colors.textPrimary, fontWeight = FontWeight.SemiBold),
             modifier = Modifier.weight(2f).fillMaxHeight(),
         )
         ClickableTile(
-            title = "Other pilot",
+            title = other,
             detail = "Choose from the list",
             onClick = onOther,
             modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -299,7 +310,7 @@ private fun CurrentPilot(current: Pick, detail: String?, onFly: () -> Unit, onOt
  * Everyone who flies, each once: the controller's group's pilots first, then
  * the others, and "Not in the list" unless it's on the first screen already.
  * Each tile names the pilot's own groups. Choosing a pilot goes on to the
- * group step when there's a group to choose.
+ * group screen when they may fly for more than one group.
  */
 @Composable
 private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, showNotListed: Boolean = true) {
@@ -326,25 +337,23 @@ private fun PilotList(list: PilotList, onChoose: (Pilot?) -> Unit, showNotListed
 }
 
 /**
- * Groups to choose from, by name, and "Other group" for `others` more,
- * which opens a list of its own (carbon-expert's advice: tiles don't reveal
- * more in place).
+ * The other groups the pilot may fly for, by name: their own first, then
+ * the rest under "Other groups", as the pilot list puts the controller's
+ * group first. The group already on the tile isn't repeated.
  */
 @Composable
-private fun GroupList(
-    list: PilotList,
-    groupIds: List<String>,
-    onChoose: (String) -> Unit,
-    others: Int = 0,
-    onOthers: () -> Unit = {},
-) {
+private fun GroupList(list: PilotList, choice: Choice, onChoose: (String) -> Unit) {
+    val own = choice.pilot.groups.filter { it != choice.groupId }
+    val others = choice.pilot.otherGroups.filter { it != choice.groupId }
     TileGrid {
-        items(groupIds, key = { it }) { id ->
+        items(own, key = { it }) { id ->
             Tile(list.group(id)?.name.orEmpty(), detail = null) { onChoose(id) }
         }
-        if (others > 0) {
-            item(key = "other-group") {
-                Tile("Other group", if (others == 1) "1 more group" else "$others more groups", onOthers)
+        if (others.isNotEmpty()) {
+            // Only apart from their own groups; without any, it's one list.
+            if (choice.pilot.groups.isNotEmpty()) sectionHeading("Other groups")
+            items(others, key = { it }) { id ->
+                Tile(list.group(id)?.name.orEmpty(), detail = null) { onChoose(id) }
             }
         }
     }
