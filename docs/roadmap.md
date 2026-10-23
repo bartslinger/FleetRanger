@@ -85,7 +85,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - [ ] 7. Web app elsewhere: groups instead of teams, pilot lists, a session's owner, moving flights and sessions
 - [ ] 8. Controller app: the group after the pilot, with "Other group"; older apps' flights go to the queue
 - [ ] 9. MCP: the user's own access, read only
-- [ ] 10. Final migration and release: teams and holders dropped; server and app released together
+- [ ] 10. Final migration and release: teams and holders dropped; server and app released together. Check first that the server still has no all-flights user in a team: the fill would give them Editor there.
 
 ## Public website (fleetranger.org)
 
