@@ -87,7 +87,7 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 | Permission | Viewer | Pilot | Editor | Admin |
 |---|---|---|---|---|
 | `flights.read`, `equipment.read` | ✓ | | ✓ | ✓ |
-| `flights.fly_for` | | ✓ | | ✓ |
+| `flights.fly_for` | | ✓ | | |
 | `controllers.pair` | | ✓ | ✓ | ✓ |
 | `flights.set_pilot`, `flights.archive`, `sessions.edit`, `equipment.rename` | | | ✓ | ✓ |
 | `flights.move`, `sessions.move`, `equipment.move`, `batteries.rename` | | | | ✓ |
@@ -96,6 +96,7 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 
 - **Two permissions for admin work the table first lacked** (user's decision, 2026-10-23, my proposal): `controllers.manage` on a group, for unpairing its controllers and seeing and revoking others' pairing codes for it; `logs.manage` on the organisation, for log processing.
 
+- **Admin doesn't include `flights.fly_for`** (user's decision, 2026-10-23): it puts someone in pilot lists, so an admin who flies also gets Pilot, in a group or on the whole organisation.
 - **Pilot doesn't read the group's flights:** a pilot always sees their own, so a guest pilot sees only theirs. A pilot who should see the group's work also gets Viewer or Editor.
 - **Pilot can pair controllers**, so pilots set up controllers in the field without waiting for an editor.
 - Batteries and areas have no group, so their permissions count only on the whole organisation. `equipment.*` covers drones and controllers together while their rules are the same.
