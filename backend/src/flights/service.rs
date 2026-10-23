@@ -76,27 +76,22 @@ pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<D
 pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<FlightDetail> {
     let scope = policy::flight_scope(actor);
     let mut flight = db::get(db, &scope, id).await?.ok_or(ApiError::NotFound)?;
-    link_equipment(db, actor, std::slice::from_mut(&mut flight)).await?;
+    link_equipment(actor, std::slice::from_mut(&mut flight));
     Ok(flight)
 }
 
 /// Keeps the links to the drone's and controller's pages only where the
 /// actor may see them.
-pub async fn link_equipment(
-    db: &PgPool,
-    actor: &Actor,
-    flights: &mut [FlightDetail],
-) -> sqlx::Result<()> {
-    let own_teams = db::own_teams(db, actor.user_id).await?;
+pub fn link_equipment(actor: &Actor, flights: &mut [FlightDetail]) {
+    let see = |group| actor.grants.may(Permission::EquipmentRead, group);
     for flight in flights {
-        if !policy::see_equipment(actor.role, &own_teams, flight.aircraft_team_id) {
+        if !see(flight.aircraft_group_id) {
             flight.aircraft_id = None;
         }
-        if !policy::see_equipment(actor.role, &own_teams, flight.rc_team_id) {
+        if !see(flight.rc_group_id) {
             flight.rc_id = None;
         }
     }
-    Ok(())
 }
 
 /// What the actor can change in the logbook, so it offers only that.

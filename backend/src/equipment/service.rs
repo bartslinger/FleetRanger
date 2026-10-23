@@ -5,7 +5,7 @@ use super::db::{self, Equipment, EquipmentFields, Kind};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    policy,
+    policy::{self, Permission},
 };
 
 /// What is entered for a drone or controller; all optional.
@@ -15,30 +15,29 @@ pub struct EquipmentInput {
     pub holder_user_id: Option<Uuid>,
 }
 
+/// Whether the actor sees this item: `equipment.read` on its group.
+fn sees(actor: &Actor, item: &Equipment) -> bool {
+    actor.grants.may(Permission::EquipmentRead, item.group_id)
+}
+
 /// The equipment the actor may see; the lists are short, so the policy
 /// filters them here rather than in the query.
 pub async fn list(db: &PgPool, actor: &Actor, kind: Kind) -> ApiResult<Vec<Equipment>> {
-    let own_teams = own_teams(db, actor).await?;
     let mut items = db::list(db, kind).await?;
-    items.retain(|item| policy::see_equipment(actor.role, &own_teams, item.team_id));
+    items.retain(|item| sees(actor, item));
     Ok(items)
 }
 
 /// One the actor may not see is not found, so its existence isn't revealed.
 pub async fn get(db: &PgPool, actor: &Actor, kind: Kind, id: Uuid) -> ApiResult<Equipment> {
-    let own_teams = own_teams(db, actor).await?;
     db::get(db, kind, id)
         .await?
-        .filter(|item| policy::see_equipment(actor.role, &own_teams, item.team_id))
+        .filter(|item| sees(actor, item))
         .ok_or(ApiError::NotFound)
 }
 
-async fn own_teams(db: &PgPool, actor: &Actor) -> sqlx::Result<Vec<Uuid>> {
-    crate::flights::db::own_teams(db, actor.user_id).await
-}
-
 /// The team decides the team of new flights without a pilot, so it must be
-/// active; so must the holder. Members change only the name and holder.
+/// an existing group; the holder must be active.
 pub async fn update(
     db: &PgPool,
     actor: &Actor,
@@ -47,20 +46,18 @@ pub async fn update(
     input: &EquipmentInput,
 ) -> ApiResult<Equipment> {
     let item = get(db, actor, kind, id).await?;
-    let holder_teams = match input.holder_user_id {
+    let holder_groups = match input.holder_user_id {
         Some(user) => Some(crate::flights::db::pilot_groups(db, user).await?),
         None => None,
     };
-    let own_teams = own_teams(db, actor).await?;
     policy::change_equipment(
-        actor.role,
-        &own_teams,
-        item.team_id,
+        &actor.grants,
+        item.group_id,
         input.team_id,
-        holder_teams.as_deref(),
+        holder_groups.as_deref(),
     )?;
-    if let Some(team_id) = input.team_id
-        && !db::team_is_active(db, team_id).await?
+    if let Some(group_id) = input.team_id
+        && !db::group_exists(db, group_id).await?
     {
         return Err(ApiError::Invalid("Choose an active team.".to_owned()));
     }

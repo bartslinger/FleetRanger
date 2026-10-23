@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select e.id, e.serial, e.name, e.team_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.rc_serial = e.serial and f.archived_at is null)\n                              as last_flight_at,\n                          e.token_sha256 is not null as \"paired?\",\n                          e.synced_at, e.app_version\n                   from remote_controllers e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   order by lower(coalesce(e.name, e.serial)), e.id",
+  "query": "select e.id, e.serial, e.name, e.team_id, e.group_id, t.name as \"team_name?\",\n                          e.holder_user_id, p.name as \"holder_name?\",\n                          (select max(takeoff_at) from flights f\n                           where f.aircraft_serial = e.serial and f.archived_at is null)\n                              as last_flight_at,\n                          null::bool as \"paired?\",\n                          null::timestamptz as \"synced_at?\",\n                          null::text as \"app_version?\"\n                   from aircraft e\n                   left join teams t on t.id = e.team_id\n                   left join users p on p.id = e.holder_user_id\n                   order by lower(coalesce(e.name, e.serial)), e.id",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "serial"
           }
         }
@@ -31,7 +31,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "name"
           }
         }
@@ -42,13 +42,24 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "team_id"
           }
         }
       },
       {
         "ordinal": 4,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "aircraft",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "team_name?",
         "type_info": "Text",
         "origin": {
@@ -59,18 +70,18 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "holder_user_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "remote_controllers",
+            "table": "aircraft",
             "name": "holder_user_id"
           }
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "holder_name?",
         "type_info": "Text",
         "origin": {
@@ -81,38 +92,28 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "last_flight_at",
         "type_info": "Timestamptz",
         "origin": "Expression"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "paired?",
         "type_info": "Bool",
         "origin": "Expression"
       },
       {
-        "ordinal": 9,
-        "name": "synced_at",
+        "ordinal": 10,
+        "name": "synced_at?",
         "type_info": "Timestamptz",
-        "origin": {
-          "Table": {
-            "table": "remote_controllers",
-            "name": "synced_at"
-          }
-        }
+        "origin": "Expression"
       },
       {
-        "ordinal": 10,
-        "name": "app_version",
+        "ordinal": 11,
+        "name": "app_version?",
         "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "remote_controllers",
-            "name": "app_version"
-          }
-        }
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -123,14 +124,15 @@
       false,
       true,
       true,
+      true,
       false,
       true,
       false,
       null,
       null,
-      true,
-      true
+      null,
+      null
     ]
   },
-  "hash": "178634c7c8cf20659aee8d38a099e11f6116608d3859a8508bdf76bafb2c3503"
+  "hash": "657473de661bda4f2bc2d5cad0125ac7d14413d3d5786fbaebf4afbc5a123b89"
 }
