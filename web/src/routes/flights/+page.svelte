@@ -161,12 +161,17 @@
 	/** The group the batch's flights share: the selected ones', or for all
 	 * matching flights the one group filtered on. */
 	function batchGroup(ids: string[]) {
-		if (!allMatching) return sharedGroup(selectedRows(ids));
+		return sharedGroup(batchGroups(ids));
+	}
+	/** The groups of the batch's flights as far as the page knows them: the
+	 * selected rows', or for all matching flights the one group filtered on. */
+	function batchGroups(ids: string[]): { group_id: string | null; group_name: string | null }[] {
+		if (!allMatching) return selectedRows(ids);
+		if (data.state.groups.length !== 1) return [];
 		const [only] = data.state.groups;
+		if (only === 'none') return [{ group_id: null, group_name: null }];
 		const group = data.devices.groups.find((group) => group.id === only);
-		return data.state.groups.length === 1 && group?.id
-			? { id: group.id, name: group.name ?? '' }
-			: null;
+		return group?.id ? [{ group_id: group.id, group_name: group.name }] : [];
 	}
 	// Where the user may move flights to.
 	const groupOptions = $derived(
@@ -345,7 +350,7 @@
 								it.
 							</p>
 							<SessionGroupField
-								choice={sessionGroupChoice(data.account, data.choices.groups, batchGroup(ids))}
+								choice={sessionGroupChoice(data.account, data.choices.groups, batchGroups(ids))}
 							/>
 						</Modal>
 						<span class="wide-only">

@@ -28,15 +28,20 @@ export function sharedGroup(items: Grouped[]): { id: string; name: string } | nu
 export function sessionGroupChoice(
 	account: Account | null | undefined,
 	groups: { id: string; name: string }[],
-	flights: { id: string } | null
+	flights: Grouped[]
 ): { options: { value: string; label: string }[]; value: string } {
 	const options = groupOptions(account, 'sessions.edit', groups, WHOLE_ORGANISATION).map(
 		(option) => (option.value === '' ? { ...option, value: 'organisation' } : option)
 	);
+	// Flights all in no group (the queue) share the organisation.
+	const shared =
+		flights.length > 0 && flights.every((flight) => flight.group_id === null)
+			? 'organisation'
+			: sharedGroup(flights)?.id;
 	const value =
 		options.length === 1
 			? options[0].value
-			: (options.find((option) => option.value === flights?.id)?.value ?? '');
+			: (options.find((option) => option.value === shared)?.value ?? '');
 	return { options, value };
 }
 
