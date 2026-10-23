@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS, roleList } from '#lib/roles.js';
-	import Checkbox from '#lib/ui/Checkbox.svelte';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -10,6 +9,7 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
+	import Toggle from '#lib/ui/Toggle.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
 
@@ -72,7 +72,7 @@
 		>
 			{#snippet toolbar()}
 				<div class="filter">
-					<Checkbox label="Show archived" checked={data.archived} onchange={showArchived} />
+					<Toggle label="Show archived" checked={data.archived} onchange={showArchived} />
 				</div>
 				<Modal
 					title="New user"
