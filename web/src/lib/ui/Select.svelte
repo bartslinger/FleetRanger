@@ -21,6 +21,10 @@
 		error?: string;
 		size?: 'sm' | 'md' | 'lg';
 		value?: string;
+		/** A prompt such as "Choose a team" for a choice without a default:
+		 * shown in the closed field, never in the list (Carbon's disabled,
+		 * hidden, selected option). The field's value is then empty. */
+		placeholder?: string;
 	}
 
 	let {
@@ -28,6 +32,7 @@
 		options,
 		helper,
 		error,
+		placeholder,
 		size = 'md',
 		value = $bindable(),
 		...rest
@@ -47,6 +52,9 @@
 			aria-describedby={error || helper ? `${id}-message` : undefined}
 			{...rest}
 		>
+			{#if placeholder}
+				<option value="" disabled hidden selected>{placeholder}</option>
+			{/if}
 			{#each options as option (option.value)}
 				<option value={option.value}>{option.label}</option>
 			{/each}

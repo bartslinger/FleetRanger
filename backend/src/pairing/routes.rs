@@ -14,12 +14,11 @@ use uuid::Uuid;
 use super::{
     Controller,
     db::{self, OpenCode, Paired},
-    service::{self, Created, PilotList},
+    service::{self, Created, Destinations, PilotList},
 };
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    flights::db::TeamChoice,
 };
 
 pub fn router<S>() -> Router<S>
@@ -40,7 +39,7 @@ where
 
 #[derive(Deserialize)]
 struct Create {
-    /// The creator's team the controller joins, if they're in several.
+    /// The team the controller joins; none for the organisation.
     team: Option<Uuid>,
     /// How long the code stays valid.
     hours: i64,
@@ -69,8 +68,8 @@ async fn revoke(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// The teams a controller paired with the actor's code can join.
-async fn teams(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<TeamChoice>>> {
+/// Where a controller paired with the actor's code can go.
+async fn teams(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Destinations>> {
     Ok(Json(service::teams(&db, &actor).await?))
 }
 
