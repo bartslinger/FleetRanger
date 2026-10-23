@@ -161,7 +161,7 @@ fun RadioButton(
 
 /**
  * Carbon's inline loading: a small spinner before the text, for something the
- * app is doing right now, such as waiting for approval.
+ * app is doing right now, such as pairing.
  */
 @Composable
 fun InlineLoading(text: String, modifier: Modifier = Modifier) {

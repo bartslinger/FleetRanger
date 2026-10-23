@@ -47,6 +47,9 @@ object Colors {
     val supportError = Color(0xFFDA1E28)
     val supportWarning = Color(0xFFF1C21B)
     val notificationBackgroundWarning = Color(0xFFFCF4D6)
+    val notificationBackgroundError = Color(0xFFFFF1F1)
+    val supportSuccess = Color(0xFF24A148)
+    val notificationBackgroundSuccess = Color(0xFFDEFBE6)
 }
 
 val Plex = FontFamily(

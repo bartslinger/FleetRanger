@@ -1,7 +1,6 @@
 package org.fleetranger.rc
 
 import android.content.Context
-import android.os.Build
 import android.util.Base64
 import java.io.File
 import java.io.IOException
@@ -16,7 +15,7 @@ import org.json.JSONObject
 
 /**
  * The FleetRanger install this controller belongs to: its address, and the
- * token the controller uses once a user has approved pairing. See "Clients" in
+ * token the controller uses once it paired with a code. See docs/pairing.md and "Clients" in
  * docs/architecture.md. Calls block, so run them off the main thread.
  */
 class Server(private val context: Context) {
@@ -34,7 +33,7 @@ class Server(private val context: Context) {
             prefs.edit().putString("url", value).remove("token").putBoolean("paired", false).apply()
         }
 
-    /** Whether a user approved this controller, as last checked. */
+    /** Whether this controller is paired, as last checked. */
     var paired: Boolean
         get() = prefs.getBoolean("paired", false)
         private set(value) = prefs.edit().putBoolean("paired", value).apply()
@@ -42,41 +41,28 @@ class Server(private val context: Context) {
     private val token: String?
         get() = prefs.getString("token", null)
 
-    /** Where this controller's token stands, as the server sees it. */
-    enum class Check { Paired, Waiting, Unknown }
+    /** The server refused a request, saying why in words for the person. */
+    class Refused(message: String) : IOException(message)
 
     /**
-     * Asks to pair, with a new token: only its hash is sent, so the token never
-     * leaves the controller. Returns the code a user approves in the web app.
+     * Pairs with a code a user created in the web app, and a new token: only
+     * its hash is sent, so the token never leaves the controller. Returns the
+     * team the controller joined, null for none. Throws [Refused] for a code
+     * that doesn't pair, and another IOException when no FleetRanger answered.
      */
-    fun startPairing(): String {
+    fun pair(code: String): String? {
         val token = newToken()
         prefs.edit().putString("token", token).putBoolean("paired", false).apply()
+        val body = JSONObject()
+            .put("code", code)
+            .put("serial", serial())
+            .put("token_sha256", sha256Hex(token))
+        val answer = call("POST", "/api/controller/pairing", body)
+            ?: throw IOException("no FleetRanger answered")
         // Perhaps another install, or this one after its logs moved.
         FlightLogs(context).forgetUploaded()
-        val body = JSONObject()
-            .put("serial", serial())
-            .put("model", Build.MODEL.replace('_', ' '))
-            .put("token_sha256", sha256Hex(token))
-        val answer = call("POST", "/api/pairing", body)
-            ?: throw IOException("the server refused the pairing request")
-        return answer.optString("code").ifEmpty { throw IOException("the server gave no pairing code") }
-    }
-
-    /**
-     * Asks the server about this controller's token. While waiting for
-     * approval, asking keeps the code valid; the server drops it about a
-     * minute after the controller stops asking.
-     */
-    fun check(): Check {
-        val answer = call("GET", "/api/controller")
-        val result = when {
-            answer == null -> Check.Unknown
-            answer.optBoolean("paired") -> Check.Paired
-            else -> Check.Waiting
-        }
-        paired = result == Check.Paired
-        return result
+        paired = true
+        return if (answer.isNull("team")) null else answer.getString("team")
     }
 
     /**
@@ -188,8 +174,9 @@ class Server(private val context: Context) {
 
     /**
      * Calls the API. Returns the JSON answer (empty for no content), or null if
-     * the server refused the token or the request (401, 404). Anything else,
-     * such as no connection, is an IOException.
+     * the server refused the token or the request (401, 404). A request the
+     * server finds wrong (400) is [Refused], with the server's reason. Anything
+     * else, such as no connection, is an IOException.
      */
     private fun call(method: String, path: String, body: JSONObject? = null): JSONObject? {
         val base = url ?: throw IOException("no server set up")
@@ -215,6 +202,10 @@ class Server(private val context: Context) {
                     }
                 }
                 401, 404 -> null
+                400 -> throw Refused(
+                    connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                        .ifBlank { "The server refused the request." },
+                )
                 else -> throw IOException("the server answered $status")
             }
         } finally {
