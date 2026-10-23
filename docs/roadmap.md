@@ -77,7 +77,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 Each package leaves a working app with its tests passing. Groups are added beside teams first and filled from them; the code moves over package by package, and teams and holders are dropped only at the end. Each package also removes the rules in architecture.md it replaces.
 
 - [x] 1. Docs: the decisions in architecture.md, these packages
-- [ ] 2. Schema proposal and first migration: groups, memberships with roles, organisation-wide roles and a group on flights, sessions, drones and controllers, filled from teams (the final SQL approved by the user)
+- [x] 2. Schema proposal and first migration: groups, memberships with roles, organisation-wide roles and a group on flights, sessions, drones and controllers, filled from teams (the final SQL approved by the user)
 - [ ] 3. Permission checks: permissions and built-in roles in code, the check and the list filter, on the new tables, with today's behaviour (the access tests unchanged)
 - [ ] 4. Flights and sessions: pilot and group independent, the queue, a session's owner and the checks on every session that changes
 - [ ] 5. Equipment: seen through its flights, figures over all flights, pairing into a group, holders out
