@@ -22,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -32,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.fleetranger.rc.ui.Button
 import org.fleetranger.rc.ui.ButtonKind
+import org.fleetranger.rc.ui.CodeInput
 import org.fleetranger.rc.ui.Colors
 import org.fleetranger.rc.ui.InlineNotification
 import org.fleetranger.rc.ui.LabelledCode
@@ -90,9 +90,10 @@ fun Pairing(
             form = form.copy(addressError = "Enter an address such as example.fleetranger.org.")
             return
         }
-        val code = normalize(form.code)
-        if (code.length != CODE_LENGTH || code.any { it !in CODE_ALPHABET }) {
-            form = form.copy(codeError = "Enter the 8 characters of the code, as the web app shows it.")
+        // The field takes only the code's characters, so only its length can be wrong.
+        val code = form.code
+        if (code.length != CODE_LENGTH) {
+            form = form.copy(codeError = "Enter all 8 characters of the code.")
             return
         }
         // What went wrong last time may not any more.
@@ -157,7 +158,7 @@ fun Pairing(
         unpairing = unpairing,
         serial = remember { Serial.read() },
         onAddressChange = { form = form.copy(address = it, addressError = null) },
-        onCodeChange = { form = form.copy(code = it.uppercase(), codeError = null) },
+        onCodeChange = { form = form.copy(code = it, codeError = null) },
         onPair = ::pair,
         onContinue = onContinue,
         onUnpair = ::unpair,
@@ -228,20 +229,15 @@ fun PairingScreen(
                     ),
                 )
             }
-            TextInput(
+            CodeInput(
                 label = "Pairing code",
                 value = form.code,
                 onValueChange = onCodeChange,
-                modifier = width,
+                length = CODE_LENGTH,
+                alphabet = CODE_ALPHABET,
                 helper = "8 letters and digits, from Pair a controller in FleetRanger’s web app.",
                 invalid = form.codeError,
                 readOnly = form.busy,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Characters,
-                    autoCorrectEnabled = false,
-                    keyboardType = KeyboardType.Ascii,
-                    imeAction = ImeAction.Done,
-                ),
                 onDone = onPair,
             )
             form.problem?.let {
@@ -252,9 +248,6 @@ fun PairingScreen(
         LabelledCode("Serial number", serial)
     }
 }
-
-/** A code as typed: any case, with or without the dash or spaces. */
-private fun normalize(code: String) = code.filter { it.isLetterOrDigit() }.uppercase()
 
 /**
  * "example.fleetranger.org" as "https://example.fleetranger.org"; null if it can't be
@@ -271,7 +264,7 @@ private fun serverAddress(input: String): String? {
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun PairingScreenPreview() {
-    PairingScreen(PairingForm(code = "KDW4-9TXR"), needsAddress = false, pairedWith = null, serial = "TESTRC0001")
+    PairingScreen(PairingForm(code = "KDW49TXR"), needsAddress = false, pairedWith = null, serial = "TESTRC0001")
 }
 
 @Preview(widthDp = 768, heightDp = 432)
