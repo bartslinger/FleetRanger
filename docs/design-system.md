@@ -157,7 +157,7 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 - Short, user-triggered tasks only, used sparingly. Never nested, never a full page, no complex tables.
 - A title and buttons naming the action ("Delete flight"). Cancel left, one primary right, full bleed at the bottom.
 - Focus goes to the first input and is trapped; it returns to the trigger on close. Esc closes.
-- Destructive or irreversible actions use a danger modal. High-impact deletes ask the user to type the name.
+- Destructive or irreversible actions use a danger modal. High-impact deletes ask the user to type the name. What can be redone isn't a danger modal: removing someone from a group is a plain confirmation, as they can be added again (user's decision, 2026-10-23).
 
 **Common actions**
 - Delete by impact: trivial → immediate; hard to undo → confirm with consequences; expensive → danger modal plus typing the name. Afterwards, return to the list with a success notification.

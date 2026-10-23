@@ -242,7 +242,6 @@
 							triggerSize="md"
 							triggerLabel="Remove {member.name} from the group"
 							submitLabel="Remove member"
-							danger
 							action="?/removeMember"
 							error={removeMessage}
 							onsuccess={() => toast(`${member.name} removed.`)}
