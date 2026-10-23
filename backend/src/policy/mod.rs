@@ -1,64 +1,35 @@
 //! Access rules. Every access decision is made here, never in handlers; see
-//! "Identity and access" in docs/architecture.md.
+//! "Groups and roles" in docs/architecture.md. The code asks whether the
+//! actor holds a permission on a group or the organisation, never whether
+//! they're an admin.
 
 mod grants;
 
 use uuid::Uuid;
 
-pub use grants::{Grants, Permission, roles_granting};
+pub use grants::{Grants, Permission, Scope, roles_granting};
 
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
 };
 
-/// A user's role, stored in `users.role`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Role {
-    Member,
-    /// Sees every flight, without managing anything.
-    AllFlights,
-    /// Sees every flight and manages users, teams and equipment.
-    Admin,
-}
-
-impl Role {
-    pub fn parse(value: &str) -> Option<Self> {
-        Some(match value {
-            "member" => Self::Member,
-            "all_flights" => Self::AllFlights,
-            "admin" => Self::Admin,
-            _ => return None,
-        })
-    }
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Member => "member",
-            Self::AllFlights => "all_flights",
-            Self::Admin => "admin",
-        }
+/// The check, refusing with Forbidden: the permission on a group, or with
+/// None on the whole organisation (for what has no group, such as users,
+/// areas, batteries and logs).
+pub fn require(actor: &Actor, permission: Permission, group: Option<Uuid>) -> ApiResult<()> {
+    if actor.grants.may(permission, group) {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden)
     }
 }
 
-/// Managing users, teams and equipment is for admins only.
-pub fn require_admin(actor: &Actor) -> ApiResult<()> {
-    match actor.role {
-        Role::Admin => Ok(()),
-        Role::Member | Role::AllFlights => Err(ApiError::Forbidden),
-    }
-}
-
-/// Whether the actor sees everyone's open pairing codes: admins do; others
-/// see their own. Any user may create one; see "Clients" in
-/// docs/architecture.md.
-pub fn all_pairing_codes(actor: &Actor) -> bool {
-    actor.role == Role::Admin
-}
-
-/// Whether the actor may revoke a pairing code: its creator and admins.
-pub fn revoke_pairing_code(actor: &Actor, created_by: Uuid) -> bool {
-    actor.user_id == created_by || all_pairing_codes(actor)
+/// Whether the actor may see and revoke a pairing code: its creator, and
+/// whoever holds `controllers.manage` on the group the controller joins.
+/// Any user may create one; see "Clients" in docs/architecture.md.
+pub fn manage_pairing_code(actor: &Actor, created_by: Uuid, group: Option<Uuid>) -> bool {
+    actor.user_id == created_by || actor.grants.may(Permission::ControllersManage, group)
 }
 
 /// Which flights an actor sees, as the parameters of the visibility condition

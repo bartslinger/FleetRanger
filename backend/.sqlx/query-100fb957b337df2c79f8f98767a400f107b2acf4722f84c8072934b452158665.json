@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select c.id, c.code, u.name as created_by, t.name as \"team?\", c.created_at, c.expires_at\n           from pairing_codes c\n           join users u on u.id = c.created_by\n           left join teams t on t.id = c.team_id\n           where c.expires_at > now() and ($1::uuid is null or c.created_by = $1)\n           order by c.expires_at, c.id",
+  "query": "select c.id, c.code, u.name as created_by, t.name as \"team?\", c.created_at, c.expires_at\n           from pairing_codes c\n           join users u on u.id = c.created_by\n           left join teams t on t.id = c.team_id\n           where c.expires_at > now()\n             and ($2 or c.created_by = $1 or c.team_id = any($3))\n           order by c.expires_at, c.id",
   "describe": {
     "columns": [
       {
@@ -72,7 +72,9 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Bool",
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -84,5 +86,5 @@
       false
     ]
   },
-  "hash": "fdef54720371cebae6c7c27e3f6fb96737634d740b77ef565afa1604cf124b30"
+  "hash": "100fb957b337df2c79f8f98767a400f107b2acf4722f84c8072934b452158665"
 }

@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 pub use oidc::Provider;
 
-use crate::policy::{Grants, Role};
+use crate::policy::Grants;
 
 /// Whether the install is reached over HTTPS, set once at startup.
 static HTTPS: OnceLock<bool> = OnceLock::new();
@@ -76,7 +76,6 @@ impl Auth {
 #[derive(Clone)]
 pub struct Actor {
     pub user_id: Uuid,
-    pub role: Role,
     /// Their roles, read once per request; every access decision asks these.
     pub grants: Grants,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
@@ -117,10 +116,6 @@ where
             StatusCode::INTERNAL_SERVER_ERROR
         })?
         .ok_or(StatusCode::UNAUTHORIZED)?;
-        let role = Role::parse(&session.role).ok_or_else(|| {
-            tracing::error!(role = session.role, "unknown user role");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
         let grants = grants(&PgPool::from_ref(state), session.user_id)
             .await
             .map_err(|error| {
@@ -129,7 +124,6 @@ where
             })?;
         Ok(Actor {
             user_id: session.user_id,
-            role,
             grants,
             login_session_id: session.id,
             ip,

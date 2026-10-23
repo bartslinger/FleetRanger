@@ -23,6 +23,7 @@ use super::db::{self, LoginUser};
 use super::oidc::PendingLogin;
 use super::{Actor, Auth, SESSION_IDLE_DAYS, client_ip, login_cookie, session_cookie, token_hash};
 use crate::oauth::OAuth;
+use crate::policy::{Grants, Permission};
 
 pub fn router<S>() -> Router<S>
 where
@@ -201,11 +202,24 @@ struct Me {
     email: String,
     name: String,
     /// So the web app shows only what the user can use; the backend still
-    /// checks every request.
+    /// checks every request. Today's three roles, read from the grants, until
+    /// the web app asks for permissions (package 7).
     role: &'static str,
     /// Whether apps (such as AI assistants) can connect to this install, so
     /// the web app offers the list of connected apps only then.
     apps: bool,
+}
+
+/// The role the web app shows pages by: what Admin or Viewer on the whole
+/// organisation allowed under the three fixed roles, else a member.
+fn web_role(grants: &Grants) -> &'static str {
+    if grants.may(Permission::UsersManage, None) {
+        "admin"
+    } else if grants.may(Permission::FlightsRead, None) {
+        "all_flights"
+    } else {
+        "member"
+    }
 }
 
 /// The logged-in user, or 401.
@@ -214,7 +228,7 @@ async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
         id: actor.user_id,
         email: actor.email,
         name: actor.name,
-        role: actor.role.as_str(),
+        role: web_role(&actor.grants),
         apps: !oauth.resources.is_empty(),
     })
 }
