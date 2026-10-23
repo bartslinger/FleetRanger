@@ -79,16 +79,16 @@ impl Role {
             Self::Admin => true,
         }
     }
+}
 
-    /// The stored names of the roles that grant a permission, for queries
-    /// that look at memberships, such as pilot lists.
-    pub fn granting(permission: Permission) -> Vec<String> {
-        Self::ALL
-            .into_iter()
-            .filter(|role| role.grants(permission))
-            .map(|role| role.as_str().to_owned())
-            .collect()
-    }
+/// The stored names of the roles that grant a permission, for queries that
+/// look at memberships, such as pilot lists.
+pub fn roles_granting(permission: Permission) -> Vec<String> {
+    Role::ALL
+        .into_iter()
+        .filter(|role| role.grants(permission))
+        .map(|role| role.as_str().to_owned())
+        .collect()
 }
 
 /// The roles an actor holds: on the whole organisation, and per group through

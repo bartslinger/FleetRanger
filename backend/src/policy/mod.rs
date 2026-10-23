@@ -5,7 +5,7 @@ mod grants;
 
 use uuid::Uuid;
 
-pub use grants::{Grants, Permission};
+pub use grants::{Grants, Permission, roles_granting};
 
 use crate::{
     auth::Actor,
@@ -95,28 +95,33 @@ fn among(own_teams: &[Uuid], team: Option<Uuid>) -> bool {
     team.is_some_and(|team| own_teams.contains(&team))
 }
 
-/// Whether the actor may split or merge sessions holding flights of these
-/// teams: the same rule as setting a flight's pilot.
-pub fn change_sessions(
-    role: Role,
-    own_teams: &[Uuid],
-    flight_teams: &[Option<Uuid>],
+/// The check on every group involved. Someone who holds the permission
+/// nowhere is forbidden; someone who holds it elsewhere gets `refusal`.
+fn on_all(
+    grants: &Grants,
+    permission: Permission,
+    groups: &[Option<Uuid>],
+    refusal: &str,
 ) -> ApiResult<()> {
-    match role {
-        Role::Admin => Ok(()),
-        Role::AllFlights => Err(ApiError::Forbidden),
-        Role::Member => {
-            if own_teams.is_empty() {
-                return Err(ApiError::Forbidden);
-            }
-            if !flight_teams.iter().all(|team| among(own_teams, *team)) {
-                return Err(ApiError::Conflict(
-                    "You can only change sessions of your own teams.".to_owned(),
-                ));
-            }
-            Ok(())
-        }
+    if grants.may_on_all(permission, groups) {
+        Ok(())
+    } else if grants.anywhere(permission) {
+        Err(ApiError::Conflict(refusal.to_owned()))
+    } else {
+        Err(ApiError::Forbidden)
     }
+}
+
+/// Whether the actor may split or merge sessions holding flights of these
+/// groups: `sessions.edit` on every one of them. A session's own group
+/// decides this from package 4.
+pub fn change_sessions(grants: &Grants, flight_groups: &[Option<Uuid>]) -> ApiResult<()> {
+    on_all(
+        grants,
+        Permission::SessionsEdit,
+        flight_groups,
+        "You can only change sessions of your own teams.",
+    )
 }
 
 /// Whether the actor sees a drone or controller of this team: admins and the
@@ -171,24 +176,24 @@ pub enum TeamChange {
 
 /// Whether the actor may set the pilot of these flights, and what happens to
 /// their team; see "Setting a flight's pilot" in docs/architecture.md. A
-/// pilot is chosen with one of their teams, and the flights move to it.
+/// pilot is chosen with one of their teams, and the flights move to it, so
+/// the actor needs `flights.set_pilot` on the flights' groups and that one.
+/// Package 4 makes the pilot and the group independent.
 ///
-/// - `own_teams`: the actor's own teams.
-/// - `flight_teams`: the current team of each flight.
-/// - `new_pilot_team`: the team the pilot was chosen with, or `None` for
+/// - `flight_groups`: the current group of each flight.
+/// - `new_pilot_group`: the group the pilot was chosen with, or `None` for
 ///   unknown.
 pub fn set_pilot(
-    role: Role,
-    own_teams: &[Uuid],
-    flight_teams: &[Option<Uuid>],
-    new_pilot_team: Option<Uuid>,
+    grants: &Grants,
+    flight_groups: &[Option<Uuid>],
+    new_pilot_group: Option<Uuid>,
 ) -> ApiResult<TeamChange> {
-    let change = match new_pilot_team {
-        Some(team) => TeamChange::Follow(team),
+    let change = match new_pilot_group {
+        Some(group) => TeamChange::Follow(group),
         None => TeamChange::Keep,
     };
-    change_flights(role, own_teams, flight_teams)?;
-    if role == Role::Member && new_pilot_team.is_some_and(|team| !own_teams.contains(&team)) {
+    change_flights(grants, Permission::FlightsSetPilot, flight_groups)?;
+    if new_pilot_group.is_some_and(|group| !grants.may(Permission::FlightsSetPilot, Some(group))) {
         return Err(ApiError::Invalid(
             "Choose someone of your own teams.".to_owned(),
         ));
@@ -196,28 +201,34 @@ pub fn set_pilot(
     Ok(change)
 }
 
-/// Whether the actor may change these flights, e.g. archive or restore them:
-/// admins any flight, members those of their own teams, and the all-flights
-/// role none.
+/// Whether the actor may make this change, such as archiving, to flights of
+/// these groups.
 pub fn change_flights(
-    role: Role,
-    own_teams: &[Uuid],
-    flight_teams: &[Option<Uuid>],
+    grants: &Grants,
+    permission: Permission,
+    flight_groups: &[Option<Uuid>],
 ) -> ApiResult<()> {
-    match role {
-        Role::Admin => Ok(()),
-        Role::AllFlights => Err(ApiError::Forbidden),
-        Role::Member => {
-            if own_teams.is_empty() {
-                return Err(ApiError::Forbidden);
-            }
-            if !flight_teams.iter().all(|team| among(own_teams, *team)) {
-                return Err(ApiError::Conflict(
-                    "You can only change flights of your own teams.".to_owned(),
-                ));
-            }
-            Ok(())
-        }
+    on_all(
+        grants,
+        permission,
+        flight_groups,
+        "You can only change flights of your own teams.",
+    )
+}
+
+/// Whether the actor may move flights of these groups to another group, or
+/// with None to the queue: `flights.move` on every group involved.
+pub fn move_flights(
+    grants: &Grants,
+    flight_groups: &[Option<Uuid>],
+    to: Option<Uuid>,
+) -> ApiResult<()> {
+    if grants.may_on_all(Permission::FlightsMove, flight_groups)
+        && grants.may(Permission::FlightsMove, to)
+    {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden)
     }
 }
 
@@ -229,12 +240,32 @@ mod tests {
     const B: Uuid = Uuid::from_u128(2);
     const C: Uuid = Uuid::from_u128(3);
 
+    // Today's roles as migration 0018 filled them.
+
+    fn admin() -> Grants {
+        Grants::from_stored([(None, "admin".to_owned())]).unwrap()
+    }
+
+    fn all_flights() -> Grants {
+        Grants::from_stored([(None, "viewer".to_owned())]).unwrap()
+    }
+
+    /// A member of these teams: Pilot and Editor in each.
+    fn member(teams: &[Uuid]) -> Grants {
+        Grants::from_stored(
+            teams
+                .iter()
+                .flat_map(|team| ["pilot", "editor"].map(|role| (Some(*team), role.to_owned()))),
+        )
+        .unwrap()
+    }
+
     #[test]
     fn admin_moves_flights_to_the_new_pilots_team() {
         let (a, b) = (A, B);
-        let change = set_pilot(Role::Admin, &[], &[Some(a), None], Some(b));
+        let change = set_pilot(&admin(), &[Some(a), None], Some(b));
         assert_eq!(change.ok(), Some(TeamChange::Follow(b)));
-        let cleared = set_pilot(Role::Admin, &[], &[Some(a)], None);
+        let cleared = set_pilot(&admin(), &[Some(a)], None);
         assert_eq!(cleared.ok(), Some(TeamChange::Keep));
     }
 
@@ -263,28 +294,23 @@ mod tests {
     #[test]
     fn member_changes_only_own_teams_flights_to_own_teams_pilots() {
         let (own, second, other) = (A, C, B);
-        let mine = [own, second];
-        let ok = set_pilot(
-            Role::Member,
-            &mine,
-            &[Some(own), Some(second)],
-            Some(second),
-        );
+        let mine = member(&[own, second]);
+        let ok = set_pilot(&mine, &[Some(own), Some(second)], Some(second));
         assert_eq!(ok.ok(), Some(TeamChange::Follow(second)));
         // "This wasn't me": unknown pilot, and the flight stays in the team.
-        let unknown = set_pilot(Role::Member, &mine, &[Some(own)], None);
+        let unknown = set_pilot(&mine, &[Some(own)], None);
         assert_eq!(unknown.ok(), Some(TeamChange::Keep));
         // Another team's flight, a queue flight, a pilot of another team.
-        assert!(set_pilot(Role::Member, &mine, &[Some(own), Some(other)], None).is_err());
-        assert!(set_pilot(Role::Member, &mine, &[None], None).is_err());
-        assert!(set_pilot(Role::Member, &mine, &[Some(own)], Some(other)).is_err());
+        assert!(set_pilot(&mine, &[Some(own), Some(other)], None).is_err());
+        assert!(set_pilot(&mine, &[None], None).is_err());
+        assert!(set_pilot(&mine, &[Some(own)], Some(other)).is_err());
     }
 
     #[test]
     fn viewers_and_members_without_a_team_change_nothing() {
         let own = A;
-        assert!(set_pilot(Role::AllFlights, &[own], &[Some(own)], None).is_err());
-        assert!(set_pilot(Role::Member, &[], &[None], None).is_err());
+        assert!(set_pilot(&all_flights(), &[Some(own)], None).is_err());
+        assert!(set_pilot(&member(&[]), &[None], None).is_err());
     }
 
     /// A member can't split or merge a session that holds another team's
@@ -292,11 +318,11 @@ mod tests {
     #[test]
     fn members_change_only_sessions_of_their_own_teams() {
         let (own, second, other) = (A, C, B);
-        let mine = [own, second];
-        assert!(change_sessions(Role::Member, &mine, &[Some(own), Some(second)]).is_ok());
-        assert!(change_sessions(Role::Member, &mine, &[Some(own), Some(other)]).is_err());
-        assert!(change_sessions(Role::Member, &[], &[Some(own)]).is_err());
-        assert!(change_sessions(Role::AllFlights, &mine, &[Some(own)]).is_err());
-        assert!(change_sessions(Role::Admin, &[], &[Some(own), Some(other)]).is_ok());
+        let mine = member(&[own, second]);
+        assert!(change_sessions(&mine, &[Some(own), Some(second)]).is_ok());
+        assert!(change_sessions(&mine, &[Some(own), Some(other)]).is_err());
+        assert!(change_sessions(&member(&[]), &[Some(own)]).is_err());
+        assert!(change_sessions(&all_flights(), &[Some(own)]).is_err());
+        assert!(change_sessions(&admin(), &[Some(own), Some(other)]).is_ok());
     }
 }

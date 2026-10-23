@@ -48,7 +48,7 @@ pub async fn update(
 ) -> ApiResult<Equipment> {
     let item = get(db, actor, kind, id).await?;
     let holder_teams = match input.holder_user_id {
-        Some(user) => Some(crate::flights::db::pilot_teams(db, user).await?),
+        Some(user) => Some(crate::flights::db::pilot_groups(db, user).await?),
         None => None,
     };
     let own_teams = own_teams(db, actor).await?;

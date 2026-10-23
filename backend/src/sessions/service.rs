@@ -90,11 +90,10 @@ pub async fn create(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResul
     if flight_ids.is_empty() {
         return Err(ApiError::Invalid("Select flights.".to_owned()));
     }
-    let teams = flights::db::teams_of(db, &flight_ids)
+    let groups = flights::db::groups_of(db, &flight_ids)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, &own_teams, &teams)?;
+    policy::change_sessions(&actor.grants, &groups)?;
     not_archived(db, &flight_ids).await?;
     Ok(db::split(db, &flight_ids).await?)
 }
@@ -115,16 +114,15 @@ pub async fn add(db: &PgPool, actor: &Actor, session: Uuid, flight_ids: &[Uuid])
     if flight_ids.is_empty() {
         return Err(ApiError::Invalid("Select flights.".to_owned()));
     }
-    let mut teams = flights::db::teams_of(db, &flight_ids)
+    let mut groups = flights::db::groups_of(db, &flight_ids)
         .await?
         .ok_or(ApiError::NotFound)?;
-    teams.extend(
-        db::flight_teams(db, &[session])
+    groups.extend(
+        db::flight_groups(db, &[session])
             .await?
             .ok_or(ApiError::NotFound)?,
     );
-    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, &own_teams, &teams)?;
+    policy::change_sessions(&actor.grants, &groups)?;
     not_archived(db, &flight_ids).await?;
     Ok(db::add(db, session, &flight_ids).await?)
 }
@@ -137,11 +135,10 @@ pub async fn remove(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResul
     if flight_ids.is_empty() {
         return Err(ApiError::Invalid("Select flights.".to_owned()));
     }
-    let teams = flights::db::teams_of(db, &flight_ids)
+    let groups = flights::db::groups_of(db, &flight_ids)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, &own_teams, &teams)?;
+    policy::change_sessions(&actor.grants, &groups)?;
     Ok(db::remove(db, &flight_ids).await?)
 }
 
@@ -171,11 +168,10 @@ pub async fn merge(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<Uuid> 
     if ids.len() < 2 {
         return Err(ApiError::Invalid("Select two or more sessions.".to_owned()));
     }
-    let teams = db::flight_teams(db, &ids)
+    let groups = db::flight_groups(db, &ids)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, &own_teams, &teams)?;
+    policy::change_sessions(&actor.grants, &groups)?;
     Ok(db::merge(db, &ids).await?)
 }
 
@@ -185,12 +181,11 @@ pub async fn split(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResult
     let session = db::session_of(db, &flight_ids)
         .await?
         .ok_or_else(|| ApiError::Invalid("Select flights of one session.".to_owned()))?;
-    let teams = db::flight_teams(db, &[session])
+    let groups = db::flight_groups(db, &[session])
         .await?
         .ok_or(ApiError::NotFound)?;
-    let own_teams = flights::db::own_teams(db, actor.user_id).await?;
-    policy::change_sessions(actor.role, &own_teams, &teams)?;
-    if flight_ids.len() == teams.len() {
+    policy::change_sessions(&actor.grants, &groups)?;
+    if flight_ids.len() == groups.len() {
         return Err(ApiError::Invalid(
             "Leave at least one flight in the session.".to_owned(),
         ));

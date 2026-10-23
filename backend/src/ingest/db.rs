@@ -172,23 +172,27 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                      join team_members m on m.user_id = u.id
                      join teams t on t.id = m.team_id and t.archived_at is null
                      where l.id = $1
+                 ),
+                 chosen as (
+                     select coalesce((select p.team_id from pilot_teams p
+                                      join raw_logs l on l.team_id = p.team_id
+                                      where l.id = $1),
+                                     (select (array_agg(team_id))[1] from pilot_teams
+                                      having count(*) = 1),
+                                     (select r.team_id from remote_controllers r
+                                      join teams t on t.id = r.team_id
+                                      where r.serial = $7 and t.archived_at is null),
+                                     (select a.team_id from aircraft a
+                                      join teams t on t.id = a.team_id
+                                      where a.serial = $6 and t.archived_at is null)) as team_id
                  )
+                 -- The team's group has its id; package 4 chooses the group itself.
                  insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
                                       aircraft_serial, rc_serial, track, metrics,
-                                      pilot_id, team_id)
+                                      pilot_id, team_id, group_id)
                  values ($1, $2, $3, $4, $5, $6, $7, $8, $9,
                          (select distinct id from pilot_teams),
-                         coalesce((select p.team_id from pilot_teams p
-                                   join raw_logs l on l.team_id = p.team_id
-                                   where l.id = $1),
-                                  (select (array_agg(team_id))[1] from pilot_teams
-                                   having count(*) = 1),
-                                  (select r.team_id from remote_controllers r
-                                   join teams t on t.id = r.team_id
-                                   where r.serial = $7 and t.archived_at is null),
-                                  (select a.team_id from aircraft a
-                                   join teams t on t.id = a.team_id
-                                   where a.serial = $6 and t.archived_at is null)))
+                         (select team_id from chosen), (select team_id from chosen))
                  on conflict (raw_log_id) do update set
                      takeoff_at = excluded.takeoff_at,
                      landed_at = excluded.landed_at,
@@ -422,21 +426,12 @@ mod tests {
     /// pilot's team; a new version of the log replaces it and keeps the flight.
     #[sqlx::test]
     async fn uploads_bring_their_pilot_and_replace_earlier_versions(db: PgPool) {
-        let team: Uuid =
-            sqlx::query_scalar("insert into teams (name) values ('North') returning id")
-                .fetch_one(&db)
-                .await
-                .unwrap();
+        let team = crate::testing::team(&db, "North").await;
         let pilot: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
             .fetch_one(&db)
             .await
             .unwrap();
-        sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
-            .bind(pilot)
-            .bind(team)
-            .execute(&db)
-            .await
-            .unwrap();
+        crate::testing::join(&db, pilot, team).await;
         let path = "raw/TESTRC0003/FlightRecord/DJIFlightRecord_test.txt";
 
         let first = save_upload(&db, &[1; 32], path, 10, Some(pilot), None)
@@ -474,33 +469,19 @@ mod tests {
     /// controller's team.
     #[sqlx::test]
     async fn the_flights_team_is_the_one_chosen_on_the_controller(db: PgPool) {
-        let team = |name: &'static str| {
-            let db = db.clone();
-            async move {
-                sqlx::query_scalar::<_, Uuid>("insert into teams (name) values ($1) returning id")
-                    .bind(name)
-                    .fetch_one(&db)
-                    .await
-                    .unwrap()
-            }
-        };
+        use crate::testing::team;
         let (north, south, base, other) = (
-            team("North").await,
-            team("South").await,
-            team("Base").await,
-            team("Other").await,
+            team(&db, "North").await,
+            team(&db, "South").await,
+            team(&db, "Base").await,
+            team(&db, "Other").await,
         );
         let pilot: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
             .fetch_one(&db)
             .await
             .unwrap();
         for team in [north, south] {
-            sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
-                .bind(pilot)
-                .bind(team)
-                .execute(&db)
-                .await
-                .unwrap();
+            crate::testing::join(&db, pilot, team).await;
         }
         sqlx::query("insert into remote_controllers (serial, team_id) values ('TESTRC0003', $1)")
             .bind(base)

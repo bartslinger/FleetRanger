@@ -269,18 +269,18 @@ pub(crate) async fn locked(
     Ok(tx)
 }
 
-/// The team of every flight in these sessions, or None if one of them doesn't
-/// exist. The visibility check is the policy's job, not this query's.
-pub async fn flight_teams(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
+/// The group of every flight in these sessions, or None if one of them
+/// doesn't exist. The visibility check is the policy's job, not this query's.
+pub async fn flight_groups(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
     let flights = sqlx::query!(
-        r#"select session_id as "session_id!", team_id from flights where session_id = any($1)"#,
+        r#"select session_id as "session_id!", group_id from flights where session_id = any($1)"#,
         ids
     )
     .fetch_all(db)
     .await?;
     let found: HashSet<Uuid> = flights.iter().map(|flight| flight.session_id).collect();
     Ok((found.len() == ids.len())
-        .then(|| flights.into_iter().map(|flight| flight.team_id).collect()))
+        .then(|| flights.into_iter().map(|flight| flight.group_id).collect()))
 }
 
 /// The one session all these flights are in, or None if one of them doesn't

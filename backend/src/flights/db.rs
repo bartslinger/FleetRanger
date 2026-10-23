@@ -4,7 +4,10 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{policy::FlightScope, sessions};
+use crate::{
+    policy::{self, FlightScope, Permission},
+    sessions,
+};
 
 /// A flight as listed in the logbook.
 #[derive(Serialize)]
@@ -798,13 +801,13 @@ pub async fn pilots_in(
     .await
 }
 
-/// The team of each of these flights, or None if one of them doesn't exist.
+/// The group of each of these flights, or None if one of them doesn't exist.
 /// The visibility check is the policy's job, not this query's.
-pub async fn teams_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
-    let teams = sqlx::query_scalar!("select team_id from flights where id = any($1)", ids)
+pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
+    let groups = sqlx::query_scalar!("select group_id from flights where id = any($1)", ids)
         .fetch_all(db)
         .await?;
-    Ok((teams.len() == ids.len()).then_some(teams))
+    Ok((groups.len() == ids.len()).then_some(groups))
 }
 
 /// The teams the user flies for; none for someone who doesn't fly.
@@ -817,60 +820,67 @@ pub async fn own_teams(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
     .await
 }
 
-/// The teams of an active user who can be chosen as pilot; none if there is
-/// no such user or they aren't in a team.
-pub async fn pilot_teams(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
+/// The groups an active user flies for (`flights.fly_for` through their
+/// memberships); none if there is no such user or they fly for none.
+pub async fn pilot_groups(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar!(
-        "select m.team_id from users u join team_members m on m.user_id = u.id
-         where u.id = $1 and u.archived_at is null
-         order by m.team_id",
+        "select distinct m.group_id from users u join group_members m on m.user_id = u.id
+         where u.id = $1 and u.archived_at is null and m.role = any($2)
+         order by m.group_id",
         user_id,
+        &policy::roles_granting(Permission::FlightsFlyFor),
     )
     .fetch_all(db)
     .await
 }
 
-pub async fn team_is_active(db: &PgPool, team_id: Uuid) -> sqlx::Result<bool> {
+pub async fn group_exists(db: &PgPool, group_id: Uuid) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
-        r#"select exists(select 1 from teams where id = $1 and archived_at is null) as "exists!""#,
-        team_id,
+        r#"select exists(select 1 from groups where id = $1) as "exists!""#,
+        group_id,
     )
     .fetch_one(db)
     .await
 }
 
-/// Sets the pilot of these flights, and their team if given. A flight stays in
-/// its session: sessions change only when someone changes them.
+/// Sets the pilot of these flights, and their team and group if given (a
+/// group's id is its team's). A flight stays in its session: sessions change
+/// only when someone changes them.
 pub async fn set_pilot(
     db: &PgPool,
     ids: &[Uuid],
     pilot_id: Option<Uuid>,
-    team_id: Option<Uuid>,
+    group_id: Option<Uuid>,
 ) -> sqlx::Result<u64> {
     let result = sqlx::query!(
-        "update flights set pilot_id = $2, team_id = coalesce($3, team_id)
+        "update flights set pilot_id = $2,
+             team_id = coalesce($3, team_id), group_id = coalesce($3, group_id)
          where id = any($1)",
         ids,
         pilot_id,
-        team_id,
+        group_id,
     )
     .execute(db)
     .await?;
     Ok(result.rows_affected())
 }
 
-/// Moves these flights to a team, or to the queue; a pilot who isn't in the
-/// new team is cleared, and the flight leaves its session.
-pub async fn set_team(db: &PgPool, ids: &[Uuid], team_id: Option<Uuid>) -> sqlx::Result<u64> {
+/// Moves these flights to a group (and its team), or to the queue; a pilot
+/// who doesn't fly for the new group is cleared, and the flight leaves its
+/// session.
+pub async fn set_team(db: &PgPool, ids: &[Uuid], group_id: Option<Uuid>) -> sqlx::Result<u64> {
     let result = sqlx::query!(
-        "update flights set team_id = $2,
-             pilot_id = case when pilot_id in (select user_id from team_members
-                                               where team_id = $2) then pilot_id end,
-             session_id = case when pilot_id in (select user_id from team_members
-                                                 where team_id = $2) then session_id end
+        "update flights set team_id = $2, group_id = $2,
+             pilot_id = case when pilot_id in (select user_id from group_members
+                                               where group_id = $2 and role = any($3))
+                             then pilot_id end,
+             session_id = case when pilot_id in (select user_id from group_members
+                                                 where group_id = $2 and role = any($3))
+                               then session_id end
          where id = any($1)",
         ids,
-        team_id,
+        group_id,
+        &policy::roles_granting(Permission::FlightsFlyFor),
     )
     .execute(db)
     .await?;
@@ -917,7 +927,8 @@ pub async fn any_archived(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<bool> {
     .await
 }
 
-/// A user who can be chosen as the pilot of flights: active and in a team.
+/// A user who can be chosen as the pilot of flights: active and flying for a
+/// group (still called a team in the API).
 #[derive(Serialize)]
 pub struct PilotChoice {
     pub id: Uuid,
@@ -926,26 +937,29 @@ pub struct PilotChoice {
     pub team_name: String,
 }
 
-/// Active users in a team by name, once per team, of these teams or of all.
+/// Active users by name, once per group they fly for, of these groups or of
+/// all.
 pub async fn pilot_choices(
     db: &PgPool,
-    team_ids: Option<&[Uuid]>,
+    group_ids: Option<&[Uuid]>,
 ) -> sqlx::Result<Vec<PilotChoice>> {
     sqlx::query_as!(
         PilotChoice,
-        "select u.id, u.name, m.team_id, t.name as team_name
+        "select u.id, u.name, g.id as team_id, g.name as team_name
          from users u
-         join team_members m on m.user_id = u.id
-         join teams t on t.id = m.team_id
-         where u.archived_at is null and ($1::uuid[] is null or m.team_id = any($1))
-         order by lower(u.name), u.id, lower(t.name)",
-        team_ids,
+         join groups g on exists (select 1 from group_members m
+                                  where m.user_id = u.id and m.group_id = g.id
+                                    and m.role = any($2))
+         where u.archived_at is null and ($1::uuid[] is null or g.id = any($1))
+         order by lower(u.name), u.id, lower(g.name)",
+        group_ids,
+        &policy::roles_granting(Permission::FlightsFlyFor),
     )
     .fetch_all(db)
     .await
 }
 
-/// A team flights can be moved to.
+/// A group flights can be moved to (still called a team in the API).
 #[derive(Serialize)]
 pub struct TeamChoice {
     pub id: Uuid,
@@ -965,10 +979,10 @@ pub async fn teams_of_user(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<TeamC
     .await
 }
 
-pub async fn team_choices(db: &PgPool) -> sqlx::Result<Vec<TeamChoice>> {
+pub async fn group_choices(db: &PgPool) -> sqlx::Result<Vec<TeamChoice>> {
     sqlx::query_as!(
         TeamChoice,
-        "select id, name from teams where archived_at is null order by lower(name), id",
+        "select id, name from groups order by lower(name), id",
     )
     .fetch_all(db)
     .await
