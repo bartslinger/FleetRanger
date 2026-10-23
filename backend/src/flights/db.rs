@@ -810,17 +810,22 @@ pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Opt
     Ok((groups.len() == ids.len()).then_some(groups))
 }
 
-/// The groups an active user flies for (`flights.fly_for` through their
-/// memberships); none if there is no such user or they fly for none.
-pub async fn pilot_groups(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
+/// Whether this is an active user who holds `flights.fly_for` anywhere, on a
+/// group or the organisation: someone who can be a flight's pilot.
+pub async fn flies(db: &PgPool, user_id: Uuid) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
-        "select distinct m.group_id from users u join group_members m on m.user_id = u.id
-         where u.id = $1 and u.archived_at is null and m.role = any($2)
-         order by m.group_id",
+        r#"select exists(
+               select 1 from users u
+               where u.id = $1 and u.archived_at is null
+                 and (exists (select 1 from group_members m
+                              where m.user_id = u.id and m.role = any($2))
+                      or exists (select 1 from organisation_roles r
+                                 where r.user_id = u.id and r.role = any($2)))
+           ) as "flies!""#,
         user_id,
         &policy::roles_granting(Permission::FlightsFlyFor),
     )
-    .fetch_all(db)
+    .fetch_one(db)
     .await
 }
 
@@ -833,44 +838,26 @@ pub async fn group_exists(db: &PgPool, group_id: Uuid) -> sqlx::Result<bool> {
     .await
 }
 
-/// Sets the pilot of these flights, and their team and group if given (a
-/// group's id is its team's). A flight stays in its session: sessions change
-/// only when someone changes them.
-pub async fn set_pilot(
-    db: &PgPool,
-    ids: &[Uuid],
-    pilot_id: Option<Uuid>,
-    group_id: Option<Uuid>,
-) -> sqlx::Result<u64> {
+/// Sets the pilot of these flights. They stay in their group and their
+/// session: sessions change only when someone changes them.
+pub async fn set_pilot(db: &PgPool, ids: &[Uuid], pilot_id: Option<Uuid>) -> sqlx::Result<u64> {
     let result = sqlx::query!(
-        "update flights set pilot_id = $2,
-             team_id = coalesce($3, team_id), group_id = coalesce($3, group_id)
-         where id = any($1)",
+        "update flights set pilot_id = $2 where id = any($1)",
         ids,
         pilot_id,
-        group_id,
     )
     .execute(db)
     .await?;
     Ok(result.rows_affected())
 }
 
-/// Moves these flights to a group (and its team), or to the queue; a pilot
-/// who doesn't fly for the new group is cleared, and the flight leaves its
-/// session.
+/// Moves these flights to a group (and its team, which has its id), or to
+/// the queue. They keep their pilot and their session.
 pub async fn set_team(db: &PgPool, ids: &[Uuid], group_id: Option<Uuid>) -> sqlx::Result<u64> {
     let result = sqlx::query!(
-        "update flights set team_id = $2, group_id = $2,
-             pilot_id = case when pilot_id in (select user_id from group_members
-                                               where group_id = $2 and role = any($3))
-                             then pilot_id end,
-             session_id = case when pilot_id in (select user_id from group_members
-                                                 where group_id = $2 and role = any($3))
-                               then session_id end
-         where id = any($1)",
+        "update flights set team_id = $2, group_id = $2 where id = any($1)",
         ids,
         group_id,
-        &policy::roles_granting(Permission::FlightsFlyFor),
     )
     .execute(db)
     .await?;
@@ -917,32 +904,32 @@ pub async fn any_archived(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<bool> {
     .await
 }
 
-/// A user who can be chosen as the pilot of flights: active and flying for a
-/// group (still called a team in the API).
+/// A user who can be chosen as the pilot of flights: active and holding
+/// `flights.fly_for` anywhere.
 #[derive(Serialize)]
 pub struct PilotChoice {
     pub id: Uuid,
     pub name: String,
-    pub team_id: Uuid,
-    pub team_name: String,
+    /// One of the given group's own pilots (its members with Pilot).
+    pub in_group: bool,
 }
 
-/// Active users by name, once per group they fly for, of these groups or of
-/// all.
-pub async fn pilot_choices(
-    db: &PgPool,
-    group_ids: Option<&[Uuid]>,
-) -> sqlx::Result<Vec<PilotChoice>> {
+/// Everyone who flies, by name; with a group, its own pilots first.
+pub async fn pilot_choices(db: &PgPool, group_id: Option<Uuid>) -> sqlx::Result<Vec<PilotChoice>> {
     sqlx::query_as!(
         PilotChoice,
-        "select u.id, u.name, g.id as team_id, g.name as team_name
-         from users u
-         join groups g on exists (select 1 from group_members m
-                                  where m.user_id = u.id and m.group_id = g.id
-                                    and m.role = any($2))
-         where u.archived_at is null and ($1::uuid[] is null or g.id = any($1))
-         order by lower(u.name), u.id, lower(g.name)",
-        group_ids,
+        r#"select u.id, u.name,
+                  exists (select 1 from group_members m
+                          where m.user_id = u.id and m.group_id = $1
+                            and m.role = any($2)) as "in_group!"
+           from users u
+           where u.archived_at is null
+             and (exists (select 1 from group_members m
+                          where m.user_id = u.id and m.role = any($2))
+                  or exists (select 1 from organisation_roles r
+                             where r.user_id = u.id and r.role = any($2)))
+           order by 3 desc, lower(u.name), u.id"#,
+        group_id,
         &policy::roles_granting(Permission::FlightsFlyFor),
     )
     .fetch_all(db)
@@ -1297,32 +1284,93 @@ mod tests {
         assert!(visible(&db, &member).await.is_empty());
     }
 
-    /// Moving flights keeps a pilot who is in the new team and clears others,
-    /// also when moving to the queue.
+    /// A flight's pilot and group are independent: moving it, also to a
+    /// group its pilot isn't in or to the queue, keeps its pilot and its
+    /// session, and setting its pilot keeps its group.
     #[sqlx::test]
-    async fn moving_clears_pilots_from_other_teams(db: PgPool) {
+    async fn pilot_and_group_change_independently(db: PgPool) {
         let north = testing::team(&db, "North").await;
         let south = testing::team(&db, "South").await;
         let pilot = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         testing::join(&db, pilot, south).await;
         let flight = flight(&db, Some(north), Some(pilot)).await;
-        let pilot_of = async || -> Option<Uuid> {
-            sqlx::query_scalar("select pilot_id from flights where id = $1")
+        let session = sessions::db::split(&db, &[flight]).await.unwrap();
+        let state = async || -> (Option<Uuid>, Option<Uuid>, Option<Uuid>) {
+            sqlx::query_as("select pilot_id, group_id, session_id from flights where id = $1")
                 .bind(flight)
                 .fetch_one(&db)
                 .await
                 .unwrap()
         };
 
-        set_team(&db, &[flight], Some(south)).await.unwrap();
-        assert_eq!(pilot_of().await, Some(pilot));
+        set_team(&db, &[flight], None).await.unwrap();
+        assert_eq!(state().await, (Some(pilot), None, Some(session)));
         set_team(&db, &[flight], Some(north)).await.unwrap();
-        assert_eq!(pilot_of().await, None);
-        set_pilot(&db, &[flight], Some(pilot), Some(south))
+        set_pilot(&db, &[flight], None).await.unwrap();
+        assert_eq!(state().await, (None, Some(north), Some(session)));
+    }
+
+    /// Only someone active with `flights.fly_for` somewhere can be a pilot:
+    /// a member with Pilot in a group, or Pilot on the organisation, but not
+    /// an admin or an editor who doesn't fly, nor an archived pilot.
+    #[sqlx::test]
+    async fn only_who_flies_can_be_a_pilot(db: PgPool) {
+        let north = testing::team(&db, "North").await;
+        let user = async |name: &str| -> Uuid {
+            sqlx::query_scalar("insert into users (name) values ($1) returning id")
+                .bind(name)
+                .fetch_one(&db)
+                .await
+                .unwrap()
+        };
+        let (member, guest, admin, editor, archived) = (
+            user("Member").await,
+            user("Guest").await,
+            user("Admin").await,
+            user("Editor").await,
+            user("Archived").await,
+        );
+        testing::join(&db, member, north).await;
+        testing::join(&db, archived, north).await;
+        sqlx::query(
+            "insert into organisation_roles (user_id, role) values ($1, 'pilot'), ($2, 'admin')",
+        )
+        .bind(guest)
+        .bind(admin)
+        .execute(&db)
+        .await
+        .unwrap();
+        sqlx::query(
+            "insert into group_members (group_id, user_id, role) values ($1, $2, 'editor')",
+        )
+        .bind(north)
+        .bind(editor)
+        .execute(&db)
+        .await
+        .unwrap();
+        sqlx::query("update users set archived_at = now() where id = $1")
+            .bind(archived)
+            .execute(&db)
             .await
             .unwrap();
-        set_team(&db, &[flight], None).await.unwrap();
-        assert_eq!(pilot_of().await, None);
+
+        for (who, expected) in [
+            (member, true),
+            (guest, true),
+            (admin, false),
+            (editor, false),
+            (archived, false),
+        ] {
+            assert_eq!(flies(&db, who).await.unwrap(), expected);
+        }
+        // The pilot list agrees, with the group's own pilots first.
+        let listed: Vec<Uuid> = pilot_choices(&db, Some(north))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|pilot| pilot.id)
+            .collect();
+        assert_eq!(listed, [member, guest]);
     }
 
     /// Archiving takes flights out of their sessions, deletes a session left

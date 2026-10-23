@@ -116,44 +116,10 @@ pub fn change_equipment(
     Ok(())
 }
 
-/// What happens to the flights' team when their pilot is set.
-#[derive(Debug, PartialEq, Eq)]
-pub enum TeamChange {
-    /// The flights keep their team.
-    Keep,
-    /// The flights move to the team the pilot was chosen with.
-    Follow(Uuid),
-}
-
-/// Whether the actor may set the pilot of these flights, and what happens to
-/// their team; see "Setting a flight's pilot" in docs/architecture.md. A
-/// pilot is chosen with one of their teams, and the flights move to it, so
-/// the actor needs `flights.set_pilot` on the flights' groups and that one.
-/// Package 4 makes the pilot and the group independent.
-///
-/// - `flight_groups`: the current group of each flight.
-/// - `new_pilot_group`: the group the pilot was chosen with, or `None` for
-///   unknown.
-pub fn set_pilot(
-    grants: &Grants,
-    flight_groups: &[Option<Uuid>],
-    new_pilot_group: Option<Uuid>,
-) -> ApiResult<TeamChange> {
-    let change = match new_pilot_group {
-        Some(group) => TeamChange::Follow(group),
-        None => TeamChange::Keep,
-    };
-    change_flights(grants, Permission::FlightsSetPilot, flight_groups)?;
-    if new_pilot_group.is_some_and(|group| !grants.may(Permission::FlightsSetPilot, Some(group))) {
-        return Err(ApiError::Invalid(
-            "Choose someone of your own teams.".to_owned(),
-        ));
-    }
-    Ok(change)
-}
-
-/// Whether the actor may make this change, such as archiving, to flights of
-/// these groups.
+/// Whether the actor may make this change, such as setting the pilot or
+/// archiving, to flights of these groups. Setting the pilot never moves a
+/// flight, so only the flights' groups count; that the pilot flies is a rule
+/// of the data, not of the actor.
 pub fn change_flights(
     grants: &Grants,
     permission: Permission,
@@ -212,15 +178,6 @@ mod tests {
     }
 
     #[test]
-    fn admin_moves_flights_to_the_new_pilots_team() {
-        let (a, b) = (A, B);
-        let change = set_pilot(&admin(), &[Some(a), None], Some(b));
-        assert_eq!(change.ok(), Some(TeamChange::Follow(b)));
-        let cleared = set_pilot(&admin(), &[Some(a)], None);
-        assert_eq!(cleared.ok(), Some(TeamChange::Keep));
-    }
-
-    #[test]
     fn member_changes_name_and_holder_of_own_teams_equipment_only() {
         let (own, second, other) = (A, C, B);
         let mine = member(&[own, second]);
@@ -241,28 +198,21 @@ mod tests {
         assert!(change_equipment(&all_flights(), None, None, None).is_err());
     }
 
-    /// A member of two teams changes the flights of both, also moving them
-    /// from one to the other with a pilot chosen with that team.
+    /// A member of two groups sets the pilot of both groups' flights, but
+    /// not of another group's or the queue's; an admin of any.
     #[test]
-    fn member_changes_only_own_teams_flights_to_own_teams_pilots() {
+    fn member_sets_pilots_of_own_groups_flights_only() {
         let (own, second, other) = (A, C, B);
+        let set = |grants: &Grants, groups: &[Option<Uuid>]| {
+            change_flights(grants, Permission::FlightsSetPilot, groups)
+        };
         let mine = member(&[own, second]);
-        let ok = set_pilot(&mine, &[Some(own), Some(second)], Some(second));
-        assert_eq!(ok.ok(), Some(TeamChange::Follow(second)));
-        // "This wasn't me": unknown pilot, and the flight stays in the team.
-        let unknown = set_pilot(&mine, &[Some(own)], None);
-        assert_eq!(unknown.ok(), Some(TeamChange::Keep));
-        // Another team's flight, a queue flight, a pilot of another team.
-        assert!(set_pilot(&mine, &[Some(own), Some(other)], None).is_err());
-        assert!(set_pilot(&mine, &[None], None).is_err());
-        assert!(set_pilot(&mine, &[Some(own)], Some(other)).is_err());
-    }
-
-    #[test]
-    fn viewers_and_members_without_a_team_change_nothing() {
-        let own = A;
-        assert!(set_pilot(&all_flights(), &[Some(own)], None).is_err());
-        assert!(set_pilot(&member(&[]), &[None], None).is_err());
+        assert!(set(&mine, &[Some(own), Some(second)]).is_ok());
+        assert!(set(&mine, &[Some(own), Some(other)]).is_err());
+        assert!(set(&mine, &[None]).is_err());
+        assert!(set(&admin(), &[Some(other), None]).is_ok());
+        assert!(set(&all_flights(), &[Some(own)]).is_err());
+        assert!(set(&member(&[]), &[None]).is_err());
     }
 
     /// A member can't split or merge a session that holds another team's

@@ -3,7 +3,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::policy::Scope;
+use crate::policy::{self, Permission, Scope};
 
 /// Adds a pairing code, and deletes expired ones. Returns its id, or None if
 /// the code is already taken, so the caller can try another.
@@ -197,6 +197,34 @@ pub async fn unpair(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
     .execute(db)
     .await?;
     Ok(result.rows_affected() == 1)
+}
+
+/// A pilot as a controller offers them: once per group they are a pilot in
+/// (still called a team), until the controller chooses the group after the
+/// pilot (package 8).
+#[derive(Serialize)]
+pub struct PilotChoice {
+    pub id: Uuid,
+    pub name: String,
+    pub team_id: Uuid,
+    pub team_name: String,
+}
+
+/// Active users by name, once per group they fly for.
+pub async fn pilot_choices(db: &PgPool) -> sqlx::Result<Vec<PilotChoice>> {
+    sqlx::query_as!(
+        PilotChoice,
+        "select u.id, u.name, g.id as team_id, g.name as team_name
+         from users u
+         join groups g on exists (select 1 from group_members m
+                                  where m.user_id = u.id and m.group_id = g.id
+                                    and m.role = any($1))
+         where u.archived_at is null
+         order by lower(u.name), u.id, lower(g.name)",
+        &policy::roles_granting(Permission::FlightsFlyFor),
+    )
+    .fetch_all(db)
+    .await
 }
 
 #[cfg(test)]

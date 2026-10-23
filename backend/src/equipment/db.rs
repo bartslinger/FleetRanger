@@ -6,6 +6,8 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::policy::{self, Permission};
+
 #[derive(Clone, Copy)]
 pub enum Kind {
     Aircraft,
@@ -163,6 +165,20 @@ pub async fn update(
         }
     };
     Ok(result.rows_affected() == 1)
+}
+
+/// The groups a holder flies for (`flights.fly_for` through their
+/// memberships), until holders are dropped (package 5).
+pub async fn holder_groups(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
+    sqlx::query_scalar!(
+        "select distinct group_id from group_members
+         where user_id = $1 and role = any($2)
+         order by group_id",
+        user_id,
+        &policy::roles_granting(Permission::FlightsFlyFor),
+    )
+    .fetch_all(db)
+    .await
 }
 
 pub async fn user_is_active(db: &PgPool, user_id: Uuid) -> sqlx::Result<bool> {

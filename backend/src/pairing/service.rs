@@ -3,12 +3,12 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, OpenCode, Paired};
+use super::db::{self, OpenCode, Paired, PilotChoice};
 use super::{Controller, parse_sha256};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    flights::{self, db::PilotChoice},
+    flights,
     policy::{self, Permission},
 };
 
@@ -132,8 +132,9 @@ pub async fn paired(db: &PgPool, token_sha256: &[u8]) -> ApiResult<bool> {
     Ok(db::by_token(db, token_sha256).await?.is_some())
 }
 
-/// The pilots a controller offers: every active user in a team. The controller
-/// shows its own team first, and keeps the list for when it's offline.
+/// The pilots a controller offers: every active user who is a pilot in a
+/// group, once per group. The controller shows its own team first, and keeps
+/// the list for when it's offline.
 #[derive(Serialize)]
 pub struct PilotList {
     /// The controller's team; None if it has none.
@@ -144,7 +145,7 @@ pub struct PilotList {
 pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
     Ok(PilotList {
         team_id: controller.team_id,
-        pilots: flights::db::pilot_choices(db, None).await?,
+        pilots: db::pilot_choices(db).await?,
     })
 }
 
