@@ -6,7 +6,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Releases:** v0.5.0 and android-v0.2.1 run on the first organisation's server; the deploy dumps the database before changing the release. v0.5.0 brought **batteries** in Equipment, with a page per battery (capacity over time, its flights), linked from each flight, and fixes in the parser's battery records; it reprocessed all 3,611 logs without failures, and nginx now also compresses JSON. See "Batteries" below. v0.4.0 reworked **Sessions**: the cards show a week or a month beside a map with all its tracks, each card with a **day strip** (the day with its flights and night, each flight's times on hover); **a session opens on the page itself** (the map flies to it, its facts replace the cards, its flights follow in a table, the arrows step through sessions across weeks and months with the filters kept); a track on the map opens its session, and in an open session points at its flight's row with its times. Tracks are **cyan** with a dot for takeoff and an X for landing; the street map follows the theme and the satellite or map choice is kept for the tab. Times carry no time-zone label. v0.3.0 brought areas and list filters.
 
-**Pairing reversed, not yet released** (branch `pairing`): a user creates a code in the web app ("Pair a controller", valid 1 hour to 7 days, revocable) and the pilot types it into the controller, one box per character, so nobody logs in in the field. Needs a server release and a controller app release together; controllers already paired keep working, an older app that isn't paired needs the new one. See "Clients" in [architecture.md](architecture.md).
+**v0.6.0 and android-v0.3.0 prepared: pairing reversed.** A user creates a code in the web app ("Pair a controller", valid 1 hour to 7 days, revocable) and the pilot types it into the controller, one box per character, so nobody logs in in the field; nginx limits pairing attempts per address. Server and app go out together: controllers already paired keep working, an older app that isn't paired needs the new one. See "Clients" in [architecture.md](architecture.md).
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -68,6 +68,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Pairing: linking a (new) controller to the organisation, which any user can do, with unpairing and the download page
 - [x] Pairing with a code created in the web app and typed into the controller, replacing the approval flow
 - [~] Onboarding asks which logs to upload (all, or from a date that starts at today, with the number of logs each covers); today's until chosen
+- [ ] Stay in landscape when the controller is turned (the app rotates with it now)
 
 ## Public website (fleetranger.org)
 
