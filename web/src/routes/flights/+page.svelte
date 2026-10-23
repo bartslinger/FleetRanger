@@ -143,21 +143,6 @@
 		BATCH.some((permission) => may(data.account, permission, flight.group_id));
 	const can = (permission: Permission) => anywhere(data.account, permission);
 
-	/**
-	 * Whether archiving takes flights out of their sessions first: for who
-	 * may do both, when some of them are in one (for all matching flights,
-	 * unless the list holds only flights without a session). Others are
-	 * refused for flights in a session, as before.
-	 */
-	function leaving(ids: string[]) {
-		if (!can('flights.archive') || !can('sessions.edit')) return false;
-		if (allMatching) return !data.state.withoutSession;
-		return selectedRows(ids).some((flight) => flight.session_id !== null);
-	}
-	/** The archive action's label, the same in the menu and its dialog (Carbon). */
-	const archiveLabel = (ids: string[]) =>
-		leaving(ids) ? 'Remove from session and archive' : 'Archive';
-
 	/** The group the batch's flights share: the selected ones', or for all
 	 * matching flights the one group filtered on. */
 	function batchGroup(ids: string[]) {
@@ -390,14 +375,13 @@
 									? [{ label: 'Move to group', onselect: () => (groupOpen = true) }]
 									: []),
 								...(can('flights.archive')
-									? [{ label: archiveLabel(ids), onselect: () => (archiveOpen = true) }]
+									? [{ label: 'Archive', onselect: () => (archiveOpen = true) }]
 									: [])
 							]}
 						/>
 						<Modal
-							title={archiveLabel(ids)}
-							submitLabel={leaving(ids) ? 'Remove and archive' : 'Archive'}
-							danger={leaving(ids)}
+							title="Archive"
+							submitLabel="Archive"
 							action="?/archive"
 							error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
 							onsuccess={() => done(`${flights(count(ids))} archived.`)}
@@ -406,19 +390,11 @@
 							returnFocus={() => overflow ?? undefined}
 						>
 							{@render chosenFields(ids)}
-							{#if leaving(ids)}<input type="hidden" name="leave_sessions" value="true" />{/if}
 							<p>
 								{count(ids) === 1
 									? 'The flight is left out of Flights and totals, as if it hadn’t happened.'
 									: `The ${count(ids)} flights are left out of Flights and totals, as if they hadn’t happened.`}
-								{#if leaving(ids)}
-									{count(ids) === 1
-										? 'If it is in a session, it leaves it; a session left without flights ends. Restoring it doesn’t put it back in its session.'
-										: 'Those in a session leave it; a session left without flights ends. Restoring them doesn’t put them back in their sessions.'}
-								{/if}
-								{#if !leaving(ids)}
-									You can restore archived flights from Flights with Status: Archived.
-								{/if}
+								You can restore archived flights from Flights with Status: Archived.
 							</p>
 						</Modal>
 						<Modal

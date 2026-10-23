@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
 	import { areaShares, clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
-	import { anywhere, may } from '#lib/permissions.js';
+	import { may } from '#lib/permissions.js';
 	import { groupOptions as groupChoices, sharedGroup } from '#lib/groups.js';
 	import { offered, pilotOptions as pilotOptions_ } from '#lib/pilots.js';
 	import Column from '#lib/ui/Column.svelte';
@@ -25,8 +25,6 @@
 
 	const canSetPilot = $derived(may(data.account, 'flights.set_pilot', flight.group_id));
 	const canArchive = $derived(may(data.account, 'flights.archive', flight.group_id));
-	// Without sessions.edit on its session, archiving a flight in one is refused.
-	const leaving = $derived(flight.session_id !== null && anywhere(data.account, 'sessions.edit'));
 	// Its group's own pilots first.
 	const pilotOptions = $derived(pilotOptions_(data.choices, sharedGroup([flight])));
 	// "That was me": an unknown pilot starts as the viewer, if they fly.
@@ -129,28 +127,19 @@
 			>
 				<Button type="submit" kind="tertiary">Restore</Button>
 			</form>
-		{:else if canArchive}
-			<!-- In a session, for who may also edit it: one action that takes it
-			     out first, as a danger modal, since restoring doesn't put it back
-			     (carbon-expert's advice). -->
+		{:else if canArchive && flight.session_id === null}
+			<!-- Only a flight without a session can be archived. -->
 			<Modal
-				title={leaving ? 'Remove from session and archive' : 'Archive'}
-				triggerKind={leaving ? 'danger-tertiary' : 'tertiary'}
-				submitLabel={leaving ? 'Remove and archive' : 'Archive'}
-				danger={leaving}
+				title="Archive"
+				triggerKind="tertiary"
+				submitLabel="Archive"
 				action="?/archive"
 				error={form?.archiveMessage}
 				onsuccess={() => toast('Flight archived.')}
 			>
-				{#if leaving}<input type="hidden" name="leave_sessions" value="true" />{/if}
 				<p>
-					The flight is left out of Flights and totals, as if it hadn’t happened.
-					{#if leaving}
-						It leaves its session; a session left without flights ends. Restoring the flight doesn’t
-						put it back in the session.
-					{:else}
-						You can restore it later.
-					{/if}
+					The flight is left out of Flights and totals, as if it hadn’t happened. You can restore it
+					later.
 				</p>
 			</Modal>
 		{/if}

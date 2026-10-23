@@ -185,21 +185,10 @@ pub async fn set_group(
 
 /// Archives a batch of flights, all or none: they leave every list and total.
 /// Only flights without a session can be archived, so archiving never changes
-/// a session, perhaps another group's; with `leave_sessions` they first leave
-/// their sessions in the same step, which also needs `sessions.edit` on those
-/// sessions. Returns how many weren't archived yet.
-pub async fn archive(
-    db: &PgPool,
-    actor: &Actor,
-    ids: &[Uuid],
-    leave_sessions: bool,
-) -> ApiResult<u64> {
+/// a session, perhaps another group's. Returns how many weren't archived yet.
+pub async fn archive(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
     let ids = archivable(db, actor, ids).await?;
-    if leave_sessions {
-        let left = crate::sessions::db::groups_left(db, &ids).await?;
-        policy::change_sessions(&actor.grants, &left)?;
-    }
-    db::archive(db, &ids, leave_sessions).await?.ok_or_else(|| {
+    db::archive(db, &ids).await?.ok_or_else(|| {
         ApiError::Conflict(
             "Flights in a session can’t be archived. Remove them from their session first."
                 .to_owned(),

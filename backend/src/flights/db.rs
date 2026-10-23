@@ -896,22 +896,11 @@ pub async fn set_group(db: &PgPool, ids: &[Uuid], group_id: Option<Uuid>) -> sql
     Ok(result.rows_affected())
 }
 
-/// Archives these flights and returns how many weren't archived yet. With
-/// `leave_sessions` they first leave their sessions, in the same step, and a
-/// session left without flights is deleted; without it, archiving never
-/// changes a session, so it returns None without archiving any when one of
-/// them is in a session.
-pub async fn archive(db: &PgPool, ids: &[Uuid], leave_sessions: bool) -> sqlx::Result<Option<u64>> {
+/// Archives these flights and returns how many weren't archived yet. Archiving
+/// never changes a session, so it returns None without archiving any when one
+/// of them is in a session.
+pub async fn archive(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<u64>> {
     let mut tx = sessions::db::locked(db).await?;
-    if leave_sessions {
-        sqlx::query!(
-            "update flights set session_id = null where id = any($1) and session_id is not null",
-            ids,
-        )
-        .execute(&mut *tx)
-        .await?;
-        sessions::db::delete_empty(&mut tx).await?;
-    }
     let in_session = sqlx::query_scalar!(
         r#"select exists(select 1 from flights where id = any($1) and session_id is not null)
                as "exists!""#,
@@ -1436,10 +1425,10 @@ mod tests {
         );
         let session = sessions::db::split(&db, &[b], None).await.unwrap();
 
-        assert_eq!(archive(&db, &[a, b], false).await.unwrap(), None);
+        assert_eq!(archive(&db, &[a, b]).await.unwrap(), None);
         assert!(!any_archived(&db, &[a, b]).await.unwrap());
-        assert_eq!(archive(&db, &[a, c], false).await.unwrap(), Some(2));
-        assert_eq!(archive(&db, &[a], false).await.unwrap(), Some(0));
+        assert_eq!(archive(&db, &[a, c]).await.unwrap(), Some(2));
+        assert_eq!(archive(&db, &[a]).await.unwrap(), Some(0));
         let session_of_b: Option<Uuid> =
             sqlx::query_scalar("select session_id from flights where id = $1")
                 .bind(b)
@@ -1478,13 +1467,5 @@ mod tests {
 
         assert_eq!(restore(&db, &[a]).await.unwrap(), 1);
         assert!(!any_archived(&db, &[a, b]).await.unwrap());
-
-        // Leaving its session in the same step, which then ends.
-        assert_eq!(archive(&db, &[b], true).await.unwrap(), Some(1));
-        let sessions: i64 = sqlx::query_scalar("select count(*) from sessions")
-            .fetch_one(&db)
-            .await
-            .unwrap();
-        assert_eq!(sessions, 0);
     }
 }

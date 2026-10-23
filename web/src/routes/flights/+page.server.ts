@@ -106,8 +106,7 @@ export const actions = {
 		const form = await request.formData();
 		const flights = await flightIds(fetch, url, form);
 		if ('message' in flights) return fail(409, { archiveMessage: flights.message });
-		// With both rights, flights in a session leave it in the same step.
-		const body = { flight_ids: flights.ids, leave_sessions: form.get('leave_sessions') === 'true' };
+		const body = { flight_ids: flights.ids };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/archive', body);
 		if (!result.ok) return fail(result.status, { archiveMessage: result.message });
 		return { changed: result.data.changed };
