@@ -8,6 +8,8 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **v0.6.0 and android-v0.3.0 prepared: pairing reversed.** A user creates a code in the web app ("Pair a controller", valid 1 hour to 7 days, revocable) and the pilot types it into the controller, one box per character, so nobody logs in in the field; nginx limits pairing attempts per address. Server and app go out together: controllers already paired keep working, an older app that isn't paired needs the new one. See "Clients" in [architecture.md](architecture.md).
 
+**Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replace teams, and permissions checked on a group or the whole organisation replace the three fixed roles. The first step keeps today's behaviour; the edge cases are being worked out before a schema proposal. Serving several organisations from one install follows after.
+
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
 **Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
