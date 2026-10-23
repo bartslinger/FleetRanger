@@ -6,8 +6,11 @@ pub mod routes;
 pub mod service;
 
 use axum::{
-    extract::{FromRef, FromRequestParts},
+    Json,
+    extract::{FromRef, FromRequestParts, Request},
     http::{HeaderMap, StatusCode, header, request::Parts},
+    middleware::Next,
+    response::{IntoResponse, Response},
 };
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -55,6 +58,35 @@ pub fn parse_sha256(hex: &str) -> Option<Vec<u8>> {
         .step_by(2)
         .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
         .collect()
+}
+
+/// The errors of the controller's API from v1 on: JSON `{"message": …}` for
+/// any refusal that says why, and a malformed request (axum's 422) as a 400
+/// like any other. See "Clients" in docs/architecture.md.
+pub async fn v1_errors(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    let status = response.status();
+    let is_json = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .is_some_and(|value| value.as_bytes().starts_with(b"application/json"));
+    if !status.is_client_error() || is_json {
+        return response;
+    }
+    // Messages are a sentence; anything larger isn't one of ours.
+    let Ok(body) = axum::body::to_bytes(response.into_body(), 64 * 1024).await else {
+        return status.into_response();
+    };
+    if body.is_empty() {
+        return status.into_response();
+    }
+    let status = if status == StatusCode::UNPROCESSABLE_ENTITY {
+        StatusCode::BAD_REQUEST
+    } else {
+        status
+    };
+    let message = String::from_utf8_lossy(&body).into_owned();
+    (status, Json(serde_json::json!({ "message": message }))).into_response()
 }
 
 /// The SHA-256 of the bearer token, which is what the database stores.
