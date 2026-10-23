@@ -882,21 +882,30 @@ pub async fn set_team(db: &PgPool, ids: &[Uuid], group_id: Option<Uuid>) -> sqlx
     Ok(result.rows_affected())
 }
 
-/// Archives these flights, taking them out of their sessions, and returns how
-/// many weren't archived yet. Deletes a session left without flights.
-pub async fn archive(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<u64> {
+/// Archives these flights and returns how many weren't archived yet, or None
+/// without archiving any when one of them is in a session: archiving never
+/// changes a session.
+pub async fn archive(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<u64>> {
     let mut tx = sessions::db::locked(db).await?;
+    let in_session = sqlx::query_scalar!(
+        r#"select exists(select 1 from flights where id = any($1) and session_id is not null)
+               as "exists!""#,
+        ids,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if in_session {
+        return Ok(None);
+    }
     let archived = sqlx::query!(
-        "update flights set archived_at = now(), session_id = null
-         where id = any($1) and archived_at is null",
+        "update flights set archived_at = now() where id = any($1) and archived_at is null",
         ids,
     )
     .execute(&mut *tx)
     .await?
     .rows_affected();
-    sessions::db::delete_empty(&mut tx).await?;
     tx.commit().await?;
-    Ok(archived)
+    Ok(Some(archived))
 }
 
 /// Restores these archived flights, without a session, and returns how many
@@ -1391,39 +1400,29 @@ mod tests {
         assert_eq!(listed, [member, guest]);
     }
 
-    /// Archiving takes flights out of their sessions, deletes a session left
-    /// empty and leaves them out of the list but for the archived filter;
-    /// restoring brings them back without a session.
+    /// Only flights without a session can be archived: a batch with a flight
+    /// in a session is refused whole. Archived flights are left out of the
+    /// list but for the archived filter; restoring brings them back.
     #[sqlx::test]
-    async fn archived_flights_leave_sessions_and_lists(db: PgPool) {
+    async fn archived_flights_leave_lists_but_never_sessions(db: PgPool) {
         let (a, b, c) = (
             flight(&db, None, None).await,
             flight(&db, None, None).await,
             flight(&db, None, None).await,
         );
-        let kept = sessions::db::split(&db, &[a, b], None).await.unwrap();
-        let emptied = sessions::db::split(&db, &[c], None).await.unwrap();
-        let session_of = async |id: Uuid| -> Option<Uuid> {
-            sqlx::query_scalar("select session_id from flights where id = $1")
-                .bind(id)
-                .fetch_one(&db)
-                .await
-                .unwrap()
-        };
-        let session_exists = async |id: Uuid| -> bool {
-            sqlx::query_scalar("select exists(select 1 from sessions where id = $1)")
-                .bind(id)
-                .fetch_one(&db)
-                .await
-                .unwrap()
-        };
+        let session = sessions::db::split(&db, &[b], None).await.unwrap();
 
-        assert_eq!(archive(&db, &[a, c]).await.unwrap(), 2);
-        assert_eq!(archive(&db, &[a]).await.unwrap(), 0);
-        assert_eq!(session_of(a).await, None);
-        assert_eq!(session_of(b).await, Some(kept));
-        assert!(!session_exists(emptied).await);
-        assert!(any_archived(&db, &[b, c]).await.unwrap());
+        assert_eq!(archive(&db, &[a, b]).await.unwrap(), None);
+        assert!(!any_archived(&db, &[a, b]).await.unwrap());
+        assert_eq!(archive(&db, &[a, c]).await.unwrap(), Some(2));
+        assert_eq!(archive(&db, &[a]).await.unwrap(), Some(0));
+        let session_of_b: Option<Uuid> =
+            sqlx::query_scalar("select session_id from flights where id = $1")
+                .bind(b)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(session_of_b, Some(session));
 
         let everything = FlightScope {
             all: true,
@@ -1454,7 +1453,6 @@ mod tests {
         assert_eq!(listed(true).await, archived);
 
         assert_eq!(restore(&db, &[a]).await.unwrap(), 1);
-        assert_eq!(session_of(a).await, None);
         assert!(!any_archived(&db, &[a, b]).await.unwrap());
     }
 }
