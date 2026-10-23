@@ -23,6 +23,8 @@ export interface FlightSummary {
 	/** Null: in the organisation's queue. */
 	group_id: string | null;
 	group_name: string | null;
+	/** Null: in no session. */
+	session_id: string | null;
 	/** Set for an archived flight: left out everywhere but the archived filter. */
 	archived_at: string | null;
 }
@@ -105,6 +107,8 @@ export interface FlightDetail {
 	/** Null: in the organisation's queue. */
 	group_id: string | null;
 	group_name: string | null;
+	/** Null: in no session. */
+	session_id: string | null;
 	track: Track;
 	metrics: {
 		max_altitude_m?: number;

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                group_id,\n                (select g.name from groups g where g.id = flights.group_id) as \"group_name?\",\n                archived_at\n         from flights\n         where ($5\n                or pilot_id = $6\n                or group_id = any($18))\n           and ($7::text[] is null or aircraft_serial = any($7))\n           and ($8::text[] is null or rc_serial = any($8))\n           and ($9::bool is null or (session_id is not null) = $9)\n           and ($10::timestamptz is null or takeoff_at >= $10)\n           and ($11::timestamptz is null or takeoff_at < $11)\n           and ($12::uuid[] is null or group_id = any($12) or ($13 and group_id is null))\n           and ($14::uuid[] is null or pilot_id = any($14) or ($15 and pilot_id is null))\n           and (archived_at is not null) = $16\n           and ($17::uuid[] is null or exists (select 1 from flight_areas fa\n                                               where fa.flight_id = flights.id\n                                                 and fa.area_id = any($17)))\n         order by\n             case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,\n             case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,\n             case when $1 = 'air_time_s' and not $2 then air_time_s end asc,\n             case when $1 = 'air_time_s' and $2 then air_time_s end desc,\n             case when $1 = 'distance_m' and not $2 then distance_m end asc,\n             case when $1 = 'distance_m' and $2 then distance_m end desc,\n             case when $1 = 'aircraft_serial' and not $2 then lower(coalesce(\n                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),\n                 aircraft_serial)) end asc nulls last,\n             case when $1 = 'aircraft_serial' and $2 then lower(coalesce(\n                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),\n                 aircraft_serial)) end desc nulls last,\n             case when $1 = 'rc_serial' and not $2 then lower(coalesce(\n                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),\n                 rc_serial)) end asc nulls last,\n             case when $1 = 'rc_serial' and $2 then lower(coalesce(\n                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),\n                 rc_serial)) end desc nulls last,\n             id\n         limit $3 offset $4",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                group_id,\n                (select g.name from groups g where g.id = flights.group_id) as \"group_name?\",\n                session_id,\n                archived_at\n         from flights\n         where ($5\n                or pilot_id = $6\n                or group_id = any($18))\n           and ($7::text[] is null or aircraft_serial = any($7))\n           and ($8::text[] is null or rc_serial = any($8))\n           and ($9::bool is null or (session_id is not null) = $9)\n           and ($10::timestamptz is null or takeoff_at >= $10)\n           and ($11::timestamptz is null or takeoff_at < $11)\n           and ($12::uuid[] is null or group_id = any($12) or ($13 and group_id is null))\n           and ($14::uuid[] is null or pilot_id = any($14) or ($15 and pilot_id is null))\n           and (archived_at is not null) = $16\n           and ($17::uuid[] is null or exists (select 1 from flight_areas fa\n                                               where fa.flight_id = flights.id\n                                                 and fa.area_id = any($17)))\n         order by\n             case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,\n             case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,\n             case when $1 = 'air_time_s' and not $2 then air_time_s end asc,\n             case when $1 = 'air_time_s' and $2 then air_time_s end desc,\n             case when $1 = 'distance_m' and not $2 then distance_m end asc,\n             case when $1 = 'distance_m' and $2 then distance_m end desc,\n             case when $1 = 'aircraft_serial' and not $2 then lower(coalesce(\n                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),\n                 aircraft_serial)) end asc nulls last,\n             case when $1 = 'aircraft_serial' and $2 then lower(coalesce(\n                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),\n                 aircraft_serial)) end desc nulls last,\n             case when $1 = 'rc_serial' and not $2 then lower(coalesce(\n                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),\n                 rc_serial)) end asc nulls last,\n             case when $1 = 'rc_serial' and $2 then lower(coalesce(\n                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),\n                 rc_serial)) end desc nulls last,\n             id\n         limit $3 offset $4",
   "describe": {
     "columns": [
       {
@@ -128,6 +128,17 @@
       },
       {
         "ordinal": 13,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
         "name": "archived_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -174,8 +185,9 @@
       null,
       true,
       null,
+      true,
       true
     ]
   },
-  "hash": "62fe6af5fb1ed13c36e2b0d730c11a372c499dbec0eee89a8d7d757f85754910"
+  "hash": "0d9ebc566c2c8c1756d9ed55c5efd513b52d9252838c86309953abbcec3cbb30"
 }

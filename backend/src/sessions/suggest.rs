@@ -206,6 +206,7 @@ mod tests {
             pilot_name: None,
             group_id: group,
             group_name: None,
+            session_id: None,
             archived_at: None,
         }
     }
