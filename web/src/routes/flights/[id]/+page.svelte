@@ -136,7 +136,7 @@
 			<Modal
 				title={leaving ? 'Remove from session and archive' : 'Archive'}
 				triggerKind={leaving ? 'danger-tertiary' : 'tertiary'}
-				submitLabel={leaving ? 'Remove from session and archive' : 'Archive'}
+				submitLabel={leaving ? 'Remove and archive' : 'Archive'}
 				danger={leaving}
 				action="?/archive"
 				error={form?.archiveMessage}
@@ -148,8 +148,9 @@
 					{#if leaving}
 						It leaves its session; a session left without flights ends. Restoring the flight doesn’t
 						put it back in the session.
+					{:else}
+						You can restore it later.
 					{/if}
-					You can restore it later.
 				</p>
 			</Modal>
 		{/if}

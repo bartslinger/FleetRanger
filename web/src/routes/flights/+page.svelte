@@ -396,7 +396,7 @@
 						/>
 						<Modal
 							title={archiveLabel(ids)}
-							submitLabel={archiveLabel(ids)}
+							submitLabel={leaving(ids) ? 'Remove and archive' : 'Archive'}
 							danger={leaving(ids)}
 							action="?/archive"
 							error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
@@ -416,7 +416,9 @@
 										? 'If it is in a session, it leaves it; a session left without flights ends. Restoring it doesn’t put it back in its session.'
 										: 'Those in a session leave it; a session left without flights ends. Restoring them doesn’t put them back in their sessions.'}
 								{/if}
-								You can restore archived flights from Flights with Status: Archived.
+								{#if !leaving(ids)}
+									You can restore archived flights from Flights with Status: Archived.
+								{/if}
 							</p>
 						</Modal>
 						<Modal
