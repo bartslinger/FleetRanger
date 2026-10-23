@@ -33,9 +33,12 @@ pub struct Equipment {
     pub flights: i64,
     pub air_time_s: i64,
     pub last_flight_at: Option<DateTime<Utc>>,
-    /// Who flew its last flight; None without flights or when that flight has
-    /// no pilot.
+    /// Who flew its last flight; None without flights, when that flight has
+    /// no pilot, or when the user doesn't see that flight.
     pub last_pilot_name: Option<String>,
+    /// Its last flight has a pilot the user may not know: someone flew it
+    /// then, but the user doesn't see that flight.
+    pub last_pilot_hidden: bool,
     /// Whether a controller is paired with the install; None for drones.
     pub paired: Option<bool>,
     /// When a controller last synced (also without logs); None for drones
@@ -69,7 +72,8 @@ pub async fn list(
                        where archived_at is null and aircraft_serial is not null
                        group by aircraft_serial
                    ), last as (
-                       select distinct on (aircraft_serial) aircraft_serial as serial, pilot_id
+                       select distinct on (aircraft_serial) aircraft_serial as serial, pilot_id,
+                              ($4 or pilot_id = $5 or group_id = any($6)) as seen
                        from flights
                        where archived_at is null and aircraft_serial is not null
                        order by aircraft_serial, takeoff_at desc, id desc
@@ -79,7 +83,9 @@ pub async fn list(
                           coalesce(s.flights, 0) as "flights!",
                           coalesce(s.air_time_s, 0) as "air_time_s!",
                           s.last_flight_at as "last_flight_at?",
-                          p.name as "last_pilot_name?",
+                          case when l.seen then p.name end as "last_pilot_name?",
+                          coalesce(l.pilot_id is not null and not l.seen, false)
+                              as "last_pilot_hidden!",
                           null::bool as "paired?",
                           null::timestamptz as "synced_at?",
                           null::text as "app_version?"
@@ -116,7 +122,8 @@ pub async fn list(
                        where archived_at is null and rc_serial is not null
                        group by rc_serial
                    ), last as (
-                       select distinct on (rc_serial) rc_serial as serial, pilot_id
+                       select distinct on (rc_serial) rc_serial as serial, pilot_id,
+                              ($4 or pilot_id = $5 or group_id = any($6)) as seen
                        from flights
                        where archived_at is null and rc_serial is not null
                        order by rc_serial, takeoff_at desc, id desc
@@ -126,7 +133,9 @@ pub async fn list(
                           coalesce(s.flights, 0) as "flights!",
                           coalesce(s.air_time_s, 0) as "air_time_s!",
                           s.last_flight_at as "last_flight_at?",
-                          p.name as "last_pilot_name?",
+                          case when l.seen then p.name end as "last_pilot_name?",
+                          coalesce(l.pilot_id is not null and not l.seen, false)
+                              as "last_pilot_hidden!",
                           e.token_sha256 is not null as "paired?",
                           e.synced_at, e.app_version
                    from remote_controllers e
@@ -270,6 +279,8 @@ mod tests {
         assert_eq!(serials, ["TESTOWN", "TESTSHARED"]);
         let shared = &seen[1];
         assert_eq!((shared.flights, shared.air_time_s), (2, 1200));
-        assert_eq!(shared.last_pilot_name.as_deref(), Some("B"));
+        // Its last flight is the other group's: someone flew it, not who.
+        assert_eq!(shared.last_pilot_name, None);
+        assert!(shared.last_pilot_hidden);
     }
 }

@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { back } from '#lib/back.svelte.js';
-	import { KINDS } from '#lib/equipment.js';
+	import { KINDS, lastPilot } from '#lib/equipment.js';
 	import { dateTime, duration } from '#lib/format.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -118,7 +118,7 @@
 			{#if item.last_flight_at}
 				<div>
 					<dt>Last flown by</dt>
-					<dd>{item.last_pilot_name ?? 'Unknown pilot'}</dd>
+					<dd>{lastPilot(item)}</dd>
 				</div>
 			{/if}
 			<!-- Who can't change it sees it here. -->

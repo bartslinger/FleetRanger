@@ -2,7 +2,7 @@
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { KINDS, type Kind, type Tab } from '#lib/equipment.js';
+	import { KINDS, lastPilot, type Kind, type Tab } from '#lib/equipment.js';
 	import { dateTime, duration, health } from '#lib/format.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -40,7 +40,7 @@
 			numeric: true,
 			format: (item) => duration(item.air_time_s)
 		},
-		{ key: 'last_pilot_name', header: 'Last flown by' },
+		{ key: 'last_pilot_name', header: 'Last flown by', format: lastPilot },
 		{
 			key: 'last_flight_at',
 			header: 'Last flight',

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "with flown as (\n                       select rc_serial as serial, count(*) as flights,\n                              sum(air_time_s)::bigint as air_time_s,\n                              max(takeoff_at) as last_flight_at\n                       from flights\n                       where archived_at is null and rc_serial is not null\n                       group by rc_serial\n                   ), last as (\n                       select distinct on (rc_serial) rc_serial as serial, pilot_id\n                       from flights\n                       where archived_at is null and rc_serial is not null\n                       order by rc_serial, takeoff_at desc, id desc\n                   )\n                   select e.id, e.serial, e.name, e.team_id, e.group_id,\n                          t.name as \"team_name?\",\n                          coalesce(s.flights, 0) as \"flights!\",\n                          coalesce(s.air_time_s, 0) as \"air_time_s!\",\n                          s.last_flight_at as \"last_flight_at?\",\n                          p.name as \"last_pilot_name?\",\n                          e.token_sha256 is not null as \"paired?\",\n                          e.synced_at, e.app_version\n                   from remote_controllers e\n                   left join teams t on t.id = e.team_id\n                   left join flown s on s.serial = e.serial\n                   left join last l on l.serial = e.serial\n                   left join users p on p.id = l.pilot_id\n                   where ($1::uuid is null or e.id = $1)\n                     and ($2 or e.group_id = any($3)\n                          or exists (select 1 from flights f\n                                     where f.rc_serial = e.serial\n                                       and f.archived_at is null\n                                       and ($4 or f.pilot_id = $5 or f.group_id = any($6))))\n                   order by lower(coalesce(e.name, e.serial)), e.id",
+  "query": "with flown as (\n                       select rc_serial as serial, count(*) as flights,\n                              sum(air_time_s)::bigint as air_time_s,\n                              max(takeoff_at) as last_flight_at\n                       from flights\n                       where archived_at is null and rc_serial is not null\n                       group by rc_serial\n                   ), last as (\n                       select distinct on (rc_serial) rc_serial as serial, pilot_id,\n                              ($4 or pilot_id = $5 or group_id = any($6)) as seen\n                       from flights\n                       where archived_at is null and rc_serial is not null\n                       order by rc_serial, takeoff_at desc, id desc\n                   )\n                   select e.id, e.serial, e.name, e.team_id, e.group_id,\n                          t.name as \"team_name?\",\n                          coalesce(s.flights, 0) as \"flights!\",\n                          coalesce(s.air_time_s, 0) as \"air_time_s!\",\n                          s.last_flight_at as \"last_flight_at?\",\n                          case when l.seen then p.name end as \"last_pilot_name?\",\n                          coalesce(l.pilot_id is not null and not l.seen, false)\n                              as \"last_pilot_hidden!\",\n                          e.token_sha256 is not null as \"paired?\",\n                          e.synced_at, e.app_version\n                   from remote_controllers e\n                   left join teams t on t.id = e.team_id\n                   left join flown s on s.serial = e.serial\n                   left join last l on l.serial = e.serial\n                   left join users p on p.id = l.pilot_id\n                   where ($1::uuid is null or e.id = $1)\n                     and ($2 or e.group_id = any($3)\n                          or exists (select 1 from flights f\n                                     where f.rc_serial = e.serial\n                                       and f.archived_at is null\n                                       and ($4 or f.pilot_id = $5 or f.group_id = any($6))))\n                   order by lower(coalesce(e.name, e.serial)), e.id",
   "describe": {
     "columns": [
       {
@@ -91,21 +91,22 @@
         "ordinal": 9,
         "name": "last_pilot_name?",
         "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "users",
-            "name": "name"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 10,
-        "name": "paired?",
+        "name": "last_pilot_hidden!",
         "type_info": "Bool",
         "origin": "Expression"
       },
       {
         "ordinal": 11,
+        "name": "paired?",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
         "name": "synced_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -116,7 +117,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "app_version",
         "type_info": "Text",
         "origin": {
@@ -147,11 +148,12 @@
       null,
       null,
       null,
-      false,
+      null,
+      null,
       null,
       true,
       true
     ]
   },
-  "hash": "2183cb5af7e509c7f73a1f241e50a51f9c4f322f80434364779ee018226f340f"
+  "hash": "033570d59567e2a24b32ca1bc82c165f513ea3f8ba64a3182f53839d68937459"
 }
