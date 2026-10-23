@@ -8,6 +8,8 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **v0.5.0 prepared** (images on the server, playbook to run): **batteries** in Equipment, with a page per battery (capacity over time, its flights), linked from each flight, and fixes in the parser's battery records. The release reprocesses every log once, with the stored DJI keys (about an hour on the server). nginx now also compresses JSON. See "Batteries" below.
 
+**In progress: pairing reversed** (branch `pairing`): a user creates a code in the web app and the pilot types it into the controller, so nobody logs in in the field. See [pairing.md](pairing.md).
+
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
 **Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
@@ -66,6 +68,7 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [x] Syncing finished logs over approved Wi-Fi networks, any Wi-Fi or any connection
 - [x] Uploading only the logs the server lacks (asked by hash before uploading)
 - [x] Pairing: linking a (new) controller to the organisation, which any user can do, with unpairing and the download page
+- [~] Pairing with a code created in the web app and typed into the controller, replacing the approval flow
 - [~] Onboarding asks which logs to upload (all, or from a date that starts at today, with the number of logs each covers); today's until chosen
 
 ## Public website (fleetranger.org)
