@@ -157,7 +157,7 @@
 				? 'Your team’s drones and remote controllers appear here once an admin assigns them to the team.'
 				: kind === 'drones'
 					? 'Drones appear here when flight logs that use them are imported.'
-					: 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with the code its screen shows.'}
+					: 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with a pairing code.'}
 			action={kind === 'controllers' ? pair : undefined}
 		/>
 	{:else}

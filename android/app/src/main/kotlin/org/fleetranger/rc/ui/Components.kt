@@ -24,7 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -40,13 +43,18 @@ import androidx.compose.ui.unit.dp
  */
 enum class ButtonKind { Primary, Secondary, Tertiary, Ghost, Danger, DangerTertiary }
 
-/** Carbon's button, extra large (64dp), with its text at the top left. */
+/**
+ * Carbon's button, extra large (64dp), with its text at the top left. While
+ * `loading` is set, it shows that instead, with a spinner, and can't be tapped
+ * again until the action is done.
+ */
 @Composable
 fun Button(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     kind: ButtonKind = ButtonKind.Primary,
+    loading: String? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -79,7 +87,7 @@ fun Button(
             .height(64.dp)
             .background(background)
             .border(if (focused) 2.dp else 1.dp, border)
-            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
+            .clickable(interaction, indication = null, role = Role.Button, enabled = loading == null, onClick = onClick)
             .padding(
                 start = Spacing.s05,
                 end = if (ghost) Spacing.s05 else 64.dp,
@@ -87,7 +95,11 @@ fun Button(
             ),
         contentAlignment = if (ghost) Alignment.CenterStart else Alignment.TopStart,
     ) {
-        BasicText(text, style = Type.bodyCompact01.copy(color = foreground))
+        if (loading != null) {
+            InlineLoading(loading, color = foreground, style = Type.bodyCompact01)
+        } else {
+            BasicText(text, style = Type.bodyCompact01.copy(color = foreground))
+        }
     }
 }
 
@@ -164,6 +176,9 @@ fun LabelledCode(label: String, code: String, modifier: Modifier = Modifier) {
     )
 }
 
+/** The statuses of Carbon's inline notification that the app uses. */
+enum class NotificationKind { Error, Success, Warning }
+
 /**
  * Carbon's inline notification, warning kind (low contrast), with an
  * optional action at the right.
@@ -175,18 +190,46 @@ fun WarningNotification(
     modifier: Modifier = Modifier,
     action: String? = null,
     onAction: () -> Unit = {},
+) = InlineNotification(NotificationKind.Warning, title, text, modifier, action, onAction)
+
+/**
+ * Carbon's inline notification (low contrast), with an optional action at
+ * the right. Not dismissible: it stays until what it says changes.
+ */
+@Composable
+fun InlineNotification(
+    kind: NotificationKind,
+    title: String,
+    text: String,
+    modifier: Modifier = Modifier,
+    action: String? = null,
+    onAction: () -> Unit = {},
 ) {
+    val (background, support) = when (kind) {
+        NotificationKind.Error -> Colors.notificationBackgroundError to Colors.supportError
+        NotificationKind.Success -> Colors.notificationBackgroundSuccess to Colors.supportSuccess
+        NotificationKind.Warning -> Colors.notificationBackgroundWarning to Colors.supportWarning
+    }
     Row(
         modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .background(Colors.notificationBackgroundWarning)
-            .border(1.dp, Colors.supportWarning.copy(alpha = 0.4f)),
+            .background(background)
+            .border(1.dp, support.copy(alpha = 0.4f))
+            // Read out when it appears, like role="alert" or "status" on the web.
+            .semantics {
+                liveRegion = if (kind == NotificationKind.Error) LiveRegionMode.Assertive else LiveRegionMode.Polite
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(3.dp).fillMaxHeight().background(Colors.supportWarning))
+        Box(Modifier.width(3.dp).fillMaxHeight().background(support))
         // Status by icon and colour, not colour alone; aligned with the title.
-        WarningIcon(Modifier.align(Alignment.Top).padding(start = Spacing.s05, top = Spacing.s04 + 1.dp))
+        val iconModifier = Modifier.align(Alignment.Top).padding(start = Spacing.s05, top = Spacing.s04 + 1.dp)
+        when (kind) {
+            NotificationKind.Error -> ErrorIcon(iconModifier)
+            NotificationKind.Success -> SuccessIcon(iconModifier)
+            NotificationKind.Warning -> WarningIcon(iconModifier)
+        }
         Column(Modifier.weight(1f).padding(horizontal = Spacing.s05, vertical = Spacing.s04)) {
             BasicText(title, style = Type.headingCompact02.copy(color = Colors.textPrimary))
             BasicText(text, style = Type.bodyCompact02.copy(color = Colors.textPrimary))

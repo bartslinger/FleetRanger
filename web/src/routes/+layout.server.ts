@@ -1,5 +1,5 @@
 import { TIME_ZONE } from '$app/env/private';
-import { get, type ProcessingStatus, type WaitingController } from '#lib/server/backend.js';
+import { get, type ProcessingStatus } from '#lib/server/backend.js';
 
 export async function load({ fetch, locals }) {
 	return {
@@ -10,8 +10,6 @@ export async function load({ fetch, locals }) {
 		processing:
 			locals.account?.role === 'admin'
 				? await get<ProcessingStatus>(fetch, '/api/logs/processing')
-				: null,
-		// Controllers waiting to be paired, shown to everyone in the header.
-		pairing: locals.account ? await get<WaitingController[]>(fetch, '/api/pairing') : []
+				: null
 	};
 }

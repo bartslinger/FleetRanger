@@ -6,14 +6,12 @@
 	import FlightRoster from '@carbon/icons/es/flight--roster/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
 	import CheckmarkFilled from '@carbon/icons/es/checkmark--filled/20.js';
-	import NotificationNew from '@carbon/icons/es/notification--new/20.js';
 	import WarningFilled from '@carbon/icons/es/warning--filled/20.js';
 	import UserMultiple from '@carbon/icons/es/user--multiple/16.js';
 	import { Tooltip } from 'bits-ui';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import favicon from '#lib/assets/favicon.svg';
-	import PairingPanel from '#lib/PairingPanel.svelte';
 	import ProcessingPanel from '#lib/ProcessingPanel.svelte';
 	import { trackTrail } from '#lib/trail.svelte.js';
 	import type { ProcessingStatus } from '#lib/server/backend.js';
@@ -26,17 +24,15 @@
 
 	trackTrail();
 
-	// Log processing (for admins) and controllers waiting to be paired: from
-	// the server, then as they change, through server-sent events. The
-	// browser reconnects by itself, and the stream starts with the current state.
+	// Log processing, for admins: from the server, then as it changes, through
+	// server-sent events. The browser reconnects by itself, and the stream
+	// starts with the current state.
 	let processing = $derived(data.processing);
-	let pairing = $derived(data.pairing);
 
 	$effect(() => {
-		if (!data.account) return;
+		if (data.account?.role !== 'admin') return;
 		const events = new EventSource('/api/events');
 		events.addEventListener('processing', (event) => processed(JSON.parse(event.data)));
-		events.addEventListener('pairing', (event) => (pairing = JSON.parse(event.data)));
 		return () => events.close();
 	});
 
@@ -76,19 +72,6 @@
 	const shownProcessing = $derived(processing && processing.pending > 0 ? processing : finished);
 
 	const actions: HeaderAction[] = $derived([
-		...(pairing.length > 0
-			? [
-					{
-						id: 'pairing',
-						label:
-							pairing.length === 1
-								? 'A controller is waiting to be paired'
-								: `${pairing.length} controllers are waiting to be paired`,
-						icon: pairingIcon,
-						panel: pairingPanel
-					}
-				]
-			: []),
 		...((processing && processing.pending > 0) || finished
 			? [
 					{
@@ -137,10 +120,6 @@
 		<span class="status success"><Icon icon={CheckmarkFilled} /></span>
 	{/if}
 {/snippet}
-
-{#snippet pairingIcon()}<Icon icon={NotificationNew} />{/snippet}
-
-{#snippet pairingPanel()}<PairingPanel controllers={pairing} />{/snippet}
 
 {#snippet processingPanel()}
 	{#if shownProcessing}<ProcessingPanel status={shownProcessing} timeZone={data.timeZone} />{/if}

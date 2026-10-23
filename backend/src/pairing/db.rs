@@ -3,96 +3,101 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Adds a pairing request, and deletes expired ones. Returns false if the code
-/// is already taken, so the caller can try another.
-pub async fn add_request(
+/// Adds a pairing code, and deletes expired ones. Returns its id, or None if
+/// the code is already taken, so the caller can try another.
+pub async fn add_code(
     db: &PgPool,
     code: &str,
-    token_sha256: &[u8],
-    serial: &str,
-    model: &str,
+    created_by: Uuid,
+    team_id: Option<Uuid>,
     expires_at: DateTime<Utc>,
-) -> sqlx::Result<bool> {
+) -> sqlx::Result<Option<Uuid>> {
     let mut tx = db.begin().await?;
-    sqlx::query!("delete from pairing_requests where expires_at < now()")
+    sqlx::query!("delete from pairing_codes where expires_at < now()")
         .execute(&mut *tx)
         .await?;
-    // A controller that asks again replaces its earlier request.
-    sqlx::query!("delete from pairing_requests where serial = $1", serial)
-        .execute(&mut *tx)
-        .await?;
-    let added = sqlx::query!(
-        "insert into pairing_requests (code, token_sha256, serial, model, expires_at)
-         values ($1, $2, $3, $4, $5)
-         on conflict (code) do nothing",
+    let id = sqlx::query_scalar!(
+        "insert into pairing_codes (code, created_by, team_id, expires_at)
+         values ($1, $2, $3, $4)
+         on conflict (code) do nothing
+         returning id",
         code,
-        token_sha256,
-        serial,
-        model,
+        created_by,
+        team_id,
         expires_at,
     )
-    .execute(&mut *tx)
-    .await?
-    .rows_affected()
-        == 1;
-    tx.commit().await?;
-    Ok(added)
-}
-
-/// Keeps a waiting request with this token alive for another `seconds`, as
-/// long as it hasn't expired. Returns false if there is no such request.
-pub async fn keep_waiting(db: &PgPool, token_sha256: &[u8], seconds: f64) -> sqlx::Result<bool> {
-    let result = sqlx::query!(
-        "update pairing_requests set expires_at = now() + make_interval(secs => $2)
-         where token_sha256 = $1 and expires_at > now()",
-        token_sha256,
-        seconds,
-    )
-    .execute(db)
+    .fetch_optional(&mut *tx)
     .await?;
-    Ok(result.rows_affected() == 1)
+    tx.commit().await?;
+    Ok(id)
 }
 
-/// A controller waiting to be paired, without its code: approving still needs
-/// the code shown on the controller.
+/// A code that can still be used.
 #[derive(Serialize)]
-pub struct Waiting {
-    pub serial: String,
-    pub model: String,
+pub struct OpenCode {
+    pub id: Uuid,
+    pub code: String,
+    pub created_by: String,
+    /// The team the controller joins; None for none.
+    pub team: Option<String>,
+    pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
 }
 
-/// The controllers waiting to be paired, most recent first.
-pub async fn waiting(db: &PgPool) -> sqlx::Result<Vec<Waiting>> {
+/// The codes that can still be used, of one creator or, with None, of
+/// everyone; those expiring first come first.
+pub async fn open_codes(db: &PgPool, created_by: Option<Uuid>) -> sqlx::Result<Vec<OpenCode>> {
     sqlx::query_as!(
-        Waiting,
-        "select serial, model, expires_at from pairing_requests
-         where expires_at > now()
-         order by expires_at desc",
+        OpenCode,
+        r#"select c.id, c.code, u.name as created_by, t.name as "team?", c.created_at, c.expires_at
+           from pairing_codes c
+           join users u on u.id = c.created_by
+           left join teams t on t.id = c.team_id
+           where c.expires_at > now() and ($1::uuid is null or c.created_by = $1)
+           order by c.expires_at, c.id"#,
+        created_by,
     )
     .fetch_all(db)
     .await
 }
 
-/// The controller a user just paired.
-#[derive(Serialize)]
-pub struct Approved {
-    pub serial: String,
-    pub model: String,
+/// Who created a code; None if there is no such code.
+pub async fn code_creator(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Uuid>> {
+    sqlx::query_scalar!("select created_by from pairing_codes where id = $1", id)
+        .fetch_optional(db)
+        .await
 }
 
-/// Approves a request: the controller with its serial (registered now if it's
-/// new) gets the request's token and joins the team. Returns the controller,
-/// or None if there is no such request or it has expired.
-pub async fn approve(
+/// Deletes a code. Returns false if there is no such code.
+pub async fn revoke(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    let result = sqlx::query!("delete from pairing_codes where id = $1", id)
+        .execute(db)
+        .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+/// A controller that just paired.
+#[derive(Serialize)]
+pub struct Paired {
+    /// The team it joined; None for none.
+    pub team: Option<String>,
+}
+
+/// Uses a code: it's deleted, and the controller with this serial (registered
+/// now if it's new) gets the token and the code's team. Returns None if the
+/// code doesn't exist, has expired, or its creator has been archived since.
+pub async fn use_code(
     db: &PgPool,
     code: &str,
-    team_id: Option<Uuid>,
-) -> sqlx::Result<Option<Approved>> {
+    serial: &str,
+    token_sha256: &[u8],
+) -> sqlx::Result<Option<Paired>> {
     let mut tx = db.begin().await?;
-    let Some(request) = sqlx::query!(
-        "delete from pairing_requests where code = $1 and expires_at > now()
-         returning serial, model, token_sha256",
+    let Some(team_id) = sqlx::query_scalar!(
+        "delete from pairing_codes c using users u
+         where c.code = $1 and c.expires_at > now()
+           and u.id = c.created_by and u.archived_at is null
+         returning c.team_id",
         code,
     )
     .fetch_optional(&mut *tx)
@@ -100,34 +105,40 @@ pub async fn approve(
     else {
         return Ok(None);
     };
+    // A team archived since the code was made isn't joined.
+    let team = sqlx::query!(
+        "select id, name from teams where id = $1 and archived_at is null",
+        team_id,
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
     sqlx::query!(
         "insert into remote_controllers (serial, team_id, token_sha256) values ($1, $2, $3)
          on conflict (serial) do update set
              team_id = excluded.team_id,
              token_sha256 = excluded.token_sha256",
-        request.serial,
-        team_id,
-        request.token_sha256,
+        serial,
+        team.as_ref().map(|team| team.id),
+        token_sha256,
     )
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Some(Approved {
-        serial: request.serial,
-        model: request.model,
+    Ok(Some(Paired {
+        team: team.map(|team| team.name),
     }))
 }
 
 /// A paired controller, as it authenticates.
-pub struct Paired {
+pub struct Authenticated {
     pub id: Uuid,
     pub serial: String,
     pub team_id: Option<Uuid>,
 }
 
-pub async fn by_token(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<Paired>> {
+pub async fn by_token(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<Authenticated>> {
     sqlx::query_as!(
-        Paired,
+        Authenticated,
         "select id, serial, team_id from remote_controllers where token_sha256 = $1",
         token_sha256,
     )
@@ -165,65 +176,83 @@ mod tests {
 
     use super::*;
 
-    /// Approving gives the controller the token whose hash it sent, in the
-    /// approver's team; the request can't be approved twice, and an expired
-    /// request can't be approved at all.
-    #[sqlx::test]
-    async fn approving_pairs_the_controller(db: PgPool) {
-        let team: Uuid =
-            sqlx::query_scalar("insert into teams (name) values ('North') returning id")
-                .fetch_one(&db)
-                .await
-                .unwrap();
-        let soon = Utc::now() + Duration::minutes(10);
-        assert!(
-            add_request(&db, "AAAA2222", b"token-hash", "RC1", "Test RC", soon)
-                .await
-                .unwrap()
-        );
-        assert!(
-            !add_request(&db, "AAAA2222", b"other", "RC2", "Test RC", soon)
-                .await
-                .unwrap()
-        );
+    async fn insert(db: &PgPool, sql: &'static str) -> Uuid {
+        sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
+    }
 
-        let approved = approve(&db, "AAAA2222", Some(team)).await.unwrap();
-        assert_eq!(approved.map(|a| a.serial).as_deref(), Some("RC1"));
+    /// A code pairs one controller, with the token whose hash it sent, in the
+    /// code's team; it can't be used twice, nor once expired, nor once its
+    /// creator was archived.
+    #[sqlx::test]
+    async fn a_code_pairs_one_controller(db: PgPool) {
+        let team = insert(
+            &db,
+            "insert into teams (name) values ('North') returning id",
+        )
+        .await;
+        let user = insert(
+            &db,
+            "insert into users (name) values ('Test user') returning id",
+        )
+        .await;
+        let soon = Utc::now() + Duration::hours(1);
         assert!(
-            approve(&db, "AAAA2222", Some(team))
+            add_code(&db, "AAAA2222", user, Some(team), soon)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            add_code(&db, "AAAA2222", user, None, soon)
                 .await
                 .unwrap()
                 .is_none()
         );
-        let paired = by_token(&db, b"token-hash").await.unwrap().unwrap();
-        assert_eq!(paired.serial, "RC1");
-        let team_of: Option<Uuid> =
-            sqlx::query_scalar("select team_id from remote_controllers where id = $1")
-                .bind(paired.id)
-                .fetch_one(&db)
-                .await
-                .unwrap();
-        assert_eq!(team_of, Some(team));
 
-        let past = Utc::now() - Duration::minutes(1);
-        add_request(&db, "BBBB3333", b"late", "RC3", "Test RC", past)
+        let paired = use_code(&db, "AAAA2222", "RC1", b"token-hash")
             .await
             .unwrap();
-        assert!(approve(&db, "BBBB3333", None).await.unwrap().is_none());
-        // Checking can't revive an expired request, only keep a live one alive.
-        assert!(!keep_waiting(&db, b"late", 60.0).await.unwrap());
-        add_request(&db, "CCCC4444", b"live", "RC4", "Test RC", soon)
+        assert_eq!(paired.and_then(|p| p.team).as_deref(), Some("North"));
+        assert!(
+            use_code(&db, "AAAA2222", "RC2", b"other")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let controller = by_token(&db, b"token-hash").await.unwrap().unwrap();
+        assert_eq!(controller.serial, "RC1");
+        assert_eq!(controller.team_id, Some(team));
+
+        // Expired: a code created long ago, as add_code refuses none.
+        sqlx::query(
+            "insert into pairing_codes (code, created_by, created_at, expires_at)
+             values ('BBBB3333', $1, now() - interval '2 hours', now() - interval '1 hour')",
+        )
+        .bind(user)
+        .execute(&db)
+        .await
+        .unwrap();
+        assert!(
+            use_code(&db, "BBBB3333", "RC3", b"late")
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        add_code(&db, "CCCC4444", user, None, soon).await.unwrap();
+        sqlx::query("update users set archived_at = now() where id = $1")
+            .bind(user)
+            .execute(&db)
             .await
             .unwrap();
-        assert!(keep_waiting(&db, b"live", 3600.0).await.unwrap());
-        let expires: DateTime<Utc> =
-            sqlx::query_scalar("select expires_at from pairing_requests where code = 'CCCC4444'")
-                .fetch_one(&db)
+        assert!(
+            use_code(&db, "CCCC4444", "RC4", b"gone")
                 .await
-                .unwrap();
-        assert!(expires > soon);
+                .unwrap()
+                .is_none()
+        );
 
-        assert!(unpair(&db, paired.id).await.unwrap());
+        assert!(unpair(&db, controller.id).await.unwrap());
         assert!(by_token(&db, b"token-hash").await.unwrap().is_none());
     }
 }

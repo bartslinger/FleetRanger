@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,17 +27,35 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 
 /**
@@ -54,6 +73,8 @@ fun TextInput(
     helper: String? = null,
     invalid: String? = null,
     enabled: Boolean = true,
+    /** Locked while the app works with the value, but still read out. */
+    readOnly: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     onDone: () -> Unit = {},
 ) {
@@ -65,6 +86,7 @@ fun TextInput(
             value,
             onValueChange,
             enabled = enabled,
+            readOnly = readOnly,
             singleLine = true,
             textStyle = Type.bodyCompact02.copy(color = Colors.textPrimary),
             cursorBrush = SolidColor(Colors.focus),
@@ -108,6 +130,147 @@ fun TextInput(
             invalid != null -> BasicText(invalid, style = Type.label02.copy(color = Colors.textError))
             helper != null -> BasicText(helper, style = Type.label02.copy(color = Colors.textHelper))
         }
+    }
+}
+
+/**
+ * A short code typed one character per box, the way it's shown elsewhere,
+ * with a dash between the halves (KDW4-9TXR). Carbon has no such component:
+ * this is one text field, so typing, pasting, backspace and TalkBack work as
+ * in any field, drawn as boxes in Carbon's field style. The box the next
+ * character goes into shows focus; when invalid, all boxes do in red. Label,
+ * helper and error are the group's, as with [TextInput]. The value holds
+ * only the code's characters: others, such as a pasted dash, are dropped.
+ * The keyboard's Done only closes the keyboard, as Android intends; the
+ * screen's button submits.
+ */
+@Composable
+fun CodeInput(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    length: Int,
+    /** The characters a code can have, in upper case. */
+    alphabet: String,
+    modifier: Modifier = Modifier,
+    helper: String? = null,
+    invalid: String? = null,
+    readOnly: Boolean = false,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    // The text with its selection, so a selection (e.g. "Select all") can show
+    // on the boxes; a value changed from outside starts with the cursor at the end.
+    var edited by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    val field = if (edited.text == value) edited else TextFieldValue(value, TextRange(value.length))
+    val selected = if (field.selection.collapsed) IntRange.EMPTY else field.selection.min until field.selection.max
+    // As wide as the boxes, so helper and error text wrap there.
+    Column(modifier.width(IntrinsicSize.Min), verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
+        BasicText(label, style = Type.label02.copy(color = Colors.textSecondary))
+        // The hidden field's own selection handles and highlight would show
+        // where it lies, over the first box; the boxes show the selection.
+        CompositionLocalProvider(
+            LocalTextSelectionColors provides TextSelectionColors(Color.Transparent, Color.Transparent),
+        ) {
+            BasicTextField(
+                field,
+                { typed ->
+                    val text = typed.text.uppercase().filter { it in alphabet }.take(length)
+                    // Typed as it should be, it keeps its selection; changed, the cursor goes to the end.
+                    edited = if (text == typed.text) typed else TextFieldValue(text, TextRange(text.length))
+                    if (text != value) onValueChange(text)
+                },
+                modifier = Modifier.semantics {
+                    contentDescription = label
+                    invalid?.let { error(it) }
+                },
+                readOnly = readOnly,
+                singleLine = true,
+                // The boxes show the characters, and where the next one goes.
+                textStyle = TextStyle(color = Color.Transparent, fontSize = 1.sp),
+                cursorBrush = SolidColor(Color.Transparent),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.Done,
+                ),
+                interactionSource = interaction,
+                decorationBox = { input ->
+                    Box {
+                        // The real field, invisible, under the boxes: it takes the
+                        // keyboard's input. First, so it keeps its place when the
+                        // error icon comes and goes: moved, it would be made anew.
+                        // At the bottom, with tiny text: the cursor it scrolls into
+                        // view lies below the helper or error, so all of the field
+                        // shows above the keyboard.
+                        Box(Modifier.align(Alignment.BottomStart).size(1.dp)) { input() }
+                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Drawn from the value; the field itself is read out.
+                                Row(
+                                    Modifier.clearAndSetSemantics {},
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.s02),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    for (i in 0 until length) {
+                                        if (i == length / 2) {
+                                            BasicText(
+                                                "-",
+                                                style = Type.heading04.copy(color = Colors.textSecondary, fontFamily = PlexMono),
+                                            )
+                                        }
+                                        CodeBox(
+                                            char = value.getOrNull(i),
+                                            current = focused && !readOnly && selected.isEmpty() &&
+                                                i == value.length.coerceAtMost(length - 1),
+                                            selected = i in selected,
+                                            invalid = invalid != null,
+                                        )
+                                    }
+                                }
+                                if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
+                            }
+                            when {
+                                invalid != null -> BasicText(invalid, style = Type.label02.copy(color = Colors.textError))
+                                helper != null -> BasicText(helper, style = Type.label02.copy(color = Colors.textHelper))
+                            }
+                        }
+                    }
+                },
+            )
+        }
+    }
+}
+
+/** One character's box: Carbon's field, 64dp high for gloves. */
+@Composable
+private fun CodeBox(char: Char?, current: Boolean, selected: Boolean, invalid: Boolean) {
+    Box(
+        Modifier
+            .size(width = 52.dp, height = 64.dp)
+            // Selected text in Carbon's highlight colour.
+            .background(if (selected) Colors.highlight else Colors.field01)
+            .then(
+                when {
+                    invalid -> Modifier.border(2.dp, Colors.supportError)
+                    current -> Modifier.border(2.dp, Colors.focus)
+                    else -> Modifier.drawBehind {
+                        drawLine(
+                            Colors.borderStrong01,
+                            Offset(0f, size.height - 0.5f),
+                            Offset(size.width, size.height - 0.5f),
+                            1.dp.toPx(),
+                        )
+                    }
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        BasicText(
+            char?.toString().orEmpty(),
+            style = Type.heading04.copy(color = Colors.textPrimary, fontFamily = PlexMono, textAlign = TextAlign.Center),
+        )
     }
 }
 
@@ -161,10 +324,16 @@ fun RadioButton(
 
 /**
  * Carbon's inline loading: a small spinner before the text, for something the
- * app is doing right now, such as waiting for approval.
+ * app is doing right now, such as pairing.
  */
 @Composable
-fun InlineLoading(text: String, modifier: Modifier = Modifier) {
+fun InlineLoading(
+    text: String,
+    modifier: Modifier = Modifier,
+    /** The text and turning arc; on a coloured button, its text colour. */
+    color: Color? = null,
+    style: TextStyle = Type.bodyCompact02,
+) {
     val turning = rememberInfiniteTransition(label = "loading")
     val angle by turning.animateFloat(
         initialValue = 0f,
@@ -181,9 +350,13 @@ fun InlineLoading(text: String, modifier: Modifier = Modifier) {
         // interactive colour, turning.
         Canvas(Modifier.size(16.dp)) {
             val stroke = Stroke(width = 2.dp.toPx())
-            drawCircle(Colors.borderSubtle01, style = stroke, radius = size.minDimension / 2 - stroke.width / 2)
+            drawCircle(
+                color?.copy(alpha = 0.3f) ?: Colors.borderSubtle01,
+                style = stroke,
+                radius = size.minDimension / 2 - stroke.width / 2,
+            )
             drawArc(
-                Colors.interactive,
+                color ?: Colors.interactive,
                 startAngle = angle,
                 sweepAngle = 90f,
                 useCenter = false,
@@ -192,7 +365,7 @@ fun InlineLoading(text: String, modifier: Modifier = Modifier) {
                 style = stroke,
             )
         }
-        BasicText(text, style = Type.bodyCompact02.copy(color = Colors.textSecondary))
+        BasicText(text, style = style.copy(color = color ?: Colors.textSecondary))
     }
 }
 

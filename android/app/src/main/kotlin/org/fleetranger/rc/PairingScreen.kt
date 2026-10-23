@@ -1,24 +1,27 @@
 package org.fleetranger.rc
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -27,220 +30,233 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.fleetranger.rc.ui.Button
+import org.fleetranger.rc.ui.ButtonKind
+import org.fleetranger.rc.ui.CodeInput
 import org.fleetranger.rc.ui.Colors
-import org.fleetranger.rc.ui.InlineLoading
+import org.fleetranger.rc.ui.InlineNotification
 import org.fleetranger.rc.ui.LabelledCode
-import org.fleetranger.rc.ui.PlexMono
-import org.fleetranger.rc.ui.QrCode
+import org.fleetranger.rc.ui.NotificationKind
 import org.fleetranger.rc.ui.Spacing
 import org.fleetranger.rc.ui.TextInput
 import org.fleetranger.rc.ui.Type
-import org.fleetranger.rc.ui.WarningNotification
 
-/** How often to ask whether a user approved the code; asking keeps it valid. */
-private const val CHECK_EVERY_MS = 3_000L
-/** How long to wait before trying an unreachable server again. */
-private const val RETRY_AFTER_MS = 10_000L
-/** How long a code is shown before pairing stops, so a forgotten controller
- * doesn't keep a pairing notification up in the web app. */
-private const val GIVE_UP_AFTER_MS = 60 * 60_000L
+/** The characters of a pairing code: no 0/O or 1/I, as on the server. */
+private const val CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+private const val CODE_LENGTH = 8
 
-/** What the pairing screen shows. */
-sealed interface PairingState {
-    /**
-     * The app doesn't know its server yet: the download page's link sets it
-     * up, or someone types it. `error` says why the last address didn't work.
-     */
-    data class NoServer(val error: String? = null) : PairingState
-    data object Starting : PairingState
-    data class Unreachable(val server: String) : PairingState
-    data class Waiting(val server: String, val code: String) : PairingState
-    /** Stopped after an hour without approval, until someone asks for a new code. */
-    data object Stopped : PairingState
-}
+/** What the pairing form shows besides its fields. */
+data class PairingForm(
+    val address: String = "",
+    val addressError: String? = null,
+    val code: String = "",
+    val codeError: String? = null,
+    /** Not about a field, such as FleetRanger being out of reach. */
+    val problem: Problem? = null,
+    val busy: Boolean = false,
+)
+
+/** What went wrong, and what to do about it. */
+data class Problem(val title: String, val text: String)
 
 /**
- * Pairs the controller: asks the server for a code, shows it with a QR code
- * for a user to approve, and checks until they have. The code stays the same
- * while the screen is open; if the server forgot it (the controller was
- * offline for a while), a new code replaces it.
+ * Pairs the controller with a code someone created in the web app: the pilot
+ * types it here, and the controller pairs at once, nobody logging in. See
+ * "Clients" in docs/architecture.md. Afterwards it says which team the controller joined, with
+ * a way to unpair straight away if that's wrong.
  *
- * A typed address is checked by asking it for a code: only FleetRanger
- * answers with one. If it doesn't, the address is forgotten again.
+ * Without a known server (an APK installed some other way), the address is
+ * asked for too; it's kept only if FleetRanger answers there.
  */
 @Composable
-fun Pairing(server: Server, serverUrl: String?, onServer: (String?) -> Unit, onPaired: () -> Unit) {
-    var state by remember { mutableStateOf<PairingState>(PairingState.Starting) }
-    // Raised by "Show a new code", to start pairing again.
-    var attempt by remember { mutableIntStateOf(0) }
-    // A typed address that hasn't answered yet, and why the last one failed.
-    var typed by remember { mutableStateOf(false) }
-    var addressError by remember { mutableStateOf<String?>(null) }
-    // Kept here, so the field still has it when an address didn't work.
-    var address by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(serverUrl, attempt) {
-        if (serverUrl == null) {
-            state = PairingState.NoServer(addressError)
-            return@LaunchedEffect
+fun Pairing(
+    server: Server,
+    serverUrl: String?,
+    onServer: (String?) -> Unit,
+    /** As soon as the controller is paired, before the pilot continues. */
+    onPaired: () -> Unit,
+    onContinue: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var form by remember { mutableStateOf(PairingForm()) }
+    // The team the controller joined (empty for none); null until it's paired.
+    var pairedWith by rememberSaveable { mutableStateOf<String?>(null) }
+    var unpairing by remember { mutableStateOf(false) }
+
+    fun pair() {
+        // Done on the keyboard while already pairing.
+        if (form.busy) return
+        val typedUrl = if (serverUrl == null) serverAddress(form.address) else null
+        if (serverUrl == null && typedUrl == null) {
+            form = form.copy(addressError = "Enter an address such as example.fleetranger.org.")
+            return
         }
-        val started = System.currentTimeMillis()
-        while (System.currentTimeMillis() - started < GIVE_UP_AFTER_MS) {
-            val code = try {
-                withContext(Dispatchers.IO) { server.startPairing() }
+        // The field takes only the code's characters, so only its length can be wrong.
+        val code = form.code
+        if (code.length != CODE_LENGTH) {
+            form = form.copy(codeError = "Enter all 8 characters of the code.")
+            return
+        }
+        // What went wrong last time may not any more.
+        form = form.copy(busy = true, addressError = null, codeError = null, problem = null)
+        typedUrl?.let(onServer)
+        scope.launch {
+            form = try {
+                val team = withContext(Dispatchers.IO) { server.pair(code) }
+                onPaired()
+                pairedWith = team.orEmpty()
+                PairingForm()
+            } catch (refused: Server.Refused) {
+                form.copy(busy = false, codeError = refused.message)
             } catch (_: IOException) {
-                if (typed) {
-                    typed = false
-                    addressError = "FleetRanger didn’t answer at this address. " +
-                        "Check the address and the Wi-Fi connection."
+                if (typedUrl != null) {
                     onServer(null)
-                    return@LaunchedEffect
+                    form.copy(
+                        busy = false,
+                        addressError = "FleetRanger didn’t answer at this address. " +
+                            "Check the address and the Wi-Fi connection.",
+                    )
+                } else {
+                    form.copy(
+                        busy = false,
+                        problem = Problem("Can’t reach FleetRanger", "Check the Wi-Fi connection and try again."),
+                    )
                 }
-                state = PairingState.Unreachable(serverUrl)
-                delay(RETRY_AFTER_MS)
-                continue
-            }
-            typed = false
-            state = PairingState.Waiting(serverUrl, code)
-            while (System.currentTimeMillis() - started < GIVE_UP_AFTER_MS) {
-                delay(CHECK_EVERY_MS)
-                val check = try {
-                    withContext(Dispatchers.IO) { server.check() }
-                } catch (_: IOException) {
-                    // Offline for a moment: keep the code; if the server forgot
-                    // it meanwhile, the next check says so.
-                    Server.Check.Waiting
-                }
-                if (check == Server.Check.Paired) {
-                    onPaired()
-                    return@LaunchedEffect
-                }
-                if (check == Server.Check.Unknown) break
             }
         }
-        state = PairingState.Stopped
     }
+
+    fun unpair() {
+        unpairing = true
+        scope.launch {
+            // The token is forgotten here whatever happens; an admin can
+            // remove a pairing the server still has.
+            val reached = try {
+                withContext(Dispatchers.IO) { server.unpair() }
+                true
+            } catch (_: IOException) {
+                false
+            }
+            unpairing = false
+            pairedWith = null
+            form = PairingForm(
+                problem = if (reached) {
+                    null
+                } else {
+                    Problem(
+                        "Unpaired only on this controller",
+                        "FleetRanger couldn’t be reached. Ask an admin to unpair this controller in Equipment.",
+                    )
+                },
+            )
+        }
+    }
+
     PairingScreen(
-        state,
+        form = form,
+        needsAddress = serverUrl == null,
+        pairedWith = pairedWith,
+        unpairing = unpairing,
         serial = remember { Serial.read() },
-        onRestart = { attempt++ },
-        address = address,
-        onAddressChange = {
-            address = it
-            // A new address hasn't failed yet.
-            if (addressError != null) {
-                addressError = null
-                state = PairingState.NoServer()
-            }
-        },
-        onConnect = {
-            val url = serverAddress(address)
-            if (url == null) {
-                addressError = "Enter an address such as example.fleetranger.org"
-                state = PairingState.NoServer(addressError)
-            } else {
-                addressError = null
-                typed = true
-                state = PairingState.Starting
-                onServer(url)
-            }
-        },
+        onAddressChange = { form = form.copy(address = it, addressError = null) },
+        onCodeChange = { form = form.copy(code = it, codeError = null) },
+        onPair = ::pair,
+        onContinue = onContinue,
+        onUnpair = ::unpair,
     )
 }
 
 @Composable
 fun PairingScreen(
-    state: PairingState,
+    form: PairingForm,
+    needsAddress: Boolean,
+    pairedWith: String?,
     serial: String,
-    onRestart: () -> Unit = {},
-    address: String = "",
+    unpairing: Boolean = false,
     onAddressChange: (String) -> Unit = {},
-    onConnect: () -> Unit = {},
+    onCodeChange: (String) -> Unit = {},
+    onPair: () -> Unit = {},
+    onContinue: () -> Unit = {},
+    onUnpair: () -> Unit = {},
 ) {
-    Row(
+    // Clearing focus closes the keyboard: on a tap outside the fields, and on
+    // pairing, so what comes of it isn't hidden behind the keyboard.
+    val focus = LocalFocusManager.current
+    val pair = {
+        focus.clearFocus()
+        onPair()
+    }
+    Column(
         Modifier
             .fillMaxSize()
             .background(Colors.background)
+            .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } }
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = Spacing.s07, vertical = Spacing.s06),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.s07),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(Spacing.s05),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s05)) {
-            BasicText(
-                "Pair this controller",
-                style = Type.heading04.copy(color = Colors.textPrimary),
-                modifier = Modifier.semantics { heading() },
+        BasicText(
+            "Pair this controller",
+            style = Type.heading04.copy(color = Colors.textPrimary),
+            modifier = Modifier.semantics { heading() },
+        )
+        val width = Modifier.widthIn(max = 480.dp)
+        if (pairedWith != null) {
+            InlineNotification(
+                NotificationKind.Success,
+                title = "Paired",
+                text = if (pairedWith.isEmpty()) {
+                    "This controller is paired, without a team. An admin can choose its team."
+                } else {
+                    "This controller is paired with $pairedWith."
+                },
+                modifier = width,
             )
-            when (state) {
-                is PairingState.NoServer -> AddressForm(address, onAddressChange, state.error, onConnect)
-                PairingState.Starting -> InlineLoading("Asking for a code…")
-                PairingState.Stopped -> {
-                    Text("Pairing stopped after an hour without approval.")
-                    Button("Show a new code", onRestart)
-                }
-                is PairingState.Unreachable -> WarningNotification(
-                    title = "Can’t reach FleetRanger",
-                    text = "Check the Wi-Fi connection. Trying ${state.server} again shortly.",
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s01)) {
+                Button("Continue", { if (!unpairing) onContinue() })
+                Button(
+                    "Unpair",
+                    onUnpair,
+                    kind = ButtonKind.Secondary,
+                    loading = if (unpairing) "Unpairing…" else null,
                 )
-                is PairingState.Waiting -> {
-                    Text("Scan the QR code with your phone, or go to this address and enter the code:")
-                    BasicText(pageUrl(state.server), style = Type.code02.copy(color = Colors.textPrimary))
-                    // Monospaced, so 0 and O, 1 and I can't be confused.
-                    BasicText(
-                        formatCode(state.code),
-                        style = Type.heading06.copy(color = Colors.textPrimary, fontFamily = PlexMono),
-                    )
-                    InlineLoading("Waiting for approval…")
-                }
             }
-            LabelledCode("Serial number", serial)
-        }
-        if (state is PairingState.Waiting) {
-            QrCode(
-                text = "${pageUrl(state.server)}?code=${formatCode(state.code)}",
-                size = 240.dp,
-                description = "QR code to approve this controller",
+        } else {
+            if (needsAddress) {
+                TextInput(
+                    label = "Server address",
+                    value = form.address,
+                    onValueChange = onAddressChange,
+                    modifier = width,
+                    helper = "The address you open FleetRanger at in a browser, such as example.fleetranger.org.",
+                    invalid = form.addressError,
+                    readOnly = form.busy,
+                    keyboardOptions = KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Next,
+                    ),
+                )
+            }
+            CodeInput(
+                label = "Pairing code",
+                value = form.code,
+                onValueChange = onCodeChange,
+                length = CODE_LENGTH,
+                alphabet = CODE_ALPHABET,
+                helper = "8 letters and digits, from Pair a controller in FleetRanger’s web app.",
+                invalid = form.codeError,
+                readOnly = form.busy,
             )
+            form.problem?.let {
+                InlineNotification(NotificationKind.Error, title = it.title, text = it.text, modifier = width)
+            }
+            Button("Pair", pair, loading = if (form.busy) "Pairing…" else null)
         }
+        LabelledCode("Serial number", serial)
     }
-}
-
-@Composable
-private fun Text(text: String, secondary: Boolean = false) {
-    BasicText(
-        text,
-        style = Type.bodyCompact02.copy(
-            color = if (secondary) Colors.textSecondary else Colors.textPrimary,
-        ),
-    )
-}
-
-/** Where this controller's FleetRanger is, typed: what people use in the browser. */
-@Composable
-private fun AddressForm(
-    address: String,
-    onAddressChange: (String) -> Unit,
-    error: String?,
-    onConnect: () -> Unit,
-) {
-    TextInput(
-        label = "Server address",
-        value = address,
-        onValueChange = onAddressChange,
-        modifier = Modifier.widthIn(max = 480.dp),
-        placeholder = "example.fleetranger.org",
-        helper = "The address you open FleetRanger at in a browser",
-        invalid = error,
-        keyboardOptions = KeyboardOptions(
-            autoCorrectEnabled = false,
-            keyboardType = KeyboardType.Uri,
-            imeAction = ImeAction.Go,
-        ),
-        onDone = onConnect,
-    )
-    Button("Connect", onConnect)
 }
 
 /**
@@ -255,13 +271,14 @@ private fun serverAddress(input: String): String? {
     return url
 }
 
-private fun pageUrl(server: String) = "$server/pair"
-
-/** KDW49TXR as KDW4-9TXR, easier to read and type. */
-private fun formatCode(code: String) = code.chunked(4).joinToString("-")
-
 @Preview(widthDp = 768, heightDp = 432)
 @Composable
 private fun PairingScreenPreview() {
-    PairingScreen(PairingState.Waiting("https://fleet.example.org", "KDW49TXR"), serial = "TESTRC0001")
+    PairingScreen(PairingForm(code = "KDW49TXR"), needsAddress = false, pairedWith = null, serial = "TESTRC0001")
+}
+
+@Preview(widthDp = 768, heightDp = 432)
+@Composable
+private fun PairedPreview() {
+    PairingScreen(PairingForm(), needsAddress = false, pairedWith = "Test team", serial = "TESTRC0001")
 }
