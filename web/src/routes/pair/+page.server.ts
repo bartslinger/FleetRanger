@@ -2,12 +2,12 @@ import { fail } from '@sveltejs/kit';
 import { get, remove, send, type PairingCode } from '#lib/server/backend.js';
 
 // Any user creates a single-use code here, which the pilot types into the
-// controller; see docs/pairing.md.
+// controller; see "Clients" in docs/architecture.md.
 
 export async function load({ fetch }) {
 	return {
 		// The creator's teams: the controller joins one, chosen if several.
-		teams: await get<{ id: string; name: string }[]>(fetch, '/api/pairing/teams'),
+		teams: await get<{ id: string; name: string }[]>(fetch, '/api/pairing-codes/teams'),
 		// Theirs, or everyone's for admins.
 		codes: await get<PairingCode[]>(fetch, '/api/pairing-codes')
 	};

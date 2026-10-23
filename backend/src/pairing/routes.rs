@@ -29,8 +29,8 @@ where
 {
     Router::new()
         .route("/api/pairing-codes", get(open_codes).post(create))
+        .route("/api/pairing-codes/teams", get(teams))
         .route("/api/pairing-codes/{id}", delete(revoke))
-        .route("/api/pairing/teams", get(teams))
         .route("/api/controller", get(me).delete(unpair_self))
         .route("/api/controller/pairing", post(pair))
         .route("/api/controller/pilots", get(pilots))
