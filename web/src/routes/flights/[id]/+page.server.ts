@@ -26,10 +26,8 @@ export const actions = {
 		const body = { flight_ids: [params.id], ...parsePilot(String(form.get('pilot') ?? '')) };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
-		// For the toast: an admin's change can move the flight to another team.
 		const flight = await get<FlightDetail>(fetch, `/api/flights/${params.id}`);
-		const moved = (flight.team_id ?? '') !== String(form.get('team_before') ?? '');
-		return { pilotName: flight.pilot_name, movedTo: moved ? flight.team_name : null };
+		return { pilotName: flight.pilot_name };
 	},
 	/** Moves the flight to a team or the queue, as the logbook's batch action does. Admins. */
 	setTeam: async ({ fetch, params, request }) => {

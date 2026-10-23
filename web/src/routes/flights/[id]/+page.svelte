@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
 	import { areaShares, clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
-	import { pilotOptions as pilotOptions_, pilotValue } from '#lib/pilots.js';
+	import { pilotOptions as pilotOptions_ } from '#lib/pilots.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
@@ -27,14 +27,10 @@
 			(flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id))
 	);
 	const pilotOptions = $derived(pilotOptions_(data.choices));
-	// The pilot with the flight's team; "that was me": an unknown pilot starts
-	// as the viewer, with the flight's team if they're in it.
+	// "That was me": an unknown pilot starts as the viewer, if they fly.
 	const pilotChoice = $derived.by(() => {
-		const user = flight.pilot_id ?? data.account?.id;
-		const own = pilotOptions.filter((option) => option.value.startsWith(`${user}:`));
-		const value = pilotValue(user ?? null, flight.team_id);
-		if (own.some((option) => option.value === value)) return value;
-		return flight.pilot_id ? (own[0]?.value ?? '') : '';
+		const user = flight.pilot_id ?? data.account?.id ?? '';
+		return pilotOptions.some((option) => option.value === user) ? user : '';
 	});
 
 	const teamOptions = $derived([
@@ -48,8 +44,7 @@
 
 	function pilotSet(result: Record<string, unknown> | undefined) {
 		const name = (result?.pilotName as string | null) ?? 'Unknown';
-		const team = result?.movedTo as string | null | undefined;
-		toast(`Pilot set to ${name}.${team ? ` The flight moved to ${team}.` : ''}`);
+		toast(`Pilot set to ${name}.`);
 	}
 	const time = (iso: string) => dateTime(iso, data.timeZone);
 
@@ -186,13 +181,8 @@
 									error={form?.pilotMessage}
 									onsuccess={pilotSet}
 								>
-									<input type="hidden" name="team_before" value={flight.team_id ?? ''} />
 									<Select label="Pilot" name="pilot" options={pilotOptions} value={pilotChoice} />
-									<p class="help">
-										{data.choices.admin
-											? 'The flight moves to the pilot’s team. With Unknown, it keeps its team.'
-											: 'Choose Unknown for a flight that wasn’t flown by someone in your team. It stays in your team.'}
-									</p>
+									<p class="help">The flight keeps its team.</p>
 								</Modal>
 							{/if}
 							<!-- Admins only, as Move to team in Flights. -->

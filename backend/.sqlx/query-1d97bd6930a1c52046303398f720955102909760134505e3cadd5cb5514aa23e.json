@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select u.id, u.name, g.id as team_id, g.name as team_name\n         from users u\n         join groups g on exists (select 1 from group_members m\n                                  where m.user_id = u.id and m.group_id = g.id\n                                    and m.role = any($2))\n         where u.archived_at is null and ($1::uuid[] is null or g.id = any($1))\n         order by lower(u.name), u.id, lower(g.name)",
+  "query": "select u.id, u.name, g.id as team_id, g.name as team_name\n         from users u\n         join groups g on exists (select 1 from group_members m\n                                  where m.user_id = u.id and m.group_id = g.id\n                                    and m.role = any($1))\n         where u.archived_at is null\n         order by lower(u.name), u.id, lower(g.name)",
   "describe": {
     "columns": [
       {
@@ -50,7 +50,6 @@
     ],
     "parameters": {
       "Left": [
-        "UuidArray",
         "TextArray"
       ]
     },
@@ -61,5 +60,5 @@
       false
     ]
   },
-  "hash": "7ad3479e8720d34640409c98480415c9c2e4179c99658b83be5f8d2f86bf2a69"
+  "hash": "1d97bd6930a1c52046303398f720955102909760134505e3cadd5cb5514aa23e"
 }

@@ -56,9 +56,6 @@ struct PilotChange {
     flight_ids: Vec<Uuid>,
     /// None: unknown.
     pilot_id: Option<Uuid>,
-    /// The team the pilot was chosen with; may be left out for a pilot in
-    /// one team.
-    team_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -81,8 +78,18 @@ async fn show(
     Ok(Json(service::get(&db, &actor, id).await?))
 }
 
-async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Choices>> {
-    Ok(Json(service::choices(&db, &actor).await?))
+#[derive(Deserialize)]
+struct ChoicesQuery {
+    /// The flights' group, whose own pilots come first.
+    group: Option<Uuid>,
+}
+
+async fn choices(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Query(query): Query<ChoicesQuery>,
+) -> ApiResult<Json<service::Choices>> {
+    Ok(Json(service::choices(&db, &actor, query.group).await?))
 }
 
 #[derive(Serialize)]
@@ -119,14 +126,7 @@ async fn set_pilot(
     State(db): State<PgPool>,
     Json(change): Json<PilotChange>,
 ) -> ApiResult<Json<Changed>> {
-    let changed = service::set_pilot(
-        &db,
-        &actor,
-        &change.flight_ids,
-        change.pilot_id,
-        change.team_id,
-    )
-    .await?;
+    let changed = service::set_pilot(&db, &actor, &change.flight_ids, change.pilot_id).await?;
     Ok(Json(Changed { changed }))
 }
 

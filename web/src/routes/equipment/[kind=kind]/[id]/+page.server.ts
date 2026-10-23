@@ -22,8 +22,11 @@ export async function load({ fetch, locals, params }) {
 	}
 	if (role === 'member') {
 		// Members choose a holder from the item's team: its pilots in the logbook.
-		const choices = await get<FlightChoices>(fetch, '/api/flights/choices');
-		const holders = choices.pilots.filter((pilot) => pilot.team_id === item.team_id);
+		const holders = item.team_id
+			? (
+					await get<FlightChoices>(fetch, `/api/flights/choices?group=${item.team_id}`)
+				).pilots.filter((pilot) => pilot.in_group)
+			: [];
 		return { kind: params.kind, item, edit: 'name' as const, teams: [], holders };
 	}
 	return { kind: params.kind, item, edit: 'none' as const, teams: [], holders: [] };

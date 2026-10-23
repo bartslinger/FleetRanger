@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select distinct m.group_id from users u join group_members m on m.user_id = u.id\n         where u.id = $1 and u.archived_at is null and m.role = any($2)\n         order by m.group_id",
+  "query": "select distinct group_id from group_members\n         where user_id = $1 and role = any($2)\n         order by group_id",
   "describe": {
     "columns": [
       {
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "530da5287c782f5592dea8d5aaabe16ea9ed802506957fe4b743df641399e17d"
+  "hash": "9c54d57df40af3ecc2a2a1d764828ed7d82a72f469492f8e8a2437bf1db0f360"
 }

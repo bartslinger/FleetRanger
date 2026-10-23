@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select exists(\n               select 1 from users u\n               where u.id = $1 and u.archived_at is null\n                 and (exists (select 1 from group_members m\n                              where m.user_id = u.id and m.role = any($2))\n                      or exists (select 1 from organisation_roles r\n                                 where r.user_id = u.id and r.role = any($2)))\n           ) as \"flies!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "flies!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b191fd01ef82d1a04982bdaa8eb8731184a12bb7f523027cfacadc1ce9e7e595"
+}

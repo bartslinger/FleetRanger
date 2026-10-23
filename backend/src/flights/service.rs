@@ -9,7 +9,7 @@ use super::db::{
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    policy::{self, Permission, TeamChange},
+    policy::{self, Permission},
 };
 
 /// One page of the flights the actor may see that pass the filter, and how
@@ -102,21 +102,22 @@ pub struct Choices {
     pub own_team_ids: Vec<Uuid>,
     /// Changes any flight and can move flights between groups.
     pub admin: bool,
-    /// A pilot in several groups is a choice per group: the flights move to it.
+    /// Everyone who flies, the group's own pilots first if a group was given;
+    /// empty if the actor sets no pilots.
     pub pilots: Vec<PilotChoice>,
     /// Groups to move flights to.
     pub teams: Vec<TeamChoice>,
 }
 
-pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
+/// - `group`: the group of the flights whose pilot is chosen, if they share
+///   one, so its own pilots come first.
+pub async fn choices(db: &PgPool, actor: &Actor, group: Option<Uuid>) -> ApiResult<Choices> {
     let set_pilot = actor.grants.scope(Permission::FlightsSetPilot);
     let moves = actor.grants.may(Permission::FlightsMove, None);
-    let pilots = if set_pilot.all {
-        db::pilot_choices(db, None).await?
-    } else if set_pilot.groups.is_empty() {
-        Vec::new()
+    let pilots = if set_pilot.all || !set_pilot.groups.is_empty() {
+        db::pilot_choices(db, group).await?
     } else {
-        db::pilot_choices(db, Some(&set_pilot.groups)).await?
+        Vec::new()
     };
     Ok(Choices {
         own_team_ids: if set_pilot.all {
@@ -134,47 +135,28 @@ pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
     })
 }
 
-/// Sets the pilot of a batch of flights, all or none, chosen with one of
-/// their teams; without one, a pilot in a single team brings that team.
-/// Returns how many changed.
+/// Sets the pilot of a batch of flights, all or none: someone who flies
+/// (anywhere), or unknown. The flights stay in their group. Returns how many
+/// changed.
 pub async fn set_pilot(
     db: &PgPool,
     actor: &Actor,
     ids: &[Uuid],
     pilot_id: Option<Uuid>,
-    team_id: Option<Uuid>,
 ) -> ApiResult<u64> {
     let ids = distinct(ids)?;
     let flight_groups = db::groups_of(db, &ids).await?.ok_or(ApiError::NotFound)?;
-    let new_pilot_group = match pilot_id {
-        Some(pilot) => {
-            let teams = db::pilot_groups(db, pilot).await?;
-            Some(match (team_id, teams.as_slice()) {
-                (_, []) => return Err(ApiError::Invalid("Choose an active pilot.".to_owned())),
-                (Some(team), teams) if teams.contains(&team) => team,
-                (Some(_), _) => {
-                    return Err(ApiError::Invalid(
-                        "The pilot isn’t in that team.".to_owned(),
-                    ));
-                }
-                (None, [team]) => *team,
-                (None, _) => {
-                    return Err(ApiError::Invalid(
-                        "Choose the team the pilot flew for.".to_owned(),
-                    ));
-                }
-            })
-        }
-        None => None,
-    };
-    let group = match policy::set_pilot(&actor.grants, &flight_groups, new_pilot_group)? {
-        TeamChange::Keep => None,
-        TeamChange::Follow(group) => Some(group),
-    };
-    Ok(db::set_pilot(db, &ids, pilot_id, group).await?)
+    policy::change_flights(&actor.grants, Permission::FlightsSetPilot, &flight_groups)?;
+    if let Some(pilot) = pilot_id
+        && !db::flies(db, pilot).await?
+    {
+        return Err(ApiError::Invalid("Choose an active pilot.".to_owned()));
+    }
+    Ok(db::set_pilot(db, &ids, pilot_id).await?)
 }
 
-/// Moves a batch of flights to a group, or to the queue with None.
+/// Moves a batch of flights to a group, or to the queue with None. They keep
+/// their pilot.
 pub async fn set_team(
     db: &PgPool,
     actor: &Actor,
