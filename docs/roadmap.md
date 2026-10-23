@@ -8,7 +8,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **v0.6.0 and android-v0.3.0 prepared: pairing reversed.** A user creates a code in the web app ("Pair a controller", valid 1 hour to 7 days, revocable) and the pilot types it into the controller, one box per character, so nobody logs in in the field; nginx limits pairing attempts per address. Server and app go out together: controllers already paired keep working, an older app that isn't paired needs the new one. See "Clients" in [architecture.md](architecture.md).
 
-**Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replace teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replace the three fixed roles. The design is settled, see "Groups and roles" in [architecture.md](architecture.md); the work is split into the packages under "Groups and roles" below, each done in a session of its own. Serving several organisations from one install follows after.
+**Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replace teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replace the three fixed roles. The design is settled, see "Groups and roles" in [architecture.md](architecture.md); the work is split into the packages under "Groups and roles" below, each done in a session of its own. Packages 1 to 3 are done: groups sit beside teams, and every access check asks for a permission on the groups tables. Until the admin pages manage groups (package 6), changes to teams and roles there don't change anyone's access. Serving several organisations from one install follows after.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -78,7 +78,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 
 - [x] 1. Docs: the decisions in architecture.md, these packages
 - [x] 2. Schema proposal and first migration: groups, memberships with roles, organisation-wide roles and a group on flights, sessions, drones and controllers, filled from teams (the final SQL approved by the user)
-- [ ] 3. Permission checks: permissions and built-in roles in code, the check and the list filter, on the new tables, with today's behaviour (the access tests unchanged)
+- [x] 3. Permission checks: permissions and built-in roles in code, the check and the list filter, on the new tables, with today's behaviour (the access tests unchanged)
 - [ ] 4. Flights and sessions: pilot and group independent, the queue, a session's owner and the checks on every session that changes
 - [ ] 5. Equipment: seen through its flights, figures over all flights, pairing into a group, holders out
 - [ ] 6. Web admin pages: groups with their members and roles, organisation-wide roles (Carbon expert before and after)

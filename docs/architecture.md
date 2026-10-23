@@ -38,7 +38,6 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **Teams.** A user can fly for several teams (user's decision, 2026-10-19: a pilot who flies for two teams, with each team's drones); admins and viewers who don't fly have none. A member's own flights, sessions and equipment are those of any of their teams.
 - **A flight belongs to the team its pilot was chosen with.** A pilot in several teams is a choice per team, on the controller and in the web app ("Test pilot (North)", "Test pilot (South)"), and the flight goes to that team, also with another team's controller and drone: the pilot is borrowing them. An upload brings the team chosen on the controller, accepted only if the pilot is in it. Without one (nobody chosen, or an older app), a flight gets the pilot's team if they're in one, else the controller's, else the drone's (controller before drone is my choice), else none.
 - **Archived, not deleted.** Users and teams that are no longer active are archived, so flights and history keep referring to them. An archived user can't log in and can't be chosen as a pilot. A user without flights can be deleted, for example one created by mistake.
-- **Roles** are one per user: member, all flights, or admin.
 - **Flights** have a team and an optional pilot. The team is the pilot's team at flight time. A flight with no pilot takes the remote controller's team, or else goes to an organisation-level queue. Changing a pilot's team does not move their past flights.
 - **Drones and remote controllers** belong to the organisation. Each can have a team and a current holder (a user). The holder is informational only and grants no access. They are registered automatically from the serials in imported logs; flights keep the serials as text.
 - **One table per kind of equipment** (`aircraft`, `remote_controllers`, `batteries`), not one devices table: they share a few columns but will differ, for example controllers get enrollment and sync settings, and only a controller's team decides the team of a flight without a pilot.
@@ -92,7 +91,10 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 | `controllers.pair` | | ✓ | ✓ | ✓ |
 | `flights.set_pilot`, `flights.archive`, `sessions.edit`, `equipment.rename` | | | ✓ | ✓ |
 | `flights.move`, `sessions.move`, `equipment.move`, `batteries.rename` | | | | ✓ |
-| `users.manage`, `groups.manage`, `areas.manage` | | | | ✓ |
+| `controllers.manage` | | | | ✓ |
+| `users.manage`, `groups.manage`, `areas.manage`, `logs.manage` | | | | ✓ |
+
+- **Two permissions for admin work the table first lacked** (user's decision, 2026-10-23, my proposal): `controllers.manage` on a group, for unpairing its controllers and seeing and revoking others' pairing codes for it; `logs.manage` on the organisation, for log processing.
 
 - **Pilot doesn't read the group's flights:** a pilot always sees their own, so a guest pilot sees only theirs. A pilot who should see the group's work also gets Viewer or Editor.
 - **Pilot can pair controllers**, so pilots set up controllers in the field without waiting for an editor.
@@ -131,6 +133,8 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 
 - **`groups`, `group_members` and `organisation_roles`**, with a nullable `group_id` on flights, sessions, drones and controllers: null is directly in the organisation (for flights, the queue). A group with anything in it can't be deleted.
 - **A membership is one row per role** (`group_id`, `user_id`, `role`), so a membership always has a role and a check is a plain `role in (…)`. Roles are text with a check constraint (Viewer, Pilot, Editor in groups; also Admin on the organisation) until organisations define their own.
+- **Checks read only the groups tables, with no dual write** (user's decision, 2026-10-23): until the admin pages manage groups (package 6), changing teams, team members or `users.role` doesn't change anyone's access; the app only needs to work again once all packages are done. Where the code still sets an item's team (setting a pilot, moving flights, uploads, equipment, pairing), it sets its group to the same id, so access follows the item (my choice).
+- **The check in code** (my design): each request reads the actor's roles once (`policy::Grants`); `may(permission, group)` counts the roles on that group and on the organisation, and the list filter is the groups where they hold a permission, or all of them. Batches need the permission on every group involved. Until package 4, a pilot is still chosen with a group and the flights follow it, so setting a pilot needs `flights.set_pilot` on that group too; until package 5, a holder from outside a device's group needs `equipment.move`. The web app still gets one of the three old roles in `/api/me`, read from the grants, until it asks for permissions (package 7).
 - **Teams became groups with the same ids** (migration 0018), so the remaining team columns (`raw_logs`, `pairing_codes`) move over without a lookup. A session got its flights' group when they all had one team; a session of mixed teams or with queue flights went to the organisation (none existed). Archived teams would have become ordinary groups (none existed).
 
 ## Sessions and operations
