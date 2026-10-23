@@ -16,7 +16,7 @@
 	import { resolve } from '$app/paths';
 	import { dateTime, day, distance, duration, timeSpan } from '#lib/format.js';
 	import { may } from '#lib/permissions.js';
-	import { sessionGroupChoice, sharedGroup } from '#lib/groups.js';
+	import { sessionGroupChoice } from '#lib/groups.js';
 	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Button from '#lib/ui/Button.svelte';
@@ -81,9 +81,7 @@
 	const canSetPilots = $derived(chosen.every(mayChange));
 	// The session's group: chosen where the user may edit sessions, the
 	// flights' own preselected.
-	const groupChoice = $derived(
-		sessionGroupChoice(data.account, data.choices.groups, sharedGroup(chosen))
-	);
+	const groupChoice = $derived(sessionGroupChoice(data.account, data.choices.groups, chosen));
 	const canChange = $derived(groupChoice.options.length > 0);
 
 	// After creating: the flights left out are a suggestion to look at next,
