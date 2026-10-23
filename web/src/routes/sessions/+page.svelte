@@ -4,7 +4,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { anywhere, may, readsSeveralGroups } from '#lib/permissions.js';
-	import { groupOptions as groupChoices, WHOLE_ORGANISATION } from '#lib/groups.js';
+	import { groupOptions as groupChoices } from '#lib/groups.js';
 	import Checkbox from '#lib/ui/Checkbox.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import SessionFacts, { sessionGroup } from '#lib/SessionFacts.svelte';
@@ -12,7 +12,6 @@
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import ListFilters, {
 		NO_FILTERS,
-		NO_GROUP_ORGANISATION,
 		filterNames,
 		filtering as listFiltering,
 		type Filters
@@ -116,9 +115,7 @@
 	});
 
 	// In a later page's breadcrumb, a filtered list names its filters.
-	const crumb = $derived(
-		['Sessions', ...filterNames(data.state, data.devices, NO_GROUP_ORGANISATION)].join(' · ')
-	);
+	const crumb = $derived(['Sessions', ...filterNames(data.state, data.devices)].join(' · '));
 	const sessions = (count: number) => `${count} ${count === 1 ? 'session' : 'sessions'}`;
 
 	// Cards, grouped by month; the list comes newest first.
@@ -353,12 +350,7 @@
 	// The chosen group, starting at the session's own.
 	let moveTo = $derived(openSession?.group_id ?? '');
 	const moveOptions = $derived.by(() => {
-		const options = groupChoices(
-			data.account,
-			'sessions.move',
-			data.choices.groups,
-			WHOLE_ORGANISATION
-		);
+		const options = groupChoices(data.account, 'sessions.move', data.choices.groups);
 		const current = openSession?.group_id ?? '';
 		return options.some((option) => option.value === current)
 			? options
@@ -533,7 +525,6 @@
 					none={{ ...data.state, ...NO_FILTERS }}
 					devices={data.devices}
 					groupFilter={readsSeveralGroups(data.account)}
-					noGroup={NO_GROUP_ORGANISATION}
 					filtering={cardsFiltering}
 					onchange={filter}
 				/>
@@ -604,7 +595,6 @@
 				none={{ ...data.state, ...NO_FILTERS }}
 				devices={data.devices}
 				groupFilter={readsSeveralGroups(data.account)}
-				noGroup={NO_GROUP_ORGANISATION}
 				{filtering}
 				onchange={filter}
 			/>

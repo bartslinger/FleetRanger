@@ -2,6 +2,7 @@
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
 	import { enhance } from '$app/forms';
 	import { dateTime } from '#lib/format.js';
+	import { ORGANISATION } from '#lib/groups.js';
 	import { anywhere } from '#lib/permissions.js';
 	import type { PairingCode } from '#lib/server/backend.js';
 	import Button from '#lib/ui/Button.svelte';
@@ -28,10 +29,8 @@
 	// Where the controller can go. With one choice it is taken without
 	// asking; with several, nobody gets one by default.
 	const destinations = $derived([
-		...data.destinations.groups.map((group) => ({ value: group.id, label: group.name })),
-		...(data.destinations.organisation
-			? [{ value: 'organisation', label: 'Whole organisation' }]
-			: [])
+		...(data.destinations.organisation ? [{ value: 'organisation', label: ORGANISATION }] : []),
+		...data.destinations.groups.map((group) => ({ value: group.id, label: group.name }))
 	]);
 
 	/** KDW49TXR as KDW4-9TXR, easier to read out and type; the controller takes either. */
@@ -42,7 +41,7 @@
 	// phones only the code and its time, so Revoke stays in view.
 	const columns: TableColumn<PairingCode>[] = $derived([
 		{ key: 'code', header: 'Code', identifier: true, format: (row) => shown(row.code) },
-		{ key: 'group', header: 'Group', wideOnly: true, format: (row) => row.group ?? 'No group' },
+		{ key: 'group', header: 'Group', wideOnly: true, format: (row) => row.group ?? ORGANISATION },
 		...(anywhere(data.account, 'controllers.manage')
 			? [
 					{
@@ -123,7 +122,7 @@
 					<p>
 						{created.group
 							? `The controller joins ${created.group}.`
-							: 'The controller joins the organisation, in no group.'}
+							: 'The controller joins the organisation.'}
 						Valid until {until(created.expires_at)}.
 					</p>
 				</InlineNotification>

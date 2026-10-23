@@ -6,7 +6,7 @@
 -->
 <script lang="ts" module>
 	import { areaShares, clock, dayMonth, distance, duration } from '#lib/format.js';
-	import { WHOLE_ORGANISATION } from '#lib/groups.js';
+	import { ORGANISATION } from '#lib/groups.js';
 
 	interface Flight {
 		takeoff_at: string;
@@ -41,14 +41,14 @@
 			/** The flights' groups: those a suggested session would get. */
 			groups: names(
 				flights.map((flight) => flight.group_name),
-				'None (organisation queue)'
+				ORGANISATION
 			)
 		};
 	}
 
 	/** A session's own group, as its facts say it. */
 	export const sessionGroup = (session: { group_name: string | null }) =>
-		session.group_name ?? WHOLE_ORGANISATION;
+		session.group_name ?? ORGANISATION;
 </script>
 
 <script lang="ts">

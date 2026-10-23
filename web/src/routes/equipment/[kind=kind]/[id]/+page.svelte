@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { back } from '#lib/back.svelte.js';
+	import { ORGANISATION } from '#lib/groups.js';
 	import { KINDS, lastPilot } from '#lib/equipment.js';
 	import { dateTime, duration } from '#lib/format.js';
 	import Button from '#lib/ui/Button.svelte';
@@ -32,9 +33,7 @@
 
 	// Where the user may move it, and where it is now.
 	const groupOptions = $derived([
-		...(data.toOrganisation || item.group_id === null
-			? [{ value: '', label: 'Whole organisation' }]
-			: []),
+		...(data.toOrganisation || item.group_id === null ? [{ value: '', label: ORGANISATION }] : []),
 		...data.groups.map((group) => ({ value: group.id, label: group.name })),
 		...(item.group_id && !data.groups.some((group) => group.id === item.group_id)
 			? [{ value: item.group_id, label: item.group_name ?? '' }]
@@ -127,7 +126,7 @@
 			{#if !data.move}
 				<div>
 					<dt>Group</dt>
-					<dd>{item.group_name ?? 'Whole organisation'}</dd>
+					<dd>{item.group_name ?? ORGANISATION}</dd>
 				</div>
 			{/if}
 		</dl>

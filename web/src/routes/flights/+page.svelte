@@ -22,7 +22,12 @@
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import { dateTime, distance, duration } from '#lib/format.js';
 	import { anywhere, may, readsSeveralGroups, type Permission } from '#lib/permissions.js';
-	import { groupOptions as groupChoices, sessionGroupChoice, sharedGroup } from '#lib/groups.js';
+	import {
+		groupOptions as groupChoices,
+		ORGANISATION,
+		sessionGroupChoice,
+		sharedGroup
+	} from '#lib/groups.js';
 	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import { pilotOptions } from '#lib/pilots.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
@@ -57,7 +62,7 @@
 			format: (flight) => distance(flight.distance_m)
 		},
 		{ key: 'pilot_name', header: 'Pilot' },
-		{ key: 'group_name', header: 'Group' },
+		{ key: 'group_name', header: 'Group', format: (flight) => flight.group_name ?? ORGANISATION },
 		{
 			key: 'aircraft_serial',
 			header: 'Drone',
@@ -159,9 +164,7 @@
 		return group?.id ? [{ group_id: group.id, group_name: group.name }] : [];
 	}
 	// Where the user may move flights to.
-	const groupOptions = $derived(
-		groupChoices(data.account, 'flights.move', data.choices.groups, 'No group (organisation queue)')
-	);
+	const groupOptions = $derived(groupChoices(data.account, 'flights.move', data.choices.groups));
 
 	const flights = (count: number) => `${count} ${count === 1 ? 'flight' : 'flights'}`;
 
