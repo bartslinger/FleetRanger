@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
-	import { areaShares, clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
+	import { areaShares, clock, dateTime, day, dayMonth, distance, duration } from '#lib/format.js';
 	import { may } from '#lib/permissions.js';
 	import { groupOptions as groupChoices, sharedGroup } from '#lib/groups.js';
 	import { offered, pilotOptions as pilotOptions_ } from '#lib/pilots.js';
@@ -60,10 +60,12 @@
 		[
 			{ label: 'Pilot', value: flight.pilot_name ?? 'Unknown' },
 			{ label: 'Group', value: flight.group_name ?? 'None (organisation queue)' },
-			// Whoever sees the flight may open its session.
+			// Whoever sees the flight may open its session; named as its page is.
 			{
 				label: 'Session',
-				value: flight.session_id ? 'Open session' : 'None',
+				value: flight.session_takeoff_at
+					? `Session ${day(flight.session_takeoff_at, data.timeZone, true)}`
+					: 'None',
 				href: flight.session_id
 					? `${resolve('/sessions')}?session=${encodeURIComponent(flight.session_id)}`
 					: undefined

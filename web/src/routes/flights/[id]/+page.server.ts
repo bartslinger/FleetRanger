@@ -6,12 +6,13 @@ import {
 	send,
 	type Area,
 	type FlightChoices,
-	type FlightDetail
+	type FlightDetail,
+	type FlightPage
 } from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
 	const [flight, choices, areas] = await Promise.all([
-		get<FlightDetail>(fetch, `/api/flights/${params.id}`),
+		get<FlightPage>(fetch, `/api/flights/${params.id}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),
 		get<Area[]>(fetch, '/api/areas')
 	]);

@@ -274,6 +274,28 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
     .await
 }
 
+/// The first takeoff of a session's flights in the scope; None if there are
+/// none.
+pub async fn session_takeoff(
+    db: &PgPool,
+    scope: &FlightScope,
+    session_id: Uuid,
+) -> sqlx::Result<Option<DateTime<Utc>>> {
+    sqlx::query_scalar!(
+        r#"select min(takeoff_at) from flights
+         where session_id = $1
+           and ($2
+                or pilot_id = $3
+                or group_id = any($4))"#,
+        session_id,
+        scope.all,
+        scope.user_id,
+        &scope.group_ids,
+    )
+    .fetch_one(db)
+    .await
+}
+
 /// The flights of a session that are in the scope, in takeoff order; empty if
 /// the session doesn't exist or none of its flights is in the scope.
 pub async fn of_session(

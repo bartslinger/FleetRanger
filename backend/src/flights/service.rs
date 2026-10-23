@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -84,6 +85,17 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<FlightDetail
     let mut flight = db::get(db, &scope, id).await?.ok_or(ApiError::NotFound)?;
     link_equipment(actor, std::slice::from_mut(&mut flight));
     Ok(flight)
+}
+
+/// The first takeoff of a session's flights the actor may see, as its page
+/// starts with; None if they see none.
+pub async fn session_takeoff(
+    db: &PgPool,
+    actor: &Actor,
+    session_id: Uuid,
+) -> ApiResult<Option<DateTime<Utc>>> {
+    let scope = policy::flight_scope(actor);
+    Ok(db::session_takeoff(db, &scope, session_id).await?)
 }
 
 /// Keeps the links to the drone's and controller's pages only where the
