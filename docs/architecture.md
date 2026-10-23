@@ -55,6 +55,7 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 - **Access hangs on the resource's group, not on its pilot.** Rejected: permissions from person to person ("A reads B's flights"), which leaves flights without a pilot, equipment and sessions without an owner, can't keep a pilot's flights for two groups apart, and multiplies grants. Sharing with people can come later, beside the roles.
 - **Admin work is organisation-wide only, for now.** Groups get Viewer, Pilot and Editor; Admin is a role on the whole organisation, and only admins give roles. Group-level admins must stay easy to add (user's requirement): admin work is checked as a permission on every group involved, both groups for a move, so a Manager role later only grants those permissions on a group, plus two checks (nobody grants roles they don't hold, a group keeps a Manager) (my design).
 - **The last active admin can't lose Admin or be archived**, so nobody locks the organisation out through the app.
+- How (my choices): the server checks it with the active admins locked, and the user's page disables the Admin checkbox and Archive with a warning that says why. With another active admin, an admin may give up their own Admin (this replaces "admins can't change their own role"); they still can't archive or delete themselves or remove their own login. Giving roles in a group, renaming and deleting it need `groups.manage` on that group, creating one on the organisation.
 
 **Groups**
 
