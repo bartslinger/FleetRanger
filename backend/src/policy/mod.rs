@@ -1,7 +1,11 @@
 //! Access rules. Every access decision is made here, never in handlers; see
 //! "Identity and access" in docs/architecture.md.
 
+mod grants;
+
 use uuid::Uuid;
+
+pub use grants::{Grants, Permission, Scope};
 
 use crate::{
     auth::Actor,
