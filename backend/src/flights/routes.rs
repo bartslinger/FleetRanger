@@ -70,12 +70,29 @@ struct Changed {
     changed: u64,
 }
 
+/// A flight for its page, with when its session starts, to name the session
+/// as its page does.
+#[derive(Serialize)]
+struct ShownFlight {
+    #[serde(flatten)]
+    flight: FlightDetail,
+    session_takeoff_at: Option<DateTime<Utc>>,
+}
+
 async fn show(
     actor: Actor,
     State(db): State<PgPool>,
     Path(id): Path<Uuid>,
-) -> ApiResult<Json<FlightDetail>> {
-    Ok(Json(service::get(&db, &actor, id).await?))
+) -> ApiResult<Json<ShownFlight>> {
+    let flight = service::get(&db, &actor, id).await?;
+    let session_takeoff_at = match flight.session_id {
+        Some(session) => service::session_takeoff(&db, &actor, session).await?,
+        None => None,
+    };
+    Ok(Json(ShownFlight {
+        flight,
+        session_takeoff_at,
+    }))
 }
 
 async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Choices>> {

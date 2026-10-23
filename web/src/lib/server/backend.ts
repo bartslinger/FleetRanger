@@ -128,6 +128,13 @@ export interface FlightDetail {
 	areas: FlightArea[];
 }
 
+/** A flight as `GET /api/flights/{id}` returns it, for its page. */
+export interface FlightPage extends FlightDetail {
+	/** The first takeoff of its session's flights the user sees, to name the
+	 * session as its page does; null in no session. */
+	session_takeoff_at: string | null;
+}
+
 /** A session as listed by `GET /api/sessions`: what its visible flights add up to. */
 export interface SessionSummary {
 	id: string;
