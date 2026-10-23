@@ -132,9 +132,6 @@ async fn set_group(
 #[derive(Deserialize)]
 struct Archive {
     flight_ids: Vec<Uuid>,
-    /// Takes them out of their sessions first, in the same step.
-    #[serde(default)]
-    leave_sessions: bool,
 }
 
 async fn archive(
@@ -142,7 +139,7 @@ async fn archive(
     State(db): State<PgPool>,
     Json(batch): Json<Archive>,
 ) -> ApiResult<Json<Changed>> {
-    let changed = service::archive(&db, &actor, &batch.flight_ids, batch.leave_sessions).await?;
+    let changed = service::archive(&db, &actor, &batch.flight_ids).await?;
     Ok(Json(Changed { changed }))
 }
 
