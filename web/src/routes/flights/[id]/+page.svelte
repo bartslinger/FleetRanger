@@ -55,10 +55,19 @@
 		return serial ?? 'Unknown';
 	}
 
-	const groups = $derived([
+	type Fact = { label: string; value: string; numeric?: boolean; href?: string };
+	const groups: Fact[][] = $derived([
 		[
 			{ label: 'Pilot', value: flight.pilot_name ?? 'Unknown' },
-			{ label: 'Group', value: flight.group_name ?? 'None (organisation queue)' }
+			{ label: 'Group', value: flight.group_name ?? 'None (organisation queue)' },
+			// Whoever sees the flight may open its session.
+			{
+				label: 'Session',
+				value: flight.session_id ? 'Open session' : 'None',
+				href: flight.session_id
+					? `${resolve('/sessions')}?session=${encodeURIComponent(flight.session_id)}`
+					: undefined
+			}
 		],
 		[
 			{ label: 'Takeoff', value: time(flight.takeoff_at) },
