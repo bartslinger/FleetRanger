@@ -1,0 +1,181 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                group_id as team_id,\n                (select g.name from groups g where g.id = flights.group_id) as \"team_name?\",\n                archived_at\n         from flights\n         where ($5\n                or pilot_id = $6\n                or group_id = any($18))\n           and ($7::text[] is null or aircraft_serial = any($7))\n           and ($8::text[] is null or rc_serial = any($8))\n           and ($9::bool is null or (session_id is not null) = $9)\n           and ($10::timestamptz is null or takeoff_at >= $10)\n           and ($11::timestamptz is null or takeoff_at < $11)\n           and ($12::uuid[] is null or group_id = any($12) or ($13 and group_id is null))\n           and ($14::uuid[] is null or pilot_id = any($14) or ($15 and pilot_id is null))\n           and (archived_at is not null) = $16\n           and ($17::uuid[] is null or exists (select 1 from flight_areas fa\n                                               where fa.flight_id = flights.id\n                                                 and fa.area_id = any($17)))\n         order by\n             case when $1 = 'takeoff_at' and not $2 then takeoff_at end asc,\n             case when $1 = 'takeoff_at' and $2 then takeoff_at end desc,\n             case when $1 = 'air_time_s' and not $2 then air_time_s end asc,\n             case when $1 = 'air_time_s' and $2 then air_time_s end desc,\n             case when $1 = 'distance_m' and not $2 then distance_m end asc,\n             case when $1 = 'distance_m' and $2 then distance_m end desc,\n             case when $1 = 'aircraft_serial' and not $2 then lower(coalesce(\n                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),\n                 aircraft_serial)) end asc nulls last,\n             case when $1 = 'aircraft_serial' and $2 then lower(coalesce(\n                 (select a.name from aircraft a where a.serial = flights.aircraft_serial),\n                 aircraft_serial)) end desc nulls last,\n             case when $1 = 'rc_serial' and not $2 then lower(coalesce(\n                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),\n                 rc_serial)) end asc nulls last,\n             case when $1 = 'rc_serial' and $2 then lower(coalesce(\n                 (select r.name from remote_controllers r where r.serial = flights.rc_serial),\n                 rc_serial)) end desc nulls last,\n             id\n         limit $3 offset $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "takeoff_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "takeoff_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "landed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "landed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "air_time_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "air_time_s"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "distance_m",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "distance_m"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "aircraft_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "aircraft_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "aircraft_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "rc_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "rc_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "rc_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "pilot_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "pilot_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "pilot_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "team_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "team_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "archived_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "archived_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bool",
+        "Int8",
+        "Int8",
+        "Bool",
+        "Uuid",
+        "TextArray",
+        "TextArray",
+        "Bool",
+        "Timestamptz",
+        "Timestamptz",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "Bool",
+        "Bool",
+        "UuidArray",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      null,
+      true,
+      null,
+      true,
+      null,
+      true
+    ]
+  },
+  "hash": "04271840e03e7d2cea97755a87d4d88db091cce3211b846d74e40f4170115055"
+}

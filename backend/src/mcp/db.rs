@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{flights::db::Filter, policy::FlightScope};
+use crate::{
+    flights::db::Filter,
+    policy::{self, FlightScope, Permission},
+};
 
 /// The totals of one group of flights.
 #[derive(Serialize)]
@@ -81,7 +84,7 @@ pub async fn totals(
            from (
                select f.session_id, f.air_time_s, f.distance_m, f.takeoff_at, f.landed_at,
                       case $11
-                          when 'team' then f.team_id::text
+                          when 'team' then f.group_id::text
                           when 'pilot' then f.pilot_id::text
                           when 'drone' then f.aircraft_serial
                           when 'controller' then f.rc_serial
@@ -90,7 +93,7 @@ pub async fn totals(
                           when 'month' then to_char(f.takeoff_at at time zone $12, 'YYYY-MM')
                       end as key,
                       case $11
-                          when 'team' then (select t.name from teams t where t.id = f.team_id)
+                          when 'team' then (select g.name from groups g where g.id = f.group_id)
                           when 'pilot' then (select u.name from users u where u.id = f.pilot_id)
                           when 'drone' then (select a.name from aircraft a
                                              where a.serial = f.aircraft_serial)
@@ -106,7 +109,7 @@ pub async fn totals(
                  and ($4::text[] is null or f.rc_serial = any($4))
                  and ($5::timestamptz is null or f.takeoff_at >= $5)
                  and ($6::timestamptz is null or f.takeoff_at < $6)
-                 and ($7::uuid[] is null or f.team_id = any($7) or ($8 and f.team_id is null))
+                 and ($7::uuid[] is null or f.group_id = any($7) or ($8 and f.group_id is null))
                  and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))
                  and ($13::uuid[] is null or exists (select 1 from flight_areas fa
                                                      where fa.flight_id = f.id
@@ -162,7 +165,7 @@ pub async fn area_totals(
              and ($4::text[] is null or f.rc_serial = any($4))
              and ($5::timestamptz is null or f.takeoff_at >= $5)
              and ($6::timestamptz is null or f.takeoff_at < $6)
-             and ($7::uuid[] is null or f.team_id = any($7) or ($8 and f.team_id is null))
+             and ($7::uuid[] is null or f.group_id = any($7) or ($8 and f.group_id is null))
              and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))
              and ($11::uuid[] is null or a.id = any($11))
            group by a.id, a.name
@@ -206,14 +209,17 @@ pub struct OwnTeam {
     pub name: String,
 }
 
-/// The teams the user flies for, by name; none for someone who doesn't fly.
+/// The groups the user flies for, by name; none for someone who doesn't fly
+/// in a group.
 pub async fn own_teams(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<OwnTeam>> {
     sqlx::query_as!(
         OwnTeam,
-        "select t.id, t.name from team_members m join teams t on t.id = m.team_id
-         where m.user_id = $1 and t.archived_at is null
-         order by lower(t.name), t.id",
+        "select g.id, g.name from groups g
+         where exists (select 1 from group_members m
+                       where m.group_id = g.id and m.user_id = $1 and m.role = any($2))
+         order by lower(g.name), g.id",
         user_id,
+        &policy::roles_granting(Permission::FlightsFlyFor),
     )
     .fetch_all(db)
     .await
@@ -249,8 +255,8 @@ mod tests {
         let takeoff: DateTime<Utc> = takeoff.parse().unwrap();
         sqlx::query(
             "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
-                                  track, team_id, group_id, archived_at)
-             values ($1, $2, $2, 60, 100.4, '{}', $3, $3, case when $4 then now() end)",
+                                  track, group_id, archived_at)
+             values ($1, $2, $2, 60, 100.4, '{}', $3, case when $4 then now() end)",
         )
         .bind(raw_log)
         .bind(takeoff)
@@ -266,8 +272,8 @@ mod tests {
     /// flights of another team don't count for a member.
     #[sqlx::test]
     async fn totals_per_month_in_the_time_zone(db: PgPool) {
-        let north = crate::testing::team(&db, "North").await;
-        let south = crate::testing::team(&db, "South").await;
+        let north = crate::testing::group(&db, "North").await;
+        let south = crate::testing::group(&db, "South").await;
         let member = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         crate::testing::join(&db, member, north).await;
         flight(&db, north, "2026-09-30T12:00:00Z", false).await;

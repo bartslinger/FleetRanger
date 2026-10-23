@@ -11,7 +11,7 @@ pub async fn add_code(
     db: &PgPool,
     code: &str,
     created_by: Uuid,
-    team_id: Option<Uuid>,
+    group_id: Option<Uuid>,
     expires_at: DateTime<Utc>,
 ) -> sqlx::Result<Option<Uuid>> {
     let mut tx = db.begin().await?;
@@ -19,13 +19,13 @@ pub async fn add_code(
         .execute(&mut *tx)
         .await?;
     let id = sqlx::query_scalar!(
-        "insert into pairing_codes (code, created_by, team_id, expires_at)
+        "insert into pairing_codes (code, created_by, group_id, expires_at)
          values ($1, $2, $3, $4)
          on conflict (code) do nothing
          returning id",
         code,
         created_by,
-        team_id,
+        group_id,
         expires_at,
     )
     .fetch_optional(&mut *tx)
@@ -55,12 +55,12 @@ pub async fn open_codes(
 ) -> sqlx::Result<Vec<OpenCode>> {
     sqlx::query_as!(
         OpenCode,
-        r#"select c.id, c.code, u.name as created_by, t.name as "team?", c.created_at, c.expires_at
+        r#"select c.id, c.code, u.name as created_by, g.name as "team?", c.created_at, c.expires_at
            from pairing_codes c
            join users u on u.id = c.created_by
-           left join teams t on t.id = c.team_id
+           left join groups g on g.id = c.group_id
            where c.expires_at > now()
-             and ($2 or c.created_by = $1 or c.team_id = any($3))
+             and ($2 or c.created_by = $1 or c.group_id = any($3))
            order by c.expires_at, c.id"#,
         created_by,
         scope.all,
@@ -70,7 +70,7 @@ pub async fn open_codes(
     .await
 }
 
-/// A code's creator and the group (team) the controller joins.
+/// A code's creator and the group the controller joins.
 pub struct CodeOwner {
     pub created_by: Uuid,
     pub group_id: Option<Uuid>,
@@ -80,7 +80,7 @@ pub struct CodeOwner {
 pub async fn code_owner(db: &PgPool, id: Uuid) -> sqlx::Result<Option<CodeOwner>> {
     sqlx::query_as!(
         CodeOwner,
-        "select created_by, team_id as group_id from pairing_codes where id = $1",
+        "select created_by, group_id from pairing_codes where id = $1",
         id,
     )
     .fetch_optional(db)
@@ -111,8 +111,9 @@ pub struct Paired {
 }
 
 /// Uses a code: it's deleted, and the controller with this serial (registered
-/// now if it's new) gets the token and the code's team. Returns None if the
+/// now if it's new) gets the token and the code's group. Returns None if the
 /// code doesn't exist, has expired, or its creator has been archived since.
+/// A deleted group takes its codes with it.
 pub async fn use_code(
     db: &PgPool,
     code: &str,
@@ -120,11 +121,11 @@ pub async fn use_code(
     token_sha256: &[u8],
 ) -> sqlx::Result<Option<Paired>> {
     let mut tx = db.begin().await?;
-    let Some(team_id) = sqlx::query_scalar!(
+    let Some(group_id) = sqlx::query_scalar!(
         "delete from pairing_codes c using users u
          where c.code = $1 and c.expires_at > now()
            and u.id = c.created_by and u.archived_at is null
-         returning c.team_id",
+         returning c.group_id",
         code,
     )
     .fetch_optional(&mut *tx)
@@ -132,43 +133,36 @@ pub async fn use_code(
     else {
         return Ok(None);
     };
-    // A team archived since the code was made isn't joined.
-    let team = sqlx::query!(
-        "select id, name from teams where id = $1 and archived_at is null",
-        team_id,
-    )
-    .fetch_optional(&mut *tx)
-    .await?;
+    let group = sqlx::query_scalar!("select name from groups where id = $1", group_id)
+        .fetch_optional(&mut *tx)
+        .await?;
     sqlx::query!(
-        "insert into remote_controllers (serial, team_id, group_id, token_sha256)
-         values ($1, $2, $2, $3)
+        "insert into remote_controllers (serial, group_id, token_sha256)
+         values ($1, $2, $3)
          on conflict (serial) do update set
-             team_id = excluded.team_id,
              group_id = excluded.group_id,
              token_sha256 = excluded.token_sha256",
         serial,
-        team.as_ref().map(|team| team.id),
+        group_id,
         token_sha256,
     )
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Some(Paired {
-        team: team.map(|team| team.name),
-    }))
+    Ok(Some(Paired { team: group }))
 }
 
 /// A paired controller, as it authenticates.
 pub struct Authenticated {
     pub id: Uuid,
     pub serial: String,
-    pub team_id: Option<Uuid>,
+    pub group_id: Option<Uuid>,
 }
 
 pub async fn by_token(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<Authenticated>> {
     sqlx::query_as!(
         Authenticated,
-        "select id, serial, team_id from remote_controllers where token_sha256 = $1",
+        "select id, serial, group_id from remote_controllers where token_sha256 = $1",
         token_sha256,
     )
     .fetch_optional(db)
@@ -242,7 +236,7 @@ mod tests {
     /// creator was archived.
     #[sqlx::test]
     async fn a_code_pairs_one_controller(db: PgPool) {
-        let team = crate::testing::team(&db, "North").await;
+        let team = crate::testing::group(&db, "North").await;
         let user = insert(
             &db,
             "insert into users (name) values ('Test user') returning id",
@@ -274,7 +268,7 @@ mod tests {
         );
         let controller = by_token(&db, b"token-hash").await.unwrap().unwrap();
         assert_eq!(controller.serial, "RC1");
-        assert_eq!(controller.team_id, Some(team));
+        assert_eq!(controller.group_id, Some(team));
 
         // Expired: a code created long ago, as add_code refuses none.
         sqlx::query(

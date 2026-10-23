@@ -20,7 +20,7 @@ pub struct Chosen {
     pub pilot_id: Option<Uuid>,
     /// The group chosen with the pilot (still called a team on the
     /// controller).
-    pub team_id: Option<Uuid>,
+    pub group_id: Option<Uuid>,
 }
 
 /// Checks an uploaded log against the hash the controller computed, and
@@ -68,7 +68,7 @@ pub async fn receive(
         &relative,
         size,
         chosen.pilot_id,
-        chosen.team_id,
+        chosen.group_id,
     )
     .await?)
 }

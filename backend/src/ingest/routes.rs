@@ -102,7 +102,7 @@ async fn receive(
     };
     let chosen = upload::Chosen {
         pilot_id: id("x-pilot-id")?,
-        team_id: id("x-team-id")?,
+        group_id: id("x-team-id")?,
     };
     let result =
         upload::receive(&db, &log_dir, &controller, file_name, sha256, chosen, &body).await?;

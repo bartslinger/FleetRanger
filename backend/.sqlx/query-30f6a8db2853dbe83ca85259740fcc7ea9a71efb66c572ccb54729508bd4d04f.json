@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into remote_controllers (serial, group_id, token_sha256)\n         values ($1, $2, $3)\n         on conflict (serial) do update set\n             group_id = excluded.group_id,\n             token_sha256 = excluded.token_sha256",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "30f6a8db2853dbe83ca85259740fcc7ea9a71efb66c572ccb54729508bd4d04f"
+}

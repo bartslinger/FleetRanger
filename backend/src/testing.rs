@@ -5,37 +5,23 @@ use uuid::Uuid;
 
 use crate::policy::FlightScope;
 
-/// Adds a team and its group with the same id, as migration 0018 made them.
-pub async fn team(db: &PgPool, name: &str) -> Uuid {
-    let id = sqlx::query_scalar("insert into teams (name) values ($1) returning id")
+pub async fn group(db: &PgPool, name: &str) -> Uuid {
+    sqlx::query_scalar("insert into groups (name) values ($1) returning id")
         .bind(name)
         .fetch_one(db)
         .await
-        .unwrap();
-    sqlx::query("insert into groups (id, name) values ($1, $2)")
-        .bind(id)
-        .bind(name)
-        .execute(db)
-        .await
-        .unwrap();
-    id
+        .unwrap()
 }
 
-/// Adds a user to a team, and to its group with Pilot and Editor, as
-/// migration 0018 did.
-pub async fn join(db: &PgPool, user: Uuid, team: Uuid) {
-    sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
-        .bind(user)
-        .bind(team)
-        .execute(db)
-        .await
-        .unwrap();
+/// Adds a user to a group with Pilot and Editor, as migration 0018 did for
+/// team members.
+pub async fn join(db: &PgPool, user: Uuid, group: Uuid) {
     sqlx::query(
         "insert into group_members (group_id, user_id, role)
          select $2, $1, unnest(array['pilot', 'editor'])",
     )
     .bind(user)
-    .bind(team)
+    .bind(group)
     .execute(db)
     .await
     .unwrap();
