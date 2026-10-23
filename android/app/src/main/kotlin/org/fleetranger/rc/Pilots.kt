@@ -44,15 +44,17 @@ data class PilotList(
 
     /**
      * The choice for this pilot and group, if it can still be made: the group
-     * one they may fly for, or picked by itself when there's one. Null when a
-     * group has to be chosen.
+     * one they may fly for, or picked by itself when they may fly for only
+     * one (a single group of their own with others they may fly for still
+     * gets the step, for "Other group"; user's decision, 2026-10-23). Null
+     * when a group has to be chosen.
      */
     fun choice(pilot: Pilot, groupId: String?): Choice? {
         if (groups.isEmpty()) return Choice(pilot, null)
         if (groupId != null && (groupId in pilot.groups || groupId in pilot.otherGroups)) {
             return Choice(pilot, groupId)
         }
-        return groupsFor(pilot).singleOrNull()?.let { Choice(pilot, it) }
+        return (pilot.groups + pilot.otherGroups).singleOrNull()?.let { Choice(pilot, it) }
     }
 
     companion object {
