@@ -33,12 +33,13 @@
 		)
 	]);
 
-	// Oldest first, as the chart reads.
+	// A point per flight, also of flights the user doesn't see: the battery's
+	// wear. Oldest first, as the chart reads.
 	const readings = $derived(
-		battery.flight_list
-			.filter((flight) => flight.full_capacity_mah !== null)
-			.map((flight) => ({ at: flight.takeoff_at, value: flight.full_capacity_mah! }))
-			.reverse()
+		battery.capacity_readings.map((reading) => ({
+			at: reading.takeoff_at,
+			value: reading.full_capacity_mah
+		}))
 	);
 
 	const percent = (value: number | null) => (value === null ? '—' : `${value}%`);
@@ -183,7 +184,7 @@
 				{readings}
 				formatValue={capacity}
 				formatTime={(at) => dateTime(at, data.timeZone)}
-				description="Line chart of the battery’s full charge capacity in mAh by flight date. The flights table below lists the same values."
+				description="Line chart of the battery’s full charge capacity in mAh by flight date, over all its flights. The flights table below lists the values of the flights you can see."
 			/>
 		</Column>
 	{/if}

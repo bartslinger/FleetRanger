@@ -210,7 +210,7 @@ export interface User {
 }
 
 /** A battery, from `/api/batteries`: seen through the flights the user may
- * see, with its state at the latest of them. */
+ * see, with its figures and state over all its flights. */
 export interface Battery {
 	id: string;
 	serial: string;
@@ -245,9 +245,11 @@ export interface BatteryFlight {
 	cell_spread_max_v: number | null;
 }
 
-/** A battery with its flights, newest first, from `/api/batteries/{id}`. */
+/** A battery with the flights the user sees, newest first, from `/api/batteries/{id}`. */
 export interface BatteryDetail extends Battery {
 	flight_list: BatteryFlight[];
+	/** Its full charge capacity at each of all its flights, oldest first. */
+	capacity_readings: { takeoff_at: string; full_capacity_mah: number }[];
 }
 
 /** A drone or remote controller, from `/api/aircraft` or `/api/remote-controllers`. */
@@ -257,9 +259,12 @@ export interface Equipment {
 	name: string | null;
 	team_id: string | null;
 	team_name: string | null;
-	holder_user_id: string | null;
-	holder_name: string | null;
+	/** Over all its flights, also those the user doesn't see. */
+	flights: number;
+	air_time_s: number;
 	last_flight_at: string | null;
+	/** Who flew its last flight; null without flights or a pilot. */
+	last_pilot_name: string | null;
 	/** Whether a controller is paired with the install; null for drones. */
 	paired: boolean | null;
 	/** When a controller last synced, also without logs; null for drones and never. */

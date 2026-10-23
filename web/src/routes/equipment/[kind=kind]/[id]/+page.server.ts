@@ -5,8 +5,7 @@ import {
 	send,
 	type Equipment,
 	type FlightChoices,
-	type Team,
-	type User
+	type Team
 } from '#lib/server/backend.js';
 import { KINDS } from '#lib/equipment.js';
 
@@ -14,22 +13,19 @@ export async function load({ fetch, locals, params }) {
 	const item = await get<Equipment>(fetch, `${KINDS[params.kind].api}/${params.id}`);
 	const role = locals.account?.role;
 	if (role === 'admin') {
-		const [teams, users] = await Promise.all([
-			get<Team[]>(fetch, '/api/teams'),
-			get<User[]>(fetch, '/api/users')
-		]);
-		return { kind: params.kind, item, edit: 'all' as const, teams, holders: users };
+		const teams = await get<Team[]>(fetch, '/api/teams');
+		return { kind: params.kind, item, edit: 'all' as const, teams };
 	}
-	if (role === 'member') {
-		// Members choose a holder from the item's team: its pilots in the logbook.
-		const holders = item.team_id
-			? (
-					await get<FlightChoices>(fetch, `/api/flights/choices?team=${item.team_id}`)
-				).pilots.filter((pilot) => pilot.in_group)
-			: [];
-		return { kind: params.kind, item, edit: 'name' as const, teams: [], holders };
+	if (role === 'member' && item.team_id) {
+		// Members rename their own teams' equipment, not another team's they
+		// see through its flights: the teams whose flights they change, as
+		// editors do, until the web app asks for permissions.
+		const choices = await get<FlightChoices>(fetch, '/api/flights/choices');
+		if (choices.own_team_ids.includes(item.team_id)) {
+			return { kind: params.kind, item, edit: 'name' as const, teams: [] };
+		}
 	}
-	return { kind: params.kind, item, edit: 'none' as const, teams: [], holders: [] };
+	return { kind: params.kind, item, edit: 'none' as const, teams: [] };
 }
 
 export const actions = {
@@ -37,8 +33,7 @@ export const actions = {
 		const form = await request.formData();
 		const body = {
 			name: String(form.get('name') ?? '') || null,
-			team_id: String(form.get('team_id') ?? '') || null,
-			holder_user_id: String(form.get('holder_user_id') ?? '') || null
+			team_id: String(form.get('team_id') ?? '') || null
 		};
 		const path = `${KINDS[params.kind].api}/${params.id}`;
 		const result = await send<Equipment>(fetch, 'PUT', path, body);
