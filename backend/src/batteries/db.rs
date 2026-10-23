@@ -61,7 +61,7 @@ pub async fn list(
                where f.archived_at is null
                  and ($1
                       or f.pilot_id = $2
-                      or f.team_id in (select team_id from team_members where user_id = $2))
+                      or f.group_id = any($4))
            )
            select b.id, b.serial, b.name,
                   count(*) as "flights!",
@@ -87,6 +87,7 @@ pub async fn list(
         scope.all,
         scope.user_id,
         id,
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -111,11 +112,12 @@ pub async fn flights(
            where fb.battery_id = $3 and f.archived_at is null
              and ($1
                   or f.pilot_id = $2
-                  or f.team_id in (select team_id from team_members where user_id = $2))
+                  or f.group_id = any($4))
            order by f.takeoff_at desc, f.id"#,
         scope.all,
         scope.user_id,
         id,
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -148,8 +150,8 @@ mod tests {
         .await;
         let flight: Uuid = sqlx::query_scalar(
             "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
-                                  track, team_id)
-             values ($1, now() - make_interval(hours => $2), now(), 0, 0, '{}', $3)
+                                  track, team_id, group_id)
+             values ($1, now() - make_interval(hours => $2), now(), 0, 0, '{}', $3, $3)
              returning id",
         )
         .bind(raw_log)
@@ -175,23 +177,10 @@ mod tests {
     /// state as of the latest of those.
     #[sqlx::test]
     async fn members_see_batteries_through_their_teams_flights(db: PgPool) {
-        let north = id(
-            &db,
-            "insert into teams (name) values ('North') returning id",
-        )
-        .await;
-        let south = id(
-            &db,
-            "insert into teams (name) values ('South') returning id",
-        )
-        .await;
+        let north = crate::testing::team(&db, "North").await;
+        let south = crate::testing::team(&db, "South").await;
         let me = id(&db, "insert into users (name) values ('A') returning id").await;
-        sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
-            .bind(me)
-            .bind(north)
-            .execute(&db)
-            .await
-            .unwrap();
+        crate::testing::join(&db, me, north).await;
         let shared = id(
             &db,
             "insert into batteries (serial) values ('TESTB1') returning id",
@@ -206,10 +195,7 @@ mod tests {
         flight(&db, south, shared, 1, 11).await;
         flight(&db, south, theirs, 1, 5).await;
 
-        let member = FlightScope {
-            all: false,
-            user_id: me,
-        };
+        let member = crate::testing::scope(&db, me).await;
         let seen = list(&db, &member, None).await.unwrap();
         assert_eq!(seen.len(), 1);
         assert_eq!(
@@ -228,6 +214,7 @@ mod tests {
         let admin = FlightScope {
             all: true,
             user_id: me,
+            group_ids: Vec::new(),
         };
         let all = list(&db, &admin, Some(shared)).await.unwrap();
         assert_eq!((all[0].flights, all[0].cycles), (2, Some(11)));

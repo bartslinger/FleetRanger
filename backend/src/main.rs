@@ -15,6 +15,8 @@ mod pairing;
 mod policy;
 mod sessions;
 mod teams;
+#[cfg(test)]
+mod testing;
 mod users;
 
 use std::io::IsTerminal;

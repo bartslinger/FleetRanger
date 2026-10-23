@@ -79,7 +79,7 @@ pub async fn list(
          where f.session_id is not null
            and ($1
                 or f.pilot_id = $2
-                or f.team_id in (select team_id from team_members where user_id = $2))
+                or f.group_id = any($17))
            and ($5::timestamptz is null
                 or f.session_id in (select session_id from flights
                                     where takeoff_at < $6 and landed_at > $5))
@@ -88,7 +88,7 @@ pub async fn list(
                where g.session_id is not null
                  and ($1
                       or g.pilot_id = $2
-                      or g.team_id in (select team_id from team_members where user_id = $2))
+                      or g.group_id = any($17))
                  and ($7::text[] is null or g.aircraft_serial = any($7))
                  and ($8::text[] is null or g.rc_serial = any($8))
                  and ($9::timestamptz is null or g.takeoff_at >= $9)
@@ -119,6 +119,7 @@ pub async fn list(
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
         with_tracks,
+        &scope.group_ids,
     )
     .fetch_all(db)
     .await
@@ -136,7 +137,7 @@ pub async fn count(
            from flights
            where ($1
                   or pilot_id = $2
-                  or team_id in (select team_id from team_members where user_id = $2))
+                  or group_id = any($14))
              and ($3::timestamptz is null
                   or session_id in (select session_id from flights
                                     where takeoff_at < $4 and landed_at > $3))
@@ -145,7 +146,7 @@ pub async fn count(
                  where g.session_id is not null
                    and ($1
                         or g.pilot_id = $2
-                        or g.team_id in (select team_id from team_members where user_id = $2))
+                        or g.group_id = any($14))
                    and ($5::text[] is null or g.aircraft_serial = any($5))
                    and ($6::text[] is null or g.rc_serial = any($6))
                    and ($7::timestamptz is null or g.takeoff_at >= $7)
@@ -170,6 +171,7 @@ pub async fn count(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_one(db)
     .await
@@ -202,13 +204,13 @@ pub async fn neighbours(
                where f.session_id is not null
                  and ($1
                       or f.pilot_id = $2
-                      or f.team_id in (select team_id from team_members where user_id = $2))
+                      or f.group_id = any($13))
                  and f.session_id in (
                      select g.session_id from flights g
                      where g.session_id is not null
                        and ($1
                             or g.pilot_id = $2
-                            or g.team_id in (select team_id from team_members where user_id = $2))
+                            or g.group_id = any($13))
                        and ($4::text[] is null or g.aircraft_serial = any($4))
                        and ($5::text[] is null or g.rc_serial = any($5))
                        and ($6::timestamptz is null or g.takeoff_at >= $6)
@@ -246,6 +248,7 @@ pub async fn neighbours(
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
+        &scope.group_ids,
     )
     .fetch_optional(db)
     .await
@@ -658,6 +661,7 @@ mod tests {
         let everything = FlightScope {
             all: true,
             user_id: a,
+            group_ids: Vec::new(),
         };
         let at =
             |time: &str| -> DateTime<Utc> { format!("2026-10-12T{time}:00Z").parse().unwrap() };
@@ -716,6 +720,7 @@ mod tests {
         let everything = FlightScope {
             all: true,
             user_id: a,
+            group_ids: Vec::new(),
         };
         let (morning, noon, evening) = (
             session_of(&db, morning).await.unwrap(),
@@ -766,16 +771,8 @@ mod tests {
     /// in the list and the session's flights alike; outsiders see nothing.
     #[sqlx::test]
     async fn sessions_show_only_visible_flights(db: PgPool) {
-        let north = insert_id(
-            &db,
-            "insert into teams (name) values ('North') returning id",
-        )
-        .await;
-        let south = insert_id(
-            &db,
-            "insert into teams (name) values ('South') returning id",
-        )
-        .await;
+        let north = crate::testing::team(&db, "North").await;
+        let south = crate::testing::team(&db, "South").await;
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
         let outsider = insert_id(&db, "insert into users (name) values ('C') returning id").await;
@@ -783,27 +780,21 @@ mod tests {
         for (pilot, team, takeoff, landed) in
             [(a, north, "08:00", "08:20"), (b, south, "08:30", "08:50")]
         {
-            sqlx::query("insert into team_members (user_id, team_id) values ($1, $2)")
-                .bind(pilot)
-                .bind(team)
-                .execute(&db)
-                .await
-                .unwrap();
+            crate::testing::join(&db, pilot, team).await;
             let flight = flight(&db, pilot, takeoff, landed).await;
-            sqlx::query("update flights set team_id = $2, session_id = $3 where id = $1")
-                .bind(flight)
-                .bind(team)
-                .bind(session)
-                .execute(&db)
-                .await
-                .unwrap();
+            sqlx::query(
+                "update flights set team_id = $2, group_id = $2, session_id = $3 where id = $1",
+            )
+            .bind(flight)
+            .bind(team)
+            .bind(session)
+            .execute(&db)
+            .await
+            .unwrap();
         }
 
         let all = Filter::default();
-        let member = FlightScope {
-            all: false,
-            user_id: a,
-        };
+        let member = crate::testing::scope(&db, a).await;
         let listed = list(&db, &member, &all, None, 10, 0, false).await.unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(
@@ -816,10 +807,7 @@ mod tests {
             .unwrap();
         assert_eq!(flights.len(), 1);
 
-        let stranger = FlightScope {
-            all: false,
-            user_id: outsider,
-        };
+        let stranger = crate::testing::scope(&db, outsider).await;
         assert!(
             list(&db, &stranger, &all, None, 10, 0, false)
                 .await
@@ -835,6 +823,7 @@ mod tests {
         let everything = FlightScope {
             all: true,
             user_id: outsider,
+            group_ids: Vec::new(),
         };
         assert_eq!(
             list(&db, &everything, &all, None, 10, 0, false)

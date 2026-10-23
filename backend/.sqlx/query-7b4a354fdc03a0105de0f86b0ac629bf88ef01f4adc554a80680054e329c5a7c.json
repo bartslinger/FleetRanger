@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select f.id as flight_id, f.takeoff_at, f.air_time_s, f.aircraft_serial,\n                  (select a.name from aircraft a where a.serial = f.aircraft_serial)\n                      as \"aircraft_name?\",\n                  fb.charge_start_pct, fb.charge_end_pct, fb.full_capacity_mah,\n                  fb.design_capacity_mah, fb.cycles, fb.temperature_min_c, fb.temperature_max_c,\n                  fb.cell_voltage_min_v, fb.cell_spread_max_v\n           from flight_batteries fb\n           join flights f on f.id = fb.flight_id\n           where fb.battery_id = $3 and f.archived_at is null\n             and ($1\n                  or f.pilot_id = $2\n                  or f.team_id in (select team_id from team_members where user_id = $2))\n           order by f.takeoff_at desc, f.id",
+  "query": "select f.id as flight_id, f.takeoff_at, f.air_time_s, f.aircraft_serial,\n                  (select a.name from aircraft a where a.serial = f.aircraft_serial)\n                      as \"aircraft_name?\",\n                  fb.charge_start_pct, fb.charge_end_pct, fb.full_capacity_mah,\n                  fb.design_capacity_mah, fb.cycles, fb.temperature_min_c, fb.temperature_max_c,\n                  fb.cell_voltage_min_v, fb.cell_spread_max_v\n           from flight_batteries fb\n           join flights f on f.id = fb.flight_id\n           where fb.battery_id = $3 and f.archived_at is null\n             and ($1\n                  or f.pilot_id = $2\n                  or f.group_id = any($4))\n           order by f.takeoff_at desc, f.id",
   "describe": {
     "columns": [
       {
@@ -157,7 +157,8 @@
       "Left": [
         "Bool",
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -177,5 +178,5 @@
       true
     ]
   },
-  "hash": "9352202ef7e0d16585cc992302f61fbeb8d055a53cad6a8da90bfbb39d74fcf9"
+  "hash": "7b4a354fdc03a0105de0f86b0ac629bf88ef01f4adc554a80680054e329c5a7c"
 }

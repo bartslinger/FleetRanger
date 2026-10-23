@@ -5,7 +5,7 @@ mod grants;
 
 use uuid::Uuid;
 
-pub use grants::{Grants, Permission, Scope};
+pub use grants::{Grants, Permission};
 
 use crate::{
     auth::Actor,
@@ -62,18 +62,28 @@ pub fn revoke_pairing_code(actor: &Actor, created_by: Uuid) -> bool {
 }
 
 /// Which flights an actor sees, as the parameters of the visibility condition
-/// in the flight queries: every flight, or the actor's own flights and those of
-/// the actor's team.
+/// in the flight queries: those of the groups where they hold `flights.read`,
+/// every flight when they hold it on the organisation, and, as a built-in
+/// rule, the flights they flew themselves.
 pub struct FlightScope {
     pub all: bool,
     pub user_id: Uuid,
+    pub group_ids: Vec<Uuid>,
+}
+
+impl FlightScope {
+    pub fn new(user_id: Uuid, grants: &Grants) -> Self {
+        let read = grants.scope(Permission::FlightsRead);
+        Self {
+            all: read.all,
+            user_id,
+            group_ids: read.groups,
+        }
+    }
 }
 
 pub fn flight_scope(actor: &Actor) -> FlightScope {
-    FlightScope {
-        all: matches!(actor.role, Role::AllFlights | Role::Admin),
-        user_id: actor.user_id,
-    }
+    FlightScope::new(actor.user_id, &actor.grants)
 }
 
 // A member can be in several teams (user's decision, 2026-10-19): what's
