@@ -60,7 +60,8 @@ impl Role {
     }
 
     /// The table in docs/architecture.md. A pilot doesn't read the group's
-    /// flights: they see their own anyway.
+    /// flights: they see their own anyway. Admin has every permission but
+    /// flying.
     pub fn grants(self, permission: Permission) -> bool {
         use Permission::*;
         match self {
@@ -76,7 +77,9 @@ impl Role {
                     | SessionsEdit
                     | EquipmentRename
             ),
-            Self::Admin => true,
+            // Flying puts someone in pilot lists: an admin who flies also
+            // gets Pilot.
+            Self::Admin => permission != FlightsFlyFor,
         }
     }
 }
@@ -197,6 +200,9 @@ mod tests {
         let read = editor.scope(Permission::FlightsRead);
         assert!(!read.all);
         assert_eq!(read.groups, [NORTH]);
+
+        // Only Pilot puts someone in pilot lists, not Admin.
+        assert!(!grants(&[(None, "admin")]).anywhere(Permission::FlightsFlyFor));
 
         let viewer = grants(&[(None, "viewer")]);
         assert!(viewer.may_on_all(Permission::FlightsRead, &[Some(NORTH), None]));
