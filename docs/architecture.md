@@ -46,7 +46,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
   - the all-flights role
   - admins
   - later, people it has been shared with
-- **Archiving flights** (user's decisions, 2026-10-20): a flight that should count as not having happened is archived, never deleted (`flights.archived_at`). It leaves its session (a session left empty is deleted) and is left out everywhere: lists, sessions, suggestions, totals, filter options and the equipment's last flight. Flights shows them with an "Archived" filter, with an "Archived" tag and Restore; a restored flight comes back without a session. Archived flights can't be added to a session, and an upload of the same log again leaves its flight archived. Archiving and restoring need `flights.archive` on the flights' groups (see "Groups and roles"). Who archived a flight is for the audit log, not a column.
+- **Archiving flights** (user's decisions, 2026-10-20): a flight that should count as not having happened is archived, never deleted (`flights.archived_at`). Only a flight without a session can be archived (user's decision, 2026-10-23): taking it out of its session first needs `sessions.edit` on that session, so archiving never changes another group's session. An archived flight is left out everywhere: lists, sessions, suggestions, totals, filter options and the equipment's last flight. Flights shows them with an "Archived" filter, with an "Archived" tag and Restore; a restored flight comes back without a session. Archived flights can't be added to a session, and an upload of the same log again leaves its flight archived. Archiving and restoring need `flights.archive` on the flights' groups (see "Groups and roles"). Who archived a flight is for the audit log, not a column.
 - **Admins** manage users, teams and devices.
 - **Equipment pages:** admins and the all-flights role see every drone and controller; members see their own team's. Members change the name and holder (someone of their team) of those; the team and pairing stay with admins, and the all-flights role only views. A flight's page links its drone and controller to their pages for whoever may see them, and each page links to its flights in the logbook, which filters by drone and controller.
 - **All access decisions go through one policy module** in the backend, never through ad-hoc checks in handlers. Service functions take an `Actor` (who is acting), so a handler can't skip the check.
@@ -122,7 +122,7 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 **Elsewhere**
 
 - **MCP has the user's own access, read only**, replacing "everyone counts as a member": an admin's assistant sees what the admin sees. The install-wide switch stays.
-- **Archiving flights stays** a soft delete, with `flights.archive`.
+- **Archiving flights stays** a soft delete, with `flights.archive`, for flights without a session. The web app may offer "Remove from session and archive" in one action to someone who holds both rights.
 - **Migrating changes nobody's access:** teams become groups, every team member becomes a member with Pilot and Editor, admins get Admin and the all-flights role Viewer on the whole organisation. Pilot lists are tidied by hand afterwards. Operations, never built, are dropped: merged sessions cover joint missions.
 
 **Storage** (schema approved by the user, 2026-10-23; the shape is my proposal)
