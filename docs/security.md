@@ -64,7 +64,7 @@ sequenceDiagram
 
 - The controller generates its own long random token and sends only its hash. The server stores only the hash.
 - A code pairs one controller and is deleted when it's used, revoked or expired. Its creator, or an admin, can revoke it until then.
-- A code is 8 characters (about 40 bits), so guessing has to be limited: a rate limit in nginx is planned (see "Limits and open items").
+- A code is 8 characters (about 40 bits), so guessing is limited: nginx allows 10 pairing attempts a minute per address (with a burst of 5), as it does for OAuth registration. There is no limit across all addresses (the user's decision, 2026-10-23), so many addresses together could guess faster; a successful guess yields a controller token, which can read the pilot list and upload logs but not read flights, and the code's rightful user finds it used.
 - The token allows exactly two things: downloading the pilot list and uploading logs. It can't read flights or anything else.
 - Unpairing, on the controller or by an admin, stops the token immediately.
 
@@ -170,7 +170,6 @@ Every request is stored exactly as sent, with the response. An operator can chec
 
 - **DJI Pilot 2 itself** talks to DJI separately, for example for activation, no-fly zones and firmware updates. FleetRanger can't see or change that traffic, and this document doesn't cover it.
 - **Not built yet:**
-    - a rate limit on pairing attempts, in nginx;
     - an audit log of views and changes;
     - backups of the database and raw logs;
     - a vault that developers can't decrypt;

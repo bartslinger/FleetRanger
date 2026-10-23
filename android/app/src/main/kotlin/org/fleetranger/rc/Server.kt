@@ -175,8 +175,9 @@ class Server(private val context: Context) {
     /**
      * Calls the API. Returns the JSON answer (empty for no content), or null if
      * the server refused the token or the request (401, 404). A request the
-     * server finds wrong (400) is [Refused], with the server's reason. Anything
-     * else, such as no connection, is an IOException.
+     * server finds wrong (400) is [Refused], with the server's reason, as is
+     * one turned away for too many attempts (429). Anything else, such as no
+     * connection, is an IOException.
      */
     private fun call(method: String, path: String, body: JSONObject? = null): JSONObject? {
         val base = url ?: throw IOException("no server set up")
@@ -206,6 +207,8 @@ class Server(private val context: Context) {
                     connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                         .ifBlank { "The server refused the request." },
                 )
+                // nginx limits pairing attempts per address.
+                429 -> throw Refused("Too many attempts from this network. Wait a minute and try again.")
                 else -> throw IOException("the server answered $status")
             }
         } finally {
