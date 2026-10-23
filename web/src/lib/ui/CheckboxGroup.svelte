@@ -9,8 +9,9 @@
 	interface Props {
 		legend: string;
 		name: string;
-		/** `helper`: what this option means, below its label. */
-		options: { value: string; label: string; helper?: string }[];
+		/** `helper`: what this option means, below its label. A disabled option
+		 * isn't posted; the page says why. */
+		options: { value: string; label: string; helper?: string; disabled?: boolean }[];
 		/** The values checked at first. */
 		value: string[];
 		helper?: string;
@@ -28,6 +29,7 @@
 				{name}
 				value={option.value}
 				checked={value.includes(option.value)}
+				disabled={option.disabled}
 			/>
 		</div>
 		{#if option.helper}<p class="helper option-helper">{option.helper}</p>{/if}

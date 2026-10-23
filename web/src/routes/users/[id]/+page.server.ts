@@ -1,12 +1,15 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { get, remove, send, type Team, type User } from '#lib/server/backend.js';
+import { get, remove, send, type User } from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
-	const [user, teams] = await Promise.all([
+	const [user, users] = await Promise.all([
 		get<User>(fetch, `/api/users/${params.id}`),
-		get<Team[]>(fetch, '/api/teams')
+		get<User[]>(fetch, '/api/users')
 	]);
-	return { user, teams };
+	// The server keeps the last active admin; the page explains it.
+	const admins = users.filter((other) => other.roles.includes('admin'));
+	const lastAdmin = user.archived_at === null && admins.length === 1 && admins[0].id === user.id;
+	return { user, lastAdmin };
 }
 
 export const actions = {
@@ -14,8 +17,7 @@ export const actions = {
 		const form = await request.formData();
 		const body = {
 			name: String(form.get('name') ?? ''),
-			role: String(form.get('role') ?? ''),
-			team_ids: form.getAll('team_id').map(String),
+			roles: form.getAll('role').map(String),
 			email: String(form.get('email') ?? '') || null
 		};
 		const result = await send<User>(fetch, 'PUT', `/api/users/${params.id}`, body);
