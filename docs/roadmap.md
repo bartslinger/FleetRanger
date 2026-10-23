@@ -84,6 +84,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - [x] 6. Web admin pages: groups with their members and roles, organisation-wide roles (Carbon expert before and after)
 - [ ] 7. Web app elsewhere, together with MCP (user's choice, 2026-10-23): groups instead of teams, pilot lists, a session's owner, moving flights and sessions; MCP with the user's own access, read only
 - [ ] 8. Controller app: the group after the pilot, with "Other group"; older apps' flights go to the queue
+- [ ] After the migration (user, 2026-10-23), UI fine-tuning left from the Carbon review of the admin pages: Delete and Archive on phones, read-only or disabled for the last admin's Admin checkbox, a danger style for the Remove icon, the "Show archived" toggle in other lists
 - [ ] 10. Final migration and release: teams and holders dropped; server and app released together. Check first that the server still has no all-flights user in a team: the fill would give them Editor there.
 
 ## Public website (fleetranger.org)
