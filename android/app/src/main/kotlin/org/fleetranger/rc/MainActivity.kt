@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The app's screen: pairing until a user approved this controller, then who's
+ * The app's screen: pairing until this controller is paired, then who's
  * flying, then DJI Pilot 2. The controller opens it at startup once it is
  * chosen as the startup app.
  */
@@ -97,10 +97,13 @@ class MainActivity : ComponentActivity() {
                     server.url = url
                     serverUrl = url
                 }, onPaired = {
-                    // Until someone chooses, only today's logs upload.
+                    // Until someone chooses, only today's logs upload. Set
+                    // at once, so the choice still comes if the app is left
+                    // before Continue.
                     sync.syncFrom = LocalDate.now()
                     onboarding().edit().putBoolean("choose_logs", true).apply()
                     choosingLogs = true
+                }, onContinue = {
                     paired = true
                     refreshPilots()
                     startUploads()
@@ -210,7 +213,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Unpairs on the server, and forgets the token here whatever happens, so
-     * the controller shows a new pairing code. If the server can't be reached,
+     * the controller asks for a pairing code again. If the server can't be reached,
      * an admin can still remove the pairing there.
      */
     private fun unpair() {

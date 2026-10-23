@@ -274,10 +274,14 @@ export interface Download {
 	android: { size_bytes: number; version_code: number | null; version_name: string | null } | null;
 }
 
-/** A controller waiting to be paired, from `GET /api/pairing`: without its code. */
-export interface WaitingController {
-	serial: string;
-	model: string;
+/** A code that can still pair a controller, from `GET /api/pairing-codes`. */
+export interface PairingCode {
+	id: string;
+	code: string;
+	created_by: string;
+	/** The team the controller joins; null for none. */
+	team: string | null;
+	created_at: string;
 	expires_at: string;
 }
 

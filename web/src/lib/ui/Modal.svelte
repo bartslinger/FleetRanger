@@ -34,8 +34,10 @@
 		 * e.g. the item a row's action affects. */
 		label?: string;
 		/** An icon-only trigger instead, e.g. Edit beside a value; the title is
-		 * its label and tooltip. */
+		 * its label and tooltip, and `triggerLabel` its name where it repeats. */
 		triggerIcon?: IconDescriptor;
+		/** The icon trigger's size: md in a table row, as other row actions. */
+		triggerSize?: 'xs' | 'md';
 		/** The primary button, e.g. "Create". */
 		submitLabel: string;
 		/** Carbon's danger modal, for actions that can't be undone. */
@@ -60,6 +62,7 @@
 		triggerLabel,
 		label,
 		triggerIcon,
+		triggerSize = 'xs',
 		submitLabel,
 		danger = false,
 		action,
@@ -89,7 +92,13 @@
 		<Dialog.Trigger>
 			{#snippet child({ props })}
 				{#if triggerIcon}
-					<IconButton {...props} icon={triggerIcon} label={title} />
+					<IconButton
+						{...props}
+						icon={triggerIcon}
+						label={title}
+						name={triggerLabel}
+						size={triggerSize}
+					/>
 				{:else}
 					<Button {...props} kind={triggerKind} aria-label={triggerLabel}>{title}</Button>
 				{/if}

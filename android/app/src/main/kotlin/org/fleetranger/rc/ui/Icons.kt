@@ -77,6 +77,18 @@ object CarbonIcons {
         20f,
         "M9.2,5h1.5v7H9.2V5z M10,16c-0.6,0-1-0.4-1-1s0.4-1,1-1s1,0.4,1,1S10.6,16,10,16z",
     )
+
+    /** The circle, with the checkmark cut out; drawn over [CheckmarkMark]. */
+    val Checkmark = icon(
+        "checkmark--filled",
+        20f,
+        "M10,1c-4.9,0-9,4.1-9,9s4.1,9,9,9s9-4,9-9S15,1,10,1z M8.7,13.5l-3.2-3.2l1-1l2.2,2.2l4.8-4.8l1,1L8.7,13.5z",
+    )
+    val CheckmarkMark = icon(
+        "checkmark--filled-inner",
+        20f,
+        "M8.7,13.5l-3.2-3.2l1-1l2.2,2.2l4.8-4.8l1,1L8.7,13.5z",
+    )
 }
 
 @Composable
@@ -99,6 +111,15 @@ fun ErrorIcon(modifier: Modifier = Modifier) {
     androidx.compose.foundation.layout.Box(modifier.size(20.dp)) {
         Icon(CarbonIcons.WarningMark, Colors.textOnColor)
         Icon(CarbonIcons.Warning, Colors.supportError)
+    }
+}
+
+/** Carbon's success status icon: a green circle with a white checkmark. */
+@Composable
+fun SuccessIcon(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.Box(modifier.size(20.dp)) {
+        Icon(CarbonIcons.CheckmarkMark, Colors.textOnColor)
+        Icon(CarbonIcons.Checkmark, Colors.supportSuccess)
     }
 }
 

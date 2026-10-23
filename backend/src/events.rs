@@ -1,11 +1,10 @@
-//! Server-sent events for the web app's header: log processing (for admins)
-//! and controllers waiting to be paired, sent as they change instead of being
-//! polled.
+//! Server-sent events for the web app's header: log processing, for admins,
+//! sent as it changes instead of being polled.
 //!
-//! Whatever changes them calls [`Changes::notify`]. Each stream then works
-//! out the current state for its user and sends what differs from what it
-//! sent before. A refresh now and then catches what nothing signals: a pairing
-//! code expiring, or logs imported from the command line.
+//! Whatever changes it calls [`Changes::notify`]. Each stream then works out
+//! the current state for its user and sends what differs from what it sent
+//! before. A refresh now and then catches what nothing signals, such as logs
+//! imported from the command line.
 
 use std::collections::VecDeque;
 use std::convert::Infallible;
@@ -30,7 +29,6 @@ use tokio::sync::watch;
 use crate::auth::Actor;
 use crate::error::ApiError;
 use crate::ingest::{activity::Activity, service as ingest};
-use crate::pairing::service as pairing;
 use crate::policy::Role;
 
 /// Changes in quick succession (each step of processing a log) go out as one.
@@ -84,7 +82,6 @@ struct Stream {
     queue: VecDeque<Event>,
     /// What was sent last, per event, as JSON.
     processing: Option<String>,
-    pairing: Option<String>,
 }
 
 async fn events(
@@ -103,7 +100,6 @@ async fn events(
         started: false,
         queue: VecDeque::new(),
         processing: None,
-        pairing: None,
     };
     let events = stream::unfold(state, |mut state| async move {
         let event = state.next().await?;
@@ -153,10 +149,6 @@ impl Stream {
                 Ok(status) => queue(&mut self.queue, &mut self.processing, "processing", &status),
                 Err(error) => failed("processing status", error),
             }
-        }
-        match pairing::waiting(&self.db, &self.actor).await {
-            Ok(waiting) => queue(&mut self.queue, &mut self.pairing, "pairing", &waiting),
-            Err(error) => failed("waiting controllers", error),
         }
     }
 }

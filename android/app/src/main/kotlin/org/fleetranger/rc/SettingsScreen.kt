@@ -208,7 +208,7 @@ fun SettingsScreen(
     if (confirmingUnpair) {
         DangerDialog(
             title = "Unpair controller",
-            text = "The controller stops uploading flight logs and shows a new pairing code. " +
+            text = "The controller stops uploading flight logs until it’s paired again with a new pairing code. " +
                 "Logs already uploaded stay in FleetRanger.",
             action = "Unpair",
             onConfirm = {

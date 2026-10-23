@@ -31,7 +31,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let hash = token_hash(&parts.headers).ok_or(StatusCode::UNAUTHORIZED)?;
-        let paired = db::by_token(&PgPool::from_ref(state), &hash)
+        let controller = db::by_token(&PgPool::from_ref(state), &hash)
             .await
             .map_err(|error| {
                 tracing::error!(%error, "looking up a controller token");
@@ -39,9 +39,9 @@ where
             })?
             .ok_or(StatusCode::UNAUTHORIZED)?;
         Ok(Self {
-            id: paired.id,
-            serial: paired.serial,
-            team_id: paired.team_id,
+            id: controller.id,
+            serial: controller.serial,
+            team_id: controller.team_id,
         })
     }
 }

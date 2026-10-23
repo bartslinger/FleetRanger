@@ -47,24 +47,24 @@ flowchart LR
 
 ## From controller to server
 
-**Pairing.** The FleetRanger app is downloaded on the controller from the install's own download page. The controller shows a short code and a QR code. A logged-in user enters or scans it on their phone, sees which controller it is (model and serial) and approves it. Nobody logs in on the controller, which is shared.
+**Pairing.** The FleetRanger app is downloaded on the controller from the install's own download page. A logged-in user creates a pairing code in the web app and gives it to the pilot, who types it into the controller. Nobody logs in on the controller, which is shared, nor in the field.
 
 ```mermaid
 sequenceDiagram
-    participant RC as Remote controller
+    participant U as User (web app, logged in)
     participant S as FleetRanger server
-    participant U as User (phone, logged in)
-    RC->>S: Pairing request with SHA-256 of a token it generated
-    S-->>RC: Short code
-    RC->>RC: Shows code and QR code
-    U->>S: Enters code, approves the controller
-    RC->>S: Checks every few seconds
-    S-->>RC: Approved
+    participant RC as Remote controller
+    U->>S: Creates a pairing code
+    S-->>U: Code, valid for 1 hour to 7 days
+    U-->>RC: Gives the code to the pilot, who types it in
+    RC->>S: Code, serial and SHA-256 of a token it generated
+    S-->>RC: Paired, with the code's team
     Note over RC,S: From now on the controller authenticates with its token
 ```
 
 - The controller generates its own long random token and sends only its hash. The server stores only the hash.
-- A code stays valid only while the controller keeps showing it, and expires after an hour without approval.
+- A code pairs one controller and is deleted when it's used, revoked or expired. Its creator, or an admin, can revoke it until then.
+- A code is 8 characters (about 40 bits), so guessing is limited: nginx allows 10 pairing attempts a minute per address (with a burst of 5), as it does for OAuth registration. There is no limit across all addresses (the user's decision, 2026-10-23), so many addresses together could guess faster; a successful guess yields a controller token, which can read the pilot list and upload logs but not read flights, and the code's rightful user finds it used.
 - The token allows exactly two things: downloading the pilot list and uploading logs. It can't read flights or anything else.
 - Unpairing, on the controller or by an admin, stops the token immediately.
 
