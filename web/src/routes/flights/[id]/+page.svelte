@@ -3,7 +3,8 @@
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
 	import { areaShares, clock, dateTime, dayMonth, distance, duration } from '#lib/format.js';
-	import { pilotOptions as pilotOptions_ } from '#lib/pilots.js';
+	import { may } from '#lib/permissions.js';
+	import { offered, pilotOptions as pilotOptions_, sharedGroup } from '#lib/pilots.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
@@ -21,21 +22,25 @@
 	const flight = $derived(data.flight);
 	const archived = $derived(flight.archived_at !== null);
 
-	// Setting the pilot: admins on any flight, members on their group's.
-	const canSetPilot = $derived(
-		data.choices.admin ||
-			(flight.group_id !== null && data.choices.own_team_ids.includes(flight.group_id))
-	);
-	const pilotOptions = $derived(pilotOptions_(data.choices));
+	const canSetPilot = $derived(may(data.account, 'flights.set_pilot', flight.group_id));
+	const canArchive = $derived(may(data.account, 'flights.archive', flight.group_id));
+	// Its group's own pilots first.
+	const pilotOptions = $derived(pilotOptions_(data.choices, sharedGroup([flight])));
 	// "That was me": an unknown pilot starts as the viewer, if they fly.
 	const pilotChoice = $derived.by(() => {
 		const user = flight.pilot_id ?? data.account?.id ?? '';
-		return pilotOptions.some((option) => option.value === user) ? user : '';
+		return offered(data.choices, user) ? user : '';
 	});
 
+	// Moving needs flights.move on its group and the one it goes to.
+	const canMove = $derived(may(data.account, 'flights.move', flight.group_id));
 	const groupOptions = $derived([
-		...data.choices.groups.map((group) => ({ value: group.id, label: group.name })),
-		{ value: '', label: 'No group (organisation queue)' }
+		...data.choices.groups
+			.filter((group) => may(data.account, 'flights.move', group.id))
+			.map((group) => ({ value: group.id, label: group.name })),
+		...(may(data.account, 'flights.move', null)
+			? [{ value: '', label: 'No group (organisation queue)' }]
+			: [])
 	]);
 	function groupSet(result: Record<string, unknown> | undefined) {
 		const group = (result?.groupName as string | null) ?? 'the organisation queue';
@@ -114,8 +119,7 @@
 	status={archived ? 'Archived' : undefined}
 >
 	{#snippet actions()}
-		<!-- Who may set the pilot may archive and restore. -->
-		{#if canSetPilot && archived}
+		{#if canArchive && archived}
 			<form
 				method="POST"
 				action="?/restore"
@@ -127,7 +131,7 @@
 			>
 				<Button type="submit" kind="tertiary">Restore</Button>
 			</form>
-		{:else if canSetPilot}
+		{:else if canArchive}
 			<Modal
 				title="Archive"
 				triggerKind="tertiary"
@@ -164,7 +168,7 @@
 						<dd
 							class:numeric={fact.numeric}
 							class:editable={(fact.label === 'Pilot' && canSetPilot) ||
-								(fact.label === 'Group' && data.choices.admin)}
+								(fact.label === 'Group' && canMove)}
 						>
 							<!-- The drone's and controller's pages, for who may see them. -->
 							{#if 'href' in fact && fact.href}
@@ -186,7 +190,7 @@
 								</Modal>
 							{/if}
 							<!-- As Move to group in Flights. -->
-							{#if fact.label === 'Group' && data.choices.admin}
+							{#if fact.label === 'Group' && canMove}
 								<Modal
 									title="Move to group"
 									triggerIcon={Edit}

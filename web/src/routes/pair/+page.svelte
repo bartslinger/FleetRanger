@@ -2,6 +2,7 @@
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
 	import { enhance } from '$app/forms';
 	import { dateTime } from '#lib/format.js';
+	import { anywhere } from '#lib/permissions.js';
 	import type { PairingCode } from '#lib/server/backend.js';
 	import Button from '#lib/ui/Button.svelte';
 	import CodeSnippet from '#lib/ui/CodeSnippet.svelte';
@@ -37,12 +38,12 @@
 	const shown = (code: string) => `${code.slice(0, 4)}-${code.slice(4)}`;
 	const until = (iso: string) => dateTime(iso, data.timeZone);
 
-	// Admins see everyone's codes, so who made each. On phones only the code
-	// and its time, so Revoke stays in view.
+	// Who manages controllers sees others' codes too, so who made each. On
+	// phones only the code and its time, so Revoke stays in view.
 	const columns: TableColumn<PairingCode>[] = $derived([
 		{ key: 'code', header: 'Code', identifier: true, format: (row) => shown(row.code) },
 		{ key: 'group', header: 'Group', wideOnly: true, format: (row) => row.group ?? 'No group' },
-		...(data.account?.role === 'admin'
+		...(anywhere(data.account, 'controllers.manage')
 			? [
 					{
 						key: 'created_by',

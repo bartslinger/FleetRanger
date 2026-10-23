@@ -6,13 +6,18 @@
 	batch bar; the same rules as the flight page's.
 -->
 <script lang="ts">
-	import { pilotOptions } from '#lib/pilots.js';
+	import { offered, pilotOptions, sharedGroup } from '#lib/pilots.js';
 	import Modal from '#lib/ui/Modal.svelte';
 	import Select from '#lib/ui/Select.svelte';
 
 	interface Props {
 		/** The flights to change. */
-		flights: { id: string; pilot_id: string | null; group_id: string | null }[];
+		flights: {
+			id: string;
+			pilot_id: string | null;
+			group_id: string | null;
+			group_name: string | null;
+		}[];
 		/** Which flights those are, e.g. "All 3 flights in the session." */
 		which: string;
 		choices: Parameters<typeof pilotOptions>[0];
@@ -32,12 +37,13 @@
 		onsuccess
 	}: Props = $props();
 
-	const options = $derived(pilotOptions(choices));
+	// Their group's own pilots first, if they share a group.
+	const options = $derived(pilotOptions(choices, sharedGroup(flights)));
 	// Their pilot, if they share one.
 	const choice = $derived.by(() => {
 		const values = new Set(flights.map((flight) => flight.pilot_id ?? ''));
 		const [shared] = values;
-		return values.size === 1 && options.some((option) => option.value === shared) ? shared : '';
+		return values.size === 1 && offered(choices, shared) ? shared : '';
 	});
 </script>
 

@@ -30,6 +30,51 @@ pub enum Permission {
     LogsManage,
 }
 
+impl Permission {
+    pub const ALL: [Self; 17] = [
+        Self::FlightsRead,
+        Self::EquipmentRead,
+        Self::FlightsFlyFor,
+        Self::ControllersPair,
+        Self::FlightsSetPilot,
+        Self::FlightsArchive,
+        Self::SessionsEdit,
+        Self::EquipmentRename,
+        Self::FlightsMove,
+        Self::SessionsMove,
+        Self::EquipmentMove,
+        Self::ControllersManage,
+        Self::BatteriesRename,
+        Self::UsersManage,
+        Self::GroupsManage,
+        Self::AreasManage,
+        Self::LogsManage,
+    ];
+
+    /// Its name in docs/architecture.md and the API, such as `flights.read`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FlightsRead => "flights.read",
+            Self::EquipmentRead => "equipment.read",
+            Self::FlightsFlyFor => "flights.fly_for",
+            Self::ControllersPair => "controllers.pair",
+            Self::FlightsSetPilot => "flights.set_pilot",
+            Self::FlightsArchive => "flights.archive",
+            Self::SessionsEdit => "sessions.edit",
+            Self::EquipmentRename => "equipment.rename",
+            Self::FlightsMove => "flights.move",
+            Self::SessionsMove => "sessions.move",
+            Self::EquipmentMove => "equipment.move",
+            Self::ControllersManage => "controllers.manage",
+            Self::BatteriesRename => "batteries.rename",
+            Self::UsersManage => "users.manage",
+            Self::GroupsManage => "groups.manage",
+            Self::AreasManage => "areas.manage",
+            Self::LogsManage => "logs.manage",
+        }
+    }
+}
+
 /// A built-in role: a named set of permissions. Each includes the permissions
 /// it depends on, so any single role makes sense on its own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -165,6 +210,39 @@ impl Grants {
         }
     }
 
+    /// The permissions held on the whole organisation, and per group those
+    /// its memberships add, so a client can show only what the actor may
+    /// do. A group's rights are the organisation's and its own together.
+    pub fn permissions(&self) -> (Vec<Permission>, Vec<(Uuid, Vec<Permission>)>) {
+        let held = |roles: &[Role]| -> Vec<Permission> {
+            Permission::ALL
+                .into_iter()
+                .filter(|permission| roles.iter().any(|role| role.grants(*permission)))
+                .collect()
+        };
+        let organisation = held(&self.organisation);
+        let mut ids: Vec<Uuid> = self.groups.iter().map(|(group, _)| *group).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let groups = ids
+            .into_iter()
+            .map(|id| {
+                let roles: Vec<Role> = self
+                    .groups
+                    .iter()
+                    .filter(|(group, _)| *group == id)
+                    .map(|(_, role)| *role)
+                    .collect();
+                let own = held(&roles)
+                    .into_iter()
+                    .filter(|permission| !organisation.contains(permission))
+                    .collect();
+                (id, own)
+            })
+            .collect();
+        (organisation, groups)
+    }
+
     /// The same memberships without the roles on the whole organisation.
     pub fn without_organisation_roles(self) -> Self {
         Self {
@@ -211,5 +289,32 @@ mod tests {
                 .without_organisation_roles()
                 .anywhere(Permission::FlightsRead)
         );
+    }
+
+    /// The web app decides what to offer from `permissions()` with the same
+    /// rule as `may`: the organisation's permissions, plus a group's own.
+    #[test]
+    fn listed_permissions_agree_with_the_check() {
+        let mixed = grants(&[
+            (None, "viewer"),
+            (Some(NORTH), "editor"),
+            (Some(NORTH), "pilot"),
+        ]);
+        let (organisation, groups) = mixed.permissions();
+        for permission in Permission::ALL {
+            for group in [None, Some(NORTH), Some(SOUTH)] {
+                let listed = organisation.contains(&permission)
+                    || group.is_some_and(|group| {
+                        groups
+                            .iter()
+                            .any(|(id, held)| *id == group && held.contains(&permission))
+                    });
+                assert_eq!(
+                    listed,
+                    mixed.may(permission, group),
+                    "{permission:?} on {group:?}"
+                );
+            }
+        }
     }
 }

@@ -1,5 +1,6 @@
 import { BACKEND_URL } from '$app/env/private';
 import { error } from '@sveltejs/kit';
+import type { Permissions } from '#lib/permissions.js';
 import type { Area } from '#lib/ui/areas.js';
 import type { DayStripFlight } from '#lib/ui/DayStrip.svelte';
 import type { Track } from '#lib/ui/TrackMap.svelte';
@@ -174,14 +175,15 @@ export interface Neighbours {
 	total: number;
 }
 
-/** What the logged-in account can change in the logbook, from `GET /api/flights/choices`. */
+/** The pilots and groups to choose from when changing flights, sessions and
+ * equipment, from `GET /api/flights/choices`. Which changes the user may
+ * make is in their permissions. */
 export interface FlightChoices {
-	/** The groups whose flights a member can change. */
-	own_team_ids: string[];
-	/** Admins change any flight and move flights between groups. */
-	admin: boolean;
-	/** Everyone who flies, by name, with the groups they fly for as a member. */
+	/** Everyone who flies, by name, with the groups they fly for as a
+	 * member; empty for someone who sets no pilots. */
 	pilots: Pilot[];
+	/** The groups where the user may move flights, sessions or equipment,
+	 * or edit sessions, by name. */
 	groups: { id: string; name: string }[];
 }
 
@@ -360,7 +362,8 @@ export interface Account {
 	id: string;
 	email: string;
 	name: string;
-	role: 'member' | 'all_flights' | 'admin';
+	/** What the user may do; see `#lib/permissions.js`. */
+	permissions: Permissions;
 	/** Whether apps (such as AI assistants) can connect to this install. */
 	apps: boolean;
 }

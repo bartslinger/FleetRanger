@@ -3,6 +3,7 @@
 	import { MediaQuery } from 'svelte/reactivity';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { anywhere, may, readsSeveralGroups } from '#lib/permissions.js';
 	import SessionFacts, { sessionGroup } from '#lib/SessionFacts.svelte';
 	import PilotDialog from '#lib/PilotDialog.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
@@ -84,12 +85,10 @@
 		{ key: 'group_name', header: 'Group', format: (session) => sessionGroup(session) }
 	]);
 
-	// Merging: admins change any session, members those of their own group.
+	// Merging: sessions.edit on each session's own group.
 	let selected: string[] = $state([]);
-	const canChange = $derived(data.choices.admin || data.choices.own_team_ids.length > 0);
-	const changeable = (session: Row) =>
-		data.choices.admin ||
-		(session.group_id !== null && data.choices.own_team_ids.includes(session.group_id));
+	const canChange = $derived(anywhere(data.account, 'sessions.edit'));
+	const changeable = (session: Row) => may(data.account, 'sessions.edit', session.group_id);
 
 	function merged(count: number) {
 		selected = [];
@@ -333,11 +332,13 @@
 		selectedFlightsFor = opened;
 		selectedFlights = [];
 	});
-	const canChangeFlights = $derived(
-		data.choices.admin ||
-			openFlights.every(
-				(flight) => flight.group_id !== null && data.choices.own_team_ids.includes(flight.group_id)
-			)
+	// Their pilot: flights.set_pilot on every flight's group. Which flights
+	// are in the session: sessions.edit on its own group.
+	const canSetPilots = $derived(
+		openFlights.every((flight) => may(data.account, 'flights.set_pilot', flight.group_id))
+	);
+	const canEditOpen = $derived(
+		openSession !== null && may(data.account, 'sessions.edit', openSession.group_id)
 	);
 	const flightsLabel = (count: number) => plural(count, 'flight');
 	function moved(count: number) {
@@ -494,7 +495,7 @@
 					filters={data.state}
 					none={{ ...data.state, ...NO_FILTERS }}
 					devices={data.devices}
-					groupFilter={data.choices.admin}
+					groupFilter={readsSeveralGroups(data.account)}
 					noGroup={NO_GROUP_ORGANISATION}
 					filtering={cardsFiltering}
 					onchange={filter}
@@ -565,7 +566,7 @@
 				filters={data.state}
 				none={{ ...data.state, ...NO_FILTERS }}
 				devices={data.devices}
-				groupFilter={data.choices.admin}
+				groupFilter={readsSeveralGroups(data.account)}
 				noGroup={NO_GROUP_ORGANISATION}
 				{filtering}
 				onchange={filter}
@@ -665,7 +666,7 @@
 									group={sessionGroup(openSession)}
 								>
 									{#snippet pilotAction()}
-										{#if canChangeFlights}
+										{#if canSetPilots}
 											<IconButton
 												icon={Edit}
 												label="Change pilot"
@@ -722,21 +723,23 @@
 						hoveredRow={pointedFlightTrack === null
 							? null
 							: (openFlights[pointedFlightTrack]?.id ?? null)}
-						selectable={canChangeFlights ? () => true : undefined}
+						selectable={canSetPilots || canEditOpen ? () => true : undefined}
 						bind:selected={selectedFlights}
 						selectedLabel={(count) => `${flightsLabel(count)} selected`}
 						summary={flightsLabel(openFlights.length)}
 					>
 						{#snippet batchActions(ids)}
-							<Button
-								onclick={(event: MouseEvent) =>
-									changePilot(
-										openFlights.filter((flight) => ids.includes(flight.id)),
-										`The ${flightsLabel(ids.length)} selected.`,
-										event
-									)}>Change pilot</Button
-							>
-							{#if ids.length < openFlights.length}
+							{#if canSetPilots}
+								<Button
+									onclick={(event: MouseEvent) =>
+										changePilot(
+											openFlights.filter((flight) => ids.includes(flight.id)),
+											`The ${flightsLabel(ids.length)} selected.`,
+											event
+										)}>Change pilot</Button
+								>
+							{/if}
+							{#if canEditOpen && ids.length < openFlights.length}
 								<Modal
 									title="Move to new session"
 									submitLabel="Move"
@@ -751,25 +754,31 @@
 									</p>
 								</Modal>
 							{/if}
-							<Modal
-								title="Remove from session"
-								submitLabel="Remove"
-								action="?/remove"
-								error={form?.removeMessage}
-								onsuccess={() => removed(ids.length)}
-							>
-								{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
-								<input type="hidden" name="all" value={String(ids.length === openFlights.length)} />
-								<p>
-									{#if ids.length === openFlights.length}
-										The session ends. Its {ids.length === 1 ? 'flight stays' : 'flights stay'} in Flights,
-										without a session.
-									{:else}
-										The {ids.length === 1 ? 'flight leaves' : `${ids.length} flights leave`} the session.
-										{ids.length === 1 ? 'It stays' : 'They stay'} in Flights, without a session.
-									{/if}
-								</p>
-							</Modal>
+							{#if canEditOpen}
+								<Modal
+									title="Remove from session"
+									submitLabel="Remove"
+									action="?/remove"
+									error={form?.removeMessage}
+									onsuccess={() => removed(ids.length)}
+								>
+									{#each ids as id (id)}<input type="hidden" name="flight_id" value={id} />{/each}
+									<input
+										type="hidden"
+										name="all"
+										value={String(ids.length === openFlights.length)}
+									/>
+									<p>
+										{#if ids.length === openFlights.length}
+											The session ends. Its {ids.length === 1 ? 'flight stays' : 'flights stay'} in Flights,
+											without a session.
+										{:else}
+											The {ids.length === 1 ? 'flight leaves' : `${ids.length} flights leave`} the session.
+											{ids.length === 1 ? 'It stays' : 'They stay'} in Flights, without a session.
+										{/if}
+									</p>
+								</Modal>
+							{/if}
 						{/snippet}
 					</DataTable>
 				</div>

@@ -15,6 +15,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { dateTime, day, distance, duration, timeSpan } from '#lib/format.js';
+	import { may } from '#lib/permissions.js';
+	import { sharedGroup } from '#lib/pilots.js';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -72,11 +74,11 @@
 	const shown = $derived(chosen.length > 0 ? chosen : flights);
 	const facts = $derived(summary(shown, data.timeZone));
 
-	// Admins change any flight, members those of their own group.
-	const mayChange = (flight: Row) =>
-		data.choices.admin ||
-		(flight.group_id !== null && data.choices.own_team_ids.includes(flight.group_id));
-	const canChange = $derived(chosen.every(mayChange));
+	// Setting a flight's pilot needs flights.set_pilot on its group; making
+	// the session sessions.edit on the group it gets, the flights' own.
+	const mayChange = (flight: Row) => may(data.account, 'flights.set_pilot', flight.group_id);
+	const canSetPilots = $derived(chosen.every(mayChange));
+	const canChange = $derived(may(data.account, 'sessions.edit', sharedGroup(chosen)?.id ?? null));
 
 	// After creating: the flights left out are a suggestion to look at next,
 	// otherwise the next one in the list.
@@ -249,7 +251,7 @@
 	{:else if !canChange}
 		<Column narrow>
 			<InlineNotification kind="info" title="You can’t create this session">
-				It has flights of another group. Leave them out, or ask an admin.
+				You can’t edit sessions of this group. Ask an admin.
 			</InlineNotification>
 		</Column>
 	{/if}
@@ -266,7 +268,7 @@
 	<Column lg={5} smOrder={1}>
 		<SessionFacts flights={shown} timeZone={data.timeZone}>
 			{#snippet pilotAction()}
-				{#if canChange && chosen.length > 0}
+				{#if canSetPilots && chosen.length > 0}
 					<IconButton
 						icon={Edit}
 						label="Change pilot"

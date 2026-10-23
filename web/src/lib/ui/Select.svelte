@@ -15,9 +15,15 @@
 		label: string;
 	}
 
+	/** Options under a label (a native optgroup); Carbon is silent on them. */
+	interface OptionGroup {
+		group: string;
+		options: Option[];
+	}
+
 	interface Props extends Omit<HTMLSelectAttributes, 'size'> {
 		label: string;
-		options: Option[];
+		options: (Option | OptionGroup)[];
 		helper?: string;
 		error?: string;
 		size?: 'sm' | 'md' | 'lg';
@@ -56,8 +62,16 @@
 			{#if placeholder}
 				<option value="" disabled hidden selected>{placeholder}</option>
 			{/if}
-			{#each options as option (option.value)}
-				<option value={option.value}>{option.label}</option>
+			{#each options as option ('group' in option ? `group:${option.group}` : option.value)}
+				{#if 'group' in option}
+					<optgroup label={option.group}>
+						{#each option.options as item (item.value)}
+							<option value={item.value}>{item.label}</option>
+						{/each}
+					</optgroup>
+				{:else}
+					<option value={option.value}>{option.label}</option>
+				{/if}
 			{/each}
 		</select>
 		{#if error}
@@ -130,7 +144,8 @@
 		cursor: not-allowed;
 	}
 
-	option {
+	option,
+	optgroup {
 		background: var(--cds-layer-01);
 		color: var(--cds-text-primary);
 	}
