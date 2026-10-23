@@ -12,6 +12,7 @@
 	import Select from '#lib/ui/Select.svelte';
 	import Tag from '#lib/ui/Tag.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
+	import Toggle from '#lib/ui/Toggle.svelte';
 
 	interface ExampleFlight {
 		id: string;
@@ -192,6 +193,11 @@
 				<Checkbox label="Show archived" />
 				<Checkbox label="Checked" checked />
 				<Checkbox label="Disabled" disabled />
+			</div>
+			<div class="row">
+				<Toggle label="Show archived" />
+				<Toggle label="On" checked />
+				<Toggle label="Disabled" disabled />
 			</div>
 		</Column>
 	</Grid>
