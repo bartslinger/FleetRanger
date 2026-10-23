@@ -6,6 +6,7 @@
 <script lang="ts">
 	import type { HTMLSelectAttributes } from 'svelte/elements';
 	import ChevronDown from '@carbon/icons/es/chevron--down/16.js';
+	import WarningFilled from '@carbon/icons/es/warning--filled/16.js';
 	import Field from './Field.svelte';
 	import Icon from './Icon.svelte';
 
@@ -59,6 +60,9 @@
 				<option value={option.value}>{option.label}</option>
 			{/each}
 		</select>
+		{#if error}
+			<span class="error-icon"><Icon icon={WarningFilled} /></span>
+		{/if}
 		<span class="chevron"><Icon icon={ChevronDown} /></span>
 	</div>
 </Field>
@@ -97,9 +101,21 @@
 		background: var(--cds-field-hover);
 	}
 
+	/* Room for the error icon before the chevron, as in Carbon's Sass. */
 	select.invalid {
+		padding-right: var(--cds-spacing-10);
 		outline: 2px solid var(--cds-support-error);
 		outline-offset: -2px;
+	}
+
+	.error-icon {
+		position: absolute;
+		top: 50%;
+		right: var(--cds-spacing-08);
+		display: flex;
+		color: var(--cds-support-error);
+		transform: translateY(-50%);
+		pointer-events: none;
 	}
 
 	select:focus-visible {
