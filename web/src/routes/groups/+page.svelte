@@ -19,9 +19,8 @@
 	}
 
 	const ORGANISATION_ROW = 'organisation';
-	// The organisation first, as the top group (user's decision): its members
-	// are all users, so it opens Users; it is told apart by its name alone
-	// (carbon-expert's suggestion).
+	// The organisation first, as the top group (user's decision): not a link, as
+	// its members are all users, which sets it apart from the groups.
 	const rows: Row[] = $derived([
 		{ id: ORGANISATION_ROW, name: 'Organisation, all users', ...data.organisation },
 		...data.groups
@@ -57,9 +56,7 @@
 			{rows}
 			rowKey={(group) => group.id}
 			rowHref={(group) =>
-				group.id === ORGANISATION_ROW
-					? resolve('/users')
-					: resolve('/groups/[id]', { id: group.id })}
+				group.id === ORGANISATION_ROW ? undefined : resolve('/groups/[id]', { id: group.id })}
 			summary={`${count(data.groups.length)} ${data.groups.length === 1 ? 'group' : 'groups'} in the organisation`}
 		>
 			{#snippet toolbar()}

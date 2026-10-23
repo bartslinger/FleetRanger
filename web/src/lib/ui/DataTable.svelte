@@ -57,8 +57,9 @@
 		defaultSort?: Sort;
 		/** Link for a header click; `undefined` returns to the default order. */
 		sortHref?: (next: Sort | undefined) => string;
-		/** Opens a row's page: the first cell becomes a link that covers the row. */
-		rowHref?: (row: T) => string;
+		/** Opens a row's page: the first cell becomes a link that covers the row;
+		 * undefined leaves that row without one. */
+		rowHref?: (row: T) => string | undefined;
 		/** Carbon's table toolbar: filters, then the primary action at the right. */
 		toolbar?: Snippet;
 		/** What the table shows, e.g. "37 flights", at the toolbar's left. */
@@ -262,8 +263,9 @@
 				{@const key = rowKey(row)}
 				{@const chosen = allMatching ? !!selectable?.(row) : selected.includes(key)}
 				{@const state = rowState?.(row)}
+				{@const href = rowHref?.(row)}
 				<tr
-					class:linked={rowHref}
+					class:linked={href}
 					class:selected={chosen}
 					class:stated={state}
 					class:hovered={key === hoveredRow}
@@ -294,9 +296,9 @@
 							{#if column.status?.(row) === 'warning'}
 								<span class="status warning"><Icon icon={WarningAltFilled} /></span>
 							{/if}
-							{#if index === 0 && rowHref}
+							{#if index === 0 && href}
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built by the caller -->
-								<a class="row-link" href={rowHref(row)}>{@render content(row, column)}</a>
+								<a class="row-link" {href}>{@render content(row, column)}</a>
 							{:else}
 								{@render content(row, column)}
 							{/if}
