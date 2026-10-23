@@ -231,7 +231,7 @@
 		{#if user.groups.length === 0}
 			<EmptyState
 				title="Not in any group"
-				body="Roles in a group let them see or organise its flights, sessions and equipment; pilots fly for it."
+				body="Roles in a group decide what they can see and organise there."
 				action={addable.length > 0 ? addToGroup : undefined}
 			/>
 		{:else}
