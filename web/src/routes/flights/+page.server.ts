@@ -69,16 +69,16 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
 		return { changed: result.data.changed };
 	},
-	setTeam: async ({ fetch, request, url }) => {
+	setGroup: async ({ fetch, request, url }) => {
 		const form = await request.formData();
 		const flights = await flightIds(fetch, url, form);
-		if ('message' in flights) return fail(409, { teamMessage: flights.message });
+		if ('message' in flights) return fail(409, { groupMessage: flights.message });
 		const body = {
 			flight_ids: flights.ids,
-			team_id: String(form.get('team_id') ?? '') || null
+			group_id: String(form.get('group_id') ?? '') || null
 		};
-		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/team', body);
-		if (!result.ok) return fail(result.status, { teamMessage: result.message });
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/group', body);
+		if (!result.ok) return fail(result.status, { groupMessage: result.message });
 		return { changed: result.data.changed };
 	},
 	newSession: async ({ fetch, request, url }) => {

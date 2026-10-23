@@ -3,8 +3,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::db::{
-    self, AreaOption, Device, Filter, FlightDetail, FlightSummary, Neighbours, PilotChoice,
-    PilotOption, Sort, TeamChoice, TeamOption,
+    self, AreaOption, Device, Filter, FlightDetail, FlightSummary, GroupChoice, GroupOption,
+    Neighbours, PilotChoice, PilotOption, Sort,
 };
 use crate::{
     auth::Actor,
@@ -49,13 +49,13 @@ pub async fn neighbours(
         .ok_or(ApiError::NotFound)
 }
 
-/// The drones and controllers of the flights the actor may see, for the
-/// logbook's filters.
+/// The drones, controllers, groups, pilots and areas of the flights the actor
+/// may see, for the logbook's filters.
 #[derive(Serialize)]
 pub struct Devices {
     pub aircraft: Vec<Device>,
     pub controllers: Vec<Device>,
-    pub teams: Vec<TeamOption>,
+    pub groups: Vec<GroupOption>,
     pub pilots: Vec<PilotOption>,
     pub areas: Vec<AreaOption>,
 }
@@ -65,7 +65,13 @@ pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<D
     Ok(Devices {
         aircraft: db::aircraft_of(db, &scope, filter).await?,
         controllers: db::controllers_of(db, &scope, filter).await?,
-        teams: db::teams_in(db, &scope, filter).await?,
+        // The Sessions list (flights in a session) filters on the sessions'
+        // own groups.
+        groups: if filter.in_session == Some(true) {
+            crate::sessions::db::groups_in(db, &scope, filter).await?
+        } else {
+            db::groups_in(db, &scope, filter).await?
+        },
         pilots: db::pilots_in(db, &scope, filter).await?,
         areas: db::areas_in(db, &scope, filter).await?,
     })
@@ -102,20 +108,17 @@ pub struct Choices {
     pub own_team_ids: Vec<Uuid>,
     /// Changes any flight and can move flights between groups.
     pub admin: bool,
-    /// Everyone who flies, the group's own pilots first if a group was given;
-    /// empty if the actor sets no pilots.
+    /// Everyone who flies; empty if the actor sets no pilots.
     pub pilots: Vec<PilotChoice>,
     /// Groups to move flights to.
-    pub teams: Vec<TeamChoice>,
+    pub groups: Vec<GroupChoice>,
 }
 
-/// - `group`: the group of the flights whose pilot is chosen, if they share
-///   one, so its own pilots come first.
-pub async fn choices(db: &PgPool, actor: &Actor, group: Option<Uuid>) -> ApiResult<Choices> {
+pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
     let set_pilot = actor.grants.scope(Permission::FlightsSetPilot);
     let moves = actor.grants.may(Permission::FlightsMove, None);
     let pilots = if set_pilot.all || !set_pilot.groups.is_empty() {
-        db::pilot_choices(db, group).await?
+        db::pilot_choices(db).await?
     } else {
         Vec::new()
     };
@@ -127,7 +130,7 @@ pub async fn choices(db: &PgPool, actor: &Actor, group: Option<Uuid>) -> ApiResu
         },
         admin: moves,
         pilots,
-        teams: if moves {
+        groups: if moves {
             db::group_choices(db).await?
         } else {
             Vec::new()
@@ -157,7 +160,7 @@ pub async fn set_pilot(
 
 /// Moves a batch of flights to a group, or to the queue with None. They keep
 /// their pilot.
-pub async fn set_team(
+pub async fn set_group(
     db: &PgPool,
     actor: &Actor,
     ids: &[Uuid],
@@ -177,9 +180,9 @@ pub async fn set_team(
     if let Some(group) = group_id
         && !db::group_exists(db, group).await?
     {
-        return Err(ApiError::Invalid("Choose an active team.".to_owned()));
+        return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
-    Ok(db::set_team(db, &ids, group_id).await?)
+    Ok(db::set_group(db, &ids, group_id).await?)
 }
 
 /// Archives a batch of flights, all or none: they leave every list and total.

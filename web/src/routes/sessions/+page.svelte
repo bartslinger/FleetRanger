@@ -3,11 +3,12 @@
 	import { MediaQuery } from 'svelte/reactivity';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import SessionFacts from '#lib/SessionFacts.svelte';
+	import SessionFacts, { sessionGroup } from '#lib/SessionFacts.svelte';
 	import PilotDialog from '#lib/PilotDialog.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import ListFilters, {
 		NO_FILTERS,
+		NO_GROUP_ORGANISATION,
 		filterNames,
 		filtering as listFiltering,
 		type Filters
@@ -80,15 +81,15 @@
 			format: (session) => distance(session.distance_m)
 		},
 		{ key: 'pilots', header: 'Pilot', format: (session) => session.pilots.join(', ') },
-		{ key: 'teams', header: 'Team', format: (session) => session.teams.join(', ') }
+		{ key: 'group_name', header: 'Group', format: (session) => sessionGroup(session) }
 	]);
 
-	// Merging: admins change any session, members those of their own team.
+	// Merging: admins change any session, members those of their own group.
 	let selected: string[] = $state([]);
 	const canChange = $derived(data.choices.admin || data.choices.own_team_ids.length > 0);
 	const changeable = (session: Row) =>
 		data.choices.admin ||
-		session.team_ids.every((team) => data.choices.own_team_ids.includes(team));
+		(session.group_id !== null && data.choices.own_team_ids.includes(session.group_id));
 
 	function merged(count: number) {
 		selected = [];
@@ -113,7 +114,9 @@
 	});
 
 	// In a later page's breadcrumb, a filtered list names its filters.
-	const crumb = $derived(['Sessions', ...filterNames(data.state, data.devices)].join(' · '));
+	const crumb = $derived(
+		['Sessions', ...filterNames(data.state, data.devices, NO_GROUP_ORGANISATION)].join(' · ')
+	);
 	const sessions = (count: number) => `${count} ${count === 1 ? 'session' : 'sessions'}`;
 
 	// Cards, grouped by month; the list comes newest first.
@@ -333,7 +336,7 @@
 	const canChangeFlights = $derived(
 		data.choices.admin ||
 			openFlights.every(
-				(flight) => flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id)
+				(flight) => flight.group_id !== null && data.choices.own_team_ids.includes(flight.group_id)
 			)
 	);
 	const flightsLabel = (count: number) => plural(count, 'flight');
@@ -491,7 +494,8 @@
 					filters={data.state}
 					none={{ ...data.state, ...NO_FILTERS }}
 					devices={data.devices}
-					admin={data.choices.admin}
+					groupFilter={data.choices.admin}
+					noGroup={NO_GROUP_ORGANISATION}
 					filtering={cardsFiltering}
 					onchange={filter}
 				/>
@@ -561,7 +565,8 @@
 				filters={data.state}
 				none={{ ...data.state, ...NO_FILTERS }}
 				devices={data.devices}
-				admin={data.choices.admin}
+				groupFilter={data.choices.admin}
+				noGroup={NO_GROUP_ORGANISATION}
 				{filtering}
 				onchange={filter}
 			/>
@@ -638,7 +643,7 @@
 													<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
 												</span>
 												<span class="card-who">
-													{session.pilots.join(', ')} · {session.teams.join(', ')}
+													{session.pilots.join(', ')} · {sessionGroup(session)}
 												</span>
 												<span class="card-numbers">
 													{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the
@@ -654,7 +659,11 @@
 					{#if openSession}
 						<div class="facts-side">
 							<div class="panel">
-								<SessionFacts flights={openSession.flights} timeZone={data.timeZone}>
+								<SessionFacts
+									flights={openSession.flights}
+									timeZone={data.timeZone}
+									group={sessionGroup(openSession)}
+								>
 									{#snippet pilotAction()}
 										{#if canChangeFlights}
 											<IconButton

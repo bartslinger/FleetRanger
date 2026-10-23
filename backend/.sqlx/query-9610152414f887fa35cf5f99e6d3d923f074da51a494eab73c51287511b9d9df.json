@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select u.id, u.name,\n                  array(select m.group_id from group_members m\n                        where m.user_id = u.id and m.role = any($1)\n                        order by m.group_id) as \"group_ids!\"\n           from users u\n           where u.archived_at is null\n             and (exists (select 1 from group_members m\n                          where m.user_id = u.id and m.role = any($1))\n                  or exists (select 1 from organisation_roles r\n                             where r.user_id = u.id and r.role = any($1)))\n           order by lower(u.name), u.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "group_ids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "9610152414f887fa35cf5f99e6d3d923f074da51a494eab73c51287511b9d9df"
+}

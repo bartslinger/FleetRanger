@@ -9,17 +9,17 @@ use crate::{
     policy::{self, FlightScope, Permission},
 };
 
-/// The totals of one group of flights.
+/// The totals of one row: the flights that share a key.
 #[derive(Serialize)]
 pub struct Totals {
-    /// What the flights share: a team's, pilot's or area's id, a drone's or
+    /// What the flights share: a group's, pilot's or area's id, a drone's or
     /// controller's serial, a day ("2026-10-12"), week ("2026-W42") or month
     /// ("2026-10"); none without grouping, or for flights without one.
     pub key: Option<String>,
-    /// The team's, pilot's, drone's, controller's or area's name.
+    /// The group's, pilot's, drone's, controller's or area's name.
     pub name: Option<String>,
     pub flights: i64,
-    /// Sessions with a flight in the group; one spanning two groups counts in both.
+    /// Sessions with a flight in the row; one spanning two rows counts in both.
     pub sessions: i64,
     pub air_time_s: i64,
     /// In whole metres.
@@ -33,7 +33,7 @@ pub struct Totals {
 #[serde(rename_all = "lowercase")]
 pub enum GroupBy {
     None,
-    Team,
+    Group,
     Pilot,
     Drone,
     Controller,
@@ -47,7 +47,7 @@ impl GroupBy {
     fn as_str(self) -> &'static str {
         match self {
             Self::None => "none",
-            Self::Team => "team",
+            Self::Group => "group",
             Self::Pilot => "pilot",
             Self::Drone => "drone",
             Self::Controller => "controller",
@@ -63,8 +63,8 @@ impl GroupBy {
 // archived flights left out. Days, weeks and months are those of the
 // organisation's time zone ($12).
 
-/// The totals of the flights in the scope that pass the filter, per group:
-/// named groups by name, periods in order.
+/// The totals of the flights in the scope that pass the filter, per row:
+/// named rows by name, periods in order.
 pub async fn totals(
     db: &PgPool,
     scope: &FlightScope,
@@ -84,7 +84,7 @@ pub async fn totals(
            from (
                select f.session_id, f.air_time_s, f.distance_m, f.takeoff_at, f.landed_at,
                       case $11
-                          when 'team' then f.group_id::text
+                          when 'group' then f.group_id::text
                           when 'pilot' then f.pilot_id::text
                           when 'drone' then f.aircraft_serial
                           when 'controller' then f.rc_serial
@@ -93,7 +93,7 @@ pub async fn totals(
                           when 'month' then to_char(f.takeoff_at at time zone $12, 'YYYY-MM')
                       end as key,
                       case $11
-                          when 'team' then (select g.name from groups g where g.id = f.group_id)
+                          when 'group' then (select g.name from groups g where g.id = f.group_id)
                           when 'pilot' then (select u.name from users u where u.id = f.pilot_id)
                           when 'drone' then (select a.name from aircraft a
                                              where a.serial = f.aircraft_serial)
@@ -123,7 +123,7 @@ pub async fn totals(
         filter.rc_serials.as_deref(),
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -176,7 +176,7 @@ pub async fn area_totals(
         filter.rc_serials.as_deref(),
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -202,18 +202,18 @@ pub async fn start_of_day(
     .await
 }
 
-/// A team the user flies for.
+/// A group the user flies for.
 #[derive(Serialize)]
-pub struct OwnTeam {
+pub struct OwnGroup {
     pub id: Uuid,
     pub name: String,
 }
 
-/// The groups the user flies for, by name; none for someone who doesn't fly
-/// in a group.
-pub async fn own_teams(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<OwnTeam>> {
+/// The groups the user flies for as a member, by name; none for someone who
+/// doesn't fly in a group.
+pub async fn own_groups(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<OwnGroup>> {
     sqlx::query_as!(
-        OwnTeam,
+        OwnGroup,
         "select g.id, g.name from groups g
          where exists (select 1 from group_members m
                        where m.group_id = g.id and m.user_id = $1 and m.role = any($2))
@@ -243,8 +243,8 @@ mod tests {
         sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
     }
 
-    /// Adds a flight of this team taking off at `takeoff` (UTC), archived or not.
-    async fn flight(db: &PgPool, team: Uuid, takeoff: &str, archived: bool) {
+    /// Adds a flight of this group taking off at `takeoff` (UTC), archived or not.
+    async fn flight(db: &PgPool, group: Uuid, takeoff: &str, archived: bool) {
         let raw_log = insert_id(
             db,
             "insert into raw_logs (sha256, path, size_bytes)
@@ -260,7 +260,7 @@ mod tests {
         )
         .bind(raw_log)
         .bind(takeoff)
-        .bind(team)
+        .bind(group)
         .bind(archived)
         .execute(db)
         .await
@@ -269,7 +269,7 @@ mod tests {
 
     /// Months are the organisation's: a flight just before midnight UTC on 30
     /// September is in October in Johannesburg (UTC+2). Archived flights and
-    /// flights of another team don't count for a member.
+    /// flights of another group don't count for a member.
     #[sqlx::test]
     async fn totals_per_month_in_the_time_zone(db: PgPool) {
         let north = crate::testing::group(&db, "North").await;

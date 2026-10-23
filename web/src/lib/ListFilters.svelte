@@ -3,8 +3,9 @@
 	The filters above the Flights and Sessions lists, the same with or without
 	a table: in a row, the takeoff days, a Filters button with how many of the
 	others are applied, and Clear filters. The button opens a panel with
-	pilots, drones, controllers, for admins teams, areas once there are any,
-	and the list's own after them; Apply applies them together.
+	pilots, drones, controllers, groups for someone who sees several, areas
+	once there are any, and the list's own after them; Apply applies them
+	together.
 -->
 <script lang="ts" module>
 	import { dayMonth } from '#lib/format.js';
@@ -17,8 +18,9 @@
 		drones: string[];
 		/** Controller serials; all if empty. */
 		controllers: string[];
-		/** Team ids, "none" for no team (the queue); all if empty. */
-		teams: string[];
+		/** Group ids, "none" for no group (the queue; for sessions, the
+		 * organisation); all if empty. */
+		groups: string[];
 		/** Area ids: flights with time in any of them; all if empty. */
 		areas: string[];
 		/** A day ("2026-10-12"), or the first of `to`. */
@@ -30,7 +32,7 @@
 		pilots: [],
 		drones: [],
 		controllers: [],
-		teams: [],
+		groups: [],
 		areas: [],
 		from: null,
 		to: null
@@ -38,7 +40,7 @@
 
 	/** How many of the panel's filters are applied; the dates aren't in it. */
 	const panelCount = (filters: Filters) =>
-		[filters.pilots, filters.drones, filters.controllers, filters.teams, filters.areas].filter(
+		[filters.pilots, filters.drones, filters.controllers, filters.groups, filters.areas].filter(
 			(values) => values.length > 0
 		).length;
 
@@ -46,7 +48,7 @@
 		filters.pilots.length > 0 ||
 		filters.drones.length > 0 ||
 		filters.controllers.length > 0 ||
-		filters.teams.length > 0 ||
+		filters.groups.length > 0 ||
 		filters.areas.length > 0 ||
 		filters.from !== null;
 
@@ -54,7 +56,11 @@
 	 * The filters' names, for a later page's breadcrumb: "12 Oct–14 Oct",
 	 * "Drone-1, Drone-2", …
 	 */
-	export function filterNames(filters: Filters, devices: Devices): string[] {
+	export function filterNames(
+		filters: Filters,
+		devices: Devices,
+		noGroup = NO_GROUP_QUEUE
+	): string[] {
 		const names = (known: Device[], serials: string[]) =>
 			serials
 				.map((serial) => known.find((device) => device.serial === serial)?.name ?? serial)
@@ -70,8 +76,8 @@
 				: []),
 			...(filters.drones.length > 0 ? [names(devices.aircraft, filters.drones)] : []),
 			...(filters.controllers.length > 0 ? [names(devices.controllers, filters.controllers)] : []),
-			...(filters.teams.length > 0
-				? [filters.teams.map((id) => teamName(devices, id)).join(', ')]
+			...(filters.groups.length > 0
+				? [filters.groups.map((id) => groupName(devices, id, noGroup)).join(', ')]
 				: []),
 			...(filters.areas.length > 0
 				? [
@@ -83,10 +89,15 @@
 		];
 	}
 
-	function teamName(devices: Devices, id: string) {
+	/** The group filter's choice for flights in no group. */
+	export const NO_GROUP_QUEUE = 'No group (queue)';
+	/** The group filter's choice for sessions in no group. */
+	export const NO_GROUP_ORGANISATION = 'No group (organisation)';
+
+	function groupName(devices: Devices, id: string, noGroup: string) {
 		return id === 'none'
-			? 'No team (queue)'
-			: (devices.teams.find((team) => team.id === id)?.name ?? 'Unknown team');
+			? noGroup
+			: (devices.groups.find((group) => group.id === id)?.name ?? 'Unknown group');
 	}
 
 	function pilotName(devices: Devices, id: string) {
@@ -109,7 +120,8 @@
 		filters: applied,
 		none,
 		devices,
-		admin,
+		groupFilter,
+		noGroup = NO_GROUP_QUEUE,
 		filtering,
 		ownCount = 0,
 		onchange,
@@ -122,8 +134,11 @@
 		none: T;
 		/** The options, narrowed by the applied filters. */
 		devices: Devices;
-		/** Teams are for admins: members see their own teams' anyway. */
-		admin: boolean;
+		/** Whether to offer the group filter: only to someone who sees more
+		 * than one group's flights. */
+		groupFilter: boolean;
+		/** The group filter's choice for no group. */
+		noGroup?: string;
 		/** Whether any filter is applied, the list's own too: Clear filters. */
 		filtering: boolean;
 		/** How many of the list's own filters are applied. */
@@ -161,10 +176,10 @@
 			label: pilot.name ?? 'Unknown pilot'
 		}))
 	);
-	const teamOptions = $derived(
-		devices.teams.map((team) => ({
-			value: team.id ?? 'none',
-			label: team.name ?? 'No team (queue)'
+	const groupOptions = $derived(
+		devices.groups.map((group) => ({
+			value: group.id ?? 'none',
+			label: group.name ?? noGroup
 		}))
 	);
 	const areaOptions = $derived(devices.areas.map((area) => ({ value: area.id, label: area.name })));
@@ -228,13 +243,13 @@
 		value={draft.controllers}
 		onchange={(controllers) => change({ controllers } as Partial<T>)}
 	/>
-	{#if admin}
+	{#if groupFilter || draft.groups.length > 0}
 		<MultiSelect
-			label="Teams"
-			placeholder="All teams"
-			options={teamOptions}
-			value={draft.teams}
-			onchange={(teams) => change({ teams } as Partial<T>)}
+			label="Groups"
+			placeholder="All groups"
+			options={groupOptions}
+			value={draft.groups}
+			onchange={(groups) => change({ groups } as Partial<T>)}
 		/>
 	{/if}
 	<!-- Once the organisation has areas: a flight passes when it has time in any of them. -->

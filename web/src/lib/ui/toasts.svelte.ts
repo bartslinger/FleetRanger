@@ -1,5 +1,5 @@
 // Toast notifications: short confirmations of a completed action, such as
-// "Team saved.", shown by <Toasts> at the top right. Without actions they
+// "Group saved.", shown by <Toasts> at the top right. Without actions they
 // dismiss themselves, as Carbon allows; errors belong inline, near the cause.
 
 export interface Toast {

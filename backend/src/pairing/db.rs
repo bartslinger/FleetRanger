@@ -40,8 +40,8 @@ pub struct OpenCode {
     pub id: Uuid,
     pub code: String,
     pub created_by: String,
-    /// The team the controller joins; None for none.
-    pub team: Option<String>,
+    /// The group the controller joins; None for the organisation.
+    pub group: Option<String>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
 }
@@ -55,7 +55,7 @@ pub async fn open_codes(
 ) -> sqlx::Result<Vec<OpenCode>> {
     sqlx::query_as!(
         OpenCode,
-        r#"select c.id, c.code, u.name as created_by, g.name as "team?", c.created_at, c.expires_at
+        r#"select c.id, c.code, u.name as created_by, g.name as "group?", c.created_at, c.expires_at
            from pairing_codes c
            join users u on u.id = c.created_by
            left join groups g on g.id = c.group_id

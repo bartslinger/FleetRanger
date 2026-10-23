@@ -6,13 +6,13 @@ import { get, remove, send, type PairingCode } from '#lib/server/backend.js';
 
 export async function load({ fetch }) {
 	return {
-		// Where the controller can go: the teams where the user may pair, and
+		// Where the controller can go: the groups where the user may pair, and
 		// the organisation itself when they may pair there.
-		destinations: await get<{ teams: { id: string; name: string }[]; organisation: boolean }>(
+		destinations: await get<{ groups: { id: string; name: string }[]; organisation: boolean }>(
 			fetch,
-			'/api/pairing-codes/teams'
+			'/api/pairing-codes/groups'
 		),
-		// Theirs, and those of the teams whose controllers they manage.
+		// Theirs, and those of the groups whose controllers they manage.
 		codes: await get<PairingCode[]>(fetch, '/api/pairing-codes')
 	};
 }
@@ -20,15 +20,15 @@ export async function load({ fetch }) {
 export const actions = {
 	create: async ({ fetch, request }) => {
 		const form = await request.formData();
-		const team = String(form.get('team_id') ?? '');
-		if (!team) return fail(400, { teamError: 'Choose a team for the controller.' });
+		const group = String(form.get('group_id') ?? '');
+		if (!group) return fail(400, { groupError: 'Choose a group for the controller.' });
 		const hours = Number(form.get('hours'));
-		const result = await send<{ code: string; team: string | null; expires_at: string }>(
+		const result = await send<{ code: string; group: string | null; expires_at: string }>(
 			fetch,
 			'POST',
 			'/api/pairing-codes',
-			// "organisation": no team, as the select's empty value is its prompt.
-			{ team: team === 'organisation' ? null : team, hours }
+			// "organisation": no group, as the select's empty value is its prompt.
+			{ group: group === 'organisation' ? null : group, hours }
 		);
 		if (!result.ok) return fail(result.status, { message: result.message });
 		return { created: result.data };

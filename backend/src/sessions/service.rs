@@ -111,7 +111,7 @@ pub async fn create(
     if let Some(group) = group
         && !flights::db::group_exists(db, group).await?
     {
-        return Err(ApiError::Invalid("Choose an existing team.".to_owned()));
+        return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
     not_archived(db, &flight_ids).await?;
     Ok(db::split(db, &flight_ids, group).await?)
@@ -173,6 +173,8 @@ pub async fn remove(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResul
 #[derive(Serialize)]
 pub struct Session {
     pub id: Uuid,
+    #[serde(flatten)]
+    pub group: db::OwnGroup,
     /// In takeoff order.
     pub flights: Vec<FlightDetail>,
 }
@@ -185,8 +187,9 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<Session> {
     if flights.is_empty() {
         return Err(ApiError::NotFound);
     }
+    let group = db::own_group(db, id).await?.ok_or(ApiError::NotFound)?;
     flights::service::link_equipment(actor, &mut flights);
-    Ok(Session { id, flights })
+    Ok(Session { id, group, flights })
 }
 
 /// Merges sessions into the one that starts first, and returns it.
@@ -249,7 +252,7 @@ pub async fn set_group(
     if let Some(group) = group
         && !flights::db::group_exists(db, group).await?
     {
-        return Err(ApiError::Invalid("Choose an existing team.".to_owned()));
+        return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
     if !db::set_group(db, id, group, with_flights).await? {
         return Err(ApiError::NotFound);

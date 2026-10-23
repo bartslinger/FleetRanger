@@ -84,7 +84,7 @@ pub fn change_sessions(grants: &Grants, session_groups: &[Option<Uuid>]) -> ApiR
         grants,
         Permission::SessionsEdit,
         session_groups,
-        "You can only change sessions of your own teams.",
+        "You can only change sessions of your own groups.",
     )
 }
 
@@ -143,7 +143,7 @@ pub fn change_flights(
         grants,
         permission,
         flight_groups,
-        "You can only change flights of your own teams.",
+        "You can only change flights of your own groups.",
     )
 }
 
@@ -181,12 +181,12 @@ mod tests {
         Grants::from_stored([(None, "viewer".to_owned())]).unwrap()
     }
 
-    /// A member of these teams: Pilot and Editor in each.
-    fn member(teams: &[Uuid]) -> Grants {
+    /// A member of these groups: Pilot and Editor in each.
+    fn member(groups: &[Uuid]) -> Grants {
         Grants::from_stored(
-            teams
+            groups
                 .iter()
-                .flat_map(|team| ["pilot", "editor"].map(|role| (Some(*team), role.to_owned()))),
+                .flat_map(|group| ["pilot", "editor"].map(|role| (Some(*group), role.to_owned()))),
         )
         .unwrap()
     }

@@ -20,7 +20,8 @@ export async function load({ fetch, url }) {
 	api.set('size', cards ? String(PERIOD_SIZE) : String(state.size));
 	// The cards' map shows all their tracks, coarse.
 	if (cards) api.set('tracks', '1');
-	// The filters' options: the equipment and teams of flights in a session.
+	// The filters' options: the equipment of flights in a session, and the
+	// sessions' own groups.
 	const options = new URLSearchParams(filters);
 	options.set('session', 'any');
 	const [{ sessions, total }, choices, devices] = await Promise.all([

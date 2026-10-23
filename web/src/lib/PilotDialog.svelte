@@ -12,7 +12,7 @@
 
 	interface Props {
 		/** The flights to change. */
-		flights: { id: string; pilot_id: string | null; team_id: string | null }[];
+		flights: { id: string; pilot_id: string | null; group_id: string | null }[];
 		/** Which flights those are, e.g. "All 3 flights in the session." */
 		which: string;
 		choices: Parameters<typeof pilotOptions>[0];
@@ -57,7 +57,7 @@
 	<Select label="Pilot" name="pilot" {options} value={choice} />
 	<p class="help">
 		{which}
-		The flights keep their team.
+		The flights keep their group.
 	</p>
 </Modal>
 

@@ -24,8 +24,8 @@ pub struct FlightSummary {
     pub pilot_id: Option<Uuid>,
     pub pilot_name: Option<String>,
     /// None: in the organisation's queue.
-    pub team_id: Option<Uuid>,
-    pub team_name: Option<String>,
+    pub group_id: Option<Uuid>,
+    pub group_name: Option<String>,
     pub archived_at: Option<DateTime<Utc>>,
 }
 
@@ -43,9 +43,10 @@ pub struct Filter {
     pub from: Option<DateTime<Utc>>,
     /// Only flights taking off before this instant.
     pub to: Option<DateTime<Utc>>,
-    /// Only the flights of these teams, if given, and with `queue` those
-    /// without a team.
-    pub team_ids: Option<Vec<Uuid>>,
+    /// Only the flights of these groups, if given, and with `queue` those
+    /// without a group. The Sessions list applies it to the sessions' own
+    /// groups instead.
+    pub group_ids: Option<Vec<Uuid>>,
     pub queue: bool,
     /// Only the flights of these pilots, if given, and with `unknown_pilot`
     /// those without a pilot.
@@ -99,7 +100,8 @@ pub struct Sort {
 }
 
 // The visibility condition is the same in every flight query: the scope sees
-// every flight ($all), or the user's own flights and those of the user's team.
+// every flight ($all), or the user's own flights and those of the groups where
+// they hold `flights.read`.
 // Keep the copies in step; the tests check them against each other.
 
 /// One page of the flights in the scope that pass the filter, in the given order.
@@ -122,8 +124,8 @@ pub async fn list(
                 rc_serial,
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
-                group_id as team_id,
-                (select g.name from groups g where g.id = flights.group_id) as "team_name?",
+                group_id,
+                (select g.name from groups g where g.id = flights.group_id) as "group_name?",
                 archived_at
          from flights
          where ($5
@@ -172,7 +174,7 @@ pub async fn list(
         filter.in_session,
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -199,8 +201,8 @@ pub struct FlightDetail {
     pub pilot_id: Option<Uuid>,
     pub pilot_name: Option<String>,
     /// None: in the organisation's queue.
-    pub team_id: Option<Uuid>,
-    pub team_name: Option<String>,
+    pub group_id: Option<Uuid>,
+    pub group_name: Option<String>,
     /// GeoJSON LineString: [longitude, latitude, height above takeoff].
     pub track: Value,
     pub metrics: Value,
@@ -234,8 +236,8 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
                 rc_serial,
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
-                group_id as team_id,
-                (select g.name from groups g where g.id = flights.group_id) as "team_name?",
+                group_id,
+                (select g.name from groups g where g.id = flights.group_id) as "group_name?",
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
                 (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_group_id?",
@@ -281,8 +283,8 @@ pub async fn of_session(
                 rc_serial,
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
-                group_id as team_id,
-                (select g.name from groups g where g.id = flights.group_id) as "team_name?",
+                group_id,
+                (select g.name from groups g where g.id = flights.group_id) as "group_name?",
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
                 (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_group_id?",
@@ -328,8 +330,8 @@ pub async fn details(
                 rc_serial,
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
-                group_id as team_id,
-                (select g.name from groups g where g.id = flights.group_id) as "team_name?",
+                group_id,
+                (select g.name from groups g where g.id = flights.group_id) as "group_name?",
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
                 (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_group_id?",
@@ -387,7 +389,7 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
         filter.in_session,
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -427,7 +429,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
         filter.in_session,
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -515,7 +517,7 @@ pub async fn neighbours(
         id,
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -574,7 +576,7 @@ pub async fn aircraft_of(
         filter.in_session,
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -624,7 +626,7 @@ pub async fn controllers_of(
         filter.in_session,
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -636,23 +638,23 @@ pub async fn controllers_of(
     .await
 }
 
-/// A team to offer in the logbook's filter; no id for the flights without a
-/// team (the organisation queue).
+/// A group to offer in the lists' filter; no id for the flights without a
+/// group (the organisation queue) or the sessions in the organisation.
 #[derive(Serialize)]
-pub struct TeamOption {
+pub struct GroupOption {
     pub id: Option<Uuid>,
     pub name: Option<String>,
 }
 
-/// The teams to offer in the logbook's filter, as `aircraft_of` does for
+/// The groups to offer in the logbook's filter, as `aircraft_of` does for
 /// drones: those with flights passing the other filters, and the chosen ones.
-pub async fn teams_in(
+pub async fn groups_in(
     db: &PgPool,
     scope: &FlightScope,
     filter: &Filter,
-) -> sqlx::Result<Vec<TeamOption>> {
+) -> sqlx::Result<Vec<GroupOption>> {
     sqlx::query_as!(
-        TeamOption,
+        GroupOption,
         r#"select f.group_id as "id?", g.name as "name?"
            from flights f
            left join groups g on g.id = f.group_id
@@ -676,7 +678,7 @@ pub async fn teams_in(
            order by lower(g.name) nulls last"#,
         scope.all,
         scope.user_id,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.aircraft_serials.as_deref(),
         filter.rc_serials.as_deref(),
@@ -737,7 +739,7 @@ pub async fn areas_in(
         filter.in_session,
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
@@ -795,7 +797,7 @@ pub async fn pilots_in(
         filter.in_session,
         filter.from,
         filter.to,
-        filter.team_ids.as_deref(),
+        filter.group_ids.as_deref(),
         filter.queue,
         filter.archived,
         filter.area_ids.as_deref(),
@@ -875,7 +877,7 @@ pub async fn set_pilot(db: &PgPool, ids: &[Uuid], pilot_id: Option<Uuid>) -> sql
 
 /// Moves these flights to a group, or to the queue. They keep their pilot and
 /// their session.
-pub async fn set_team(db: &PgPool, ids: &[Uuid], group_id: Option<Uuid>) -> sqlx::Result<u64> {
+pub async fn set_group(db: &PgPool, ids: &[Uuid], group_id: Option<Uuid>) -> sqlx::Result<u64> {
     let result = sqlx::query!(
         "update flights set group_id = $2 where id = any($1)",
         ids,
@@ -941,43 +943,43 @@ pub async fn any_archived(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<bool> {
 pub struct PilotChoice {
     pub id: Uuid,
     pub name: String,
-    /// One of the given group's own pilots (its members with Pilot).
-    pub in_group: bool,
+    /// The groups they are a member of with Pilot, so a list for a group's
+    /// flights can put its own pilots first.
+    pub group_ids: Vec<Uuid>,
 }
 
-/// Everyone who flies, by name; with a group, its own pilots first.
-pub async fn pilot_choices(db: &PgPool, group_id: Option<Uuid>) -> sqlx::Result<Vec<PilotChoice>> {
+/// Everyone who flies, by name.
+pub async fn pilot_choices(db: &PgPool) -> sqlx::Result<Vec<PilotChoice>> {
     sqlx::query_as!(
         PilotChoice,
         r#"select u.id, u.name,
-                  exists (select 1 from group_members m
-                          where m.user_id = u.id and m.group_id = $1
-                            and m.role = any($2)) as "in_group!"
+                  array(select m.group_id from group_members m
+                        where m.user_id = u.id and m.role = any($1)
+                        order by m.group_id) as "group_ids!"
            from users u
            where u.archived_at is null
              and (exists (select 1 from group_members m
-                          where m.user_id = u.id and m.role = any($2))
+                          where m.user_id = u.id and m.role = any($1))
                   or exists (select 1 from organisation_roles r
-                             where r.user_id = u.id and r.role = any($2)))
-           order by 3 desc, lower(u.name), u.id"#,
-        group_id,
+                             where r.user_id = u.id and r.role = any($1)))
+           order by lower(u.name), u.id"#,
         &policy::roles_granting(Permission::FlightsFlyFor),
     )
     .fetch_all(db)
     .await
 }
 
-/// A group flights can be moved to (still called a team in the API).
+/// A group to choose, e.g. to move flights to.
 #[derive(Serialize)]
-pub struct TeamChoice {
+pub struct GroupChoice {
     pub id: Uuid,
     pub name: String,
 }
 
 /// These groups, by name.
-pub async fn groups_named(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<TeamChoice>> {
+pub async fn groups_named(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<GroupChoice>> {
     sqlx::query_as!(
-        TeamChoice,
+        GroupChoice,
         "select id, name from groups where id = any($1) order by lower(name), id",
         ids,
     )
@@ -985,9 +987,9 @@ pub async fn groups_named(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<TeamCho
     .await
 }
 
-pub async fn group_choices(db: &PgPool) -> sqlx::Result<Vec<TeamChoice>> {
+pub async fn group_choices(db: &PgPool) -> sqlx::Result<Vec<GroupChoice>> {
     sqlx::query_as!(
-        TeamChoice,
+        GroupChoice,
         "select id, name from groups order by lower(name), id",
     )
     .fetch_all(db)
@@ -1053,22 +1055,22 @@ mod tests {
         ids
     }
 
-    /// A member sees their own flights, also from an earlier team, and all
-    /// flights of their current team; not other teams or the queue.
+    /// A member sees their own flights, also from an earlier group, and all
+    /// flights of their current group; not other groups or the queue.
     #[sqlx::test]
-    async fn member_sees_own_and_team_flights(db: PgPool) {
+    async fn member_sees_own_and_group_flights(db: PgPool) {
         let north = testing::group(&db, "North").await;
         let south = testing::group(&db, "South").await;
         let me = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let teammate = insert_id(&db, "insert into users (name) values ('B') returning id").await;
+        let fellow = insert_id(&db, "insert into users (name) values ('B') returning id").await;
         let other = insert_id(&db, "insert into users (name) values ('C') returning id").await;
-        for (pilot, team) in [(me, north), (teammate, north), (other, south)] {
-            testing::join(&db, pilot, team).await;
+        for (pilot, group) in [(me, north), (fellow, north), (other, south)] {
+            testing::join(&db, pilot, group).await;
         }
 
         let mut expected = vec![
             flight(&db, Some(north), Some(me)).await,
-            flight(&db, Some(north), Some(teammate)).await,
+            flight(&db, Some(north), Some(fellow)).await,
             flight(&db, Some(north), None).await,
             // Flown for South before moving to North.
             flight(&db, Some(south), Some(me)).await,
@@ -1148,14 +1150,14 @@ mod tests {
                     to: Some(Utc::now() - chrono::Duration::minutes(45)),
                     ..Filter::default()
                 },
-                // These flights have no team: the queue holds them all, a team none.
+                // These flights have no group: the queue holds them all, a group none.
                 Filter {
-                    team_ids: Some(Vec::new()),
+                    group_ids: Some(Vec::new()),
                     queue: true,
                     ..Filter::default()
                 },
                 Filter {
-                    team_ids: Some(vec![Uuid::nil()]),
+                    group_ids: Some(vec![Uuid::nil()]),
                     ..Filter::default()
                 },
                 // Nor a pilot: "Unknown" holds them all, a pilot none.
@@ -1170,7 +1172,7 @@ mod tests {
                 },
             ]
         };
-        let [_, _, by_drone, by_time, queue, a_team, unknown, a_pilot] = filters();
+        let [_, _, by_drone, by_time, queue, a_group, unknown, a_pilot] = filters();
         for (filter, expected) in [(&unknown, 5), (&a_pilot, 0)] {
             assert_eq!(count(&db, &scope, filter).await.unwrap(), expected);
         }
@@ -1186,7 +1188,7 @@ mod tests {
             5
         );
         assert!(
-            list(&db, &scope, &a_team, &none(), 100, 0)
+            list(&db, &scope, &a_group, &none(), 100, 0)
                 .await
                 .unwrap()
                 .is_empty()
@@ -1303,12 +1305,12 @@ mod tests {
         );
     }
 
-    /// A user without a team or flights sees nothing unless they see all.
+    /// A user without a group or flights sees nothing unless they see all.
     #[sqlx::test]
-    async fn user_without_team_sees_nothing(db: PgPool) {
+    async fn user_without_group_sees_nothing(db: PgPool) {
         let user = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let team = testing::group(&db, "North").await;
-        flight(&db, Some(team), None).await;
+        let group = testing::group(&db, "North").await;
+        flight(&db, Some(group), None).await;
         flight(&db, None, None).await;
         let member = testing::scope(&db, user).await;
         assert!(visible(&db, &member).await.is_empty());
@@ -1333,9 +1335,9 @@ mod tests {
                 .unwrap()
         };
 
-        set_team(&db, &[flight], None).await.unwrap();
+        set_group(&db, &[flight], None).await.unwrap();
         assert_eq!(state().await, (Some(pilot), None, Some(session)));
-        set_team(&db, &[flight], Some(north)).await.unwrap();
+        set_group(&db, &[flight], Some(north)).await.unwrap();
         set_pilot(&db, &[flight], None).await.unwrap();
         assert_eq!(state().await, (None, Some(north), Some(session)));
     }
@@ -1393,14 +1395,14 @@ mod tests {
         ] {
             assert_eq!(flies(&db, who).await.unwrap(), expected);
         }
-        // The pilot list agrees, with the group's own pilots first.
-        let listed: Vec<Uuid> = pilot_choices(&db, Some(north))
+        // The pilot list agrees, with the groups each flies for as a member.
+        let listed: Vec<(Uuid, Vec<Uuid>)> = pilot_choices(&db)
             .await
             .unwrap()
             .into_iter()
-            .map(|pilot| pilot.id)
+            .map(|pilot| (pilot.id, pilot.group_ids))
             .collect();
-        assert_eq!(listed, [member, guest]);
+        assert_eq!(listed, [(guest, vec![]), (member, vec![north])]);
     }
 
     /// Only flights without a session can be archived: a batch with a flight

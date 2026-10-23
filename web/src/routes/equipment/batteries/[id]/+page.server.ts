@@ -3,7 +3,7 @@ import { get, send, type Battery, type BatteryDetail } from '#lib/server/backend
 
 export async function load({ fetch, locals, params }) {
 	const battery = await get<BatteryDetail>(fetch, `/api/batteries/${params.id}`);
-	// Batteries have no team, so only admins name them.
+	// Batteries have no group, so only admins name them.
 	return { battery, edit: locals.account?.role === 'admin' };
 }
 

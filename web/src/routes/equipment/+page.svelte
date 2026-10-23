@@ -52,14 +52,14 @@
 		drones: [
 			{ key: 'serial', header: 'Serial number', identifier: true },
 			{ key: 'name', header: 'Name' },
-			{ key: 'team_name', header: 'Team' },
+			{ key: 'group_name', header: 'Group' },
 			...figures
 		],
 		// As on a controller's page.
 		controllers: [
 			{ key: 'serial', header: 'Serial number', identifier: true },
 			{ key: 'name', header: 'Name' },
-			{ key: 'team_name', header: 'Team' },
+			{ key: 'group_name', header: 'Group' },
 			{
 				key: 'paired',
 				header: 'Pairing',
@@ -115,7 +115,7 @@
 
 <!-- The way to pair a controller, on the controllers' tab only (user's
      request, 2026-10-21; carbon-expert's advice): the table toolbar's primary
-     action, as "New …" on Users and Teams, or the empty state's. A link in a
+     action, as "New …" on Users and Groups, or the empty state's. A link in a
      button's look, as it opens the page that does it. -->
 {#snippet pair()}
 	<Button href={resolve('/pair')}>Pair a controller</Button>
@@ -150,7 +150,7 @@
 		<EmptyState
 			title="No batteries yet"
 			body={data.account?.role === 'member'
-				? 'Batteries appear here once your team flies with them.'
+				? 'Batteries appear here once your group flies with them.'
 				: 'Batteries appear here when flight logs that use them are imported.'}
 		/>
 	{:else}
@@ -171,7 +171,7 @@
 		<EmptyState
 			title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
 			body={data.account?.role === 'member'
-				? 'Drones and remote controllers appear here once your team flies them or an admin assigns them to your team.'
+				? 'Drones and remote controllers appear here once your group flies them or an admin assigns them to your group.'
 				: kind === 'drones'
 					? 'Drones appear here when flight logs that use them are imported.'
 					: 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with a pairing code.'}

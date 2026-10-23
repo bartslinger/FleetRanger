@@ -13,7 +13,7 @@
 		air_time_s: number;
 		distance_m: number;
 		pilot_name: string | null;
-		team_name: string | null;
+		group_name: string | null;
 		areas: { name: string; air_time_s: number }[];
 	}
 
@@ -37,12 +37,17 @@
 				flights.map((flight) => flight.pilot_name),
 				'Unknown'
 			),
-			teams: names(
-				flights.map((flight) => flight.team_name),
+			/** The flights' groups: those a suggested session would get. */
+			groups: names(
+				flights.map((flight) => flight.group_name),
 				'None (organisation queue)'
 			)
 		};
 	}
+
+	/** A session's own group, as its facts say it. */
+	export const sessionGroup = (session: { group_name: string | null }) =>
+		session.group_name ?? 'None (organisation)';
 </script>
 
 <script lang="ts">
@@ -51,11 +56,16 @@
 	interface Props {
 		flights: Flight[];
 		timeZone: string;
+		/** A session's own group (see `sessionGroup`); without it, the
+		 * flights' groups, as for a suggested session. */
+		group?: string;
 		/** E.g. a button to change the pilot, after the pilot's name. */
 		pilotAction?: Snippet;
+		/** E.g. a button to change the session's group, after its name. */
+		groupAction?: Snippet;
 	}
 
-	let { flights, timeZone, pilotAction }: Props = $props();
+	let { flights, timeZone, group, pilotAction, groupAction }: Props = $props();
 
 	const facts = $derived(summary(flights, timeZone));
 	const distanceM = $derived(flights.reduce((total, flight) => total + flight.distance_m, 0));
@@ -102,8 +112,10 @@
 		</dd>
 	</div>
 	<div>
-		<dt>Team</dt>
-		<dd>{facts.teams}</dd>
+		<dt>Group</dt>
+		<dd class="with-action">
+			{group ?? facts.groups}{#if groupAction}{@render groupAction()}{/if}
+		</dd>
 	</div>
 </dl>
 <dl class="facts pairs">

@@ -72,10 +72,10 @@
 	const shown = $derived(chosen.length > 0 ? chosen : flights);
 	const facts = $derived(summary(shown, data.timeZone));
 
-	// Admins change any flight, members those of their own team.
+	// Admins change any flight, members those of their own group.
 	const mayChange = (flight: Row) =>
 		data.choices.admin ||
-		(flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id));
+		(flight.group_id !== null && data.choices.own_team_ids.includes(flight.group_id));
 	const canChange = $derived(chosen.every(mayChange));
 
 	// After creating: the flights left out are a suggestion to look at next,
@@ -169,7 +169,7 @@
 	crumb={`Suggested session ${day(facts.start, data.timeZone)}`}
 	status="Suggested"
 	description={`${facts.span} · ${flightsLabel(shown.length)} · ${duration(facts.airTime)} in the air`}
-	phoneDescription={`${facts.span} · ${facts.pilots} · ${facts.teams}`}
+	phoneDescription={`${facts.span} · ${facts.pilots} · ${facts.groups}`}
 	breadcrumb={[{ href: `${resolve('/flights')}${list}`, label: 'Suggested sessions' }]}
 >
 	{#snippet actions()}
@@ -249,7 +249,7 @@
 	{:else if !canChange}
 		<Column narrow>
 			<InlineNotification kind="info" title="You can’t create this session">
-				It has flights of another team. Leave them out, or ask an admin.
+				It has flights of another group. Leave them out, or ask an admin.
 			</InlineNotification>
 		</Column>
 	{/if}

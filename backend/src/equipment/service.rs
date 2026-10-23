@@ -11,7 +11,7 @@ use crate::{
 /// What is entered for a drone or controller; all optional.
 pub struct EquipmentInput {
     pub name: Option<String>,
-    pub team_id: Option<Uuid>,
+    pub group_id: Option<Uuid>,
 }
 
 /// The equipment the actor sees: with `equipment.read` on its group, or
@@ -30,8 +30,8 @@ pub async fn get(db: &PgPool, actor: &Actor, kind: Kind, id: Uuid) -> ApiResult<
         .ok_or(ApiError::NotFound)
 }
 
-/// Renames and moves a drone or controller; the team must be an existing
-/// group.
+/// Renames and moves a drone or controller to an existing group, or to the
+/// organisation.
 pub async fn update(
     db: &PgPool,
     actor: &Actor,
@@ -48,15 +48,15 @@ pub async fn update(
     policy::change_equipment(
         &actor.grants,
         item.group_id,
-        input.team_id,
+        input.group_id,
         name != item.name.as_deref(),
     )?;
-    if let Some(group_id) = input.team_id
+    if let Some(group_id) = input.group_id
         && !db::group_exists(db, group_id).await?
     {
-        return Err(ApiError::Invalid("Choose an active team.".to_owned()));
+        return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
-    if !db::update(db, kind, id, name, input.team_id).await? {
+    if !db::update(db, kind, id, name, input.group_id).await? {
         return Err(ApiError::NotFound);
     }
     get(db, actor, kind, id).await

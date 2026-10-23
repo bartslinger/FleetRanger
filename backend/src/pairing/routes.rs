@@ -28,7 +28,7 @@ where
 {
     Router::new()
         .route("/api/pairing-codes", get(open_codes).post(create))
-        .route("/api/pairing-codes/teams", get(teams))
+        .route("/api/pairing-codes/groups", get(destinations))
         .route("/api/pairing-codes/{id}", delete(revoke))
         .route("/api/controller", get(me).delete(unpair_self))
         .route("/api/controller/pairing", post(pair))
@@ -39,8 +39,8 @@ where
 
 #[derive(Deserialize)]
 struct Create {
-    /// The team the controller joins; none for the organisation.
-    team: Option<Uuid>,
+    /// The group the controller joins; none for the organisation.
+    group: Option<Uuid>,
     /// How long the code stays valid.
     hours: i64,
 }
@@ -51,7 +51,7 @@ async fn create(
     Json(body): Json<Create>,
 ) -> ApiResult<Json<Created>> {
     Ok(Json(
-        service::create(&db, &actor, body.team, body.hours).await?,
+        service::create(&db, &actor, body.group, body.hours).await?,
     ))
 }
 
@@ -69,8 +69,8 @@ async fn revoke(
 }
 
 /// Where a controller paired with the actor's code can go.
-async fn teams(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Destinations>> {
-    Ok(Json(service::teams(&db, &actor).await?))
+async fn destinations(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Destinations>> {
+    Ok(Json(service::destinations(&db, &actor).await?))
 }
 
 #[derive(Deserialize)]

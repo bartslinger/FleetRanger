@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                group_id as team_id,\n                (select g.name from groups g where g.id = flights.group_id) as \"team_name?\",\n                track, metrics,\n                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_id?\",\n                (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_group_id?\",\n                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_id?\",\n                (select r.group_id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_group_id?\",\n                (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as \"battery_id?\",\n                (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0) as \"battery_name?\",\n                archived_at,\n                (select coalesce(jsonb_agg(jsonb_build_object(\n                            'id', a.id, 'name', a.name,\n                            'air_time_s', fa.air_time_s, 'distance_m', fa.distance_m)\n                            order by fa.air_time_s desc, lower(a.name), a.id), '[]')\n                 from flight_areas fa join areas a on a.id = fa.area_id\n                 where fa.flight_id = flights.id) as \"areas!\"\n         from flights\n         where session_id = $1\n           and ($2\n                or pilot_id = $3\n                or group_id = any($4))\n         order by takeoff_at, id",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                group_id,\n                (select g.name from groups g where g.id = flights.group_id) as \"group_name?\",\n                track, metrics,\n                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_id?\",\n                (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_group_id?\",\n                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_id?\",\n                (select r.group_id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_group_id?\",\n                (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as \"battery_id?\",\n                (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0) as \"battery_name?\",\n                archived_at,\n                (select coalesce(jsonb_agg(jsonb_build_object(\n                            'id', a.id, 'name', a.name,\n                            'air_time_s', fa.air_time_s, 'distance_m', fa.distance_m)\n                            order by fa.air_time_s desc, lower(a.name), a.id), '[]')\n                 from flight_areas fa join areas a on a.id = fa.area_id\n                 where fa.flight_id = flights.id) as \"areas!\"\n         from flights\n         where session_id = $1\n           and ($2\n                or pilot_id = $3\n                or group_id = any($4))\n         order by takeoff_at, id",
   "describe": {
     "columns": [
       {
@@ -111,7 +111,7 @@
       },
       {
         "ordinal": 11,
-        "name": "team_id",
+        "name": "group_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -122,7 +122,7 @@
       },
       {
         "ordinal": 12,
-        "name": "team_name?",
+        "name": "group_name?",
         "type_info": "Text",
         "origin": "Expression"
       },
@@ -236,5 +236,5 @@
       null
     ]
   },
-  "hash": "9d473ce5ec709fb91dcb477d8ff4e024e1d9f37f8d06ec73a4762081c9245e24"
+  "hash": "ac01c3366b73176bef921048073d59664a0a9852f28d6576eb868b578e8ce32c"
 }
