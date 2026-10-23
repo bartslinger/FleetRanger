@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update flights set pilot_id = $2,\n             team_id = coalesce($3, team_id), group_id = coalesce($3, group_id)\n         where id = any($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5db93c59e2d9933df85ba98ae2e14bd4d31d5cdc21eda58c69544fa7fcb4a9b4"
+}

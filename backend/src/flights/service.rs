@@ -9,7 +9,7 @@ use super::db::{
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    policy::{self, Role, TeamChange},
+    policy::{self, Permission, TeamChange},
 };
 
 /// One page of the flights the actor may see that pass the filter, and how
@@ -102,49 +102,41 @@ pub async fn link_equipment(
 /// What the actor can change in the logbook, so it offers only that.
 #[derive(Serialize)]
 pub struct Choices {
-    /// The teams whose flights a member can change; none for admins and viewers.
+    /// The groups whose flights the actor can change, when that isn't all of
+    /// them.
     pub own_team_ids: Vec<Uuid>,
-    /// Admins change any flight and can move flights between teams.
+    /// Changes any flight and can move flights between groups.
     pub admin: bool,
-    /// A pilot in several teams is a choice per team: the flights move to it.
+    /// A pilot in several groups is a choice per group: the flights move to it.
     pub pilots: Vec<PilotChoice>,
-    /// Teams to move flights to, for admins.
+    /// Groups to move flights to.
     pub teams: Vec<TeamChoice>,
 }
 
 pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
-    Ok(match actor.role {
-        Role::Admin => Choices {
-            own_team_ids: Vec::new(),
-            admin: true,
-            pilots: db::pilot_choices(db, None).await?,
-            teams: db::team_choices(db).await?,
+    let set_pilot = actor.grants.scope(Permission::FlightsSetPilot);
+    let moves = actor.grants.may(Permission::FlightsMove, None);
+    let pilots = if set_pilot.all {
+        db::pilot_choices(db, None).await?
+    } else if set_pilot.groups.is_empty() {
+        Vec::new()
+    } else {
+        db::pilot_choices(db, Some(&set_pilot.groups)).await?
+    };
+    Ok(Choices {
+        own_team_ids: if set_pilot.all {
+            Vec::new()
+        } else {
+            set_pilot.groups
         },
-        Role::Member => {
-            let teams = db::own_teams(db, actor.user_id).await?;
-            if teams.is_empty() {
-                return Ok(Choices::none());
-            }
-            Choices {
-                pilots: db::pilot_choices(db, Some(&teams)).await?,
-                own_team_ids: teams,
-                admin: false,
-                teams: Vec::new(),
-            }
-        }
-        Role::AllFlights => Choices::none(),
+        admin: moves,
+        pilots,
+        teams: if moves {
+            db::group_choices(db).await?
+        } else {
+            Vec::new()
+        },
     })
-}
-
-impl Choices {
-    fn none() -> Self {
-        Self {
-            own_team_ids: Vec::new(),
-            admin: false,
-            pilots: Vec::new(),
-            teams: Vec::new(),
-        }
-    }
 }
 
 /// Sets the pilot of a batch of flights, all or none, chosen with one of
@@ -158,10 +150,10 @@ pub async fn set_pilot(
     team_id: Option<Uuid>,
 ) -> ApiResult<u64> {
     let ids = distinct(ids)?;
-    let flight_teams = db::teams_of(db, &ids).await?.ok_or(ApiError::NotFound)?;
-    let new_pilot_team = match pilot_id {
+    let flight_groups = db::groups_of(db, &ids).await?.ok_or(ApiError::NotFound)?;
+    let new_pilot_group = match pilot_id {
         Some(pilot) => {
-            let teams = db::pilot_teams(db, pilot).await?;
+            let teams = db::pilot_groups(db, pilot).await?;
             Some(match (team_id, teams.as_slice()) {
                 (_, []) => return Err(ApiError::Invalid("Choose an active pilot.".to_owned())),
                 (Some(team), teams) if teams.contains(&team) => team,
@@ -180,54 +172,59 @@ pub async fn set_pilot(
         }
         None => None,
     };
-    let own_teams = db::own_teams(db, actor.user_id).await?;
-    let team = match policy::set_pilot(actor.role, &own_teams, &flight_teams, new_pilot_team)? {
+    let group = match policy::set_pilot(&actor.grants, &flight_groups, new_pilot_group)? {
         TeamChange::Keep => None,
-        TeamChange::Follow(team) => Some(team),
+        TeamChange::Follow(group) => Some(group),
     };
-    Ok(db::set_pilot(db, &ids, pilot_id, team).await?)
+    Ok(db::set_pilot(db, &ids, pilot_id, group).await?)
 }
 
-/// Moves a batch of flights to a team, or to the queue with None. Admins only.
+/// Moves a batch of flights to a group, or to the queue with None.
 pub async fn set_team(
     db: &PgPool,
     actor: &Actor,
     ids: &[Uuid],
-    team_id: Option<Uuid>,
+    group_id: Option<Uuid>,
 ) -> ApiResult<u64> {
-    policy::require_admin(actor)?;
     let ids = distinct(ids)?;
-    if db::teams_of(db, &ids).await?.is_none() {
+    // Refused before not found, so this doesn't tell whether flights exist.
+    let flight_groups = db::groups_of(db, &ids).await?;
+    policy::move_flights(
+        &actor.grants,
+        flight_groups.as_deref().unwrap_or_default(),
+        group_id,
+    )?;
+    if flight_groups.is_none() {
         return Err(ApiError::NotFound);
     }
-    if let Some(team) = team_id
-        && !db::team_is_active(db, team).await?
+    if let Some(group) = group_id
+        && !db::group_exists(db, group).await?
     {
         return Err(ApiError::Invalid("Choose an active team.".to_owned()));
     }
-    Ok(db::set_team(db, &ids, team_id).await?)
+    Ok(db::set_team(db, &ids, group_id).await?)
 }
 
 /// Archives a batch of flights, all or none: they leave their sessions and
 /// every list and total. Returns how many weren't archived yet.
 pub async fn archive(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
-    let ids = changeable(db, actor, ids).await?;
+    let ids = archivable(db, actor, ids).await?;
     Ok(db::archive(db, &ids).await?)
 }
 
 /// Restores a batch of archived flights, without a session. Returns how many
 /// were archived.
 pub async fn restore(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
-    let ids = changeable(db, actor, ids).await?;
+    let ids = archivable(db, actor, ids).await?;
     Ok(db::restore(db, &ids).await?)
 }
 
-/// These flights, once, if they all exist and the actor may change them.
-async fn changeable(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<Vec<Uuid>> {
+/// These flights, once, if they all exist and the actor may archive and
+/// restore them.
+async fn archivable(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<Vec<Uuid>> {
     let ids = distinct(ids)?;
-    let flight_teams = db::teams_of(db, &ids).await?.ok_or(ApiError::NotFound)?;
-    let own_teams = db::own_teams(db, actor.user_id).await?;
-    policy::change_flights(actor.role, &own_teams, &flight_teams)?;
+    let flight_groups = db::groups_of(db, &ids).await?.ok_or(ApiError::NotFound)?;
+    policy::change_flights(&actor.grants, Permission::FlightsArchive, &flight_groups)?;
     Ok(ids)
 }
 

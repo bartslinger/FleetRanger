@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select distinct m.group_id from users u join group_members m on m.user_id = u.id\n         where u.id = $1 and u.archived_at is null and m.role = any($2)\n         order by m.group_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "group_members",
+            "name": "group_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "530da5287c782f5592dea8d5aaabe16ea9ed802506957fe4b743df641399e17d"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, name from teams where archived_at is null order by lower(name), id",
+  "query": "select id, name from groups order by lower(name), id",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "teams",
+            "table": "groups",
             "name": "id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "teams",
+            "table": "groups",
             "name": "name"
           }
         }
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "b8c399fac2101b2a00bd250cc3dddc257a2daf6c5d3b57a3d35a8b7fde332c79"
+  "hash": "ab5fada39700470317ed1f0c2e5d8f0471b3379c2da2f48e5f4fcc1e698c2976"
 }
