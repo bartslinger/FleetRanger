@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { KINDS, lastPilot, type Kind, type Tab } from '#lib/equipment.js';
 	import { dateTime, duration, health } from '#lib/format.js';
+	import { may } from '#lib/permissions.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -149,7 +150,7 @@
 	{#if data.batteries.length === 0}
 		<EmptyState
 			title="No batteries yet"
-			body={data.account?.role === 'member'
+			body={!may(data.account, 'equipment.read', null)
 				? 'Batteries appear here once your group flies with them.'
 				: 'Batteries appear here when flight logs that use them are imported.'}
 		/>
@@ -170,7 +171,7 @@
 	{#if rows.length === 0}
 		<EmptyState
 			title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
-			body={data.account?.role === 'member'
+			body={!may(data.account, 'equipment.read', null)
 				? 'Drones and remote controllers appear here once your group flies them or an admin assigns them to your group.'
 				: kind === 'drones'
 					? 'Drones appear here when flight logs that use them are imported.'

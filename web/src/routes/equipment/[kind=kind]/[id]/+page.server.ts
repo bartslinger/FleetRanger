@@ -1,31 +1,29 @@
 import { fail } from '@sveltejs/kit';
-import {
-	get,
-	remove,
-	send,
-	type Equipment,
-	type FlightChoices,
-	type Group
-} from '#lib/server/backend.js';
+import { may } from '#lib/permissions.js';
+import { get, remove, send, type Equipment, type FlightChoices } from '#lib/server/backend.js';
 import { KINDS } from '#lib/equipment.js';
 
 export async function load({ fetch, locals, params }) {
 	const item = await get<Equipment>(fetch, `${KINDS[params.kind].api}/${params.id}`);
-	const role = locals.account?.role;
-	if (role === 'admin') {
-		const groups = await get<Group[]>(fetch, '/api/groups');
-		return { kind: params.kind, item, edit: 'all' as const, groups };
-	}
-	if (role === 'member' && item.group_id) {
-		// Members rename their own groups' equipment, not another group's they
-		// see through its flights: the groups whose flights they change, as
-		// editors do, until the web app asks for permissions.
-		const choices = await get<FlightChoices>(fetch, '/api/flights/choices');
-		if (choices.own_team_ids.includes(item.group_id)) {
-			return { kind: params.kind, item, edit: 'name' as const, groups: [] };
-		}
-	}
-	return { kind: params.kind, item, edit: 'none' as const, groups: [] };
+	// Renaming needs equipment.rename on its group, moving equipment.move on
+	// both groups: offered are the groups where the user may move it to.
+	const rename = may(locals.account, 'equipment.rename', item.group_id);
+	const move = may(locals.account, 'equipment.move', item.group_id);
+	const groups = move
+		? (await get<FlightChoices>(fetch, '/api/flights/choices')).groups.filter((group) =>
+				may(locals.account, 'equipment.move', group.id)
+			)
+		: [];
+	return {
+		kind: params.kind,
+		item,
+		rename,
+		move,
+		groups,
+		// Into the organisation, out of every group.
+		toOrganisation: may(locals.account, 'equipment.move', null),
+		unpair: may(locals.account, 'controllers.manage', item.group_id)
+	};
 }
 
 export const actions = {

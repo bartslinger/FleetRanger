@@ -100,42 +100,40 @@ pub fn link_equipment(actor: &Actor, flights: &mut [FlightDetail]) {
     }
 }
 
-/// What the actor can change in the logbook, so it offers only that.
+/// The pilots and groups to choose from when changing flights and sessions;
+/// which changes the actor may make is in their permissions (`/api/me`).
 #[derive(Serialize)]
 pub struct Choices {
-    /// The groups whose flights the actor can change, when that isn't all of
-    /// them.
-    pub own_team_ids: Vec<Uuid>,
-    /// Changes any flight and can move flights between groups.
-    pub admin: bool,
     /// Everyone who flies; empty if the actor sets no pilots.
     pub pilots: Vec<PilotChoice>,
-    /// Groups to move flights to.
+    /// The groups where the actor may put flights, sessions or equipment:
+    /// where they hold `flights.move`, `sessions.edit`, `sessions.move` or
+    /// `equipment.move`.
     pub groups: Vec<GroupChoice>,
 }
 
+/// The permissions that choose a group.
+const CHOOSING_GROUPS: [Permission; 4] = [
+    Permission::FlightsMove,
+    Permission::SessionsEdit,
+    Permission::SessionsMove,
+    Permission::EquipmentMove,
+];
+
 pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
-    let set_pilot = actor.grants.scope(Permission::FlightsSetPilot);
-    let moves = actor.grants.may(Permission::FlightsMove, None);
-    let pilots = if set_pilot.all || !set_pilot.groups.is_empty() {
+    let pilots = if actor.grants.anywhere(Permission::FlightsSetPilot) {
         db::pilot_choices(db).await?
     } else {
         Vec::new()
     };
-    Ok(Choices {
-        own_team_ids: if set_pilot.all {
-            Vec::new()
-        } else {
-            set_pilot.groups
-        },
-        admin: moves,
-        pilots,
-        groups: if moves {
-            db::group_choices(db).await?
-        } else {
-            Vec::new()
-        },
-    })
+    let scopes = CHOOSING_GROUPS.map(|permission| actor.grants.scope(permission));
+    let groups = if scopes.iter().any(|scope| scope.all) {
+        db::group_choices(db).await?
+    } else {
+        let ids: Vec<Uuid> = scopes.into_iter().flat_map(|scope| scope.groups).collect();
+        db::groups_named(db, &ids).await?
+    };
+    Ok(Choices { pilots, groups })
 }
 
 /// Sets the pilot of a batch of flights, all or none: someone who flies

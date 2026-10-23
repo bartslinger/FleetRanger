@@ -4,6 +4,7 @@
 	app gets less than they can do themselves.
 -->
 <script lang="ts">
+	import { may } from '#lib/permissions.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DecisionTile from '#lib/ui/DecisionTile.svelte';
@@ -21,9 +22,7 @@
 
 	// Admins and the all-flights role see every team's flights in FleetRanger,
 	// but an app acting for them doesn't.
-	const seesAllTeams = $derived(
-		data.account?.role === 'admin' || data.account?.role === 'all_flights'
-	);
+	const seesAllTeams = $derived(may(data.account, 'flights.read', null));
 	const limits = $derived([
 		'Change anything',
 		...(seesAllTeams ? ['See other teams’ flights'] : []),

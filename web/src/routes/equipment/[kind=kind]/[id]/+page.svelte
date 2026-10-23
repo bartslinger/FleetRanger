@@ -30,9 +30,15 @@
 	// Save and Cancel go back to where the user came from, e.g. a flight's page.
 	const previous = back(() => list);
 
+	// Where the user may move it, and where it is now.
 	const groupOptions = $derived([
-		{ value: '', label: 'None (organisation)' },
-		...data.groups.map((group) => ({ value: group.id, label: group.name }))
+		...(data.toOrganisation || item.group_id === null
+			? [{ value: '', label: 'None (organisation)' }]
+			: []),
+		...data.groups.map((group) => ({ value: group.id, label: group.name })),
+		...(item.group_id && !data.groups.some((group) => group.id === item.group_id)
+			? [{ value: item.group_id, label: item.group_name ?? '' }]
+			: [])
 	]);
 	const flights = $derived(
 		`${resolve('/flights')}${filtered(data.kind === 'drones' ? { drone: item.serial } : { controller: item.serial })}`
@@ -41,7 +47,7 @@
 
 <PageHeader title={item.name ?? item.serial} breadcrumb={[{ href: list, label: 'Equipment' }]}>
 	{#snippet actions()}
-		{#if item.paired && data.edit === 'all'}
+		{#if item.paired && data.unpair}
 			<Modal
 				title="Remove pairing"
 				triggerKind="danger-tertiary"
@@ -118,7 +124,7 @@
 				</div>
 			{/if}
 			<!-- Who can't change it sees it here. -->
-			{#if data.edit !== 'all'}
+			{#if !data.move}
 				<div>
 					<dt>Group</dt>
 					<dd>{item.group_name ?? 'None (organisation)'}</dd>
@@ -130,7 +136,7 @@
 				{data.kind === 'drones' ? 'Flights with this drone' : 'Flights with this controller'}
 			</Link>
 		</p>
-		{#if data.edit !== 'none'}
+		{#if data.rename || data.move}
 			<form
 				class="form"
 				method="POST"
@@ -145,14 +151,19 @@
 					};
 				}}
 			>
-				<TextInput
-					label="Name (optional)"
-					name="name"
-					value={item.name ?? ''}
-					autocomplete="off"
-					helper="For example the number painted on it."
-				/>
-				{#if data.edit === 'all'}
+				{#if data.rename}
+					<TextInput
+						label="Name (optional)"
+						name="name"
+						value={item.name ?? ''}
+						autocomplete="off"
+						helper="For example the number painted on it."
+					/>
+				{:else}
+					<!-- Unchanged: renaming needs equipment.rename on its group. -->
+					<input type="hidden" name="name" value={item.name ?? ''} />
+				{/if}
+				{#if data.move}
 					<Select
 						label="Group"
 						name="group_id"

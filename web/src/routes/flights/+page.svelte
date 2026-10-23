@@ -21,7 +21,8 @@
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import { dateTime, distance, duration } from '#lib/format.js';
-	import { pilotOptions } from '#lib/pilots.js';
+	import { anywhere, may, readsSeveralGroups, type Permission } from '#lib/permissions.js';
+	import { pilotOptions, sharedGroup } from '#lib/pilots.js';
 	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
 	import Suggestions from './Suggestions.svelte';
@@ -131,12 +132,25 @@
 		selected = [];
 		allMatching = false;
 	});
-	const canChange = $derived(data.choices.admin || data.choices.own_team_ids.length > 0);
+	// A flight can be selected when one of the batch actions is allowed on its
+	// group; each action is offered to who holds its permission somewhere, and
+	// the backend refuses a batch it doesn't allow on every flight.
+	const BATCH = ['flights.set_pilot', 'flights.archive', 'flights.move', 'sessions.edit'] as const;
+	const canChange = $derived(BATCH.some((permission) => anywhere(data.account, permission)));
 	const changeable = (flight: Row) =>
-		data.choices.admin ||
-		(flight.group_id !== null && data.choices.own_team_ids.includes(flight.group_id));
+		BATCH.some((permission) => may(data.account, permission, flight.group_id));
+	const can = (permission: Permission) => anywhere(data.account, permission);
 
-	const pilotChoices = $derived(pilotOptions(data.choices));
+	/** The group the batch's flights share: the selected ones', or for all
+	 * matching flights the one group filtered on. */
+	function batchGroup(ids: string[]) {
+		if (!allMatching) return sharedGroup(selectedRows(ids));
+		const [only] = data.state.groups;
+		const group = data.devices.groups.find((group) => group.id === only);
+		return data.state.groups.length === 1 && group?.id
+			? { id: group.id, name: group.name ?? '' }
+			: null;
+	}
 	const groupOptions = $derived([
 		...data.choices.groups.map((group) => ({ value: group.id, label: group.name })),
 		{ value: '', label: 'No group (organisation queue)' }
@@ -208,7 +222,7 @@
 				filters={data.state}
 				none={{ ...data.state, ...none }}
 				devices={data.devices}
-				groupFilter={data.choices.admin}
+				groupFilter={readsSeveralGroups(data.account)}
 				{filtering}
 				ownCount={Number(data.state.withoutSession) + Number(data.state.archived)}
 				onchange={filter}
@@ -334,13 +348,25 @@
 							variant="batch"
 							bind:trigger={overflow}
 							items={[
-								{ label: 'Add to session', onselect: () => (addOpen = true), phoneOnly: true },
-								{ label: 'Remove from session', onselect: () => (removeOpen = true) },
-								{ label: 'Set pilot', onselect: () => (pilotOpen = true) },
-								...(data.choices.admin
+								...(can('sessions.edit')
+									? [
+											{
+												label: 'Add to session',
+												onselect: () => (addOpen = true),
+												phoneOnly: true
+											},
+											{ label: 'Remove from session', onselect: () => (removeOpen = true) }
+										]
+									: []),
+								...(can('flights.set_pilot')
+									? [{ label: 'Set pilot', onselect: () => (pilotOpen = true) }]
+									: []),
+								...(can('flights.move')
 									? [{ label: 'Move to group', onselect: () => (groupOpen = true) }]
 									: []),
-								{ label: 'Archive', onselect: () => (archiveOpen = true) }
+								...(can('flights.archive')
+									? [{ label: 'Archive', onselect: () => (archiveOpen = true) }]
+									: [])
 							]}
 						/>
 						<Modal
@@ -396,10 +422,14 @@
 							returnFocus={() => overflow ?? undefined}
 						>
 							{@render chosenFields(ids)}
-							<Select label="Pilot" name="pilot" options={pilotChoices} />
+							<Select
+								label="Pilot"
+								name="pilot"
+								options={pilotOptions(data.choices, batchGroup(ids))}
+							/>
 							<p class="help">The flights keep their group.</p>
 						</Modal>
-						{#if data.choices.admin}
+						{#if can('flights.move')}
 							<Modal
 								title="Move to group"
 								submitLabel="Move"

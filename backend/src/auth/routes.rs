@@ -1,6 +1,7 @@
 //! Logging in and out. The web app sends the browser to `/auth/login`; the
 //! provider sends it back to `/auth/callback`.
 
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -202,23 +203,34 @@ struct Me {
     email: String,
     name: String,
     /// So the web app shows only what the user can use; the backend still
-    /// checks every request. Today's three roles, read from the grants, until
-    /// the web app asks for permissions (package 7).
-    role: &'static str,
+    /// checks every request.
+    permissions: Permissions,
     /// Whether apps (such as AI assistants) can connect to this install, so
     /// the web app offers the list of connected apps only then.
     apps: bool,
 }
 
-/// The role the web app shows pages by: what Admin or Viewer on the whole
-/// organisation allowed under the three fixed roles, else a member.
-fn web_role(grants: &Grants) -> &'static str {
-    if grants.may(Permission::UsersManage, None) {
-        "admin"
-    } else if grants.may(Permission::FlightsRead, None) {
-        "all_flights"
-    } else {
-        "member"
+/// What the user may do: on the whole organisation, where it counts for
+/// every group too, and per group what their memberships add.
+#[derive(Serialize)]
+struct Permissions {
+    organisation: Vec<&'static str>,
+    groups: BTreeMap<Uuid, Vec<&'static str>>,
+}
+
+impl From<&Grants> for Permissions {
+    fn from(grants: &Grants) -> Self {
+        let names = |permissions: Vec<Permission>| {
+            permissions.into_iter().map(Permission::as_str).collect()
+        };
+        let (organisation, groups) = grants.permissions();
+        Self {
+            organisation: names(organisation),
+            groups: groups
+                .into_iter()
+                .map(|(group, permissions)| (group, names(permissions)))
+                .collect(),
+        }
     }
 }
 
@@ -226,9 +238,9 @@ fn web_role(grants: &Grants) -> &'static str {
 async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
     Json(Me {
         id: actor.user_id,
+        permissions: Permissions::from(&actor.grants),
         email: actor.email,
         name: actor.name,
-        role: web_role(&actor.grants),
         apps: !oauth.resources.is_empty(),
     })
 }
