@@ -134,6 +134,8 @@ fun PilotScreen(
     val fly: () -> Unit = {
         onChoose(choice)
         chosenKey = null
+        // Back from DJI Pilot 2, the app starts at "Who's flying?" again.
+        step = Step.First
     }
     val back: () -> Unit = {
         step = if (shown == Step.Groups) Step.Group else Step.First
