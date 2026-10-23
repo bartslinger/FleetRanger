@@ -68,6 +68,7 @@
 			rows={data.users}
 			rowKey={(user) => user.id}
 			rowHref={(user) => resolve('/users/[id]', { id: user.id })}
+			summary={`${data.users.length} ${data.users.length === 1 ? 'user' : 'users'}${data.archived ? ', archived included' : ''}`}
 		>
 			{#snippet toolbar()}
 				<div class="filter">
