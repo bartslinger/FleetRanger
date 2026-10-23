@@ -18,16 +18,27 @@ export async function load({ fetch, params }) {
 }
 
 export const actions = {
+	/** Name and email; the API takes the roles on the organisation along, as they are. */
 	save: async ({ fetch, params, request }) => {
 		const form = await request.formData();
+		const user = await get<User>(fetch, `/api/users/${params.id}`);
 		const body = {
 			name: String(form.get('name') ?? ''),
-			roles: form.getAll('role').map(String),
+			roles: user.roles,
 			email: String(form.get('email') ?? '') || null
 		};
 		const result = await send<User>(fetch, 'PUT', `/api/users/${params.id}`, body);
 		if (!result.ok) return fail(result.status, { message: result.message });
 		return { saved: true };
+	},
+	/** The roles on the organisation, edited as a group's are; name and email stay. */
+	organisationRoles: async ({ fetch, params, request }) => {
+		const form = await request.formData();
+		const user = await get<User>(fetch, `/api/users/${params.id}`);
+		const body = { name: user.name, roles: form.getAll('role').map(String), email: user.email };
+		const result = await send<User>(fetch, 'PUT', `/api/users/${params.id}`, body);
+		if (!result.ok) return fail(result.status, { organisationRolesMessage: result.message });
+		return { organisationSaved: true };
 	},
 	/** Adds them to a group or changes their roles in it, as on the group's page. */
 	groupRoles: async ({ fetch, params, request }) => {
