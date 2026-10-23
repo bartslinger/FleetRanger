@@ -8,7 +8,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **v0.6.0 and android-v0.3.0 prepared: pairing reversed.** A user creates a code in the web app ("Pair a controller", valid 1 hour to 7 days, revocable) and the pilot types it into the controller, one box per character, so nobody logs in in the field; nginx limits pairing attempts per address. Server and app go out together: controllers already paired keep working, an older app that isn't paired needs the new one. See "Clients" in [architecture.md](architecture.md).
 
-**Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replace teams, and permissions checked on a group or the whole organisation replace the three fixed roles. The first step keeps today's behaviour; the edge cases are being worked out before a schema proposal. Serving several organisations from one install follows after.
+**Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replace teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replace the three fixed roles. The design is settled, see "Groups and roles" in [architecture.md](architecture.md); the work is split into the packages under "Groups and roles" below, each done in a session of its own. Serving several organisations from one install follows after.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -72,6 +72,21 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - [~] Onboarding asks which logs to upload (all, or from a date that starts at today, with the number of logs each covers); today's until chosen
 - [ ] Stay in landscape when the controller is turned (the app rotates with it now)
 
+## Groups and roles
+
+Each package leaves a working app with its tests passing. Groups are added beside teams first and filled from them; the code moves over package by package, and teams and holders are dropped only at the end. Each package also removes the rules in architecture.md it replaces.
+
+- [x] 1. Docs: the decisions in architecture.md, these packages
+- [ ] 2. Schema proposal and first migration: groups, memberships with roles, organisation-wide roles and a group on flights, sessions, drones and controllers, filled from teams (the final SQL approved by the user)
+- [ ] 3. Permission checks: permissions and built-in roles in code, the check and the list filter, on the new tables, with today's behaviour (the access tests unchanged)
+- [ ] 4. Flights and sessions: pilot and group independent, the queue, a session's owner and the checks on every session that changes
+- [ ] 5. Equipment: seen through its flights, figures over all flights, pairing into a group, holders out
+- [ ] 6. Web admin pages: groups with their members and roles, organisation-wide roles (Carbon expert before and after)
+- [ ] 7. Web app elsewhere: groups instead of teams, pilot lists, a session's owner, moving flights and sessions
+- [ ] 8. Controller app: the group after the pilot, with "Other group"; older apps' flights go to the queue
+- [ ] 9. MCP: the user's own access, read only
+- [ ] 10. Final migration and release: teams and holders dropped; server and app released together
+
 ## Public website (fleetranger.org)
 
 - [x] Landing page: what FleetRanger does, for whom, self-hosted, source and contact
@@ -115,9 +130,8 @@ Login works locally (phase 4). Everyone is a user, with an optional team and an 
 - Session reports with organisation-specific fields
 - Sharing flights, also outside the organisation
 - Invite links for accounts
-- Suggesting operations from flights that overlap in time and area
 - Link media
 
 ## Open questions
 
-- Who sees flights with no pilot and no team?
+None at the moment.

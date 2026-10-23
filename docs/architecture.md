@@ -34,6 +34,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **No open sign-up.** An admin gives a user a login by email. The first login with that verified email ties it to the provider's permanent subject ID, and later logins match on that ID only, so a reassigned or renamed address can't take over or lock out a login. The first user of an install is added with `fleetranger add-user --admin <email> <name>`.
 - **Apps act for a user through OAuth** (user's decisions, 2026-10-20), FleetRanger being the authorization server: first AI assistants over MCP, later other integrations, so it is a module of its own (`oauth`) and not part of MCP. Apps register themselves (dynamic client registration), which grants nothing; a logged-in user allows one on the consent page (`/connect`), which says what the app will and won't be able to do; the app exchanges the code (PKCE) for an access token (an hour) and a refresh token (replaced at every use, ending after 30 days without use). Every token carries its scopes (only `flights:read` so far) and the resource it is for (e.g. `/mcp`), so a token for one part doesn't work for another; what a resource then allows is its own rule. Users see and disconnect their connected apps in the web app; archiving a user or removing their login disconnects them too. Codes and tokens are stored only as SHA-256 hashes. Apps acting without a user (client credentials, e.g. a partner system) wait until a real integration needs them. A refresh token that comes back after it was replaced was copied, so the connection ends for both holders (refresh token reuse detection; user's decision after the security review, 2026-10-20). How (my choices, several after that review): only apps without a secret, as assistants are; return addresses must be HTTPS or on the user's own computer, where any port is allowed (RFC 8252); a registration is at most 8 KB, and apps never connected are removed a day after registering, by an hourly clean-up; the consent page and Connected apps show the app's return host apart from its name, since the name is only what it says it is; the consent page refuses a request naming a form action, and its buttons carry only the checked request; no page may be framed by another site. A rate limit on registration belongs in nginx.
 - **Login sessions** (named so to tell them apart from flight sessions) are a random token in the cookie; the database stores only its SHA-256 hash. They expire after 30 days without use. Archiving a user or removing their login revokes their sessions.
+- **Teams and roles below are being replaced** by "Groups and roles".
 - **Teams.** A user can fly for several teams (user's decision, 2026-10-19: a pilot who flies for two teams, with each team's drones); admins and viewers who don't fly have none. A member's own flights, sessions and equipment are those of any of their teams.
 - **A flight belongs to the team its pilot was chosen with.** A pilot in several teams is a choice per team, on the controller and in the web app ("Test pilot (North)", "Test pilot (South)"), and the flight goes to that team, also with another team's controller and drone: the pilot is borrowing them. An upload brings the team chosen on the controller, accepted only if the pilot is in it. Without one (nobody chosen, or an older app), a flight gets the pilot's team if they're in one, else the controller's, else the drone's (controller before drone is my choice), else none.
 - **Archived, not deleted.** Users and teams that are no longer active are archived, so flights and history keep referring to them. An archived user can't log in and can't be chosen as a pilot. A user without flights can be deleted, for example one created by mistake.
@@ -62,6 +63,70 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **Simplicity first.** The visibility condition is written directly in the flight queries, with a test that list and single-flight access agree. It gets extracted (for example into a SQL function) only when duplication becomes a problem.
 - **Audit log:** append-only, recording every view, change, reassignment, move and merge, with the user, session, time and IP. There is no hash chain.
 
+## Groups and roles
+
+User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadmap): they replace teams, the three fixed roles and holders, and the rules in "Identity and access", "Sessions and operations", "Batteries" and "Clients" that depend on them, which each step removes as it lands. Groups come before serving several organisations from one install.
+
+**The model**
+
+- **Scoped roles**, as most large vendors have them (Google Cloud, Azure, GitHub): who may do what, on which part of the organisation. Permissions are fixed in code as small verbs, such as `flights.read`; the code never asks whether someone is an admin, so organisations with other structures fit without new code.
+- **Roles are named sets of permissions, and building blocks:** Viewer, Pilot and Editor, combined per person, so no combined roles are needed. Each role includes the permissions it depends on (Editor includes Viewer's), so any single role makes sense on its own. A person's rights on a resource are the union of the roles of their membership of its group and their roles on the whole organisation; nothing denies. Roles an organisation defines itself can come later.
+- **Access hangs on the resource's group, not on its pilot.** Rejected: permissions from person to person ("A reads B's flights"), which leaves flights without a pilot, equipment and sessions without an owner, can't keep a pilot's flights for two groups apart, and multiplies grants. Sharing with people can come later, beside the roles.
+- **Admin work is organisation-wide only, for now.** Groups get Viewer, Pilot and Editor; Admin is a role on the whole organisation, and only admins give roles. Group-level admins must stay easy to add (user's requirement): admin work is checked as a permission on every group involved, both groups for a move, so a Manager role later only grants those permissions on a group, plus two checks (nobody grants roles they don't hold, a group keeps a Manager) (my design).
+- **The last active admin can't lose Admin or be archived**, so nobody locks the organisation out through the app.
+
+**Groups**
+
+- **A group has members and holds flights, sessions, drones and controllers**, each of which is in at most one group or directly in the organisation. A small organisation needs no groups: everything sits in the organisation, with roles on the whole organisation, and no group is ever chosen.
+- **A membership means belonging to the group** and carries the person's roles there: one list per group, with pilots, overseers and viewers, answers both who is in it and what they may do. A person can be in any number of groups. Rejected: assignments apart from memberships, such as "the members of one group get a role on another", for which no case was found.
+- **Adding a member preselects no roles:** the admin chooses at least one, and the group's page shows which members fly.
+- **Groups aren't archived, for now.** Only an empty group can be deleted, so an admin first moves its flights, sessions and equipment to another group or the organisation, perhaps in one "delete and move everything to …" action. Archiving can come if reports per group over past years need it.
+- **Nested groups come later:** a role on a group will cover its subgroups. To begin with, groups are a flat list.
+
+**Permissions**, built-in roles (my proposal from the decisions):
+
+| Permission | Viewer | Pilot | Editor | Admin |
+|---|---|---|---|---|
+| `flights.read`, `equipment.read` | ✓ | | ✓ | ✓ |
+| `flights.fly_for` | | ✓ | | ✓ |
+| `controllers.pair` | | ✓ | ✓ | ✓ |
+| `flights.set_pilot`, `flights.archive`, `sessions.edit`, `equipment.rename` | | | ✓ | ✓ |
+| `flights.move`, `sessions.move`, `equipment.move`, `batteries.rename` | | | | ✓ |
+| `users.manage`, `groups.manage`, `areas.manage` | | | | ✓ |
+
+- **Pilot doesn't read the group's flights:** a pilot always sees their own, so a guest pilot sees only theirs. A pilot who should see the group's work also gets Viewer or Editor.
+- **Pilot can pair controllers**, so pilots set up controllers in the field without waiting for an editor.
+- Batteries and areas have no group, so their permissions count only on the whole organisation. `equipment.*` covers drones and controllers together while their rules are the same.
+
+**Flights and pilots**
+
+- **A flight's pilot and its group are independent:** the group is who the flight was for, the pilot who flew it. Setting a pilot never moves the flight, moving a flight never changes its pilot, and a pilot who leaves a group leaves nothing inconsistent. The pilot always sees their own flights, also after leaving, but not the rest of a session their flight is in.
+- **Flying comes only from `flights.fly_for`.** Pilot lists, on the controller and in the web app, hold the people with it anywhere, so viewers and admins who don't fly never appear. The web app puts the flight's group's own pilots (its members with Pilot) on top, offers all pilots for flights in the queue, and the server checks the same when a pilot is set; flights keep their pilot when someone later loses the role.
+- **On the controller the group is chosen after the pilot**, and only when the organisation has groups: it offers the groups the pilot is a member of and flies for, picks the group itself when there is one, and has "Other group" for the other groups where they hold `flights.fly_for`. An organisation where every pilot may fly for every group gives Pilot on the whole organisation. As pilots don't log in on the controller, this guides the choice rather than enforcing it.
+- **A flight without a chosen group goes to the organisation's queue:** "Not in the list", a pilot without `flights.fly_for`, older apps and imported logs, including a first upload of years of logs. Only a choice gives a flight its group; the controller's and drone's groups play no part. Hints that uploads wait in the queue can come later.
+- **Moving flights between groups is admin work.**
+
+**Sessions**
+
+- **A session has a group as its owner**, which decides who edits it and will own its report data. Sessions sit beside the tree, a way to organise and report on flights: their flights keep their own groups, so a session can mix groups, and a session of one group with another group's flights is accepted.
+- **A flight is in at most one session**, so totals over sessions count each flight once and "without session" means still to be organised. Overlapping views, such as a joint mission seen by both groups, can come later as a concept of their own.
+- **Changing which session a flight is in needs `sessions.edit` on every session that changes**, the one it joins and the one it leaves, so nobody changes another group's session. The flight's own group isn't checked: a session never changes it.
+- **A session's group:** the flight's group when an upload starts one; made by hand, the creator chooses among the groups where they hold `sessions.edit`, with the flights' group preselected and no choice when there is one (until people find it confusing). A session can have no group, at organisation level.
+- **Changing a session's group is admin work**, and asks whether to move its flights to that group as well.
+
+**Equipment**
+
+- **Pairing gives the controller a group:** whoever creates the code chooses one of the groups where they hold `controllers.pair`, chosen already when there is one.
+- **Equipment is also seen by whoever sees one of its flights**, as batteries are, so a drone shared by several groups simply sits in the organisation. Seeing a device means its row in Equipment, its page and the link from a flight; its flights stay those the user sees anyway.
+- **A device's figures count all its flights:** total air time, number of flights, a battery's capacity and cycles, and the battery's health chart with a point per flight. They describe the machine's wear; points of flights the user can't see link to nothing, and each flight's own details (such as charge at takeoff and landing) stay with the flights the user sees.
+- **Holders are dropped:** a device shows who flew it last, from its last flight, instead of a hand-kept field that goes stale.
+
+**Elsewhere**
+
+- **MCP has the user's own access, read only**, replacing "everyone counts as a member": an admin's assistant sees what the admin sees. The install-wide switch stays.
+- **Archiving flights stays** a soft delete, with `flights.archive`.
+- **Migrating changes nobody's access:** teams become groups, every team member becomes a member with Pilot and Editor, admins get Admin and the all-flights role Viewer on the whole organisation. Pilot lists are tidied by hand afterwards. Operations, never built, are dropped: merged sessions cover joint missions.
+
 ## Sessions and operations
 
 - **Sessions exist for reporting:** they summarise several flights as one thing.
@@ -77,7 +142,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **A day strip on each session card** (user's request, 2026-10-21) shows when the flying happened at a glance: 00:00 to 24:00 with a mark per flight and night shaded. Every strip has the same 24-hour scale, so cards compare; a flight past midnight wraps around to the left (user's decision; a second strip is the alternative if that confuses). Night is sunset to sunrise at the first flight's takeoff point, worked out in the browser (SunCalc's formulas, `web/src/lib/sun.ts`). For it the session list returns each visible flight's takeoff, landing, air time and takeoff point (user's approval, 2026-10-21); users already see these on the map. The MCP tools leave them out: apps get no locations.
 - **Report fields such as an organisation's "time on" and "time off"** are organisation-specific and are not derived from the flights; they come with session reports.
 - **Selecting a pilot on the remote controller** sets who is flying from that moment on.
-- **An operation groups flights across teams**, for example a joint operation. Anyone can create one. Anyone with a flight in an operation sees all of its flights. Flights can only be added by people who can already see them, and must overlap the operation's time window. One operation per flight for now, through a link table, so this can be relaxed later.
+- **An operation groups flights across teams** (dropped with "Groups and roles", never built), for example a joint operation. Anyone can create one. Anyone with a flight in an operation sees all of its flights. Flights can only be added by people who can already see them, and must overlap the operation's time window. One operation per flight for now, through a link table, so this can be relaxed later.
 
 ## Areas
 
