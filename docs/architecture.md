@@ -118,7 +118,8 @@ User's decisions, 2026-10-23, unless marked as mine. Being built (see the roadma
 - **Equipment is also seen by whoever sees one of its flights**, as batteries are, so a drone shared by several groups simply sits in the organisation. Seeing a device means its row in Equipment, its page and the link from a flight; its flights stay those the user sees anyway.
 - **A device's figures count all its flights:** total air time, number of flights, a battery's capacity and cycles, and the battery's health chart with a point per flight. They describe the machine's wear; points of flights the user can't see link to nothing, and each flight's own details (such as charge at takeoff and landing) stay with the flights the user sees.
 - **Holders are dropped:** a device shows who flew it last, from its last flight, instead of a hand-kept field that goes stale. The columns stay until the final migration.
-- How (my choices): "who flew it last" comes from its last flight overall, like the date of that flight, also when the user doesn't see that flight. Renaming needs `equipment.rename` only when the name changes, and moving `equipment.move` only when the group changes. A drone or controller seen only through an archived flight isn't seen, as archived flights are left out everywhere; its link on that flight's page then finds nothing.
+- **Who flew it last comes from its last flight overall, but the name only shows to whoever may see that flight** (user's decision, 2026-10-23): others see that someone flew it then, without the name, so the answer is never an older, wrong pilot and never reveals who flew a flight the user can't see.
+- How (my choices): renaming needs `equipment.rename` only when the name changes, and moving `equipment.move` only when the group changes. A drone or controller seen only through an archived flight isn't seen, as archived flights are left out everywhere; its link on that flight's page then finds nothing.
 
 **Elsewhere**
 
