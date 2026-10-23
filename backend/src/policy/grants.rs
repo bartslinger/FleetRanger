@@ -242,14 +242,6 @@ impl Grants {
             .collect();
         (organisation, groups)
     }
-
-    /// The same memberships without the roles on the whole organisation.
-    pub fn without_organisation_roles(self) -> Self {
-        Self {
-            organisation: Vec::new(),
-            groups: self.groups,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -284,11 +276,6 @@ mod tests {
         let viewer = grants(&[(None, "viewer")]);
         assert!(viewer.may_on_all(Permission::FlightsRead, &[Some(NORTH), None]));
         assert!(!viewer.anywhere(Permission::FlightsArchive));
-        assert!(
-            !viewer
-                .without_organisation_roles()
-                .anywhere(Permission::FlightsRead)
-        );
     }
 
     /// The web app decides what to offer from `permissions()` with the same

@@ -98,12 +98,8 @@ where
 /// hands the tools who they act for. Others get a 401 that says where to get
 /// a token (RFC 9728), or a 403 for a token without the scope (RFC 6750).
 /// Debug builds also accept a login session, for trying the tools without
-/// OAuth; release builds only access tokens.
-///
-/// Over MCP everyone is a member (user's decision, 2026-10-20): admins and the
-/// all-flights role see what a member of their teams sees, which is what
-/// matters to them as a pilot. So only the roles of their memberships count,
-/// until package 9 gives MCP the user's own access.
+/// OAuth; release builds only access tokens. The tools have the user's own
+/// access, read only: an admin's assistant sees what the admin sees.
 async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) -> Response {
     let (parts, body) = request.into_parts();
     let bearer = match oauth::bearer(&gate.db, &parts, &gate.resource, SCOPE).await {
@@ -129,11 +125,10 @@ async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) ->
         }
         other => other,
     };
-    let mut actor = match refusal {
+    let actor = match refusal {
         Ok(actor) => actor,
         Err((status, error)) => return challenge(&gate.metadata, status, error),
     };
-    actor.grants = actor.grants.without_organisation_roles();
     let mut request = Request::from_parts(parts, body);
     request.extensions_mut().insert(actor);
     next.run(request).await
