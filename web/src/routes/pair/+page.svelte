@@ -9,8 +9,8 @@
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
-	import IconButton from '#lib/ui/IconButton.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
+	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
@@ -110,9 +110,6 @@
 		{/if}
 
 		<h2 class="heading">Open codes</h2>
-		{#if revokeMessage}
-			<InlineNotification kind="error" title={revokeMessage} />
-		{/if}
 		{#if data.codes.length === 0}
 			<EmptyState
 				title="No open codes"
@@ -121,25 +118,25 @@
 		{:else}
 			<DataTable label="Open pairing codes" {columns} rows={data.codes} rowKey={(row) => row.id}>
 				{#snippet rowAction(row)}
-					<form
-						method="POST"
+					<!-- Confirmed first (user's request), though a new code is quick to make. -->
+					<Modal
+						title="Revoke code"
+						label="Code {shown(row.code)}"
+						triggerIcon={SubtractAlt}
+						triggerLabel="Revoke code {shown(row.code)}"
+						triggerSize="md"
+						submitLabel="Revoke code"
+						danger
 						action="?/revoke"
-						use:enhance={() =>
-							async ({ result, update }) => {
-								await update();
-								if (result.type === 'success') toast(`Code ${shown(row.code)} revoked.`);
-							}}
+						error={revokeMessage}
+						onsuccess={() => toast(`Code ${shown(row.code)} revoked.`)}
 					>
 						<input type="hidden" name="id" value={row.id} />
-						<IconButton
-							icon={SubtractAlt}
-							label="Revoke"
-							name="Revoke code {shown(row.code)}"
-							size="md"
-							onclick={(event: MouseEvent) =>
-								(event.currentTarget as HTMLElement).closest('form')?.requestSubmit()}
-						/>
-					</form>
+						<p>
+							The code stops working, also for a pilot who already has it. A controller it paired
+							stays paired.
+						</p>
+					</Modal>
 				{/snippet}
 			</DataTable>
 		{/if}
