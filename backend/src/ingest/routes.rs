@@ -81,7 +81,7 @@ struct Received {
 
 /// A log from a paired controller: the file itself as the body, with headers
 /// `X-File-Name` (its name on the controller), `X-SHA256` (hex) and, if a pilot
-/// was chosen, `X-Pilot-Id` with the team they were chosen with, `X-Team-Id`.
+/// was chosen, `X-Pilot-Id` with the group chosen with them, `X-Team-Id`.
 async fn receive(
     controller: Controller,
     State(db): State<PgPool>,
