@@ -35,9 +35,17 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 
@@ -113,6 +121,114 @@ fun TextInput(
             invalid != null -> BasicText(invalid, style = Type.label02.copy(color = Colors.textError))
             helper != null -> BasicText(helper, style = Type.label02.copy(color = Colors.textHelper))
         }
+    }
+}
+
+/**
+ * A short code typed one character per box, the way it's shown elsewhere,
+ * with a dash between the halves (KDW4-9TXR). Carbon has no such component:
+ * this is one text field, so typing, pasting, backspace and TalkBack work as
+ * in any field, drawn as boxes in Carbon's field style. The box the next
+ * character goes into shows focus; when invalid, all boxes do in red. Label,
+ * helper and error are the group's, as with [TextInput]. The value holds
+ * only the code's characters: others, such as a pasted dash, are dropped.
+ */
+@Composable
+fun CodeInput(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    length: Int,
+    /** The characters a code can have, in upper case. */
+    alphabet: String,
+    modifier: Modifier = Modifier,
+    helper: String? = null,
+    invalid: String? = null,
+    readOnly: Boolean = false,
+    onDone: () -> Unit = {},
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
+        BasicText(label, style = Type.label02.copy(color = Colors.textSecondary))
+        BasicTextField(
+            value,
+            { typed -> onValueChange(typed.uppercase().filter { it in alphabet }.take(length)) },
+            modifier = Modifier.semantics {
+                contentDescription = label
+                invalid?.let { error(it) }
+            },
+            readOnly = readOnly,
+            singleLine = true,
+            // The boxes show where the next character goes.
+            cursorBrush = SolidColor(Color.Transparent),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Characters,
+                autoCorrectEnabled = false,
+                keyboardType = KeyboardType.Ascii,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(onDone = { onDone() }),
+            interactionSource = interaction,
+            decorationBox = { field ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Drawn from the value; the field itself is read out.
+                    Row(
+                        Modifier.clearAndSetSemantics {},
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.s02),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        for (i in 0 until length) {
+                            if (i == length / 2) {
+                                BasicText("-", style = Type.heading04.copy(color = Colors.textSecondary, fontFamily = PlexMono))
+                            }
+                            CodeBox(
+                                char = value.getOrNull(i),
+                                current = focused && !readOnly && i == value.length.coerceAtMost(length - 1),
+                                invalid = invalid != null,
+                            )
+                        }
+                    }
+                    if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
+                    // The real field, invisible: it takes the keyboard's input.
+                    Box(Modifier.size(1.dp)) { field() }
+                }
+            },
+        )
+        when {
+            invalid != null -> BasicText(invalid, style = Type.label02.copy(color = Colors.textError))
+            helper != null -> BasicText(helper, style = Type.label02.copy(color = Colors.textHelper))
+        }
+    }
+}
+
+/** One character's box: Carbon's field, 64dp high for gloves. */
+@Composable
+private fun CodeBox(char: Char?, current: Boolean, invalid: Boolean) {
+    Box(
+        Modifier
+            .size(width = 52.dp, height = 64.dp)
+            .background(Colors.field01)
+            .then(
+                when {
+                    invalid -> Modifier.border(2.dp, Colors.supportError)
+                    current -> Modifier.border(2.dp, Colors.focus)
+                    else -> Modifier.drawBehind {
+                        drawLine(
+                            Colors.borderStrong01,
+                            Offset(0f, size.height - 0.5f),
+                            Offset(size.width, size.height - 0.5f),
+                            1.dp.toPx(),
+                        )
+                    }
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        BasicText(
+            char?.toString().orEmpty(),
+            style = Type.heading04.copy(color = Colors.textPrimary, fontFamily = PlexMono, textAlign = TextAlign.Center),
+        )
     }
 }
 
