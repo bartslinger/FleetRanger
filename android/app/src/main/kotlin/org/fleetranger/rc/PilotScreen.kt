@@ -167,8 +167,14 @@ fun PilotScreen(
                     val pilot = choice?.pilot
                     ChoiceTiles(
                         title = pilot?.name ?: "Not in the list",
-                        // A pilot's tile names only the pilot (user's decision).
-                        detail = if (pilot == null) "Set the pilot later in the logbook" else null,
+                        // The group only when there's no group screen to show
+                        // it, as there's one group for this pilot (user's
+                        // decision).
+                        detail = when {
+                            pilot == null -> "Set the pilot later in the logbook"
+                            choosesGroup -> null
+                            else -> list.group(choice.groupId)?.name
+                        },
                         // Into the group screen, or straight to DJI Pilot 2.
                         launches = !choosesGroup,
                         onMain = { if (choosesGroup) step = Step.Group else fly() },
