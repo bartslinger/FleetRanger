@@ -85,7 +85,8 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - [x] 7. Web app elsewhere, together with MCP (user's choice, 2026-10-23): groups instead of teams, pilot lists, a session's owner, moving flights and sessions; MCP with the user's own access, read only
 - [~] 8. Controller app: the group after the pilot, with "Other group"; older apps' flights go to the queue; the controller API versioned (v1)
 - [ ] After the migration (user, 2026-10-23), UI fine-tuning left from the Carbon review of the admin pages: Delete and Archive on phones, read-only or disabled for the last admin's Admin checkbox, a danger style for the Remove icon, the "Show archived" toggle in other lists. From the review of the web app's groups: the phone batch bar cuts off its count ("2 flights sel…", while Carbon says the bar always shows it), and the carbon-expert's own suggestions (archive last in the flights' overflow menu after a divider, one wording for "no group" instead of both "Whole organisation" and "No group (organisation queue)", a select or a pencil for the group on the suggestion page)
-- [ ] 10. Final migration and release: teams and holders dropped; server and app released together. Check first that the server still has no all-flights user in a team: the fill would give them Editor there.
+- [ ] 10. Final migration and release: teams and holders dropped; server and app released together. Check first that the server still has no all-flights user in a team: the fill would give them Editor there. Before the release, test the update from android-v0.3.0 once with a test release through dev.fleetranger.org.
+- [ ] Remove the unversioned controller endpoints (and the per-team pilot list in `pairing::db`) once Equipment shows no controller with android-v0.3.0
 
 ## Public website (fleetranger.org)
 

@@ -198,7 +198,7 @@ fun PilotScreen(
                 }
                 Step.OtherGroups -> {
                     val pilot = stepPilot!!
-                    Heading("Other group", backButton)
+                    Heading("Other groups", backButton)
                     GroupList(list, pilot.otherGroups, onChoose = { choose(Choice(pilot, it)) })
                 }
             }
