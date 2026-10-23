@@ -246,9 +246,7 @@
 			rows={memberships}
 			rowKey={(group) => group.id}
 			rowHref={(group) =>
-				group.id === ORGANISATION_ROW
-					? resolve('/users')
-					: resolve('/groups/[id]', { id: group.id })}
+				group.id === ORGANISATION_ROW ? undefined : resolve('/groups/[id]', { id: group.id })}
 			summary={user.groups.length === 0
 				? 'In no group'
 				: `In ${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
