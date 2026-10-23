@@ -5,8 +5,13 @@ use super::db::{self, User, UserFields};
 use crate::{
     auth::Actor,
     error::{self, ApiError, ApiResult},
-    policy::{self, Role},
+    policy::{self, Permission},
 };
+
+/// The roles stored in `users.role` and set on the Users page. Access comes
+/// from `organisation_roles` instead; the Users page moves to those in
+/// package 6.
+const ROLES: [&str; 3] = ["member", "all_flights", "admin"];
 
 /// What an admin enters for a user.
 pub struct UserInput {
@@ -27,17 +32,17 @@ pub fn email(value: &str) -> Option<String> {
 }
 
 pub async fn list(db: &PgPool, actor: &Actor, archived: bool) -> ApiResult<Vec<User>> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::UsersManage, None)?;
     Ok(db::list(db, archived).await?)
 }
 
 pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<User> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::UsersManage, None)?;
     db::get(db, id).await?.ok_or(ApiError::NotFound)
 }
 
 pub async fn create(db: &PgPool, actor: &Actor, input: &UserInput) -> ApiResult<User> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::UsersManage, None)?;
     let checked = Checked::new(db, input).await?;
     let id = db::insert(db, &checked.fields())
         .await
@@ -51,7 +56,7 @@ pub async fn update(db: &PgPool, actor: &Actor, id: Uuid, input: &UserInput) -> 
     let current = get(db, actor, id).await?;
     let checked = Checked::new(db, input).await?;
     if id == actor.user_id {
-        if checked.role != actor.role {
+        if checked.role != current.role {
             return Err(ApiError::Conflict(
                 "You can't change your own role.".to_owned(),
             ));
@@ -73,7 +78,7 @@ pub async fn update(db: &PgPool, actor: &Actor, id: Uuid, input: &UserInput) -> 
 
 /// Admins can't archive themselves.
 pub async fn set_archived(db: &PgPool, actor: &Actor, id: Uuid, archived: bool) -> ApiResult<User> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::UsersManage, None)?;
     if archived && id == actor.user_id {
         return Err(ApiError::Conflict("You can't archive yourself.".to_owned()));
     }
@@ -101,7 +106,7 @@ pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
 /// valid email address if any.
 struct Checked {
     name: String,
-    role: Role,
+    role: &'static str,
     team_ids: Vec<Uuid>,
     email: Option<String>,
 }
@@ -109,7 +114,9 @@ struct Checked {
 impl Checked {
     async fn new(db: &PgPool, input: &UserInput) -> ApiResult<Self> {
         let name = error::name(&input.name)?;
-        let role = Role::parse(&input.role)
+        let role = ROLES
+            .into_iter()
+            .find(|role| *role == input.role)
             .ok_or_else(|| ApiError::Invalid("Choose a role.".to_owned()))?;
         let mut team_ids = input.team_ids.clone();
         team_ids.sort_unstable();
@@ -137,7 +144,7 @@ impl Checked {
     fn fields(&self) -> UserFields<'_> {
         UserFields {
             name: &self.name,
-            role: self.role.as_str(),
+            role: self.role,
             team_ids: &self.team_ids,
             email: self.email.as_deref(),
         }

@@ -5,28 +5,28 @@ use super::db::{self, Team};
 use crate::{
     auth::Actor,
     error::{self, ApiError, ApiResult},
-    policy,
+    policy::{self, Permission},
 };
 
 pub async fn list(db: &PgPool, actor: &Actor, archived: bool) -> ApiResult<Vec<Team>> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::GroupsManage, None)?;
     Ok(db::list(db, archived).await?)
 }
 
 pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<Team> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::GroupsManage, None)?;
     db::get(db, id).await?.ok_or(ApiError::NotFound)
 }
 
 pub async fn create(db: &PgPool, actor: &Actor, name: &str) -> ApiResult<Team> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::GroupsManage, None)?;
     let name = error::name(name)?;
     let id = db::insert(db, &name).await.map_err(name_taken)?;
     get(db, actor, id).await
 }
 
 pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResult<Team> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::GroupsManage, None)?;
     let name = error::name(name)?;
     if !db::rename(db, id, &name).await.map_err(name_taken)? {
         return Err(ApiError::NotFound);

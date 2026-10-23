@@ -3,6 +3,8 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::policy::Scope;
+
 /// Adds a pairing code, and deletes expired ones. Returns its id, or None if
 /// the code is already taken, so the caller can try another.
 pub async fn add_code(
@@ -44,26 +46,51 @@ pub struct OpenCode {
     pub expires_at: DateTime<Utc>,
 }
 
-/// The codes that can still be used, of one creator or, with None, of
-/// everyone; those expiring first come first.
-pub async fn open_codes(db: &PgPool, created_by: Option<Uuid>) -> sqlx::Result<Vec<OpenCode>> {
+/// The codes that can still be used of this creator, and of the groups in
+/// the scope; those expiring first come first.
+pub async fn open_codes(
+    db: &PgPool,
+    created_by: Uuid,
+    scope: &Scope,
+) -> sqlx::Result<Vec<OpenCode>> {
     sqlx::query_as!(
         OpenCode,
         r#"select c.id, c.code, u.name as created_by, t.name as "team?", c.created_at, c.expires_at
            from pairing_codes c
            join users u on u.id = c.created_by
            left join teams t on t.id = c.team_id
-           where c.expires_at > now() and ($1::uuid is null or c.created_by = $1)
+           where c.expires_at > now()
+             and ($2 or c.created_by = $1 or c.team_id = any($3))
            order by c.expires_at, c.id"#,
         created_by,
+        scope.all,
+        &scope.groups,
     )
     .fetch_all(db)
     .await
 }
 
-/// Who created a code; None if there is no such code.
-pub async fn code_creator(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Uuid>> {
-    sqlx::query_scalar!("select created_by from pairing_codes where id = $1", id)
+/// A code's creator and the group (team) the controller joins.
+pub struct CodeOwner {
+    pub created_by: Uuid,
+    pub group_id: Option<Uuid>,
+}
+
+/// None if there is no such code.
+pub async fn code_owner(db: &PgPool, id: Uuid) -> sqlx::Result<Option<CodeOwner>> {
+    sqlx::query_as!(
+        CodeOwner,
+        "select created_by, team_id as group_id from pairing_codes where id = $1",
+        id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// The group a controller is in, `Some(None)` for none; None if there is no
+/// such controller.
+pub async fn controller_group(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Option<Uuid>>> {
+    sqlx::query_scalar!("select group_id from remote_controllers where id = $1", id)
         .fetch_optional(db)
         .await
 }
@@ -113,9 +140,11 @@ pub async fn use_code(
     .fetch_optional(&mut *tx)
     .await?;
     sqlx::query!(
-        "insert into remote_controllers (serial, team_id, token_sha256) values ($1, $2, $3)
+        "insert into remote_controllers (serial, team_id, group_id, token_sha256)
+         values ($1, $2, $2, $3)
          on conflict (serial) do update set
              team_id = excluded.team_id,
+             group_id = excluded.group_id,
              token_sha256 = excluded.token_sha256",
         serial,
         team.as_ref().map(|team| team.id),
@@ -185,11 +214,7 @@ mod tests {
     /// creator was archived.
     #[sqlx::test]
     async fn a_code_pairs_one_controller(db: PgPool) {
-        let team = insert(
-            &db,
-            "insert into teams (name) values ('North') returning id",
-        )
-        .await;
+        let team = crate::testing::team(&db, "North").await;
         let user = insert(
             &db,
             "insert into users (name) values ('Test user') returning id",

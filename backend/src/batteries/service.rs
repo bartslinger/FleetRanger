@@ -5,7 +5,7 @@ use super::db::{self, Battery, BatteryFlight};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    policy,
+    policy::{self, Permission},
 };
 
 /// A battery with its flights.
@@ -35,7 +35,8 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<BatteryDetai
     })
 }
 
-/// A battery has no team, so only admins name it.
+/// A battery has no group, so naming it needs `batteries.rename` on the
+/// organisation.
 pub async fn rename(
     db: &PgPool,
     actor: &Actor,
@@ -43,7 +44,7 @@ pub async fn rename(
     name: Option<&str>,
 ) -> ApiResult<BatteryDetail> {
     get(db, actor, id).await?;
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::BatteriesRename, None)?;
     let name = name.map(str::trim).filter(|name| !name.is_empty());
     if !db::rename(db, id, name).await? {
         return Err(ApiError::NotFound);

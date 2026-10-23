@@ -29,7 +29,7 @@ use tokio::sync::watch;
 use crate::auth::Actor;
 use crate::error::ApiError;
 use crate::ingest::{activity::Activity, service as ingest};
-use crate::policy::Role;
+use crate::policy::Permission;
 
 /// Changes in quick succession (each step of processing a log) go out as one.
 const SETTLE: Duration = Duration::from_millis(250);
@@ -144,7 +144,7 @@ impl Stream {
 
     /// Queues the states that differ from what was sent.
     async fn refresh(&mut self) {
-        if self.actor.role == Role::Admin {
+        if self.actor.grants.may(Permission::LogsManage, None) {
             match ingest::status(&self.db, &self.actor, &self.activity).await {
                 Ok(status) => queue(&mut self.queue, &mut self.processing, "processing", &status),
                 Err(error) => failed("processing status", error),

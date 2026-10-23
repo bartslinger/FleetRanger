@@ -40,8 +40,7 @@ use crate::{
         db::{Filter, FlightDetail, Sort, SortKey},
     },
     oauth::{self, Bearer},
-    policy::{self, Role},
-    sessions,
+    policy, sessions,
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -103,7 +102,8 @@ where
 ///
 /// Over MCP everyone is a member (user's decision, 2026-10-20): admins and the
 /// all-flights role see what a member of their teams sees, which is what
-/// matters to them as a pilot.
+/// matters to them as a pilot. So only the roles of their memberships count,
+/// until package 9 gives MCP the user's own access.
 async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) -> Response {
     let (parts, body) = request.into_parts();
     let bearer = match oauth::bearer(&gate.db, &parts, &gate.resource, SCOPE).await {
@@ -133,7 +133,6 @@ async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) ->
         Ok(actor) => actor,
         Err((status, error)) => return challenge(&gate.metadata, status, error),
     };
-    actor.role = Role::Member;
     actor.grants = actor.grants.without_organisation_roles();
     let mut request = Request::from_parts(parts, body);
     request.extensions_mut().insert(actor);

@@ -956,14 +956,12 @@ pub struct TeamChoice {
     pub name: String,
 }
 
-/// The active teams a user is in, by name.
-pub async fn teams_of_user(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<TeamChoice>> {
+/// These groups, by name.
+pub async fn groups_named(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<TeamChoice>> {
     sqlx::query_as!(
         TeamChoice,
-        "select t.id, t.name from team_members m join teams t on t.id = m.team_id
-         where m.user_id = $1 and t.archived_at is null
-         order by lower(t.name), t.id",
-        user_id,
+        "select id, name from groups where id = any($1) order by lower(name), id",
+        ids,
     )
     .fetch_all(db)
     .await

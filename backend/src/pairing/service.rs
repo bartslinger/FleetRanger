@@ -9,7 +9,7 @@ use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
     flights::{self, db::PilotChoice},
-    policy,
+    policy::{self, Permission},
 };
 
 /// Without 0/O and 1/I, which are easily confused when typed. 32 letters, so a
@@ -43,7 +43,7 @@ pub async fn create(
             "A code is valid for 1 to {MAX_HOURS} hours."
         )));
     }
-    let teams = flights::db::teams_of_user(db, actor.user_id).await?;
+    let teams = teams(db, actor).await?;
     let team = match (team, teams.as_slice()) {
         (_, []) => None,
         (Some(id), teams) => Some(
@@ -77,18 +77,19 @@ pub async fn create(
     Err(ApiError::Internal(anyhow::anyhow!("no free pairing code")))
 }
 
-/// The codes the actor may see and revoke that can still be used.
+/// The codes the actor may see and revoke that can still be used: their own,
+/// and those of the groups where they hold `controllers.manage`.
 pub async fn open_codes(db: &PgPool, actor: &Actor) -> ApiResult<Vec<OpenCode>> {
-    let created_by = (!policy::all_pairing_codes(actor)).then_some(actor.user_id);
-    Ok(db::open_codes(db, created_by).await?)
+    let scope = actor.grants.scope(Permission::ControllersManage);
+    Ok(db::open_codes(db, actor.user_id, &scope).await?)
 }
 
 /// Revokes a code, so it can't pair a controller any more.
 pub async fn revoke(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
     // Used or expired just now, before the page caught up.
     let gone = || ApiError::Conflict("This code was used or has expired.".to_owned());
-    let created_by = db::code_creator(db, id).await?.ok_or_else(gone)?;
-    if !policy::revoke_pairing_code(actor, created_by) {
+    let owner = db::code_owner(db, id).await?.ok_or_else(gone)?;
+    if !policy::manage_pairing_code(actor, owner.created_by, owner.group_id) {
         return Err(ApiError::NotFound);
     }
     if db::revoke(db, id).await? {
@@ -147,16 +148,25 @@ pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList
     })
 }
 
-/// The teams a controller paired with the actor's code can join: theirs. One
-/// of them is chosen when there are several.
+/// The groups a controller paired with the actor's code can join: those
+/// where their memberships hold `controllers.pair`. One of them is chosen
+/// when there are several. Package 5 adds the organisation-wide roles.
 pub async fn teams(db: &PgPool, actor: &Actor) -> ApiResult<Vec<flights::db::TeamChoice>> {
-    Ok(flights::db::teams_of_user(db, actor.user_id).await?)
+    let pair = actor.grants.scope(Permission::ControllersPair);
+    Ok(flights::db::groups_named(db, &pair.groups).await?)
 }
 
-/// Unpairs a controller from the web app. Admins only; a controller can also
-/// unpair itself.
+/// Unpairs a controller from the web app, with `controllers.manage` on its
+/// group; a controller can also unpair itself.
 pub async fn unpair(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
-    policy::require_admin(actor)?;
+    // Refused before not found, so this doesn't tell whether it exists.
+    if !actor.grants.anywhere(Permission::ControllersManage) {
+        return Err(ApiError::Forbidden);
+    }
+    let group = db::controller_group(db, id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    policy::require(actor, Permission::ControllersManage, group)?;
     if db::unpair(db, id).await? {
         Ok(())
     } else {
