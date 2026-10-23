@@ -27,7 +27,8 @@ pub fn require(actor: &Actor, permission: Permission, group: Option<Uuid>) -> Ap
 
 /// Whether the actor may see and revoke a pairing code: its creator, and
 /// whoever holds `controllers.manage` on the group the controller joins.
-/// Any user may create one; see "Clients" in docs/architecture.md.
+/// Creating one needs `controllers.pair`; see "Clients" in
+/// docs/architecture.md.
 pub fn manage_pairing_code(actor: &Actor, created_by: Uuid, group: Option<Uuid>) -> bool {
     actor.user_id == created_by || actor.grants.may(Permission::ControllersManage, group)
 }

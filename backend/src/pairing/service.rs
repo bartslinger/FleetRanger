@@ -29,47 +29,54 @@ pub struct Created {
     pub expires_at: DateTime<Utc>,
 }
 
-/// Creates a single-use code that pairs a controller, valid for `hours`. Any
-/// user may; the controller joins one of their teams, the one they choose if
-/// they're in several, or none when they have none.
+/// Creates a single-use code that pairs a controller, valid for `hours`, with
+/// `controllers.pair` on the group the controller joins, or with None on the
+/// organisation, where it goes in no group.
 pub async fn create(
     db: &PgPool,
     actor: &Actor,
     team: Option<Uuid>,
     hours: i64,
 ) -> ApiResult<Created> {
+    if !actor.grants.anywhere(Permission::ControllersPair) {
+        return Err(ApiError::Forbidden);
+    }
     if !(1..=MAX_HOURS).contains(&hours) {
         return Err(ApiError::Invalid(format!(
             "A code is valid for 1 to {MAX_HOURS} hours."
         )));
     }
-    let teams = teams(db, actor).await?;
-    let team = match (team, teams.as_slice()) {
-        (_, []) => None,
-        (Some(id), teams) => Some(
-            teams
-                .iter()
-                .find(|team| team.id == id)
-                .ok_or_else(|| ApiError::Invalid("Choose one of your teams.".to_owned()))?,
+    if !actor.grants.may(Permission::ControllersPair, team) {
+        return Err(ApiError::Invalid(
+            "Choose one of your teams for the controller.".to_owned(),
+        ));
+    }
+    let team = match team {
+        Some(id) => Some(
+            flights::db::groups_named(db, &[id])
+                .await?
+                .pop()
+                .ok_or_else(|| ApiError::Invalid("Choose an existing team.".to_owned()))?,
         ),
-        (None, [team]) => Some(team),
-        (None, _) => {
-            return Err(ApiError::Invalid(
-                "Choose the team the controller joins.".to_owned(),
-            ));
-        }
+        None => None,
     };
     let expires_at = Utc::now() + Duration::hours(hours);
     // A taken code is unlikely (32^8 codes); try a few times.
     for _ in 0..5 {
         let code = random_code();
-        if let Some(id) =
-            db::add_code(db, &code, actor.user_id, team.map(|t| t.id), expires_at).await?
+        if let Some(id) = db::add_code(
+            db,
+            &code,
+            actor.user_id,
+            team.as_ref().map(|t| t.id),
+            expires_at,
+        )
+        .await?
         {
             return Ok(Created {
                 id,
                 code,
-                team: team.map(|t| t.name.clone()),
+                team: team.map(|t| t.name),
                 expires_at,
             });
         }
@@ -149,12 +156,27 @@ pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList
     })
 }
 
-/// The groups a controller paired with the actor's code can join: those
-/// where their memberships hold `controllers.pair`. One of them is chosen
-/// when there are several. Package 5 adds the organisation-wide roles.
-pub async fn teams(db: &PgPool, actor: &Actor) -> ApiResult<Vec<flights::db::TeamChoice>> {
+/// Where a controller paired with the actor's code can go: the groups where
+/// they hold `controllers.pair`, and the organisation itself (no group) when
+/// they hold it there, which covers every group too (user's decision,
+/// 2026-10-23).
+#[derive(Serialize)]
+pub struct Destinations {
+    pub teams: Vec<flights::db::TeamChoice>,
+    pub organisation: bool,
+}
+
+pub async fn teams(db: &PgPool, actor: &Actor) -> ApiResult<Destinations> {
     let pair = actor.grants.scope(Permission::ControllersPair);
-    Ok(flights::db::groups_named(db, &pair.groups).await?)
+    let teams = if pair.all {
+        flights::db::group_choices(db).await?
+    } else {
+        flights::db::groups_named(db, &pair.groups).await?
+    };
+    Ok(Destinations {
+        teams,
+        organisation: pair.all,
+    })
 }
 
 /// Unpairs a controller from the web app, with `controllers.manage` on its

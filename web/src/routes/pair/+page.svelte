@@ -22,6 +22,16 @@
 	const created = $derived(form && 'created' in form ? form.created : undefined);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
 	const revokeMessage = $derived(form && 'revokeMessage' in form ? form.revokeMessage : undefined);
+	const teamError = $derived(form && 'teamError' in form ? form.teamError : undefined);
+
+	// Where the controller can go. With one choice it is taken without
+	// asking; with several, nobody gets one by default.
+	const destinations = $derived([
+		...data.destinations.teams.map((team) => ({ value: team.id, label: team.name })),
+		...(data.destinations.organisation
+			? [{ value: 'organisation', label: 'No team (organisation)' }]
+			: [])
+	]);
 
 	/** KDW49TXR as KDW4-9TXR, easier to read out and type; the controller takes either. */
 	const shown = (code: string) => `${code.slice(0, 4)}-${code.slice(4)}`;
@@ -59,41 +69,52 @@
 
 <Grid>
 	<Column lg={8}>
-		<form
-			class="form"
-			method="POST"
-			action="?/create"
-			use:enhance={() => {
-				busy = true;
-				return async ({ update }) => {
-					busy = false;
-					await update({ reset: false });
-				};
-			}}
-		>
-			<!-- The controller joins the creator's team: which one, if they're in several. -->
-			{#if data.teams.length > 1}
-				<Select
-					label="Team"
-					name="team_id"
-					options={data.teams.map((team) => ({ value: team.id, label: team.name }))}
-					helper="The controller joins this team. Its flights without a chosen team go to it."
-				/>
-			{/if}
-			<Select
-				label="Valid for"
-				name="hours"
-				value="24"
-				options={validity}
-				helper="After this, an unused code stops working."
+		{#if destinations.length === 0}
+			<EmptyState
+				title="You can’t pair controllers yet"
+				body="Pairing needs the Pilot or Editor role in a team. Ask an admin for one."
 			/>
-			{#if message}
-				<InlineNotification kind="error" title={message} />
-			{/if}
-			<div class="buttons">
-				<Button type="submit" disabled={busy}>Create code</Button>
-			</div>
-		</form>
+		{:else}
+			<form
+				class="form"
+				method="POST"
+				action="?/create"
+				use:enhance={() => {
+					busy = true;
+					return async ({ update }) => {
+						busy = false;
+						await update({ reset: false });
+					};
+				}}
+			>
+				{#if destinations.length > 1}
+					<!-- A prompt rather than a default (Carbon's empty option). -->
+					<Select
+						label="Team"
+						name="team_id"
+						options={destinations}
+						placeholder="Choose a team"
+						error={teamError}
+						helper="The controller joins this team."
+					/>
+				{:else}
+					<input type="hidden" name="team_id" value={destinations[0].value} />
+				{/if}
+				<Select
+					label="Valid for"
+					name="hours"
+					value="24"
+					options={validity}
+					helper="After this, an unused code stops working."
+				/>
+				{#if message}
+					<InlineNotification kind="error" title={message} />
+				{/if}
+				<div class="buttons">
+					<Button type="submit" disabled={busy}>Create code</Button>
+				</div>
+			</form>
+		{/if}
 
 		{#if created}
 			<div class="created">
@@ -101,7 +122,7 @@
 					<p>
 						{created.team
 							? `The controller joins ${created.team}.`
-							: 'The controller joins no team.'}
+							: 'The controller joins the organisation, in no team.'}
 						Valid until {until(created.expires_at)}.
 					</p>
 				</InlineNotification>
