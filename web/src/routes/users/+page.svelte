@@ -7,6 +7,7 @@
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
+	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import Toggle from '#lib/ui/Toggle.svelte';
@@ -48,9 +49,8 @@
 		helper: ROLE_HELP[role]
 	}));
 
-	function showArchived(event: Event) {
-		const checked = (event.currentTarget as HTMLInputElement).checked;
-		goto(resolve(checked ? '/users?archived' : '/users'), {
+	function showArchived(show: boolean) {
+		goto(resolve(show ? '/users?archived' : '/users'), {
 			replaceState: true,
 			reset: false
 		});
@@ -71,8 +71,28 @@
 			summary={`${data.users.length} ${data.users.length === 1 ? 'user' : 'users'}${data.archived ? ', archived included' : ''}`}
 		>
 			{#snippet toolbar()}
+				<!-- On phones the toggle doesn't fit beside the count and New user,
+				     so it moves into the overflow menu. -->
 				<div class="filter">
-					<Toggle label="Show archived" checked={data.archived} onchange={showArchived} />
+					<Toggle
+						label="Show archived"
+						checked={data.archived}
+						onchange={(event) => showArchived(event.currentTarget.checked)}
+					/>
+				</div>
+				<div class="more">
+					<OverflowMenu
+						label="Options"
+						variant="row"
+						vertical
+						items={[
+							{
+								label: 'Show archived',
+								checked: data.archived,
+								onselect: () => showArchived(!data.archived)
+							}
+						]}
+					/>
 				</div>
 				<Modal
 					title="New user"
@@ -108,5 +128,19 @@
 		align-items: center;
 		min-height: var(--cds-size-large);
 		padding-inline: var(--cds-spacing-05);
+	}
+
+	.more {
+		display: none;
+	}
+
+	@media (max-width: 41.99rem) {
+		.filter {
+			display: none;
+		}
+
+		.more {
+			display: flex;
+		}
 	}
 </style>
