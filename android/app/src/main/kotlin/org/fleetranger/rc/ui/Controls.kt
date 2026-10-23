@@ -27,9 +27,14 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -42,8 +47,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -152,59 +159,80 @@ fun CodeInput(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+    // The text with its selection, so a selection (e.g. "Select all") can show
+    // on the boxes; a value changed from outside starts with the cursor at the end.
+    var edited by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    val field = if (edited.text == value) edited else TextFieldValue(value, TextRange(value.length))
+    val selected = if (field.selection.collapsed) IntRange.EMPTY else field.selection.min until field.selection.max
     // As wide as the boxes, so helper and error text wrap there.
     Column(modifier.width(IntrinsicSize.Min), verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
         BasicText(label, style = Type.label02.copy(color = Colors.textSecondary))
-        BasicTextField(
-            value,
-            { typed -> onValueChange(typed.uppercase().filter { it in alphabet }.take(length)) },
-            modifier = Modifier.semantics {
-                contentDescription = label
-                invalid?.let { error(it) }
-            },
-            readOnly = readOnly,
-            singleLine = true,
-            // The boxes show the characters, and where the next one goes.
-            textStyle = TextStyle(color = Color.Transparent, fontSize = 1.sp),
-            cursorBrush = SolidColor(Color.Transparent),
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.Characters,
-                autoCorrectEnabled = false,
-                keyboardType = KeyboardType.Ascii,
-                imeAction = ImeAction.Done,
-            ),
-            interactionSource = interaction,
-            decorationBox = { field ->
-                Box {
-                    // The real field, invisible, under the boxes: it takes the
-                    // keyboard's input. First, so it keeps its place when the
-                    // error icon comes and goes: moved, it would be made anew.
-                    // At the top, with tiny text, so the cursor it scrolls into
-                    // view at every change lies within the boxes.
-                    Box(Modifier.size(1.dp)) { field() }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Drawn from the value; the field itself is read out.
-                    Row(
-                        Modifier.clearAndSetSemantics {},
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.s02),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        for (i in 0 until length) {
-                            if (i == length / 2) {
-                                BasicText("-", style = Type.heading04.copy(color = Colors.textSecondary, fontFamily = PlexMono))
+        // The hidden field's own selection handles and highlight would show
+        // where it lies, over the first box; the boxes show the selection.
+        CompositionLocalProvider(
+            LocalTextSelectionColors provides TextSelectionColors(Color.Transparent, Color.Transparent),
+        ) {
+            BasicTextField(
+                field,
+                { typed ->
+                    val text = typed.text.uppercase().filter { it in alphabet }.take(length)
+                    // Typed as it should be, it keeps its selection; changed, the cursor goes to the end.
+                    edited = if (text == typed.text) typed else TextFieldValue(text, TextRange(text.length))
+                    if (text != value) onValueChange(text)
+                },
+                modifier = Modifier.semantics {
+                    contentDescription = label
+                    invalid?.let { error(it) }
+                },
+                readOnly = readOnly,
+                singleLine = true,
+                // The boxes show the characters, and where the next one goes.
+                textStyle = TextStyle(color = Color.Transparent, fontSize = 1.sp),
+                cursorBrush = SolidColor(Color.Transparent),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.Done,
+                ),
+                interactionSource = interaction,
+                decorationBox = { input ->
+                    Box {
+                        // The real field, invisible, under the boxes: it takes the
+                        // keyboard's input. First, so it keeps its place when the
+                        // error icon comes and goes: moved, it would be made anew.
+                        // At the top, with tiny text, so the cursor it scrolls into
+                        // view at every change lies within the boxes.
+                        Box(Modifier.size(1.dp)) { input() }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Drawn from the value; the field itself is read out.
+                            Row(
+                                Modifier.clearAndSetSemantics {},
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.s02),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                for (i in 0 until length) {
+                                    if (i == length / 2) {
+                                        BasicText(
+                                            "-",
+                                            style = Type.heading04.copy(color = Colors.textSecondary, fontFamily = PlexMono),
+                                        )
+                                    }
+                                    CodeBox(
+                                        char = value.getOrNull(i),
+                                        current = focused && !readOnly && selected.isEmpty() &&
+                                            i == value.length.coerceAtMost(length - 1),
+                                        selected = i in selected,
+                                        invalid = invalid != null,
+                                    )
+                                }
                             }
-                            CodeBox(
-                                char = value.getOrNull(i),
-                                current = focused && !readOnly && i == value.length.coerceAtMost(length - 1),
-                                invalid = invalid != null,
-                            )
+                            if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
                         }
                     }
-                    if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
-                    }
-                }
-            },
-        )
+                },
+            )
+        }
         when {
             invalid != null -> BasicText(invalid, style = Type.label02.copy(color = Colors.textError))
             helper != null -> BasicText(helper, style = Type.label02.copy(color = Colors.textHelper))
@@ -214,11 +242,12 @@ fun CodeInput(
 
 /** One character's box: Carbon's field, 64dp high for gloves. */
 @Composable
-private fun CodeBox(char: Char?, current: Boolean, invalid: Boolean) {
+private fun CodeBox(char: Char?, current: Boolean, selected: Boolean, invalid: Boolean) {
     Box(
         Modifier
             .size(width = 52.dp, height = 64.dp)
-            .background(Colors.field01)
+            // Selected text in Carbon's highlight colour.
+            .background(if (selected) Colors.highlight else Colors.field01)
             .then(
                 when {
                     invalid -> Modifier.border(2.dp, Colors.supportError)
