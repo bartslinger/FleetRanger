@@ -201,41 +201,44 @@ fun CodeInput(
                         // The real field, invisible, under the boxes: it takes the
                         // keyboard's input. First, so it keeps its place when the
                         // error icon comes and goes: moved, it would be made anew.
-                        // At the top, with tiny text, so the cursor it scrolls into
-                        // view at every change lies within the boxes.
-                        Box(Modifier.size(1.dp)) { input() }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Drawn from the value; the field itself is read out.
-                            Row(
-                                Modifier.clearAndSetSemantics {},
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.s02),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                for (i in 0 until length) {
-                                    if (i == length / 2) {
-                                        BasicText(
-                                            "-",
-                                            style = Type.heading04.copy(color = Colors.textSecondary, fontFamily = PlexMono),
+                        // At the bottom, with tiny text: the cursor it scrolls into
+                        // view lies below the helper or error, so all of the field
+                        // shows above the keyboard.
+                        Box(Modifier.align(Alignment.BottomStart).size(1.dp)) { input() }
+                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.s03)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Drawn from the value; the field itself is read out.
+                                Row(
+                                    Modifier.clearAndSetSemantics {},
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.s02),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    for (i in 0 until length) {
+                                        if (i == length / 2) {
+                                            BasicText(
+                                                "-",
+                                                style = Type.heading04.copy(color = Colors.textSecondary, fontFamily = PlexMono),
+                                            )
+                                        }
+                                        CodeBox(
+                                            char = value.getOrNull(i),
+                                            current = focused && !readOnly && selected.isEmpty() &&
+                                                i == value.length.coerceAtMost(length - 1),
+                                            selected = i in selected,
+                                            invalid = invalid != null,
                                         )
                                     }
-                                    CodeBox(
-                                        char = value.getOrNull(i),
-                                        current = focused && !readOnly && selected.isEmpty() &&
-                                            i == value.length.coerceAtMost(length - 1),
-                                        selected = i in selected,
-                                        invalid = invalid != null,
-                                    )
                                 }
+                                if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
                             }
-                            if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
+                            when {
+                                invalid != null -> BasicText(invalid, style = Type.label02.copy(color = Colors.textError))
+                                helper != null -> BasicText(helper, style = Type.label02.copy(color = Colors.textHelper))
+                            }
                         }
                     }
                 },
             )
-        }
-        when {
-            invalid != null -> BasicText(invalid, style = Type.label02.copy(color = Colors.textError))
-            helper != null -> BasicText(helper, style = Type.label02.copy(color = Colors.textHelper))
         }
     }
 }
