@@ -47,6 +47,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 
 /**
@@ -160,7 +161,8 @@ fun CodeInput(
             },
             readOnly = readOnly,
             singleLine = true,
-            // The boxes show where the next character goes.
+            // The boxes show the characters, and where the next one goes.
+            textStyle = TextStyle(color = Color.Transparent, fontSize = 1.sp),
             cursorBrush = SolidColor(Color.Transparent),
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.Characters,
@@ -191,7 +193,9 @@ fun CodeInput(
                     }
                     if (invalid != null) ErrorIcon(Modifier.padding(start = Spacing.s05))
                     // The real field, invisible: it takes the keyboard's input.
-                    Box(Modifier.size(1.dp)) { field() }
+                    // At the top, with tiny text, so the cursor it scrolls into
+                    // view at every change lies within the boxes.
+                    Box(Modifier.align(Alignment.Top).size(1.dp)) { field() }
                 }
             },
         )
