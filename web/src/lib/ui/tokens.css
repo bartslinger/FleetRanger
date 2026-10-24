@@ -162,6 +162,7 @@
 	--cds-tag-hover-red: #ffc2c5;
 	--cds-tag-hover-teal: #57e5e5;
 	--cds-tag-hover-warm-gray: #d8d0cf;
+	--cds-notification-action-hover: #ffffff;
 	--cds-notification-action-tertiary-inverse: #ffffff;
 	--cds-notification-action-tertiary-inverse-active: #c6c6c6;
 	--cds-notification-action-tertiary-inverse-hover: #f4f4f4;
@@ -630,6 +631,7 @@
 		--cds-tag-hover-red: #c21e25;
 		--cds-tag-hover-teal: #007070;
 		--cds-tag-hover-warm-gray: #696363;
+		--cds-notification-action-hover: #333333;
 		--cds-notification-action-tertiary-inverse: #0f62fe;
 		--cds-notification-action-tertiary-inverse-active: #002d9c;
 		--cds-notification-action-tertiary-inverse-hover: #0050e6;
@@ -793,6 +795,7 @@
 	--cds-tag-hover-red: #c21e25;
 	--cds-tag-hover-teal: #007070;
 	--cds-tag-hover-warm-gray: #696363;
+	--cds-notification-action-hover: #333333;
 	--cds-notification-action-tertiary-inverse: #0f62fe;
 	--cds-notification-action-tertiary-inverse-active: #002d9c;
 	--cds-notification-action-tertiary-inverse-hover: #0050e6;
@@ -1001,6 +1004,7 @@
 	--cds-tag-hover-red: #c21e25;
 	--cds-tag-hover-teal: #007070;
 	--cds-tag-hover-warm-gray: #696363;
+	--cds-notification-action-hover: #333333;
 	--cds-notification-action-tertiary-inverse: #0f62fe;
 	--cds-notification-action-tertiary-inverse-active: #002d9c;
 	--cds-notification-action-tertiary-inverse-hover: #0050e6;

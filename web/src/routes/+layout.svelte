@@ -16,6 +16,8 @@
 	import { may } from '#lib/permissions.js';
 	import { trackTrail } from '#lib/trail.svelte.js';
 	import type { ProcessingStatus } from '#lib/server/backend.js';
+	import Banner from '#lib/ui/Banner.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import Loading from '#lib/ui/Loading.svelte';
 	import Shell, { type HeaderAction, type NavItem } from '#lib/ui/Shell.svelte';
@@ -144,6 +146,21 @@
 			? [{ href: resolve('/connected-apps'), label: 'Connected apps' }]
 			: []}
 	>
+		{#snippet banner()}
+			<!-- Always on screen while an admin views as someone (user's
+			     decision); warning, as changes are made as that user
+			     (carbon-expert's advice). -->
+			{#if data.account?.viewed_by}
+				<Banner kind="warning" title="Viewing as {data.account.name}">
+					Changes you make are made as them.
+					{#snippet action()}
+						<form method="POST" action="/auth/view-as/stop">
+							<Button type="submit" kind="ghost" size="sm">Stop viewing</Button>
+						</form>
+					{/snippet}
+				</Banner>
+			{/if}
+		{/snippet}
 		{@render children()}
 	</Shell>
 </Tooltip.Provider>

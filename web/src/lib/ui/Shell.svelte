@@ -18,7 +18,8 @@
 	}
 
 	export interface ShellAccount {
-		email: string;
+		/** None for a user without a login, whom an admin views as. */
+		email: string | null;
 		name: string | null;
 	}
 
@@ -64,6 +65,8 @@
 		actions?: HeaderAction[];
 		/** Pages about the user's account, linked in the profile panel. */
 		profileLinks?: { href: string; label: string }[];
+		/** A page-wide message that stays, such as a Banner, below the header. */
+		banner?: Snippet;
 		children: Snippet;
 	}
 
@@ -75,6 +78,7 @@
 		theme: initialTheme,
 		actions = [],
 		profileLinks = [],
+		banner,
 		children
 	}: Props = $props();
 
@@ -267,7 +271,7 @@
 				>
 					<div class="identity">
 						{#if account.name}<p class="account-name">{account.name}</p>{/if}
-						<p class="email">{account.email}</p>
+						{#if account.email}<p class="email">{account.email}</p>{/if}
 					</div>
 					<RadioButtonGroup
 						legend="Theme"
@@ -345,6 +349,7 @@
 {/if}
 
 <main id="main-content" tabindex="-1" class:bare={!account}>
+	{@render banner?.()}
 	{@render children()}
 </main>
 
