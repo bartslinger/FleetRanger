@@ -109,7 +109,7 @@ async fn callback(
     let pending = jar
         .get(login_cookie())
         .and_then(|cookie| PendingLogin::decode(cookie.value()));
-    let jar = jar.remove(Cookie::build(login_cookie()).path("/"));
+    let jar = jar.remove(removal(&auth, login_cookie()));
 
     let (Some(pending), Some(state), Some(code), None) =
         (pending, query.state, query.code, query.error.as_deref())
@@ -191,7 +191,11 @@ async fn callback(
     (jar.add(cookie), Redirect::to(&return_to)).into_response()
 }
 
-async fn logout(State(db): State<PgPool>, jar: CookieJar) -> Response {
+async fn logout(
+    State(auth): State<Arc<Auth>>,
+    State(db): State<PgPool>,
+    jar: CookieJar,
+) -> Response {
     if let Some(cookie) = jar.get(session_cookie())
         && let Err(error) = db::revoke_session(&db, &token_hash(cookie.value())).await
     {
@@ -199,8 +203,8 @@ async fn logout(State(db): State<PgPool>, jar: CookieJar) -> Response {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
     let jar = jar
-        .remove(Cookie::build(session_cookie()).path("/"))
-        .remove(Cookie::build(impersonation_cookie()).path("/"));
+        .remove(removal(&auth, session_cookie()))
+        .remove(removal(&auth, impersonation_cookie()));
     (jar, Redirect::to("/login?logged-out")).into_response()
 }
 
@@ -245,7 +249,7 @@ async fn impersonate(
 }
 
 /// Back to the admin themselves, on the page of the user they impersonated.
-async fn stop_impersonating(jar: CookieJar) -> Response {
+async fn stop_impersonating(State(auth): State<Arc<Auth>>, jar: CookieJar) -> Response {
     let back = match jar.get(impersonation_cookie()) {
         Some(cookie) => match Uuid::parse_str(cookie.value()) {
             Ok(user) => format!("/users/{user}"),
@@ -253,7 +257,7 @@ async fn stop_impersonating(jar: CookieJar) -> Response {
         },
         None => "/".to_owned(),
     };
-    let jar = jar.remove(Cookie::build(impersonation_cookie()).path("/"));
+    let jar = jar.remove(removal(&auth, impersonation_cookie()));
     (jar, Redirect::to(&back)).into_response()
 }
 
@@ -318,6 +322,16 @@ async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
     })
 }
 
+/// Deletes one of our cookies. Browsers ignore a `__Host-` cookie without
+/// `Secure`, also the one that deletes it, so it carries what they were set
+/// with.
+fn removal(auth: &Auth, name: &'static str) -> Cookie<'static> {
+    Cookie::build(name)
+        .path("/")
+        .secure(auth.secure_cookies())
+        .build()
+}
+
 /// A path on this site to return to after logging in. Anything else, such as
 /// `//evil.example` (another host), becomes `/`, so login can't be used to send
 /// people to another site.
@@ -337,7 +351,7 @@ fn local_path(return_to: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::local_path;
+    use super::{Auth, impersonation_cookie, local_path, removal, session_cookie};
 
     #[test]
     fn return_to_stays_on_this_site() {
@@ -355,6 +369,22 @@ mod tests {
             "evil",
         ] {
             assert_eq!(local_path(Some(path)), "/", "{path:?}");
+        }
+    }
+
+    /// Over HTTPS the cookies are `__Host-` ones, which browsers only delete
+    /// with `Secure`: without it, Stop impersonating left the cookie in place.
+    #[test]
+    fn cookies_are_deleted_as_they_were_set() {
+        let auth = Auth {
+            public_url: "https://fleet.example".parse().unwrap(),
+            provider: None,
+        };
+        for name in [session_cookie(), impersonation_cookie()] {
+            assert!(name.starts_with("__Host-"));
+            let cookie = removal(&auth, name);
+            assert_eq!(cookie.secure(), Some(true));
+            assert_eq!(cookie.path(), Some("/"));
         }
     }
 }
