@@ -279,7 +279,7 @@ mod tests {
             login_session_id: Uuid::nil(),
             ip: [127, 0, 0, 1].into(),
             email: None,
-            viewed_by: None,
+            impersonated_by: None,
             name: String::new(),
         }
     }

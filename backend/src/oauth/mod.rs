@@ -85,7 +85,7 @@ pub async fn bearer(
         login_session_id: access.grant_id,
         ip: crate::auth::client_ip(&parts.headers, peer),
         email: Some(access.email),
-        viewed_by: None,
+        impersonated_by: None,
         name: access.name,
     }))
 }

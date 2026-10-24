@@ -52,9 +52,12 @@ fn login_cookie() -> &'static str {
     cookie_name("fleetranger_login", "__Host-fleetranger_login")
 }
 
-/// Holds the user an admin views as ("View as" in docs/architecture.md).
-fn view_as_cookie() -> &'static str {
-    cookie_name("fleetranger_view_as", "__Host-fleetranger_view_as")
+/// Holds the user an admin impersonates ("Impersonation" in docs/architecture.md).
+fn impersonation_cookie() -> &'static str {
+    cookie_name(
+        "fleetranger_impersonation",
+        "__Host-fleetranger_impersonation",
+    )
 }
 
 /// Login sessions expire after this many days without use.
@@ -78,7 +81,7 @@ impl Auth {
 
 /// Who is making a request: a logged-in user. Handlers get one only through a
 /// valid login session, and pass it to the service functions they call. When
-/// an admin views as another user, it is that user, with their roles.
+/// an admin impersonates another user, it is that user, with their roles.
 #[derive(Clone)]
 pub struct Actor {
     pub user_id: Uuid,
@@ -88,16 +91,16 @@ pub struct Actor {
     pub login_session_id: Uuid,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
     pub ip: IpAddr,
-    /// None for a user without a login, whom an admin views as.
+    /// None for a user without a login, whom an admin impersonates.
     pub email: Option<String>,
     pub name: String,
-    /// The admin viewing as this user, who is the one logged in.
-    pub viewed_by: Option<Viewer>,
+    /// The admin impersonating this user, who is the one logged in.
+    pub impersonated_by: Option<Impersonator>,
 }
 
-/// An admin viewing as another user.
+/// An admin impersonating another user.
 #[derive(Clone)]
-pub struct Viewer {
+pub struct Impersonator {
     pub user_id: Uuid,
     pub name: String,
 }
@@ -140,17 +143,17 @@ where
             ip,
             email: Some(session.email),
             name: session.name,
-            viewed_by: None,
+            impersonated_by: None,
         };
         // Only a browser sends the cookie, which counts only while the one
         // logged in may manage users; otherwise they simply see their own view.
-        let viewed = jar
-            .get(view_as_cookie())
+        let impersonated = jar
+            .get(impersonation_cookie())
             .and_then(|cookie| Uuid::parse_str(cookie.value()).ok());
-        match viewed {
-            Some(user_id) if may_view_as(&actor, user_id) => {
-                view_as(&db, actor, user_id).await.map_err(|error| {
-                    tracing::error!(%error, "viewing as another user");
+        match impersonated {
+            Some(user_id) if may_impersonate(&actor, user_id) => {
+                impersonate(&db, actor, user_id).await.map_err(|error| {
+                    tracing::error!(%error, "impersonating another user");
                     StatusCode::INTERNAL_SERVER_ERROR
                 })
             }
@@ -159,15 +162,15 @@ where
     }
 }
 
-/// Whether this admin may view as that user: anyone but themselves.
-fn may_view_as(admin: &Actor, user_id: Uuid) -> bool {
+/// Whether this admin may impersonate that user: anyone but themselves.
+fn may_impersonate(admin: &Actor, user_id: Uuid) -> bool {
     admin.grants.may(Permission::UsersManage, None) && user_id != admin.user_id
 }
 
-/// The admin as the user they view as, or still themselves if that user is
+/// The admin as the user they impersonate, or still themselves if that user is
 /// archived or gone.
-async fn view_as(db: &PgPool, admin: Actor, user_id: Uuid) -> sqlx::Result<Actor> {
-    let Some(user) = db::viewed_user(db, user_id).await? else {
+async fn impersonate(db: &PgPool, admin: Actor, user_id: Uuid) -> sqlx::Result<Actor> {
+    let Some(user) = db::impersonated_user(db, user_id).await? else {
         return Ok(admin);
     };
     Ok(Actor {
@@ -175,7 +178,7 @@ async fn view_as(db: &PgPool, admin: Actor, user_id: Uuid) -> sqlx::Result<Actor
         grants: grants(db, user_id).await?,
         email: user.email,
         name: user.name,
-        viewed_by: Some(Viewer {
+        impersonated_by: Some(Impersonator {
             user_id: admin.user_id,
             name: admin.name,
         }),
@@ -263,33 +266,40 @@ pub async fn same_origin(
 mod tests {
     use sqlx::PgPool;
 
-    use super::{may_view_as, view_as};
+    use super::{impersonate, may_impersonate};
     use crate::testing;
 
     #[sqlx::test]
-    async fn only_admins_view_as_someone_else_with_that_users_roles(db: PgPool) {
+    async fn only_admins_impersonate_someone_else_with_that_users_roles(db: PgPool) {
         let admin = testing::user(&db, "Test Admin", &["admin"]).await;
         let pilot = testing::user(&db, "Test Pilot", &["pilot"]).await;
         let as_admin = testing::actor(&db, admin).await;
         let as_pilot = testing::actor(&db, pilot).await;
 
-        assert!(may_view_as(&as_admin, pilot));
-        assert!(!may_view_as(&as_admin, admin));
-        assert!(!may_view_as(&as_pilot, admin));
+        assert!(may_impersonate(&as_admin, pilot));
+        assert!(!may_impersonate(&as_admin, admin));
+        assert!(!may_impersonate(&as_pilot, admin));
 
-        let viewing = view_as(&db, as_admin.clone(), pilot).await.unwrap();
-        assert_eq!(viewing.user_id, pilot);
-        assert!(!viewing.grants.may(super::Permission::UsersManage, None));
-        assert_eq!(viewing.viewed_by.map(|viewer| viewer.user_id), Some(admin));
+        let impersonating = impersonate(&db, as_admin.clone(), pilot).await.unwrap();
+        assert_eq!(impersonating.user_id, pilot);
+        assert!(
+            !impersonating
+                .grants
+                .may(super::Permission::UsersManage, None)
+        );
+        assert_eq!(
+            impersonating.impersonated_by.map(|admin| admin.user_id),
+            Some(admin)
+        );
 
-        // An archived user can't be viewed as: the admin sees their own view.
+        // An archived user can't be impersonated: the admin stays themselves.
         sqlx::query("update users set archived_at = now() where id = $1")
             .bind(pilot)
             .execute(&db)
             .await
             .unwrap();
-        let viewing = view_as(&db, as_admin, pilot).await.unwrap();
-        assert_eq!(viewing.user_id, admin);
-        assert!(viewing.viewed_by.is_none());
+        let impersonating = impersonate(&db, as_admin, pilot).await.unwrap();
+        assert_eq!(impersonating.user_id, admin);
+        assert!(impersonating.impersonated_by.is_none());
     }
 }
