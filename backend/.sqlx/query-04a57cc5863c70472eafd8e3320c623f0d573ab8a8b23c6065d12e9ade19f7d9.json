@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select u.name, l.email as \"email?\" from users u\n           left join logins l on l.user_id = u.id\n           where u.id = $1 and u.archived_at is null",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "email?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "04a57cc5863c70472eafd8e3320c623f0d573ab8a8b23c6065d12e9ade19f7d9"
+}
