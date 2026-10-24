@@ -133,6 +133,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - Session reports with organisation-specific fields
 - Sharing flights, also outside the organisation
 - Invite links for accounts
+- A stable public API (user's wish, 2026-10-24): the web app and backend still change together, but external parties should eventually talk to the backend directly. That needs a versioned API with a documented contract kept stable across releases, as the controller API already is (`/api/controller/v1`), and access for other apps (OAuth already lets apps act for a user).
 - Link media
 
 ## Open questions
