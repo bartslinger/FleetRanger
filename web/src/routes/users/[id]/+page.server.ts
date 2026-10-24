@@ -28,7 +28,7 @@ export const actions = {
 			email: String(form.get('email') ?? '') || null
 		};
 		const result = await send<User>(fetch, 'PUT', `/api/users/${params.id}`, body);
-		if (!result.ok) return fail(result.status, { message: result.message });
+		if (!result.ok) return fail(result.status, { editMessage: result.message });
 		return { saved: true };
 	},
 	/** The roles on the organisation, edited as a group's are; name and email stay. */
