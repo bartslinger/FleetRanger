@@ -143,8 +143,9 @@
 	// flights are a data table, which needs the width). Above: the shell's
 	// header (3rem) and the page header with its breadcrumb row (8.25rem);
 	// the legend (1.5rem) below the map: 12.75rem, plus the table's 7rem.
-	// The same height in both states, so the map never resizes.
-	const MAP_HEIGHT = 'calc(100dvh - 19.75rem)';
+	// The same height in both states, so the map never resizes. A banner
+	// above the page (such as View as) takes its height off too.
+	const MAP_HEIGHT = 'calc(100dvh - 19.75rem - var(--banner-height, 0px))';
 
 	// Every flight's track, with the session it's in.
 	const flights = $derived(
