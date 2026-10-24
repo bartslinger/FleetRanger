@@ -491,7 +491,8 @@
 	}
 
 	.map {
-		height: max(30rem, calc(100vh - 12rem));
+		/* Less a banner above the page, such as View as. */
+		height: max(30rem, calc(100vh - 12rem - var(--banner-height, 0px)));
 		background: var(--cds-layer-01);
 	}
 

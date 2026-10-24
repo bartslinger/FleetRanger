@@ -1,12 +1,11 @@
 <!--
 	@component
-	A page-wide notification that stays, after the banner in Carbon's
-	notification pattern, which has no component for it yet. Built like an
-	actionable inline notification (low contrast) without a close button, since
-	what it says holds until its action is used. Deviations, ours: it sticks
-	below the header instead of scrolling away, so it is always on screen, and
-	the action takes no focus, being part of the page rather than an event; for
-	the same reason it isn't a live region.
+	A page-wide notification at the top of the content area, scrolling with it:
+	the banner in Carbon's notification pattern, which has no component for it
+	yet. Built like an actionable inline notification (low contrast) without a
+	close button, since what it says holds until its action is used. The action
+	takes no focus, being part of the page rather than an event; for the same
+	reason it isn't a live region.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -42,9 +41,6 @@
 
 <style>
 	.banner {
-		position: sticky;
-		top: var(--cds-size-large);
-		z-index: 2;
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
