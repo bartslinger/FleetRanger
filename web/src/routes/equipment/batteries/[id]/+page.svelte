@@ -102,12 +102,11 @@
 />
 
 <Grid rowGap>
-	{#if message}
-		<Column narrow lg={8}>
-			<InlineNotification kind="error" title={message} />
-		</Column>
-	{/if}
 	<Column lg={8}>
+		<!-- In the form's column, so it stacks above it at every width. -->
+		{#if message}
+			<div class="message"><InlineNotification kind="error" title={message} /></div>
+		{/if}
 		<!-- Read-only facts, from the flight logs: the battery as of its latest flight. -->
 		<dl class="facts">
 			<div>
@@ -203,6 +202,10 @@
 </Grid>
 
 <style>
+	.message {
+		margin-bottom: var(--cds-spacing-07);
+	}
+
 	/* As on a drone's page: facts 16px apart, 32px before the form. */
 	.facts {
 		display: grid;

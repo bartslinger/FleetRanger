@@ -42,15 +42,18 @@
 	const self = $derived(data.account?.id === user.id);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
 
-	// The last active admin keeps Admin and isn't archived: disabled, not
-	// hidden, since it changes once someone else is an admin (carbon-expert's
-	// advice, from Carbon's disabled states).
+	// The last active admin keeps Admin: disabled, not hidden, since it
+	// changes once someone else is an admin (carbon-expert's advice, from
+	// Carbon's disabled states), with the reason where it applies. Only an
+	// admin sees this page, so the last admin only ever sees their own.
 	const roleOptions = $derived(
 		ORGANISATION_ROLES.map((role) => ({
 			value: role,
 			label: ROLE_LABELS[role],
 			helper:
-				role === 'admin' && data.lastAdmin ? 'The only admin keeps this role.' : ROLE_HELP[role],
+				role === 'admin' && data.lastAdmin
+					? 'You are the only admin. Make another user an admin first.'
+					: ROLE_HELP[role],
 			disabled: role === 'admin' && data.lastAdmin
 		}))
 	);
@@ -137,8 +140,6 @@
 			>
 				<Button type="submit" kind="tertiary">Restore user</Button>
 			</form>
-		{:else if data.lastAdmin && !self}
-			<Button kind="tertiary" disabled>Archive user</Button>
 		{:else if !self}
 			<Modal
 				title="Archive user"
@@ -174,24 +175,11 @@
 </PageHeader>
 
 <Grid rowGap>
-	{#if data.lastAdmin}
-		<Column narrow lg={8}>
-			<InlineNotification
-				kind="warning"
-				title={self ? 'You are the only admin.' : `${user.name} is the only admin.`}
-			>
-				{self
-					? 'Make another user an admin first. Then you can give up this role.'
-					: 'Make another user an admin first. Then you can remove this role or archive this user.'}
-			</InlineNotification>
-		</Column>
-	{/if}
-	{#if message}
-		<Column narrow lg={8}>
-			<InlineNotification kind="error" title={message} />
-		</Column>
-	{/if}
 	<Column lg={8}>
+		<!-- In the form's column, so it stacks above it at every width. -->
+		{#if message}
+			<div class="message"><InlineNotification kind="error" title={message} /></div>
+		{/if}
 		<dl class="facts">
 			<div>
 				<dt>Flights as pilot</dt>
@@ -383,6 +371,10 @@
 
 	.actions {
 		display: inline-flex;
+	}
+
+	.message {
+		margin-bottom: var(--cds-spacing-07);
 	}
 
 	/* As wide as a md icon button. */
