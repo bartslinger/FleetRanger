@@ -1,0 +1,252 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, takeoff_at, landed_at, air_time_s, distance_m,\n                aircraft_serial,\n                (select a.name from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_name?\",\n                rc_serial,\n                (select r.name from remote_controllers r where r.serial = flights.rc_serial) as \"rc_name?\",\n                pilot_id, (select u.name from users u where u.id = flights.pilot_id) as \"pilot_name?\",\n                group_id,\n                (select g.name from groups g where g.id = flights.group_id) as \"group_name?\",\n                session_id,\n                track, metrics,\n                (select a.id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_id?\",\n                (select a.group_id from aircraft a where a.serial = flights.aircraft_serial) as \"aircraft_group_id?\",\n                (select r.id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_id?\",\n                (select r.group_id from remote_controllers r where r.serial = flights.rc_serial) as \"rc_group_id?\",\n                (select b.id from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0 and flights.archived_at is null) as \"battery_id?\",\n                (select b.name from flight_batteries fb join batteries b on b.id = fb.battery_id\n                 where fb.flight_id = flights.id and fb.slot = 0) as \"battery_name?\",\n                archived_at,\n                (select coalesce(jsonb_agg(jsonb_build_object(\n                            'id', a.id, 'name', a.name,\n                            'air_time_s', fa.air_time_s, 'distance_m', fa.distance_m)\n                            order by fa.air_time_s desc, lower(a.name), a.id), '[]')\n                 from flight_areas fa join areas a on a.id = fa.area_id\n                 where fa.flight_id = flights.id) as \"areas!\"\n         from flights\n         where id = $1\n           and ($2\n                or pilot_id = $3\n                or group_id = any($4))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "takeoff_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "takeoff_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "landed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "landed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "air_time_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "air_time_s"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "distance_m",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "distance_m"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "aircraft_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "aircraft_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "aircraft_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "rc_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "rc_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "rc_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "pilot_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "pilot_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "pilot_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "group_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "track",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "track"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "metrics",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "metrics"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "aircraft_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 17,
+        "name": "aircraft_group_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
+        "name": "rc_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "rc_group_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 20,
+        "name": "battery_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 21,
+        "name": "battery_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 22,
+        "name": "archived_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "archived_at"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "areas!",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      null,
+      true,
+      null,
+      true,
+      null,
+      true,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "7d52f07ca9cfa15fdab7ee5deeeda7da0b9d83bec1fd4c8ed77f03dcd9d1202e"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into group_members (group_id, user_id, role)\n         select $1, $2, unnest($3::text[])\n         on conflict do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e8845e63fdc8df1bc27bfd455b6fa7ecc7b09ed9a7d313744826951deb2b6da9"
+}

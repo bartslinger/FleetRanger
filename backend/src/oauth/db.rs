@@ -178,7 +178,6 @@ pub struct Access {
     pub user_id: Uuid,
     pub email: String,
     pub name: String,
-    pub role: String,
     pub scopes: Vec<String>,
     pub resource: String,
 }
@@ -192,7 +191,7 @@ pub async fn use_access(db: &PgPool, access_sha256: &[u8]) -> sqlx::Result<Optio
          from users u, logins l
          where g.access_token_sha256 = $1 and g.access_expires_at > now()
            and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id
-         returning g.id as grant_id, g.user_id, l.email, u.name, u.role, g.scopes, g.resource",
+         returning g.id as grant_id, g.user_id, l.email, u.name, g.scopes, g.resource",
         access_sha256,
     )
     .fetch_optional(db)

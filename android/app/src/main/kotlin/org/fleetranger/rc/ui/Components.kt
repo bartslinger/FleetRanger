@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 // Carbon's components, as far as the app needs them. Touch targets are at
@@ -122,6 +124,13 @@ fun ClickableTile(
     action: String? = null,
     /** The arrow for somewhere in the app, Launch for another app. */
     icon: ImageVector = CarbonIcons.ArrowRight,
+    /**
+     * What the tile is, before the title, e.g. a pilot or a group: decorative,
+     * in the text's colour and sized to it (Carbon's icon sizes: 20 beside
+     * 16px text, 32 beside large type).
+     */
+    leading: ImageVector? = null,
+    leadingSize: Dp = 20.dp,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -137,7 +146,17 @@ fun ClickableTile(
             .clickable(interaction, indication = null, role = Role.Button, onClick = onClick),
     ) {
         Column(Modifier.padding(Spacing.s05)) {
-            BasicText(title, style = titleStyle)
+            if (leading != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s03),
+                ) {
+                    Icon(leading, Colors.iconPrimary, size = leadingSize)
+                    BasicText(title, style = titleStyle)
+                }
+            } else {
+                BasicText(title, style = titleStyle)
+            }
             if (detail != null) {
                 BasicText(
                     detail,

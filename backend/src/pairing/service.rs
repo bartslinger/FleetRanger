@@ -3,13 +3,13 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::db::{self, OpenCode, Paired};
+use super::db::{self, OpenCode, Paired, PilotChoice};
 use super::{Controller, parse_sha256};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    flights::{self, db::PilotChoice},
-    policy,
+    flights,
+    policy::{self, Permission},
 };
 
 /// Without 0/O and 1/I, which are easily confused when typed. 32 letters, so a
@@ -25,51 +25,59 @@ const MAX_HOURS: i64 = 7 * 24;
 pub struct Created {
     pub id: Uuid,
     pub code: String,
-    pub team: Option<String>,
+    /// The group the controller joins; None for the organisation.
+    pub group: Option<String>,
     pub expires_at: DateTime<Utc>,
 }
 
-/// Creates a single-use code that pairs a controller, valid for `hours`. Any
-/// user may; the controller joins one of their teams, the one they choose if
-/// they're in several, or none when they have none.
+/// Creates a single-use code that pairs a controller, valid for `hours`, with
+/// `controllers.pair` on the group the controller joins, or with None on the
+/// organisation, where it goes in no group.
 pub async fn create(
     db: &PgPool,
     actor: &Actor,
-    team: Option<Uuid>,
+    group: Option<Uuid>,
     hours: i64,
 ) -> ApiResult<Created> {
+    if !actor.grants.anywhere(Permission::ControllersPair) {
+        return Err(ApiError::Forbidden);
+    }
     if !(1..=MAX_HOURS).contains(&hours) {
         return Err(ApiError::Invalid(format!(
             "A code is valid for 1 to {MAX_HOURS} hours."
         )));
     }
-    let teams = flights::db::teams_of_user(db, actor.user_id).await?;
-    let team = match (team, teams.as_slice()) {
-        (_, []) => None,
-        (Some(id), teams) => Some(
-            teams
-                .iter()
-                .find(|team| team.id == id)
-                .ok_or_else(|| ApiError::Invalid("Choose one of your teams.".to_owned()))?,
+    if !actor.grants.may(Permission::ControllersPair, group) {
+        return Err(ApiError::Invalid(
+            "Choose one of your groups for the controller.".to_owned(),
+        ));
+    }
+    let group = match group {
+        Some(id) => Some(
+            flights::db::groups_named(db, &[id])
+                .await?
+                .pop()
+                .ok_or_else(|| ApiError::Invalid("Choose an existing group.".to_owned()))?,
         ),
-        (None, [team]) => Some(team),
-        (None, _) => {
-            return Err(ApiError::Invalid(
-                "Choose the team the controller joins.".to_owned(),
-            ));
-        }
+        None => None,
     };
     let expires_at = Utc::now() + Duration::hours(hours);
     // A taken code is unlikely (32^8 codes); try a few times.
     for _ in 0..5 {
         let code = random_code();
-        if let Some(id) =
-            db::add_code(db, &code, actor.user_id, team.map(|t| t.id), expires_at).await?
+        if let Some(id) = db::add_code(
+            db,
+            &code,
+            actor.user_id,
+            group.as_ref().map(|g| g.id),
+            expires_at,
+        )
+        .await?
         {
             return Ok(Created {
                 id,
                 code,
-                team: team.map(|t| t.name.clone()),
+                group: group.map(|g| g.name),
                 expires_at,
             });
         }
@@ -77,18 +85,19 @@ pub async fn create(
     Err(ApiError::Internal(anyhow::anyhow!("no free pairing code")))
 }
 
-/// The codes the actor may see and revoke that can still be used.
+/// The codes the actor may see and revoke that can still be used: their own,
+/// and those of the groups where they hold `controllers.manage`.
 pub async fn open_codes(db: &PgPool, actor: &Actor) -> ApiResult<Vec<OpenCode>> {
-    let created_by = (!policy::all_pairing_codes(actor)).then_some(actor.user_id);
-    Ok(db::open_codes(db, created_by).await?)
+    let scope = actor.grants.scope(Permission::ControllersManage);
+    Ok(db::open_codes(db, actor.user_id, &scope).await?)
 }
 
 /// Revokes a code, so it can't pair a controller any more.
 pub async fn revoke(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
     // Used or expired just now, before the page caught up.
     let gone = || ApiError::Conflict("This code was used or has expired.".to_owned());
-    let created_by = db::code_creator(db, id).await?.ok_or_else(gone)?;
-    if !policy::revoke_pairing_code(actor, created_by) {
+    let owner = db::code_owner(db, id).await?.ok_or_else(gone)?;
+    if !policy::manage_pairing_code(actor, owner.created_by, owner.group_id) {
         return Err(ApiError::NotFound);
     }
     if db::revoke(db, id).await? {
@@ -126,37 +135,78 @@ pub async fn pair(
         })
 }
 
-/// Whether a controller's token is paired.
-pub async fn paired(db: &PgPool, token_sha256: &[u8]) -> ApiResult<bool> {
-    Ok(db::by_token(db, token_sha256).await?.is_some())
+/// The pilots a controller offers, from v1 of its API: whoever holds
+/// `flights.fly_for` anywhere, once, with the groups to choose from after
+/// them. The controller shows its own group's pilots first, and keeps the
+/// list for when it's offline.
+#[derive(Serialize)]
+pub struct Pilots {
+    /// None when the controller is in the organisation.
+    pub controller_group: Option<Uuid>,
+    /// Every group, by name; empty when the organisation has none, and then
+    /// the controller asks for no group.
+    pub groups: Vec<flights::db::GroupChoice>,
+    pub pilots: Vec<db::Pilot>,
 }
 
-/// The pilots a controller offers: every active user in a team. The controller
-/// shows its own team first, and keeps the list for when it's offline.
+pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<Pilots> {
+    Ok(Pilots {
+        controller_group: controller.group_id,
+        groups: flights::db::group_choices(db).await?,
+        pilots: db::pilots(db).await?,
+    })
+}
+
+/// The pilots android-v0.3.0 offers: once per group they are a pilot in,
+/// which it calls a team. Its uploads go to the queue, whatever it chose.
 #[derive(Serialize)]
 pub struct PilotList {
-    /// The controller's team; None if it has none.
+    /// The controller's group, which it calls a team.
     pub team_id: Option<Uuid>,
     pub pilots: Vec<PilotChoice>,
 }
 
-pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
+pub async fn pilots_v0(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
     Ok(PilotList {
-        team_id: controller.team_id,
-        pilots: flights::db::pilot_choices(db, None).await?,
+        team_id: controller.group_id,
+        pilots: db::pilot_choices(db).await?,
     })
 }
 
-/// The teams a controller paired with the actor's code can join: theirs. One
-/// of them is chosen when there are several.
-pub async fn teams(db: &PgPool, actor: &Actor) -> ApiResult<Vec<flights::db::TeamChoice>> {
-    Ok(flights::db::teams_of_user(db, actor.user_id).await?)
+/// Where a controller paired with the actor's code can go: the groups where
+/// they hold `controllers.pair`, and the organisation itself (no group) when
+/// they hold it there, which covers every group too (user's decision,
+/// 2026-10-23).
+#[derive(Serialize)]
+pub struct Destinations {
+    pub groups: Vec<flights::db::GroupChoice>,
+    pub organisation: bool,
 }
 
-/// Unpairs a controller from the web app. Admins only; a controller can also
-/// unpair itself.
+pub async fn destinations(db: &PgPool, actor: &Actor) -> ApiResult<Destinations> {
+    let pair = actor.grants.scope(Permission::ControllersPair);
+    let groups = if pair.all {
+        flights::db::group_choices(db).await?
+    } else {
+        flights::db::groups_named(db, &pair.groups).await?
+    };
+    Ok(Destinations {
+        groups,
+        organisation: pair.all,
+    })
+}
+
+/// Unpairs a controller from the web app, with `controllers.manage` on its
+/// group; a controller can also unpair itself.
 pub async fn unpair(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
-    policy::require_admin(actor)?;
+    // Refused before not found, so this doesn't tell whether it exists.
+    if !actor.grants.anywhere(Permission::ControllersManage) {
+        return Err(ApiError::Forbidden);
+    }
+    let group = db::controller_group(db, id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    policy::require(actor, Permission::ControllersManage, group)?;
     if db::unpair(db, id).await? {
         Ok(())
     } else {

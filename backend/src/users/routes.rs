@@ -38,9 +38,9 @@ struct ListQuery {
 #[derive(Deserialize)]
 struct Body {
     name: String,
-    role: String,
+    /// Roles on the whole organisation.
     #[serde(default)]
-    team_ids: Vec<Uuid>,
+    roles: Vec<String>,
     email: Option<String>,
 }
 
@@ -48,8 +48,7 @@ impl From<Body> for UserInput {
     fn from(body: Body) -> Self {
         Self {
             name: body.name,
-            role: body.role,
-            team_ids: body.team_ids,
+            roles: body.roles,
             email: body.email,
         }
     }

@@ -15,6 +15,9 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { dateTime, day, distance, duration, timeSpan } from '#lib/format.js';
+	import { may } from '#lib/permissions.js';
+	import { sessionGroupChoice } from '#lib/groups.js';
+	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -72,11 +75,14 @@
 	const shown = $derived(chosen.length > 0 ? chosen : flights);
 	const facts = $derived(summary(shown, data.timeZone));
 
-	// Admins change any flight, members those of their own team.
-	const mayChange = (flight: Row) =>
-		data.choices.admin ||
-		(flight.team_id !== null && data.choices.own_team_ids.includes(flight.team_id));
-	const canChange = $derived(chosen.every(mayChange));
+	// Setting a flight's pilot needs flights.set_pilot on its group; making
+	// the session sessions.edit on the group it gets, the flights' own.
+	const mayChange = (flight: Row) => may(data.account, 'flights.set_pilot', flight.group_id);
+	const canSetPilots = $derived(chosen.every(mayChange));
+	// The session's group: chosen where the user may edit sessions, the
+	// flights' own preselected.
+	const groupChoice = $derived(sessionGroupChoice(data.account, data.choices.groups, chosen));
+	const canChange = $derived(groupChoice.options.length > 0);
 
 	// After creating: the flights left out are a suggestion to look at next,
 	// otherwise the next one in the list.
@@ -153,6 +159,10 @@
 	let busy = $state(false);
 </script>
 
+{#snippet groupSelect()}
+	<SessionGroupField choice={groupChoice} form="create-session" />
+{/snippet}
+
 {#snippet pilotPencil(flight: Row)}
 	{#if mayChange(flight)}
 		<IconButton
@@ -169,7 +179,7 @@
 	crumb={`Suggested session ${day(facts.start, data.timeZone)}`}
 	status="Suggested"
 	description={`${facts.span} · ${flightsLabel(shown.length)} · ${duration(facts.airTime)} in the air`}
-	phoneDescription={`${facts.span} · ${facts.pilots} · ${facts.teams}`}
+	phoneDescription={`${facts.span} · ${facts.pilots} · ${facts.groups}`}
 	breadcrumb={[{ href: `${resolve('/flights')}${list}`, label: 'Suggested sessions' }]}
 >
 	{#snippet actions()}
@@ -184,6 +194,7 @@
 				total={data.suggestion.total}
 			/>
 			<form
+				id="create-session"
 				method="POST"
 				{action}
 				use:enhance={() => {
@@ -204,6 +215,9 @@
 					<input type="hidden" name="flight_id" value={flight.id} />
 				{/each}
 				<input type="hidden" name="then" value={then} />
+				{#if groupChoice.options.length === 1}
+					<SessionGroupField choice={groupChoice} />
+				{/if}
 				<Button type="submit" disabled={busy || chosen.length === 0 || !canChange}
 					>Create session</Button
 				>
@@ -249,7 +263,7 @@
 	{:else if !canChange}
 		<Column narrow>
 			<InlineNotification kind="info" title="You can’t create this session">
-				It has flights of another team. Leave them out, or ask an admin.
+				Making sessions needs the Editor role in a group. Ask an admin for it.
 			</InlineNotification>
 		</Column>
 	{/if}
@@ -264,9 +278,15 @@
 	</Column>
 	<!-- On phones below the table, which then follows the map. -->
 	<Column lg={5} smOrder={1}>
-		<SessionFacts flights={shown} timeZone={data.timeZone}>
+		<!-- With a choice, the group it gets is chosen by the facts it describes
+		     (carbon-expert's advice), so Create session stays one click. -->
+		<SessionFacts
+			flights={shown}
+			timeZone={data.timeZone}
+			groupField={groupChoice.options.length > 1 ? groupSelect : undefined}
+		>
 			{#snippet pilotAction()}
-				{#if canChange && chosen.length > 0}
+				{#if canSetPilots && chosen.length > 0}
 					<IconButton
 						icon={Edit}
 						label="Change pilot"

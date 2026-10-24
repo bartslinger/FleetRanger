@@ -1,33 +1,42 @@
-// Choosing a pilot: a pilot in several teams is a choice per team, and the
-// flights move to the team chosen (user's decision, 2026-10-19). A choice's
-// value is "pilot id:team id"; empty for Unknown.
+// Choosing a pilot: everyone who flies, and the flights stay in their group.
+// A choice's value is the pilot's id; empty for Unknown.
+
+import type { Pilot } from '#lib/server/backend.js';
 
 interface Choices {
-	admin: boolean;
-	own_team_ids: string[];
-	pilots: { id: string; name: string; team_id: string; team_name: string }[];
+	pilots: Pilot[];
 }
 
-/** The options of a pilot field, Unknown first. The team shows for admins and
- * members of several teams, who choose between teams. */
-export function pilotOptions(choices: Choices): { value: string; label: string }[] {
-	const withTeam = choices.admin || choices.own_team_ids.length > 1;
+type Option = { value: string; label: string };
+
+/**
+ * The options of a pilot field: Unknown first, then, for flights of one
+ * group, that group's own pilots under its name and the others after them
+ * (the carbon-expert's suggestion; Carbon is silent on option groups);
+ * otherwise one list.
+ */
+export function pilotOptions(
+	choices: Choices,
+	group: { id: string; name: string } | null = null
+): (Option | { group: string; options: Option[] })[] {
+	const unknown = { value: '', label: 'Unknown' };
+	const option = (pilot: Pilot) => ({ value: pilot.id, label: pilot.name });
+	const own = group ? choices.pilots.filter((pilot) => pilot.group_ids.includes(group.id)) : [];
+	if (!group || own.length === 0) return [unknown, ...choices.pilots.map(option)];
+	const others = choices.pilots.filter((pilot) => !pilot.group_ids.includes(group.id));
 	return [
-		{ value: '', label: 'Unknown' },
-		...choices.pilots.map((pilot) => ({
-			value: pilotValue(pilot.id, pilot.team_id),
-			label: withTeam ? `${pilot.name} (${pilot.team_name})` : pilot.name
-		}))
+		unknown,
+		{ group: `${group.name} pilots`, options: own.map(option) },
+		...(others.length > 0 ? [{ group: 'Other pilots', options: others.map(option) }] : [])
 	];
 }
 
-/** The value for a flight's pilot with its team; empty without a pilot. */
-export function pilotValue(pilotId: string | null, teamId: string | null): string {
-	return pilotId ? `${pilotId}:${teamId ?? ''}` : '';
+/** Whether a pilot can be chosen, e.g. to preselect them. */
+export function offered(choices: Choices, value: string): boolean {
+	return value === '' || choices.pilots.some((pilot) => pilot.id === value);
 }
 
 /** A chosen value as the backend takes it. */
-export function parsePilot(value: string): { pilot_id: string | null; team_id: string | null } {
-	const [pilot, team] = value.split(':');
-	return { pilot_id: pilot || null, team_id: team || null };
+export function parsePilot(value: string): { pilot_id: string | null } {
+	return { pilot_id: value || null };
 }

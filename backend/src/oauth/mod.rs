@@ -16,7 +16,7 @@ use base64::Engine;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
-use crate::{auth::Actor, policy::Role};
+use crate::auth::Actor;
 
 /// What an app can be allowed to do. Writes come later.
 pub const SCOPES: &[&str] = &["flights:read"];
@@ -71,10 +71,6 @@ pub async fn bearer(
     if access.resource != resource || !access.scopes.iter().any(|granted| granted == scope) {
         return Ok(Bearer::Insufficient);
     }
-    let Some(role) = Role::parse(&access.role) else {
-        tracing::error!(role = access.role, "unknown user role");
-        return Ok(Bearer::Invalid);
-    };
     let peer = parts
         .extensions
         .get::<ConnectInfo<SocketAddr>>()
@@ -84,7 +80,7 @@ pub async fn bearer(
     };
     Ok(Bearer::Valid(Actor {
         user_id: access.user_id,
-        role,
+        grants: crate::auth::grants(db, access.user_id).await?,
         // The audit log will name the connection here rather than a login session.
         login_session_id: access.grant_id,
         ip: crate::auth::client_ip(&parts.headers, peer),

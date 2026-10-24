@@ -2,7 +2,7 @@
 	import '#lib/ui/base.css';
 	import Area from '@carbon/icons/es/area/16.js';
 	import Drone from '@carbon/icons/es/drone/16.js';
-	import Events from '@carbon/icons/es/events/16.js';
+	import Enterprise from '@carbon/icons/es/enterprise/16.js';
 	import FlightRoster from '@carbon/icons/es/flight--roster/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
 	import CheckmarkFilled from '@carbon/icons/es/checkmark--filled/20.js';
@@ -13,6 +13,7 @@
 	import { resolve } from '$app/paths';
 	import favicon from '#lib/assets/favicon.svg';
 	import ProcessingPanel from '#lib/ProcessingPanel.svelte';
+	import { may } from '#lib/permissions.js';
 	import { trackTrail } from '#lib/trail.svelte.js';
 	import type { ProcessingStatus } from '#lib/server/backend.js';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -24,13 +25,13 @@
 
 	trackTrail();
 
-	// Log processing, for admins: from the server, then as it changes, through
-	// server-sent events. The browser reconnects by itself, and the stream
-	// starts with the current state.
+	// Log processing, for whoever manages logs: from the server, then as it
+	// changes, through server-sent events. The browser reconnects by itself,
+	// and the stream starts with the current state.
 	let processing = $derived(data.processing);
 
 	$effect(() => {
-		if (data.account?.role !== 'admin') return;
+		if (!may(data.account, 'logs.manage', null)) return;
 		const events = new EventSource('/api/events');
 		events.addEventListener('processing', (event) => processed(JSON.parse(event.data)));
 		return () => events.close();
@@ -89,17 +90,20 @@
 			: [])
 	]);
 
-	// Admin pages only for admins; the backend refuses everyone else anyway.
-	// Equipment for everyone: members see their team's.
+	// Admin pages only for who may manage them on the whole organisation; the
+	// backend refuses everyone else anyway. Equipment for everyone: members
+	// see their group's.
 	const nav: NavItem[] = $derived([
 		{ href: resolve('/sessions'), label: 'Sessions', icon: FlightRoster },
 		{ href: resolve('/flights'), label: 'Flights', icon: Notebook },
-		...(data.account?.role === 'admin'
-			? [
-					{ href: resolve('/users'), label: 'Users', icon: UserMultiple },
-					{ href: resolve('/teams'), label: 'Teams', icon: Events },
-					{ href: resolve('/areas'), label: 'Areas', icon: Area }
-				]
+		...(may(data.account, 'users.manage', null)
+			? [{ href: resolve('/users'), label: 'Users', icon: UserMultiple }]
+			: []),
+		...(may(data.account, 'groups.manage', null)
+			? [{ href: resolve('/groups'), label: 'Groups', icon: Enterprise }]
+			: []),
+		...(may(data.account, 'areas.manage', null)
+			? [{ href: resolve('/areas'), label: 'Areas', icon: Area }]
 			: []),
 		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone }
 	]);

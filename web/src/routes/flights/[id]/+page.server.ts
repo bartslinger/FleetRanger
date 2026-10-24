@@ -6,12 +6,13 @@ import {
 	send,
 	type Area,
 	type FlightChoices,
-	type FlightDetail
+	type FlightDetail,
+	type FlightPage
 } from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
 	const [flight, choices, areas] = await Promise.all([
-		get<FlightDetail>(fetch, `/api/flights/${params.id}`),
+		get<FlightPage>(fetch, `/api/flights/${params.id}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),
 		get<Area[]>(fetch, '/api/areas')
 	]);
@@ -26,20 +27,18 @@ export const actions = {
 		const body = { flight_ids: [params.id], ...parsePilot(String(form.get('pilot') ?? '')) };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
-		// For the toast: an admin's change can move the flight to another team.
 		const flight = await get<FlightDetail>(fetch, `/api/flights/${params.id}`);
-		const moved = (flight.team_id ?? '') !== String(form.get('team_before') ?? '');
-		return { pilotName: flight.pilot_name, movedTo: moved ? flight.team_name : null };
+		return { pilotName: flight.pilot_name };
 	},
-	/** Moves the flight to a team or the queue, as the logbook's batch action does. Admins. */
-	setTeam: async ({ fetch, params, request }) => {
+	/** Moves the flight to a group or the queue, as the logbook's batch action does. */
+	setGroup: async ({ fetch, params, request }) => {
 		const form = await request.formData();
-		const teamId = String(form.get('team_id') ?? '') || null;
-		const body = { flight_ids: [params.id], team_id: teamId };
-		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/team', body);
-		if (!result.ok) return fail(result.status, { teamMessage: result.message });
+		const groupId = String(form.get('group_id') ?? '') || null;
+		const body = { flight_ids: [params.id], group_id: groupId };
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/group', body);
+		if (!result.ok) return fail(result.status, { groupMessage: result.message });
 		const flight = await get<FlightDetail>(fetch, `/api/flights/${params.id}`);
-		return { teamName: flight.team_name };
+		return { groupName: flight.group_name };
 	},
 	/** Archives the flight, as the logbook's batch action does. */
 	archive: async ({ fetch, params }) => {

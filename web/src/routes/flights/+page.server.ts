@@ -1,5 +1,6 @@
 import { TIME_ZONE } from '$app/env/private';
 import { parsePilot } from '#lib/pilots.js';
+import { sessionGroup } from '#lib/groups.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
@@ -69,23 +70,25 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
 		return { changed: result.data.changed };
 	},
-	setTeam: async ({ fetch, request, url }) => {
+	setGroup: async ({ fetch, request, url }) => {
 		const form = await request.formData();
 		const flights = await flightIds(fetch, url, form);
-		if ('message' in flights) return fail(409, { teamMessage: flights.message });
+		if ('message' in flights) return fail(409, { groupMessage: flights.message });
 		const body = {
 			flight_ids: flights.ids,
-			team_id: String(form.get('team_id') ?? '') || null
+			group_id: String(form.get('group_id') ?? '') || null
 		};
-		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/team', body);
-		if (!result.ok) return fail(result.status, { teamMessage: result.message });
+		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/group', body);
+		if (!result.ok) return fail(result.status, { groupMessage: result.message });
 		return { changed: result.data.changed };
 	},
 	newSession: async ({ fetch, request, url }) => {
 		const form = await request.formData();
 		const flights = await flightIds(fetch, url, form);
 		if ('message' in flights) return fail(409, { newSessionMessage: flights.message });
-		const body = { flight_ids: flights.ids };
+		const group = sessionGroup(form);
+		if (!group) return fail(400, { newSessionMessage: 'Choose a group for the session.' });
+		const body = { flight_ids: flights.ids, ...group };
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions', body);
 		if (!result.ok) return fail(result.status, { newSessionMessage: result.message });
 		return { session: result.data.id };

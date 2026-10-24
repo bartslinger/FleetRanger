@@ -41,7 +41,7 @@ where
         .route("/api/flights/{id}", get(show))
         .route("/api/flights/{id}/neighbours", get(neighbours))
         .route("/api/flights/pilot", post(set_pilot))
-        .route("/api/flights/team", post(set_team))
+        .route("/api/flights/group", post(set_group))
         .route("/api/flights/archive", post(archive))
         .route("/api/flights/restore", post(restore))
 }
@@ -56,16 +56,13 @@ struct PilotChange {
     flight_ids: Vec<Uuid>,
     /// None: unknown.
     pilot_id: Option<Uuid>,
-    /// The team the pilot was chosen with; may be left out for a pilot in
-    /// one team.
-    team_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
-struct TeamChange {
+struct GroupChange {
     flight_ids: Vec<Uuid>,
     /// None: the organisation's queue.
-    team_id: Option<Uuid>,
+    group_id: Option<Uuid>,
 }
 
 #[derive(Serialize)]
@@ -73,12 +70,29 @@ struct Changed {
     changed: u64,
 }
 
+/// A flight for its page, with when its session starts, to name the session
+/// as its page does.
+#[derive(Serialize)]
+struct ShownFlight {
+    #[serde(flatten)]
+    flight: FlightDetail,
+    session_takeoff_at: Option<DateTime<Utc>>,
+}
+
 async fn show(
     actor: Actor,
     State(db): State<PgPool>,
     Path(id): Path<Uuid>,
-) -> ApiResult<Json<FlightDetail>> {
-    Ok(Json(service::get(&db, &actor, id).await?))
+) -> ApiResult<Json<ShownFlight>> {
+    let flight = service::get(&db, &actor, id).await?;
+    let session_takeoff_at = match flight.session_id {
+        Some(session) => service::session_takeoff(&db, &actor, session).await?,
+        None => None,
+    };
+    Ok(Json(ShownFlight {
+        flight,
+        session_takeoff_at,
+    }))
 }
 
 async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Choices>> {
@@ -119,30 +133,28 @@ async fn set_pilot(
     State(db): State<PgPool>,
     Json(change): Json<PilotChange>,
 ) -> ApiResult<Json<Changed>> {
-    let changed = service::set_pilot(
-        &db,
-        &actor,
-        &change.flight_ids,
-        change.pilot_id,
-        change.team_id,
-    )
-    .await?;
+    let changed = service::set_pilot(&db, &actor, &change.flight_ids, change.pilot_id).await?;
     Ok(Json(Changed { changed }))
 }
 
-async fn set_team(
+async fn set_group(
     actor: Actor,
     State(db): State<PgPool>,
-    Json(change): Json<TeamChange>,
+    Json(change): Json<GroupChange>,
 ) -> ApiResult<Json<Changed>> {
-    let changed = service::set_team(&db, &actor, &change.flight_ids, change.team_id).await?;
+    let changed = service::set_group(&db, &actor, &change.flight_ids, change.group_id).await?;
     Ok(Json(Changed { changed }))
+}
+
+#[derive(Deserialize)]
+struct Archive {
+    flight_ids: Vec<Uuid>,
 }
 
 async fn archive(
     actor: Actor,
     State(db): State<PgPool>,
-    Json(batch): Json<Batch>,
+    Json(batch): Json<Archive>,
 ) -> ApiResult<Json<Changed>> {
     let changed = service::archive(&db, &actor, &batch.flight_ids).await?;
     Ok(Json(Changed { changed }))
@@ -175,9 +187,9 @@ struct ListQuery {
     from: Option<DateTime<Utc>>,
     /// Only flights taking off before this instant.
     to: Option<DateTime<Utc>>,
-    /// Only the flights of these team ids, comma-separated; `none` for the
-    /// flights without a team.
-    team: Option<String>,
+    /// Only the flights of these group ids, comma-separated; `none` for the
+    /// flights without a group.
+    group: Option<String>,
     /// Only the flights of these pilots' ids, comma-separated; `none` for the
     /// flights without a pilot.
     pilot: Option<String>,
@@ -281,7 +293,7 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
         ..filter(
             &query.aircraft,
             &query.controller,
-            &query.team,
+            &query.group,
             &query.pilot,
             &query.area,
             query.from,
@@ -292,11 +304,11 @@ fn filter_and_sort(query: &ListQuery) -> Result<(Filter, Sort), String> {
 }
 
 /// The filters the flights and sessions lists share, from their query
-/// parameters: drones, controllers, teams, pilots, areas and takeoff times.
+/// parameters: drones, controllers, groups, pilots, areas and takeoff times.
 pub fn filter(
     aircraft: &Option<String>,
     controller: &Option<String>,
-    team: &Option<String>,
+    group: &Option<String>,
     pilot: &Option<String>,
     area: &Option<String>,
     from: Option<DateTime<Utc>>,
@@ -312,7 +324,7 @@ pub fn filter(
                 .collect()
         })
     };
-    let (team_ids, queue) = id_list(team).map_err(|()| "team must be team ids or none")?;
+    let (group_ids, queue) = id_list(group).map_err(|()| "group must be group ids or none")?;
     let (pilot_ids, unknown_pilot) =
         id_list(pilot).map_err(|()| "pilot must be user ids or none")?;
     let (area_ids, _) = id_list(area).map_err(|()| "area must be area ids")?;
@@ -322,7 +334,7 @@ pub fn filter(
         in_session: None,
         from,
         to,
-        team_ids,
+        group_ids,
         queue,
         pilot_ids,
         unknown_pilot,

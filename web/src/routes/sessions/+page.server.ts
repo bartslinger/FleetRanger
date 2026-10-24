@@ -20,7 +20,8 @@ export async function load({ fetch, url }) {
 	api.set('size', cards ? String(PERIOD_SIZE) : String(state.size));
 	// The cards' map shows all their tracks, coarse.
 	if (cards) api.set('tracks', '1');
-	// The filters' options: the equipment and teams of flights in a session.
+	// The filters' options: the equipment of flights in a session, and the
+	// sessions' own groups.
 	const options = new URLSearchParams(filters);
 	options.set('session', 'any');
 	const [{ sessions, total }, choices, devices] = await Promise.all([
@@ -54,6 +55,20 @@ export const actions = {
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
 		return { pilotId: pilot.pilot_id, changed: result.data.changed };
+	},
+	/** Moves the open session to another group, and its flights if asked. */
+	setGroup: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const id = String(form.get('session_id') ?? '');
+		const group = String(form.get('group_id') ?? '');
+		const body = {
+			group_id: group === '' ? null : group,
+			move_flights: form.get('move_flights') === 'true'
+		};
+		const path = `/api/sessions/${encodeURIComponent(id)}/group`;
+		const result = await send<{ id: string }>(fetch, 'POST', path, body);
+		if (!result.ok) return fail(result.status, { groupMessage: result.message });
+		return { moved: body.move_flights };
 	},
 	split: async ({ fetch, request }) => {
 		const form = await request.formData();

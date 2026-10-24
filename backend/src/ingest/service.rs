@@ -4,7 +4,11 @@ use sqlx::PgPool;
 
 use super::activity::{Activity, Current, Paused};
 use super::db::{self, Processed};
-use crate::{auth::Actor, error::ApiResult, policy};
+use crate::{
+    auth::Actor,
+    error::ApiResult,
+    policy::{self, Permission},
+};
 
 /// How many processed logs the status lists.
 const LATEST: i64 = 5;
@@ -26,7 +30,7 @@ pub struct Status {
 }
 
 pub async fn status(db: &PgPool, actor: &Actor, activity: &Activity) -> ApiResult<Status> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::LogsManage, None)?;
     let now = activity.snapshot();
     let empty = |pending| Status {
         pending,

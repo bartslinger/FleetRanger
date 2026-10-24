@@ -14,12 +14,16 @@
 		phoneOnly?: boolean;
 		/** A destructive action, e.g. Delete: last, below a divider, in red. */
 		danger?: boolean;
+		/** Carbon's selectable item, an on/off setting with a checkmark while
+		 * on, e.g. a toolbar's toggle that doesn't fit on phones. */
+		checked?: boolean;
 	}
 </script>
 
 <script lang="ts">
 	import { DropdownMenu, Tooltip } from 'bits-ui';
 	import TooltipContent from './TooltipContent.svelte';
+	import Checkmark from '@carbon/icons/es/checkmark/16.js';
 	import OverflowMenuHorizontal from '@carbon/icons/es/overflow-menu--horizontal/16.js';
 	import OverflowMenuVertical from '@carbon/icons/es/overflow-menu--vertical/16.js';
 	import Icon, { type IconDescriptor } from './Icon.svelte';
@@ -79,12 +83,25 @@
 				{#if item.danger && index > 0}
 					<DropdownMenu.Separator class="overflow-divider" />
 				{/if}
-				<DropdownMenu.Item
-					class="overflow-item{item.phoneOnly ? ' phone-only' : ''}{item.danger ? ' danger' : ''}"
-					onSelect={item.onselect}
-				>
-					{item.label}
-				</DropdownMenu.Item>
+				{#if item.checked !== undefined}
+					<DropdownMenu.CheckboxItem
+						class="overflow-item selectable{item.phoneOnly ? ' phone-only' : ''}"
+						checked={item.checked}
+						onCheckedChange={item.onselect}
+					>
+						<span class="check"
+							>{#if item.checked}<Icon icon={Checkmark} />{/if}</span
+						>
+						{item.label}
+					</DropdownMenu.CheckboxItem>
+				{:else}
+					<DropdownMenu.Item
+						class="overflow-item{item.phoneOnly ? ' phone-only' : ''}{item.danger ? ' danger' : ''}"
+						onSelect={item.onselect}
+					>
+						{item.label}
+					</DropdownMenu.Item>
+				{/if}
 			{/each}
 		</DropdownMenu.Content>
 	</DropdownMenu.Portal>
@@ -181,6 +198,18 @@
 	:global(.overflow-item[data-highlighted]) {
 		background: var(--cds-layer-hover-01);
 		color: var(--cds-text-primary);
+	}
+
+	/* A selectable item keeps 16px for its checkmark, 8px before the label. */
+	:global(.overflow-item.selectable) {
+		gap: var(--cds-spacing-03);
+	}
+
+	.check {
+		display: inline-flex;
+		flex: none;
+		width: 1rem;
+		color: var(--cds-icon-primary);
 	}
 
 	:global(.overflow-item.danger) {

@@ -3,11 +3,13 @@
 	The filters above the Flights and Sessions lists, the same with or without
 	a table: in a row, the takeoff days, a Filters button with how many of the
 	others are applied, and Clear filters. The button opens a panel with
-	pilots, drones, controllers, for admins teams, areas once there are any,
-	and the list's own after them; Apply applies them together.
+	pilots, drones, controllers, groups for someone who sees several, areas
+	once there are any, and the list's own after them; Apply applies them
+	together.
 -->
 <script lang="ts" module>
 	import { dayMonth } from '#lib/format.js';
+	import { ORGANISATION } from '#lib/groups.js';
 	import type { Device, Devices } from '#lib/server/backend.js';
 
 	export interface Filters {
@@ -17,8 +19,8 @@
 		drones: string[];
 		/** Controller serials; all if empty. */
 		controllers: string[];
-		/** Team ids, "none" for no team (the queue); all if empty. */
-		teams: string[];
+		/** Group ids, "none" for what is in no group (the organisation); all if empty. */
+		groups: string[];
 		/** Area ids: flights with time in any of them; all if empty. */
 		areas: string[];
 		/** A day ("2026-10-12"), or the first of `to`. */
@@ -30,7 +32,7 @@
 		pilots: [],
 		drones: [],
 		controllers: [],
-		teams: [],
+		groups: [],
 		areas: [],
 		from: null,
 		to: null
@@ -38,7 +40,7 @@
 
 	/** How many of the panel's filters are applied; the dates aren't in it. */
 	const panelCount = (filters: Filters) =>
-		[filters.pilots, filters.drones, filters.controllers, filters.teams, filters.areas].filter(
+		[filters.pilots, filters.drones, filters.controllers, filters.groups, filters.areas].filter(
 			(values) => values.length > 0
 		).length;
 
@@ -46,7 +48,7 @@
 		filters.pilots.length > 0 ||
 		filters.drones.length > 0 ||
 		filters.controllers.length > 0 ||
-		filters.teams.length > 0 ||
+		filters.groups.length > 0 ||
 		filters.areas.length > 0 ||
 		filters.from !== null;
 
@@ -70,8 +72,8 @@
 				: []),
 			...(filters.drones.length > 0 ? [names(devices.aircraft, filters.drones)] : []),
 			...(filters.controllers.length > 0 ? [names(devices.controllers, filters.controllers)] : []),
-			...(filters.teams.length > 0
-				? [filters.teams.map((id) => teamName(devices, id)).join(', ')]
+			...(filters.groups.length > 0
+				? [filters.groups.map((id) => groupName(devices, id)).join(', ')]
 				: []),
 			...(filters.areas.length > 0
 				? [
@@ -83,10 +85,10 @@
 		];
 	}
 
-	function teamName(devices: Devices, id: string) {
+	function groupName(devices: Devices, id: string) {
 		return id === 'none'
-			? 'No team (queue)'
-			: (devices.teams.find((team) => team.id === id)?.name ?? 'Unknown team');
+			? ORGANISATION
+			: (devices.groups.find((group) => group.id === id)?.name ?? 'Unknown group');
 	}
 
 	function pilotName(devices: Devices, id: string) {
@@ -109,7 +111,7 @@
 		filters: applied,
 		none,
 		devices,
-		admin,
+		groupFilter,
 		filtering,
 		ownCount = 0,
 		onchange,
@@ -122,8 +124,9 @@
 		none: T;
 		/** The options, narrowed by the applied filters. */
 		devices: Devices;
-		/** Teams are for admins: members see their own teams' anyway. */
-		admin: boolean;
+		/** Whether to offer the group filter: only to someone who sees more
+		 * than one group's flights. */
+		groupFilter: boolean;
 		/** Whether any filter is applied, the list's own too: Clear filters. */
 		filtering: boolean;
 		/** How many of the list's own filters are applied. */
@@ -161,11 +164,11 @@
 			label: pilot.name ?? 'Unknown pilot'
 		}))
 	);
-	const teamOptions = $derived(
-		devices.teams.map((team) => ({
-			value: team.id ?? 'none',
-			label: team.name ?? 'No team (queue)'
-		}))
+	const groupOptions = $derived(
+		// What has no group is in the organisation, the top group: first.
+		[...devices.groups]
+			.sort((a, b) => Number(a.id !== null) - Number(b.id !== null))
+			.map((group) => ({ value: group.id ?? 'none', label: group.name ?? ORGANISATION }))
 	);
 	const areaOptions = $derived(devices.areas.map((area) => ({ value: area.id, label: area.name })));
 </script>
@@ -228,13 +231,13 @@
 		value={draft.controllers}
 		onchange={(controllers) => change({ controllers } as Partial<T>)}
 	/>
-	{#if admin}
+	{#if groupFilter || draft.groups.length > 0}
 		<MultiSelect
-			label="Teams"
-			placeholder="All teams"
-			options={teamOptions}
-			value={draft.teams}
-			onchange={(teams) => change({ teams } as Partial<T>)}
+			label="Groups"
+			placeholder="All groups"
+			options={groupOptions}
+			value={draft.groups}
+			onchange={(groups) => change({ groups } as Partial<T>)}
 		/>
 	{/if}
 	<!-- Once the organisation has areas: a flight passes when it has time in any of them. -->

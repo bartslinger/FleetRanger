@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 pub use oidc::Provider;
 
-use crate::policy::Role;
+use crate::policy::Grants;
 
 /// Whether the install is reached over HTTPS, set once at startup.
 static HTTPS: OnceLock<bool> = OnceLock::new();
@@ -76,7 +76,8 @@ impl Auth {
 #[derive(Clone)]
 pub struct Actor {
     pub user_id: Uuid,
-    pub role: Role,
+    /// Their roles, read once per request; every access decision asks these.
+    pub grants: Grants,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
     pub login_session_id: Uuid,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
@@ -115,13 +116,15 @@ where
             StatusCode::INTERNAL_SERVER_ERROR
         })?
         .ok_or(StatusCode::UNAUTHORIZED)?;
-        let role = Role::parse(&session.role).ok_or_else(|| {
-            tracing::error!(role = session.role, "unknown user role");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        let grants = grants(&PgPool::from_ref(state), session.user_id)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "reading a user's roles");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
         Ok(Actor {
             user_id: session.user_id,
-            role,
+            grants,
             login_session_id: session.id,
             ip,
             email: session.email,
@@ -156,6 +159,13 @@ fn token_hash(token: &str) -> Vec<u8> {
 /// The browser's address. Behind our own proxies (nginx, SvelteKit, the Vite dev
 /// server), which connect from the internal network, it is the last address in
 /// `X-Forwarded-For`, which they append. Otherwise it is the connecting peer.
+/// A user's roles on groups and the whole organisation.
+pub async fn grants(db: &PgPool, user_id: Uuid) -> sqlx::Result<Grants> {
+    Grants::from_stored(db::roles(db, user_id).await?).ok_or_else(|| {
+        sqlx::Error::Decode(format!("unknown role stored for user {user_id}").into())
+    })
+}
+
 pub(crate) fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> IpAddr {
     let peer = peer.ip();
     if !is_internal(peer) {

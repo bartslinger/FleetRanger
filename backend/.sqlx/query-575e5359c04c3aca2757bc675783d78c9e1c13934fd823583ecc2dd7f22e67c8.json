@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select r.user_id from organisation_roles r\n         join users u on u.id = r.user_id\n         where r.role = 'admin' and u.archived_at is null\n         order by r.user_id\n         for update of r, u",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "organisation_roles",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "575e5359c04c3aca2757bc675783d78c9e1c13934fd823583ecc2dd7f22e67c8"
+}

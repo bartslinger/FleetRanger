@@ -1,0 +1,182 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select f.id as flight_id, f.takeoff_at, f.air_time_s, f.aircraft_serial,\n                  (select a.name from aircraft a where a.serial = f.aircraft_serial)\n                      as \"aircraft_name?\",\n                  fb.charge_start_pct, fb.charge_end_pct, fb.full_capacity_mah,\n                  fb.design_capacity_mah, fb.cycles, fb.temperature_min_c, fb.temperature_max_c,\n                  fb.cell_voltage_min_v, fb.cell_spread_max_v\n           from flight_batteries fb\n           join flights f on f.id = fb.flight_id\n           where fb.battery_id = $3 and f.archived_at is null\n             and ($1\n                  or f.pilot_id = $2\n                  or f.group_id = any($4))\n           order by f.takeoff_at desc, f.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "flight_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "takeoff_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "takeoff_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "air_time_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "air_time_s"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "aircraft_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "aircraft_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "aircraft_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "charge_start_pct",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "charge_start_pct"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "charge_end_pct",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "charge_end_pct"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "full_capacity_mah",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "full_capacity_mah"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "design_capacity_mah",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "design_capacity_mah"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "cycles",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "cycles"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "temperature_min_c",
+        "type_info": "Float4",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "temperature_min_c"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "temperature_max_c",
+        "type_info": "Float4",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "temperature_max_c"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "cell_voltage_min_v",
+        "type_info": "Float4",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "cell_voltage_min_v"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "cell_spread_max_v",
+        "type_info": "Float4",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "cell_spread_max_v"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "7b4a354fdc03a0105de0f86b0ac629bf88ef01f4adc554a80680054e329c5a7c"
+}
