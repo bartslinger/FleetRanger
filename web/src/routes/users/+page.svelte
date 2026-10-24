@@ -1,16 +1,17 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { ROLE_HELP, ROLE_LABELS, ROLE_OPTIONS, type Role } from '#lib/roles.js';
-	import Checkbox from '#lib/ui/Checkbox.svelte';
+	import Edit from '@carbon/icons/es/edit/16.js';
+	import { ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS, roleList } from '#lib/roles.js';
+	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
+	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
-	import RadioButtonGroup from '#lib/ui/RadioButtonGroup.svelte';
-	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
+	import Toggle from '#lib/ui/Toggle.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
 
@@ -18,19 +19,27 @@
 
 	type Row = (typeof data.users)[number];
 
-	let role: Role = $state('member');
+	// The groups by name only; their roles are on the user's page. A long
+	// list is cut short so a row stays one line (carbon-expert's suggestion).
+	function groupNames(user: Row): string | null {
+		const names = user.groups.map((group) => group.name);
+		if (names.length <= 3) return names.join(', ') || null;
+		return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+	}
 
-	// The status column only while archived users are shown.
+	// As a group's members (the organisation is the top group, user's
+	// decision): name, roles, then the rest; the status column only while
+	// archived users are shown.
 	const columns: TableColumn<Row>[] = $derived([
 		{ key: 'name', header: 'Name' },
 		{
-			key: 'team_names',
-			header: 'Teams',
+			key: 'roles',
+			header: 'Roles',
 			wrap: true,
-			format: (user) => user.team_names.join(', ')
+			format: (user) => roleList(user.roles) || null
 		},
-		{ key: 'email', header: 'Login' },
-		{ key: 'role', header: 'Role', format: (user) => ROLE_LABELS[user.role] },
+		{ key: 'groups', header: 'Groups', wrap: true, format: groupNames },
+		{ key: 'email', header: 'Login', wideOnly: true },
 		...(data.archived
 			? [
 					{
@@ -42,11 +51,31 @@
 			: [])
 	]);
 
-	const teamOptions = $derived(data.teams.map((team) => ({ value: team.id, label: team.name })));
+	const roleOptions = ORGANISATION_ROLES.map((role) => ({
+		value: role,
+		label: ROLE_LABELS[role],
+		helper: ROLE_HELP[role]
+	}));
 
-	function showArchived(event: Event) {
-		const checked = (event.currentTarget as HTMLInputElement).checked;
-		goto(resolve(checked ? '/users?archived' : '/users'), {
+	// The last active admin keeps Admin, as on the user's page.
+	const admins = $derived(
+		data.users.filter((user) => user.archived_at === null && user.roles.includes('admin'))
+	);
+	const lastAdmin = (user: Row) => admins.length === 1 && admins[0].id === user.id;
+	const rolesOf = (user: Row) =>
+		roleOptions.map((option) =>
+			option.value === 'admin' && lastAdmin(user)
+				? {
+						...option,
+						helper: 'You are the only admin. Make another user an admin first.',
+						disabled: true
+					}
+				: option
+		);
+	const rolesMessage = $derived(form && 'rolesMessage' in form ? form.rolesMessage : undefined);
+
+	function showArchived(show: boolean) {
+		goto(resolve(show ? '/users?archived' : '/users'), {
 			replaceState: true,
 			reset: false
 		});
@@ -64,10 +93,31 @@
 			rows={data.users}
 			rowKey={(user) => user.id}
 			rowHref={(user) => resolve('/users/[id]', { id: user.id })}
+			summary={`${data.users.length} ${data.users.length === 1 ? 'user' : 'users'}${data.archived ? ', archived included' : ''}`}
 		>
 			{#snippet toolbar()}
+				<!-- On phones the toggle doesn't fit beside the count and New user,
+				     so it moves into the overflow menu. -->
 				<div class="filter">
-					<Checkbox label="Show archived" checked={data.archived} onchange={showArchived} />
+					<Toggle
+						label="Show archived"
+						checked={data.archived}
+						onchange={(event) => showArchived(event.currentTarget.checked)}
+					/>
+				</div>
+				<div class="more">
+					<OverflowMenu
+						label="Options"
+						variant="row"
+						vertical
+						items={[
+							{
+								label: 'Show archived',
+								checked: data.archived,
+								onselect: () => showArchived(!data.archived)
+							}
+						]}
+					/>
 				</div>
 				<Modal
 					title="New user"
@@ -77,13 +127,6 @@
 					onsuccess={(created) => toast(`${created?.created} created.`)}
 				>
 					<TextInput label="Name" name="name" required autocomplete="off" />
-					<CheckboxGroup
-						legend="Teams"
-						name="team_id"
-						options={teamOptions}
-						value={[]}
-						helper="The teams they fly for; none for someone who doesn't fly."
-					/>
 					<TextInput
 						label="Email (optional)"
 						name="email"
@@ -91,8 +134,38 @@
 						autocomplete="off"
 						helper="To log in with the Google account for this address. Leave empty for a pilot who doesn't use the website."
 					/>
-					<RadioButtonGroup legend="Role" name="role" options={ROLE_OPTIONS} bind:value={role} />
-					<p class="help">{ROLE_HELP}</p>
+					<CheckboxGroup
+						legend="Roles on the whole organisation"
+						name="role"
+						options={roleOptions}
+						value={[]}
+						helper="None for someone who only has roles in groups. Add them to groups on their page."
+					/>
+				</Modal>
+			{/snippet}
+			{#snippet rowAction(user)}
+				<!-- As a group's members' Edit roles; archiving stays on the user's page. -->
+				<Modal
+					title="Edit roles"
+					triggerIcon={Edit}
+					triggerSize="md"
+					triggerLabel="Edit roles of {user.name}"
+					label="{user.name} in the organisation"
+					submitLabel="Save"
+					action="?/roles"
+					error={rolesMessage}
+					onsuccess={() => toast(`Roles of ${user.name} saved.`)}
+				>
+					<input type="hidden" name="user_id" value={user.id} />
+					<CheckboxGroup
+						legend="Roles"
+						name="role"
+						options={rolesOf(user)}
+						value={user.roles}
+						helper="None for someone who only has roles in groups."
+					/>
+					<!-- A disabled checkbox isn't posted; Admin stays. -->
+					{#if lastAdmin(user)}<input type="hidden" name="role" value="admin" />{/if}
 				</Modal>
 			{/snippet}
 		</DataTable>
@@ -107,11 +180,17 @@
 		padding-inline: var(--cds-spacing-05);
 	}
 
-	.help {
-		margin-top: calc(-1 * var(--cds-spacing-03));
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-helper-text-01-font-size);
-		line-height: var(--cds-helper-text-01-line-height);
-		letter-spacing: var(--cds-helper-text-01-letter-spacing);
+	.more {
+		display: none;
+	}
+
+	@media (max-width: 41.99rem) {
+		.filter {
+			display: none;
+		}
+
+		.more {
+			display: flex;
+		}
 	}
 </style>

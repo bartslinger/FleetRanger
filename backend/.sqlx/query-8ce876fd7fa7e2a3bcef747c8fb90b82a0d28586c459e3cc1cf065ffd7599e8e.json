@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select min(takeoff_at) from flights\n         where session_id = $1\n           and ($2\n                or pilot_id = $3\n                or group_id = any($4))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "min",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8ce876fd7fa7e2a3bcef747c8fb90b82a0d28586c459e3cc1cf065ffd7599e8e"
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, name from groups where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b9234c22679d60a9cd3fc621624e48356b891d996d5d56a9a27a92eb6d97aebd"
+}

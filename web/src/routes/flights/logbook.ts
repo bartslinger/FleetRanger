@@ -19,8 +19,8 @@ export interface LogbookState {
 	drones: string[];
 	/** Only the flights of these controller serials; all if empty. */
 	controllers: string[];
-	/** Only the flights of these team ids, "none" for those without a team; all if empty. */
-	teams: string[];
+	/** Only the flights of these group ids, "none" for those without a group; all if empty. */
+	groups: string[];
 	/** Only the flights with time in any of these areas' ids; all if empty. */
 	areas: string[];
 	/** Only the flights in no session, the ones still to be grouped. */
@@ -53,7 +53,7 @@ export function parse(params: URLSearchParams): LogbookState {
 		pilots: list(params.get('pilot')),
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
-		teams: list(params.get('team')),
+		groups: list(params.get('group')),
 		areas: list(params.get('area')),
 		withoutSession: !archived && params.get('session') === 'none',
 		suggestions:
@@ -72,7 +72,7 @@ export function query(state: LogbookState): string {
 	if (state.pilots.length > 0) params.set('pilot', state.pilots.join(','));
 	if (state.drones.length > 0) params.set('drone', state.drones.join(','));
 	if (state.controllers.length > 0) params.set('controller', state.controllers.join(','));
-	if (state.teams.length > 0) params.set('team', state.teams.join(','));
+	if (state.groups.length > 0) params.set('group', state.groups.join(','));
 	if (state.areas.length > 0) params.set('area', state.areas.join(','));
 	if (state.withoutSession) params.set('session', 'none');
 	if (state.withoutSession && state.suggestions) params.set('view', 'suggestions');
@@ -98,7 +98,7 @@ export function apiQuery(state: LogbookState, timeZone: string): URLSearchParams
 	if (state.pilots.length > 0) api.set('pilot', state.pilots.join(','));
 	if (state.drones.length > 0) api.set('aircraft', state.drones.join(','));
 	if (state.controllers.length > 0) api.set('controller', state.controllers.join(','));
-	if (state.teams.length > 0) api.set('team', state.teams.join(','));
+	if (state.groups.length > 0) api.set('group', state.groups.join(','));
 	if (state.areas.length > 0) api.set('area', state.areas.join(','));
 	if (state.withoutSession) api.set('session', 'none');
 	// A flight's neighbours are then those of its suggestion.
@@ -120,7 +120,7 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 		pilots: [],
 		drones: filters.drone ? [filters.drone] : [],
 		controllers: filters.controller ? [filters.controller] : [],
-		teams: [],
+		groups: [],
 		areas: [],
 		withoutSession: false,
 		suggestions: false,

@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select u.id, u.name, g.id as team_id, g.name as team_name\n         from users u\n         join groups g on exists (select 1 from group_members m\n                                  where m.user_id = u.id and m.group_id = g.id\n                                    and m.role = any($1))\n         where u.archived_at is null\n         order by lower(u.name), u.id, lower(g.name)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "team_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "team_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1d97bd6930a1c52046303398f720955102909760134505e3cadd5cb5514aa23e"
+}

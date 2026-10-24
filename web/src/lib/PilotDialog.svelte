@@ -6,13 +6,19 @@
 	batch bar; the same rules as the flight page's.
 -->
 <script lang="ts">
-	import { pilotOptions, pilotValue } from '#lib/pilots.js';
+	import { sharedGroup } from '#lib/groups.js';
+	import { offered, pilotOptions } from '#lib/pilots.js';
 	import Modal from '#lib/ui/Modal.svelte';
 	import Select from '#lib/ui/Select.svelte';
 
 	interface Props {
 		/** The flights to change. */
-		flights: { id: string; pilot_id: string | null; team_id: string | null }[];
+		flights: {
+			id: string;
+			pilot_id: string | null;
+			group_id: string | null;
+			group_name: string | null;
+		}[];
 		/** Which flights those are, e.g. "All 3 flights in the session." */
 		which: string;
 		choices: Parameters<typeof pilotOptions>[0];
@@ -32,12 +38,13 @@
 		onsuccess
 	}: Props = $props();
 
-	const options = $derived(pilotOptions(choices));
-	// Their pilot, with their team, if they share them.
+	// Their group's own pilots first, if they share a group.
+	const options = $derived(pilotOptions(choices, sharedGroup(flights)));
+	// Their pilot, if they share one.
 	const choice = $derived.by(() => {
-		const values = new Set(flights.map((flight) => pilotValue(flight.pilot_id, flight.team_id)));
+		const values = new Set(flights.map((flight) => flight.pilot_id ?? ''));
 		const [shared] = values;
-		return values.size === 1 && options.some((option) => option.value === shared) ? shared : '';
+		return values.size === 1 && offered(choices, shared) ? shared : '';
 	});
 </script>
 
@@ -57,9 +64,7 @@
 	<Select label="Pilot" name="pilot" {options} value={choice} />
 	<p class="help">
 		{which}
-		{choices.admin
-			? 'A pilot of another team moves the flights to that team. With Unknown, they keep theirs.'
-			: 'Choose Unknown for flights not flown by someone in your team.'}
+		The flights keep their group.
 	</p>
 </Modal>
 

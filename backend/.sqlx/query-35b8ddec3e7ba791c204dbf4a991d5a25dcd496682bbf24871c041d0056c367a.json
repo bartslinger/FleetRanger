@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select group_id from remote_controllers where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "remote_controllers",
+            "name": "group_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "35b8ddec3e7ba791c204dbf4a991d5a25dcd496682bbf24871c041d0056c367a"
+}

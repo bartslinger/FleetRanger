@@ -1,5 +1,6 @@
-//! Drone and remote controller API. Who sees and changes what is the policy's
-//! decision (`see_equipment`, `change_equipment`).
+//! Drone and remote controller API. Who sees what follows `equipment.read` and
+//! the flights; who changes what is the policy's decision
+//! (`change_equipment`).
 
 use axum::{
     Json, Router,
@@ -37,16 +38,14 @@ where
 #[derive(Deserialize)]
 struct Body {
     name: Option<String>,
-    team_id: Option<Uuid>,
-    holder_user_id: Option<Uuid>,
+    group_id: Option<Uuid>,
 }
 
 impl From<Body> for EquipmentInput {
     fn from(body: Body) -> Self {
         Self {
             name: body.name,
-            team_id: body.team_id,
-            holder_user_id: body.holder_user_id,
+            group_id: body.group_id,
         }
     }
 }

@@ -34,7 +34,7 @@
 		count: number;
 		air_time_s: number;
 		pilots: string;
-		teams: string;
+		groups: string;
 		controllers: string;
 	}
 
@@ -57,7 +57,7 @@
 				count: flights.length,
 				air_time_s: flights.reduce((sum, flight) => sum + flight.air_time_s, 0),
 				pilots: names(flights, (flight) => flight.pilot_name),
-				teams: names(flights, (flight) => flight.team_name),
+				groups: names(flights, (flight) => flight.group_name),
 				controllers: names(flights, (flight) => flight.rc_name ?? flight.rc_serial)
 			};
 		})
@@ -75,7 +75,7 @@
 						format: (row) => duration(row.air_time_s)
 					},
 					{ key: 'pilots', header: 'Pilot', wrap: true },
-					{ key: 'teams', header: 'Team', wrap: true },
+					{ key: 'groups', header: 'Group', wrap: true },
 					{ key: 'controllers', header: 'Controller', wrap: true }
 				]
 			: [{ key: 'span', header: 'When' }]

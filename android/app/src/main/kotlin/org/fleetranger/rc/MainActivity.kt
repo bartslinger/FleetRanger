@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
     private var paired by mutableStateOf(false)
     private var opensAtStartup by mutableStateOf(true)
     private var pilotList by mutableStateOf(PilotList.EMPTY)
-    private var last by mutableStateOf<Pilot?>(null)
+    private var last by mutableStateOf<Choice?>(null)
     private lateinit var sync: SyncSettings
     private var showSettings by mutableStateOf(false)
     /** The settings' tab to open with, e.g. the app's from the update hint. */
@@ -316,14 +316,17 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SETTINGS = "settings"
     }
 
-    /** A pilot chosen in the list flies from now on, and is the last pilot next time. */
-    private fun select(pilot: Pilot?) {
-        pilots.choose(pilot)
+    /**
+     * A pilot and group chosen in the list fly from now on, and are the last
+     * choice next time.
+     */
+    private fun select(choice: Choice?) {
+        pilots.choose(choice)
         last = pilots.last()
     }
 
-    private fun fly(pilot: Pilot?) {
-        pilots.choose(pilot)
+    private fun fly(choice: Choice?) {
+        pilots.choose(choice)
         if (!DjiPilot.open(this)) {
             Toast.makeText(this, "DJI Pilot 2 isn’t installed.", Toast.LENGTH_LONG).show()
         }

@@ -1,5 +1,6 @@
 import { BACKEND_URL } from '$app/env/private';
 import { error } from '@sveltejs/kit';
+import type { Permissions } from '#lib/permissions.js';
 import type { Area } from '#lib/ui/areas.js';
 import type { DayStripFlight } from '#lib/ui/DayStrip.svelte';
 import type { Track } from '#lib/ui/TrackMap.svelte';
@@ -20,8 +21,10 @@ export interface FlightSummary {
 	pilot_id: string | null;
 	pilot_name: string | null;
 	/** Null: in the organisation's queue. */
-	team_id: string | null;
-	team_name: string | null;
+	group_id: string | null;
+	group_name: string | null;
+	/** Null: in no session. */
+	session_id: string | null;
 	/** Set for an archived flight: left out everywhere but the archived filter. */
 	archived_at: string | null;
 }
@@ -59,12 +62,14 @@ export interface Device {
 	name: string | null;
 }
 
-/** `GET /api/flights/devices`: the equipment of the flights the user sees. */
+/** `GET /api/flights/devices`: the equipment, groups, pilots and areas of the
+ * flights the user sees. */
 export interface Devices {
 	aircraft: Device[];
 	controllers: Device[];
-	/** No id: the flights without a team (the organisation queue). */
-	teams: { id: string | null; name: string | null }[];
+	/** No id: the flights without a group (the organisation queue); with
+	 * `session=any`, the sessions' own groups, no id for the organisation. */
+	groups: { id: string | null; name: string | null }[];
 	/** No id: the flights without a pilot. */
 	pilots: { id: string | null; name: string | null }[];
 	areas: { id: string; name: string }[];
@@ -100,8 +105,10 @@ export interface FlightDetail {
 	pilot_id: string | null;
 	pilot_name: string | null;
 	/** Null: in the organisation's queue. */
-	team_id: string | null;
-	team_name: string | null;
+	group_id: string | null;
+	group_name: string | null;
+	/** Null: in no session. */
+	session_id: string | null;
 	track: Track;
 	metrics: {
 		max_altitude_m?: number;
@@ -121,6 +128,13 @@ export interface FlightDetail {
 	areas: FlightArea[];
 }
 
+/** A flight as `GET /api/flights/{id}` returns it, for its page. */
+export interface FlightPage extends FlightDetail {
+	/** The first takeoff of its session's flights the user sees, to name the
+	 * session as its page does; null in no session. */
+	session_takeoff_at: string | null;
+}
+
 /** A session as listed by `GET /api/sessions`: what its visible flights add up to. */
 export interface SessionSummary {
 	id: string;
@@ -131,8 +145,10 @@ export interface SessionSummary {
 	distance_m: number;
 	/** Names in alphabetical order. */
 	pilots: string[];
-	teams: string[];
-	team_ids: string[];
+	/** The session's own group, which decides who changes it; null for the
+	 * organisation. Its flights may be in other groups. */
+	group_id: string | null;
+	group_name: string | null;
 	/** Each visible flight's times and takeoff point, in takeoff order: the day strip. */
 	flight_times: DayStripFlight[];
 }
@@ -146,6 +162,9 @@ export interface SessionPage {
 /** A session with its visible flights in takeoff order, from `GET /api/sessions/{id}`. */
 export interface Session {
 	id: string;
+	/** Its own group; null for the organisation. */
+	group_id: string | null;
+	group_name: string | null;
 	flights: FlightDetail[];
 }
 
@@ -167,15 +186,24 @@ export interface Neighbours {
 	total: number;
 }
 
-/** What the logged-in account can change in the logbook, from `GET /api/flights/choices`. */
+/** The pilots and groups to choose from when changing flights, sessions and
+ * equipment, from `GET /api/flights/choices`. Which changes the user may
+ * make is in their permissions. */
 export interface FlightChoices {
-	/** The teams whose flights a member can change. */
-	own_team_ids: string[];
-	/** Admins change any flight and move flights between teams. */
-	admin: boolean;
-	/** A pilot in several teams is a choice per team: the flights move to it. */
-	pilots: { id: string; name: string; team_id: string; team_name: string }[];
-	teams: { id: string; name: string }[];
+	/** Everyone who flies, by name, with the groups they fly for as a
+	 * member; empty for someone who sets no pilots. */
+	pilots: Pilot[];
+	/** The groups where the user may move flights, sessions or equipment,
+	 * or edit sessions, by name. */
+	groups: { id: string; name: string }[];
+}
+
+/** Someone who can be a flight's pilot. */
+export interface Pilot {
+	id: string;
+	name: string;
+	/** The groups where they are a member with Pilot. */
+	group_ids: string[];
 }
 
 /** One page of `GET /api/flights`. */
@@ -184,23 +212,45 @@ export interface FlightPage {
 	total: number;
 }
 
-/** A team, from `/api/teams`. */
-export interface Team {
+/** A role in a group; Admin only on the whole organisation. */
+export type GroupRole = 'viewer' | 'pilot' | 'editor';
+export type OrganisationRole = GroupRole | 'admin';
+
+/** A group, from `/api/groups`. */
+export interface Group {
 	id: string;
 	name: string;
-	archived_at: string | null;
-	/** Users in the team that aren't archived. */
+	/** Members who aren't archived. */
 	members: number;
+	/** What it holds; only a group without any of these can be deleted. */
+	flights: number;
+	sessions: number;
+	drones: number;
+	controllers: number;
+}
+
+/** A member who isn't archived, with their roles in the group. */
+export interface Member {
+	user_id: string;
+	name: string;
+	email: string | null;
+	/** In the order viewer, pilot, editor. */
+	roles: GroupRole[];
+}
+
+/** A group with its members, from `/api/groups/{id}`. */
+export interface GroupDetail extends Group {
+	member_list: Member[];
 }
 
 /** A user as admins manage them, from `/api/users`. */
 export interface User {
 	id: string;
 	name: string;
-	role: 'member' | 'all_flights' | 'admin';
-	/** The teams the user flies for, by name. */
-	team_ids: string[];
-	team_names: string[];
+	/** Roles on the whole organisation, in the order viewer, pilot, editor, admin. */
+	roles: OrganisationRole[];
+	/** The groups they are a member of, by name, with their roles there. */
+	groups: { id: string; name: string; roles: GroupRole[] }[];
 	/** The login's email; null if the user can't log in. */
 	email: string | null;
 	last_login_at: string | null;
@@ -210,7 +260,7 @@ export interface User {
 }
 
 /** A battery, from `/api/batteries`: seen through the flights the user may
- * see, with its state at the latest of them. */
+ * see, with its figures and state over all its flights. */
 export interface Battery {
 	id: string;
 	serial: string;
@@ -245,9 +295,11 @@ export interface BatteryFlight {
 	cell_spread_max_v: number | null;
 }
 
-/** A battery with its flights, newest first, from `/api/batteries/{id}`. */
+/** A battery with the flights the user sees, newest first, from `/api/batteries/{id}`. */
 export interface BatteryDetail extends Battery {
 	flight_list: BatteryFlight[];
+	/** Its full charge capacity at each of all its flights, oldest first. */
+	capacity_readings: { takeoff_at: string; full_capacity_mah: number }[];
 }
 
 /** A drone or remote controller, from `/api/aircraft` or `/api/remote-controllers`. */
@@ -255,11 +307,18 @@ export interface Equipment {
 	id: string;
 	serial: string;
 	name: string | null;
-	team_id: string | null;
-	team_name: string | null;
-	holder_user_id: string | null;
-	holder_name: string | null;
+	/** Null: directly in the organisation. */
+	group_id: string | null;
+	group_name: string | null;
+	/** Over all its flights, also those the user doesn't see. */
+	flights: number;
+	air_time_s: number;
 	last_flight_at: string | null;
+	/** Who flew its last flight; null without flights or a pilot, or when the
+	 * user doesn't see that flight. */
+	last_pilot_name: string | null;
+	/** Its last flight has a pilot, but the user doesn't see that flight. */
+	last_pilot_hidden: boolean;
 	/** Whether a controller is paired with the install; null for drones. */
 	paired: boolean | null;
 	/** When a controller last synced, also without logs; null for drones and never. */
@@ -279,8 +338,8 @@ export interface PairingCode {
 	id: string;
 	code: string;
 	created_by: string;
-	/** The team the controller joins; null for none. */
-	team: string | null;
+	/** The group the controller joins; null for the organisation. */
+	group: string | null;
 	created_at: string;
 	expires_at: string;
 }
@@ -314,7 +373,8 @@ export interface Account {
 	id: string;
 	email: string;
 	name: string;
-	role: 'member' | 'all_flights' | 'admin';
+	/** What the user may do; see `#lib/permissions.js`. */
+	permissions: Permissions;
 	/** Whether apps (such as AI assistants) can connect to this install. */
 	apps: boolean;
 }

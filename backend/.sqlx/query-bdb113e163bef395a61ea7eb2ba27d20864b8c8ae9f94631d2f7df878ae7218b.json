@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update aircraft set name = $2, group_id = $3 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bdb113e163bef395a61ea7eb2ba27d20864b8c8ae9f94631d2f7df878ae7218b"
+}

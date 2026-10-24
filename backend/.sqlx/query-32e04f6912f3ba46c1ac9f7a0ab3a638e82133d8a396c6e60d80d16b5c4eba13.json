@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select group_id from flights where id = any($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "group_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "32e04f6912f3ba46c1ac9f7a0ab3a638e82133d8a396c6e60d80d16b5c4eba13"
+}

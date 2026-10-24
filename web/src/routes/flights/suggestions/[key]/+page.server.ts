@@ -1,5 +1,6 @@
 import { MAPBOX_ACCESS_TOKEN, TIME_ZONE } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
+import { sessionGroup } from '#lib/groups.js';
 import { parsePilot } from '#lib/pilots.js';
 import { get, send, type FlightChoices, type SuggestionDetail } from '#lib/server/backend.js';
 import { apiQuery, parse, query } from '../../logbook.js';
@@ -41,7 +42,9 @@ export const actions = {
 	 */
 	create: async ({ fetch, request, url }) => {
 		const form = await request.formData();
-		const body = { flight_ids: form.getAll('flight_id').map(String) };
+		const group = sessionGroup(form);
+		if (!group) return fail(400, { message: 'Choose a group for the session.' });
+		const body = { flight_ids: form.getAll('flight_id').map(String), ...group };
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/sessions', body);
 		if (!result.ok) return fail(result.status, { message: result.message });
 		const session = result.data.id;

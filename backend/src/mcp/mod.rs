@@ -40,8 +40,7 @@ use crate::{
         db::{Filter, FlightDetail, Sort, SortKey},
     },
     oauth::{self, Bearer},
-    policy::{self, Role},
-    sessions,
+    policy, sessions,
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -99,11 +98,8 @@ where
 /// hands the tools who they act for. Others get a 401 that says where to get
 /// a token (RFC 9728), or a 403 for a token without the scope (RFC 6750).
 /// Debug builds also accept a login session, for trying the tools without
-/// OAuth; release builds only access tokens.
-///
-/// Over MCP everyone is a member (user's decision, 2026-10-20): admins and the
-/// all-flights role see what a member of their teams sees, which is what
-/// matters to them as a pilot.
+/// OAuth; release builds only access tokens. The tools have the user's own
+/// access, read only: an admin's assistant sees what the admin sees.
 async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) -> Response {
     let (parts, body) = request.into_parts();
     let bearer = match oauth::bearer(&gate.db, &parts, &gate.resource, SCOPE).await {
@@ -129,11 +125,10 @@ async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) ->
         }
         other => other,
     };
-    let mut actor = match refusal {
+    let actor = match refusal {
         Ok(actor) => actor,
         Err((status, error)) => return challenge(&gate.metadata, status, error),
     };
-    actor.role = Role::Member;
     let mut request = Request::from_parts(parts, body);
     request.extensions_mut().insert(actor);
     next.run(request).await
@@ -169,8 +164,9 @@ struct Filters {
     from: Option<String>,
     /// The last day, included; without it, only `from`.
     to: Option<String>,
-    /// Team ids from `directory`; "none" for flights without a team.
-    teams: Option<Vec<String>>,
+    /// Group ids from `directory`; "none" for flights in no group (the
+    /// organisation's queue).
+    groups: Option<Vec<String>>,
     /// Pilots' ids from `directory`; "none" for flights without a pilot.
     pilots: Option<Vec<String>>,
     /// Drone serials from `directory`.
@@ -185,7 +181,7 @@ struct Filters {
 struct TotalsParams {
     #[serde(flatten)]
     filters: Filters,
-    /// What to total per: nothing (one row), team, pilot, drone,
+    /// What to total per: nothing (one row), group, pilot, drone,
     /// controller, day, week, month or area. Per area, each flight counts
     /// with only its time and distance in that area.
     group_by: Option<GroupBy>,
@@ -232,8 +228,8 @@ struct FlightFacts {
     distance_m: f64,
     pilot_id: Option<Uuid>,
     pilot_name: Option<String>,
-    team_id: Option<Uuid>,
-    team_name: Option<String>,
+    group_id: Option<Uuid>,
+    group_name: Option<String>,
     drone_serial: Option<String>,
     drone_name: Option<String>,
     controller_serial: Option<String>,
@@ -308,8 +304,8 @@ impl From<FlightDetail> for FlightFacts {
             distance_m: flight.distance_m.round(),
             pilot_id: flight.pilot_id,
             pilot_name: flight.pilot_name,
-            team_id: flight.team_id,
-            team_name: flight.team_name,
+            group_id: flight.group_id,
+            group_name: flight.group_name,
             drone_serial: flight.aircraft_serial,
             drone_name: flight.aircraft_name,
             controller_serial: flight.rc_serial,
@@ -331,7 +327,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "Start here. Who the user is (`you`: their id, name and the teams they fly for, for questions about \"my flights\" or \"my team\"), the teams, pilots, drones and controllers whose flights the user can see (their own and their teams'), with the ids and serials the other tools filter on, and the organisation's time zone and today's date in it."
+        description = "Start here. Who the user is (`you`: their id, name and the groups they fly for, for questions about \"my flights\" or \"my group\"), the groups, pilots, drones, controllers and areas of the flights the user can see, with the ids and serials the other tools filter on, and the organisation's time zone and today's date in it."
     )]
     async fn directory(
         &self,
@@ -347,11 +343,11 @@ impl FleetRanger {
             "you": {
                 "id": actor.user_id,
                 "name": actor.name,
-                "teams": db::own_teams(&self.db, actor.user_id).await.map_err(internal)?,
+                "groups": db::own_groups(&self.db, actor.user_id).await.map_err(internal)?,
             },
             "time_zone": &*self.time_zone,
             "today": today,
-            "teams": flights::db::teams_in(&self.db, &scope, &filter).await.map_err(internal)?,
+            "groups": flights::db::groups_in(&self.db, &scope, &filter).await.map_err(internal)?,
             "pilots": flights::db::pilots_in(&self.db, &scope, &filter).await.map_err(internal)?,
             "drones": flights::db::aircraft_of(&self.db, &scope, &filter).await.map_err(internal)?,
             "controllers": flights::db::controllers_of(&self.db, &scope, &filter).await.map_err(internal)?,
@@ -361,7 +357,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "Totals of the flights the user can see: number of flights and sessions, air time in seconds, distance in metres, first takeoff and last landing. For a period and filters, in one row or per team, pilot, drone, controller, day, week or month, e.g. air time per pilot in a month. Archived flights don't count."
+        description = "Totals of the flights the user can see: number of flights and sessions, air time in seconds, distance in metres, first takeoff and last landing. For a period and filters, in one row or per group, pilot, drone, controller, day, week, month or area, e.g. air time per pilot in a month. Archived flights don't count."
     )]
     async fn flight_totals(
         &self,
@@ -378,7 +374,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "The sessions the user can see (groups of flights flown together), newest first: start, end, number of flights, air time, distance, pilots and teams. A session is listed when one of its flights passes the filters."
+        description = "The sessions the user can see (flights flown together, reported on as one), newest first: start, end, number of flights, air time, distance, pilots and the session's own group, which its flights needn't share. A session is listed when one of its flights passes the filters; the groups filter is on the session's own group."
     )]
     async fn list_sessions(
         &self,
@@ -418,7 +414,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "The flights the user can see, newest first: takeoff, landing, air time, distance, pilot, team, drone and controller. Also the flights still without a pilot or without a session."
+        description = "The flights the user can see, newest first: takeoff, landing, air time, distance, pilot, group, drone and controller. Also the flights still without a pilot or without a session."
     )]
     async fn list_flights(
         &self,
@@ -450,7 +446,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "One flight's facts: times, air time, distance, highest point above takeoff, pilot, team, the serials of drone, controller, battery and camera, and its time and distance per area."
+        description = "One flight's facts: times, air time, distance, highest point above takeoff, pilot, group, the serials of drone, controller, battery and camera, and its time and distance per area."
     )]
     async fn get_flight(
         &self,
@@ -464,7 +460,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "The drones and controllers the user can see, with team, holder and last flight; controllers also with whether they're paired, when they last synced and their app version."
+        description = "The drones and controllers the user can see, with group, number of flights, air time in seconds, last flight and who flew it, counted over all their flights; controllers also with whether they're paired, when they last synced and their app version."
     )]
     async fn list_equipment(
         &self,
@@ -509,7 +505,7 @@ impl FleetRanger {
             }
             (None, Some(_)) => return Err(invalid("to needs from".to_owned())),
         };
-        let (team_ids, queue) = ids(filters.teams.as_deref(), "teams")?;
+        let (group_ids, queue) = ids(filters.groups.as_deref(), "groups")?;
         let (pilot_ids, unknown_pilot) = ids(filters.pilots.as_deref(), "pilots")?;
         let (area_ids, _) = ids(filters.areas.as_deref(), "areas")?;
         Ok(Filter {
@@ -518,7 +514,7 @@ impl FleetRanger {
             in_session: None,
             from,
             to,
-            team_ids,
+            group_ids,
             queue,
             pilot_ids,
             unknown_pilot,
@@ -535,7 +531,7 @@ impl ServerHandler for FleetRanger {
             .with_server_info(Implementation::new("FleetRanger", env!("CARGO_PKG_VERSION")))
             .with_instructions(
                 "FleetRanger keeps an organisation's drone flight logs. These tools read summaries of \
-                 the user's own flights and sessions and those of their teams. Call `directory` first \
+                 the flights and sessions the user can see in FleetRanger. Call `directory` first \
                  for who the user is, ids, the time zone and today's date. Air time is in seconds, \
                  distance in whole metres, times in UTC.",
             )
@@ -601,9 +597,7 @@ fn api(error: ApiError) -> McpError {
     match error {
         ApiError::NotFound => invalid("Not found, or not visible to this user.".to_owned()),
         ApiError::Invalid(message) | ApiError::Conflict(message) => invalid(message),
-        ApiError::Unauthorized | ApiError::Forbidden => {
-            McpError::invalid_request("Not allowed for this user.", None)
-        }
+        ApiError::Forbidden => McpError::invalid_request("Not allowed for this user.", None),
         ApiError::Internal(error) => {
             tracing::error!(error = format!("{error:#}"), "MCP tool failed");
             McpError::internal_error("Something went wrong in FleetRanger.", None)

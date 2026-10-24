@@ -1,7 +1,7 @@
 <!--
 	The consent page: an app (e.g. an AI assistant) asks to act for the user.
-	It lists what the app will and won't be able to do, so admins see that the
-	app gets less than they can do themselves.
+	It lists what the app will and won't be able to do: read what the user
+	sees, but change nothing and get no tracks or locations.
 -->
 <script lang="ts">
 	import Button from '#lib/ui/Button.svelte';
@@ -16,19 +16,11 @@
 
 	/** What each scope lets an app do. */
 	const ABILITIES: Record<string, string> = {
-		'flights:read': 'Read your flights and sessions, and those of your teams'
+		'flights:read': 'Read the flights and sessions you can see in FleetRanger'
 	};
 
-	// Admins and the all-flights role see every team's flights in FleetRanger,
-	// but an app acting for them doesn't.
-	const seesAllTeams = $derived(
-		data.account?.role === 'admin' || data.account?.role === 'all_flights'
-	);
-	const limits = $derived([
-		'Change anything',
-		...(seesAllTeams ? ['See other teams’ flights'] : []),
-		'See tracks or locations'
-	]);
+	// The app has the user's own access, read only.
+	const limits = ['Change anything', 'See tracks or locations'];
 
 	// The answer goes with the app's request as the server checked it, never
 	// the raw query, which could name another action.

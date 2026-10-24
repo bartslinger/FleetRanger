@@ -6,6 +6,7 @@
 -->
 <script lang="ts" module>
 	import { areaShares, clock, dayMonth, distance, duration } from '#lib/format.js';
+	import { ORGANISATION } from '#lib/groups.js';
 
 	interface Flight {
 		takeoff_at: string;
@@ -13,7 +14,7 @@
 		air_time_s: number;
 		distance_m: number;
 		pilot_name: string | null;
-		team_name: string | null;
+		group_name: string | null;
 		areas: { name: string; air_time_s: number }[];
 	}
 
@@ -37,12 +38,17 @@
 				flights.map((flight) => flight.pilot_name),
 				'Unknown'
 			),
-			teams: names(
-				flights.map((flight) => flight.team_name),
-				'None (organisation queue)'
+			/** The flights' groups: those a suggested session would get. */
+			groups: names(
+				flights.map((flight) => flight.group_name),
+				ORGANISATION
 			)
 		};
 	}
+
+	/** A session's own group, as its facts say it. */
+	export const sessionGroup = (session: { group_name: string | null }) =>
+		session.group_name ?? ORGANISATION;
 </script>
 
 <script lang="ts">
@@ -51,11 +57,19 @@
 	interface Props {
 		flights: Flight[];
 		timeZone: string;
+		/** A session's own group (see `sessionGroup`); without it, the
+		 * flights' groups, as for a suggested session. */
+		group?: string;
 		/** E.g. a button to change the pilot, after the pilot's name. */
 		pilotAction?: Snippet;
+		/** E.g. a button to change the session's group, after its name. */
+		groupAction?: Snippet;
+		/** A field choosing the group instead of the fact, e.g. for a session
+		 * still to be made. */
+		groupField?: Snippet;
 	}
 
-	let { flights, timeZone, pilotAction }: Props = $props();
+	let { flights, timeZone, group, pilotAction, groupAction, groupField }: Props = $props();
 
 	const facts = $derived(summary(flights, timeZone));
 	const distanceM = $derived(flights.reduce((total, flight) => total + flight.distance_m, 0));
@@ -101,11 +115,16 @@
 			{facts.pilots}{#if pilotAction}{@render pilotAction()}{/if}
 		</dd>
 	</div>
-	<div>
-		<dt>Team</dt>
-		<dd>{facts.teams}</dd>
-	</div>
+	{#if !groupField}
+		<div>
+			<dt>Group</dt>
+			<dd class="with-action">
+				{group ?? facts.groups}{#if groupAction}{@render groupAction()}{/if}
+			</dd>
+		</div>
+	{/if}
 </dl>
+{#if groupField}<div class="field">{@render groupField()}</div>{/if}
 <dl class="facts pairs">
 	{#each times as fact (fact.label)}
 		<div class:wide={'wide' in fact}>
@@ -125,6 +144,11 @@
 
 	.pairs {
 		grid-template-columns: 1fr 1fr;
+	}
+
+	/* In the group of who and where: 16px under the facts before it. */
+	.field {
+		margin: calc(var(--cds-spacing-05) - var(--cds-spacing-07)) 0 var(--cds-spacing-07);
 	}
 
 	.wide {

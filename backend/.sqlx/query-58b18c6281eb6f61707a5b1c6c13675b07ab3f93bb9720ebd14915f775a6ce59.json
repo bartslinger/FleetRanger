@@ -1,0 +1,75 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select g.id, g.name,\n                  (select count(distinct m.user_id) from group_members m\n                   join users u on u.id = m.user_id\n                   where m.group_id = g.id and u.archived_at is null) as \"members!\",\n                  (select count(*) from flights where group_id = g.id) as \"flights!\",\n                  (select count(*) from sessions where group_id = g.id) as \"sessions!\",\n                  (select count(*) from aircraft where group_id = g.id) as \"drones!\",\n                  (select count(*) from remote_controllers where group_id = g.id)\n                      as \"controllers!\"\n           from groups g\n           where $1::uuid is null or g.id = $1\n           order by lower(g.name), g.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "members!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "flights!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "sessions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "drones!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "controllers!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "58b18c6281eb6f61707a5b1c6c13675b07ab3f93bb9720ebd14915f775a6ce59"
+}

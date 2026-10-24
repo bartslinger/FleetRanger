@@ -1,6 +1,7 @@
 //! Logging in and out. The web app sends the browser to `/auth/login`; the
 //! provider sends it back to `/auth/callback`.
 
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -23,6 +24,7 @@ use super::db::{self, LoginUser};
 use super::oidc::PendingLogin;
 use super::{Actor, Auth, SESSION_IDLE_DAYS, client_ip, login_cookie, session_cookie, token_hash};
 use crate::oauth::OAuth;
+use crate::policy::{Grants, Permission};
 
 pub fn router<S>() -> Router<S>
 where
@@ -202,19 +204,43 @@ struct Me {
     name: String,
     /// So the web app shows only what the user can use; the backend still
     /// checks every request.
-    role: &'static str,
+    permissions: Permissions,
     /// Whether apps (such as AI assistants) can connect to this install, so
     /// the web app offers the list of connected apps only then.
     apps: bool,
+}
+
+/// What the user may do: on the whole organisation, where it counts for
+/// every group too, and per group what their memberships add.
+#[derive(Serialize)]
+struct Permissions {
+    organisation: Vec<&'static str>,
+    groups: BTreeMap<Uuid, Vec<&'static str>>,
+}
+
+impl From<&Grants> for Permissions {
+    fn from(grants: &Grants) -> Self {
+        let names = |permissions: Vec<Permission>| {
+            permissions.into_iter().map(Permission::as_str).collect()
+        };
+        let (organisation, groups) = grants.permissions();
+        Self {
+            organisation: names(organisation),
+            groups: groups
+                .into_iter()
+                .map(|(group, permissions)| (group, names(permissions)))
+                .collect(),
+        }
+    }
 }
 
 /// The logged-in user, or 401.
 async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
     Json(Me {
         id: actor.user_id,
+        permissions: Permissions::from(&actor.grants),
         email: actor.email,
         name: actor.name,
-        role: actor.role.as_str(),
         apps: !oauth.resources.is_empty(),
     })
 }

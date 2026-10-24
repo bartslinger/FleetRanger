@@ -1,10 +1,11 @@
 import { fail } from '@sveltejs/kit';
+import { may } from '#lib/permissions.js';
 import { get, send, type Battery, type BatteryDetail } from '#lib/server/backend.js';
 
 export async function load({ fetch, locals, params }) {
 	const battery = await get<BatteryDetail>(fetch, `/api/batteries/${params.id}`);
-	// Batteries have no team, so only admins name them.
-	return { battery, edit: locals.account?.role === 'admin' };
+	// Batteries have no group, so only a permission on the organisation names them.
+	return { battery, edit: may(locals.account, 'batteries.rename', null) };
 }
 
 export const actions = {

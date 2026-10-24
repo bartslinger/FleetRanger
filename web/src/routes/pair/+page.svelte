@@ -2,6 +2,8 @@
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
 	import { enhance } from '$app/forms';
 	import { dateTime } from '#lib/format.js';
+	import { ORGANISATION } from '#lib/groups.js';
+	import { anywhere } from '#lib/permissions.js';
 	import type { PairingCode } from '#lib/server/backend.js';
 	import Button from '#lib/ui/Button.svelte';
 	import CodeSnippet from '#lib/ui/CodeSnippet.svelte';
@@ -22,17 +24,25 @@
 	const created = $derived(form && 'created' in form ? form.created : undefined);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
 	const revokeMessage = $derived(form && 'revokeMessage' in form ? form.revokeMessage : undefined);
+	const groupError = $derived(form && 'groupError' in form ? form.groupError : undefined);
+
+	// Where the controller can go. With one choice it is taken without
+	// asking; with several, nobody gets one by default.
+	const destinations = $derived([
+		...(data.destinations.organisation ? [{ value: 'organisation', label: ORGANISATION }] : []),
+		...data.destinations.groups.map((group) => ({ value: group.id, label: group.name }))
+	]);
 
 	/** KDW49TXR as KDW4-9TXR, easier to read out and type; the controller takes either. */
 	const shown = (code: string) => `${code.slice(0, 4)}-${code.slice(4)}`;
 	const until = (iso: string) => dateTime(iso, data.timeZone);
 
-	// Admins see everyone's codes, so who made each. On phones only the code
-	// and its time, so Revoke stays in view.
+	// Who manages controllers sees others' codes too, so who made each. On
+	// phones only the code and its time, so Revoke stays in view.
 	const columns: TableColumn<PairingCode>[] = $derived([
 		{ key: 'code', header: 'Code', identifier: true, format: (row) => shown(row.code) },
-		{ key: 'team', header: 'Team', wideOnly: true, format: (row) => row.team ?? 'No team' },
-		...(data.account?.role === 'admin'
+		{ key: 'group', header: 'Group', wideOnly: true, format: (row) => row.group ?? ORGANISATION },
+		...(anywhere(data.account, 'controllers.manage')
 			? [
 					{
 						key: 'created_by',
@@ -59,49 +69,60 @@
 
 <Grid>
 	<Column lg={8}>
-		<form
-			class="form"
-			method="POST"
-			action="?/create"
-			use:enhance={() => {
-				busy = true;
-				return async ({ update }) => {
-					busy = false;
-					await update({ reset: false });
-				};
-			}}
-		>
-			<!-- The controller joins the creator's team: which one, if they're in several. -->
-			{#if data.teams.length > 1}
-				<Select
-					label="Team"
-					name="team_id"
-					options={data.teams.map((team) => ({ value: team.id, label: team.name }))}
-					helper="The controller joins this team. Its flights without a chosen team go to it."
-				/>
-			{/if}
-			<Select
-				label="Valid for"
-				name="hours"
-				value="24"
-				options={validity}
-				helper="After this, an unused code stops working."
+		{#if destinations.length === 0}
+			<EmptyState
+				title="You can’t pair controllers yet"
+				body="Pairing needs the Pilot or Editor role in a group. Ask an admin for one."
 			/>
-			{#if message}
-				<InlineNotification kind="error" title={message} />
-			{/if}
-			<div class="buttons">
-				<Button type="submit" disabled={busy}>Create code</Button>
-			</div>
-		</form>
+		{:else}
+			<form
+				class="form"
+				method="POST"
+				action="?/create"
+				use:enhance={() => {
+					busy = true;
+					return async ({ update }) => {
+						busy = false;
+						await update({ reset: false });
+					};
+				}}
+			>
+				{#if destinations.length > 1}
+					<!-- A prompt rather than a default (Carbon's empty option). -->
+					<Select
+						label="Group"
+						name="group_id"
+						options={destinations}
+						placeholder="Choose a group"
+						error={groupError}
+						helper="The controller joins this group."
+					/>
+				{:else}
+					<input type="hidden" name="group_id" value={destinations[0].value} />
+				{/if}
+				<Select
+					label="Valid for"
+					name="hours"
+					value="24"
+					options={validity}
+					helper="After this, an unused code stops working."
+				/>
+				{#if message}
+					<InlineNotification kind="error" title={message} />
+				{/if}
+				<div class="buttons">
+					<Button type="submit" disabled={busy}>Create code</Button>
+				</div>
+			</form>
+		{/if}
 
 		{#if created}
 			<div class="created">
 				<InlineNotification kind="success" title="Code created">
 					<p>
-						{created.team
-							? `The controller joins ${created.team}.`
-							: 'The controller joins no team.'}
+						{created.group
+							? `The controller joins ${created.group}.`
+							: 'The controller joins the organisation.'}
 						Valid until {until(created.expires_at)}.
 					</p>
 				</InlineNotification>

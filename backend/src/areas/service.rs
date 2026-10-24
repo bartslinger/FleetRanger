@@ -8,7 +8,7 @@ use super::geometry;
 use crate::{
     auth::Actor,
     error::{self, ApiError, ApiResult},
-    policy,
+    policy::{self, Permission},
 };
 
 /// Every user sees all areas: they belong to the organisation, and seeing an
@@ -44,7 +44,7 @@ pub async fn save(
     drawing: Drawing<'_>,
     boundary: &Value,
 ) -> ApiResult<Saved> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::AreasManage, None)?;
     let drawn = geometry::parse(boundary)
         .ok_or_else(|| ApiError::Invalid("Draw the area on the map.".to_owned()))?;
 
@@ -101,7 +101,7 @@ pub async fn save(
 
 /// Renames an area; its shape and figures stay as they are.
 pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResult<()> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::AreasManage, None)?;
     let name = error::name(name)?;
     if !db::rename(db, id, &name).await? {
         return Err(ApiError::NotFound);
@@ -111,7 +111,7 @@ pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResu
 
 /// Deletes an area and recomputes every flight's figures per area.
 pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
-    policy::require_admin(actor)?;
+    policy::require(actor, Permission::AreasManage, None)?;
     let mut tx = db.begin().await?;
     db::lock_for_change(&mut tx).await?;
     if !db::delete(&mut tx, id).await? {
@@ -125,13 +125,13 @@ pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::policy::Role;
+    use crate::policy::Grants;
     use serde_json::json;
 
     fn admin() -> Actor {
         Actor {
             user_id: Uuid::nil(),
-            role: Role::Admin,
+            grants: Grants::from_stored([(None, "admin".to_owned())]).unwrap(),
             login_session_id: Uuid::nil(),
             ip: [127, 0, 0, 1].into(),
             email: String::new(),

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select count(*) as \"count!\" from flights\n           where id = any($1)\n             and ($2\n                  or pilot_id = $3\n                  or group_id = any($4))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Bool",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d0773b1ef8944db21fdb511c9410c4f1e857265d2354f6a48b1fac8198d0d9d4"
+}

@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select a.id::text as key, a.name as \"name?\",\n                  count(*) as \"flights!\",\n                  count(distinct f.session_id) as \"sessions!\",\n                  sum(fa.air_time_s)::bigint as \"air_time_s!\",\n                  round(sum(fa.distance_m))::float8 as \"distance_m!\",\n                  min(f.takeoff_at) as \"first_takeoff_at!\",\n                  max(f.landed_at) as \"last_landed_at!\"\n           from flights f\n           join flight_areas fa on fa.flight_id = f.id\n           join areas a on a.id = fa.area_id\n           where f.archived_at is null\n             and ($1\n                  or f.pilot_id = $2\n                  or f.group_id = any($12))\n             and ($3::text[] is null or f.aircraft_serial = any($3))\n             and ($4::text[] is null or f.rc_serial = any($4))\n             and ($5::timestamptz is null or f.takeoff_at >= $5)\n             and ($6::timestamptz is null or f.takeoff_at < $6)\n             and ($7::uuid[] is null or f.group_id = any($7) or ($8 and f.group_id is null))\n             and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))\n             and ($11::uuid[] is null or a.id = any($11))\n           group by a.id, a.name\n           order by lower(a.name), a.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "areas",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "flights!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "sessions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "air_time_s!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "distance_m!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "first_takeoff_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_landed_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "TextArray",
+        "TextArray",
+        "Timestamptz",
+        "Timestamptz",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "30f47975845dfc14d4127e753908005492b7eddb03ac6dab5367bc6c1e48cb0e"
+}

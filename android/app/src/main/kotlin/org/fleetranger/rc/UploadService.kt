@@ -177,16 +177,17 @@ class UploadService : Service() {
     /**
      * A sync is a scan that could upload: paired, the logs readable, and on a
      * connection the settings allow; also when there was nothing to upload.
-     * The server shows when the controller last synced, so it's reported, at
-     * most every [SYNC_REPORT_MS] and straight after uploads.
+     * The server shows when the controller last synced, so its status is
+     * reported, at most every [SYNC_REPORT_MS] and straight after uploads.
      */
     private fun reportSync(uploaded: Boolean) {
         val state = SyncStatus.read(this).state
         if (state == SyncStatus.State.NotPaired || state == SyncStatus.State.NoAccess) return
         if (!sync.mayUploadNow()) return
         val now = System.currentTimeMillis()
+        server.lastSync = now
         if (!uploaded && now - lastSyncReport < SYNC_REPORT_MS) return
-        server.reportSync(BuildConfig.VERSION_NAME)
+        server.reportStatus(BuildConfig.VERSION_NAME)
         lastSyncReport = now
     }
 

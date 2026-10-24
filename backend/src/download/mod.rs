@@ -10,6 +10,7 @@ use axum::{
     Json, Router,
     extract::{FromRef, State},
     http::header,
+    middleware,
     response::IntoResponse,
     routing::get,
 };
@@ -30,9 +31,40 @@ where
     S: Clone + Send + Sync + 'static,
     AndroidApk: FromRef<S>,
 {
+    // The release the controller updates to, in its API (see "Clients" in
+    // docs/architecture.md); the download page keeps `/api/download`, whose
+    // version fields android-v0.3.0 also reads.
+    let v1 = Router::new()
+        .route("/api/controller/v1/release", get(release))
+        .route("/api/controller/v1/release/FleetRanger.apk", get(apk))
+        .route_layer(middleware::from_fn(crate::pairing::v1_errors));
     Router::new()
         .route("/api/download", get(available))
         .route("/api/download/FleetRanger.apk", get(apk))
+        .merge(v1)
+}
+
+#[derive(Serialize)]
+struct Release {
+    version_code: i64,
+    version_name: String,
+}
+
+/// The release this install offers; none (404) without an APK, or without
+/// its version, which leaves the app nothing to compare.
+async fn release(State(apk): State<AndroidApk>) -> ApiResult<Json<Release>> {
+    let Json(Available { android }) = available(State(apk)).await;
+    match android {
+        Some(Apk {
+            version_code: Some(version_code),
+            version_name: Some(version_name),
+            ..
+        }) => Ok(Json(Release {
+            version_code,
+            version_name,
+        })),
+        _ => Err(ApiError::NotFound),
+    }
 }
 
 #[derive(Serialize)]

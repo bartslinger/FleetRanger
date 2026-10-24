@@ -2,8 +2,9 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { back } from '#lib/back.svelte.js';
-	import { KINDS } from '#lib/equipment.js';
-	import { dateTime } from '#lib/format.js';
+	import { ORGANISATION } from '#lib/groups.js';
+	import { KINDS, lastPilot } from '#lib/equipment.js';
+	import { dateTime, duration } from '#lib/format.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -30,20 +31,12 @@
 	// Save and Cancel go back to where the user came from, e.g. a flight's page.
 	const previous = back(() => list);
 
-	// Active teams and holders, plus the current ones if archived since. Members
-	// choose from their own team; admins from everyone.
-	const teamOptions = $derived([
-		{ value: '', label: 'None' },
-		...data.teams.map((team) => ({ value: team.id, label: team.name })),
-		...(item.team_id && !data.teams.some((team) => team.id === item.team_id)
-			? [{ value: item.team_id, label: `${item.team_name} (archived)` }]
-			: [])
-	]);
-	const holderOptions = $derived([
-		{ value: '', label: 'None' },
-		...data.holders.map((user) => ({ value: user.id, label: user.name })),
-		...(item.holder_user_id && !data.holders.some((user) => user.id === item.holder_user_id)
-			? [{ value: item.holder_user_id, label: `${item.holder_name} (archived)` }]
+	// Where the user may move it, and where it is now.
+	const groupOptions = $derived([
+		...(data.toOrganisation || item.group_id === null ? [{ value: '', label: ORGANISATION }] : []),
+		...data.groups.map((group) => ({ value: group.id, label: group.name })),
+		...(item.group_id && !data.groups.some((group) => group.id === item.group_id)
+			? [{ value: item.group_id, label: item.group_name ?? '' }]
 			: [])
 	]);
 	const flights = $derived(
@@ -53,7 +46,7 @@
 
 <PageHeader title={item.name ?? item.serial} breadcrumb={[{ href: list, label: 'Equipment' }]}>
 	{#snippet actions()}
-		{#if item.paired && data.edit === 'all'}
+		{#if item.paired && data.unpair}
 			<Modal
 				title="Remove pairing"
 				triggerKind="danger-tertiary"
@@ -73,12 +66,11 @@
 </PageHeader>
 
 <Grid rowGap>
-	{#if message}
-		<Column narrow lg={8}>
-			<InlineNotification kind="error" title={message} />
-		</Column>
-	{/if}
 	<Column lg={8}>
+		<!-- In the form's column, so it stacks above it at every width. -->
+		{#if message}
+			<div class="message"><InlineNotification kind="error" title={message} /></div>
+		{/if}
 		<!-- Read-only facts, from the flight logs. -->
 		<dl class="facts">
 			<div>
@@ -108,23 +100,32 @@
 					</div>
 				{/if}
 			{/if}
+			<!-- Over all its flights, also those the user doesn't see. -->
+			<div>
+				<dt>Flights</dt>
+				<dd>{item.flights.toLocaleString('en-US')}</dd>
+			</div>
+			<div>
+				<dt>Air time</dt>
+				<dd>{duration(item.air_time_s)}</dd>
+			</div>
 			<div>
 				<dt>Last flight</dt>
 				<dd>
 					{item.last_flight_at ? dateTime(item.last_flight_at, data.timeZone) : 'None'}
 				</dd>
 			</div>
-			<!-- Who can't change them sees them here; members change only the holder. -->
-			{#if data.edit !== 'all'}
+			{#if item.last_flight_at}
 				<div>
-					<dt>Team</dt>
-					<dd>{item.team_name ?? 'None'}</dd>
+					<dt>Last flown by</dt>
+					<dd>{lastPilot(item)}</dd>
 				</div>
 			{/if}
-			{#if data.edit === 'none'}
+			<!-- Who can't change it sees it here. -->
+			{#if !data.move}
 				<div>
-					<dt>Holder</dt>
-					<dd>{item.holder_name ?? 'None'}</dd>
+					<dt>Group</dt>
+					<dd>{item.group_name ?? ORGANISATION}</dd>
 				</div>
 			{/if}
 		</dl>
@@ -133,7 +134,7 @@
 				{data.kind === 'drones' ? 'Flights with this drone' : 'Flights with this controller'}
 			</Link>
 		</p>
-		{#if data.edit !== 'none'}
+		{#if data.rename || data.move}
 			<form
 				class="form"
 				method="POST"
@@ -148,34 +149,29 @@
 					};
 				}}
 			>
-				<TextInput
-					label="Name (optional)"
-					name="name"
-					value={item.name ?? ''}
-					autocomplete="off"
-					helper="For example the number painted on it."
-				/>
-				{#if data.edit === 'all'}
-					<Select
-						label="Team"
-						name="team_id"
-						options={teamOptions}
-						value={item.team_id ?? ''}
-						helper={data.kind === 'controllers'
-							? 'New flights from this controller without a pilot go to this team.'
-							: undefined}
+				{#if data.rename}
+					<TextInput
+						label="Name (optional)"
+						name="name"
+						value={item.name ?? ''}
+						autocomplete="off"
+						helper="For example the number painted on it."
 					/>
 				{:else}
-					<!-- Unchanged: only admins move equipment between teams. -->
-					<input type="hidden" name="team_id" value={item.team_id ?? ''} />
+					<!-- Unchanged: renaming needs equipment.rename on its group. -->
+					<input type="hidden" name="name" value={item.name ?? ''} />
 				{/if}
-				<Select
-					label="Holder"
-					name="holder_user_id"
-					options={holderOptions}
-					value={item.holder_user_id ?? ''}
-					helper="Who has it now. For information only; it gives no access."
-				/>
+				{#if data.move}
+					<Select
+						label="Group"
+						name="group_id"
+						options={groupOptions}
+						value={item.group_id ?? ''}
+					/>
+				{:else}
+					<!-- Unchanged: moving needs equipment.move on both groups. -->
+					<input type="hidden" name="group_id" value={item.group_id ?? ''} />
+				{/if}
 				<div class="buttons">
 					<Button type="submit" disabled={busy} fill>Save</Button>
 					<Button kind="secondary" href={previous.href} onclick={previous.onclick} fill
@@ -188,6 +184,10 @@
 </Grid>
 
 <style>
+	.message {
+		margin-bottom: var(--cds-spacing-07);
+	}
+
 	/* The link 16px after the facts, as between them; 32px before the form. */
 	.facts {
 		display: grid;

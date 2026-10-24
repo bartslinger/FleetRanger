@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from pairing_codes c using users u\n         where c.code = $1 and c.expires_at > now()\n           and u.id = c.created_by and u.archived_at is null\n         returning c.group_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "pairing_codes",
+            "name": "group_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a1808464e24c5761fcc52721b4ec66b3727d267e948fbb88a84c5c7db89de1de"
+}

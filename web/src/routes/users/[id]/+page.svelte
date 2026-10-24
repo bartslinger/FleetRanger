@@ -1,45 +1,120 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import { back } from '#lib/back.svelte.js';
 	import { dateTime } from '#lib/format.js';
-	import { ROLE_HELP, ROLE_LABELS, ROLE_OPTIONS, type Role } from '#lib/roles.js';
+	import Edit from '@carbon/icons/es/edit/16.js';
+	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
+	import { ORGANISATION } from '#lib/groups.js';
+	import { may } from '#lib/permissions.js';
+	import {
+		GROUP_ROLE_HELP,
+		GROUP_ROLES,
+		ORGANISATION_ROLES,
+		ROLE_HELP,
+		ROLE_LABELS,
+		roleList
+	} from '#lib/roles.js';
+	import type { OrganisationRole } from '#lib/server/backend.js';
 	import Button from '#lib/ui/Button.svelte';
+	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
+	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
-	import RadioButtonGroup from '#lib/ui/RadioButtonGroup.svelte';
-	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
+	import Select from '#lib/ui/Select.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 
-	let busy = $state(false);
-	// Save and Cancel go back to where the user came from.
-	const previous = back(() => resolve('/users'));
-
 	const user = $derived(data.user);
 	const archived = $derived(user.archived_at !== null);
-	// Admins can't change their own role, remove their own login, or archive or
-	// delete themselves; the backend refuses it too.
+	// Admins can't remove their own login, or archive or delete themselves;
+	// the backend refuses it too.
 	const self = $derived(data.account?.id === user.id);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
 
-	// svelte-ignore state_referenced_locally
-	let role: Role = $state(data.user.role);
+	// The last active admin keeps Admin: disabled, not hidden, since it
+	// changes once someone else is an admin (carbon-expert's advice, from
+	// Carbon's disabled states), with the reason where it applies. Only an
+	// admin sees this page, so the last admin only ever sees their own.
+	const roleOptions = $derived(
+		ORGANISATION_ROLES.map((role) => ({
+			value: role,
+			label: ROLE_LABELS[role],
+			helper:
+				role === 'admin' && data.lastAdmin
+					? 'You are the only admin. Make another user an admin first.'
+					: ROLE_HELP[role],
+			disabled: role === 'admin' && data.lastAdmin
+		}))
+	);
 
-	// Active teams, plus the user's own that have been archived since.
-	const teamOptions = $derived([
-		...data.teams.map((team) => ({ value: team.id, label: team.name })),
-		...user.team_ids
-			.map((id, index) => ({ value: id, label: `${user.team_names[index]} (archived)` }))
-			.filter((option) => !data.teams.some((team) => team.id === option.value))
+	// The organisation first, as the top group (user's decision); everyone is
+	// in it, so it has no Remove. No roles there: the table's "—" for empty cells.
+	interface Membership {
+		id: string;
+		name: string;
+		roles: OrganisationRole[];
+	}
+	const ORGANISATION_ROW = 'organisation';
+	const memberships: Membership[] = $derived([
+		{ id: ORGANISATION_ROW, name: ORGANISATION, roles: user.roles },
+		...user.groups
 	]);
+	const groupColumns: TableColumn<Membership>[] = [
+		{ key: 'name', header: 'Group' },
+		{
+			key: 'roles',
+			header: 'Roles',
+			wrap: true,
+			format: (group) => roleList(group.roles) || null
+		}
+	];
+	const organisationRolesMessage = $derived(
+		form && 'organisationRolesMessage' in form ? form.organisationRolesMessage : undefined
+	);
+
+	// Roles in groups, as on a group's page, from the user's side; each
+	// change applies at once, apart from the form (user's choice).
+	const groupRoleOptions = GROUP_ROLES.map((role) => ({
+		value: role,
+		label: ROLE_LABELS[role],
+		helper: GROUP_ROLE_HELP[role]
+	}));
+	const manages = (group: string) => may(data.account, 'groups.manage', group);
+	const addable = $derived(data.otherGroups.filter((group) => manages(group.id)));
+	const groupRolesMessage = $derived(
+		form && 'groupRolesMessage' in form ? form.groupRolesMessage : undefined
+	);
+	const leaveMessage = $derived(form && 'leaveMessage' in form ? form.leaveMessage : undefined);
+	let addedTo = $state('');
+	const addedName = $derived(data.otherGroups.find((group) => group.id === addedTo)?.name);
 </script>
+
+{#snippet addToGroup()}
+	<Modal
+		title="Add to group"
+		label={user.name}
+		submitLabel="Add"
+		action="?/groupRoles"
+		error={groupRolesMessage}
+		onsuccess={() => toast(`${user.name} added to ${addedName ?? 'the group'}.`)}
+	>
+		<Select
+			label="Group"
+			name="group_id"
+			placeholder="Choose a group"
+			options={addable.map((group) => ({ value: group.id, label: group.name }))}
+			bind:value={addedTo}
+			required
+		/>
+		<CheckboxGroup legend="Roles" name="role" options={groupRoleOptions} value={[]} />
+	</Modal>
+{/snippet}
 
 <PageHeader
 	title={user.name}
@@ -47,7 +122,30 @@
 	status={archived ? 'Archived' : undefined}
 >
 	{#snippet actions()}
-		<!-- Apart from the form below: these apply at once. -->
+		<!-- The user's own fields in a dialog, so everything on the page applies
+		     at once (carbon-expert's advice: a dialog form for a few fields). -->
+		<Modal
+			title="Edit user"
+			triggerKind="tertiary"
+			label={user.name}
+			submitLabel="Save"
+			action="?/save"
+			error={form && 'editMessage' in form ? form.editMessage : undefined}
+			onsuccess={() => toast(`${user.name} saved.`)}
+		>
+			<TextInput label="Name" name="name" value={user.name} required autocomplete="off" />
+			<TextInput
+				label={self ? 'Email' : 'Email (optional)'}
+				name="email"
+				type="email"
+				value={user.email ?? ''}
+				required={self}
+				autocomplete="off"
+				helper={self
+					? 'You log in with this address.'
+					: 'To log in with the Google account for this address. Empty: no login.'}
+			/>
+		</Modal>
 		{#if archived}
 			<form
 				method="POST"
@@ -95,16 +193,19 @@
 </PageHeader>
 
 <Grid rowGap>
-	{#if message}
-		<Column narrow lg={8}>
-			<InlineNotification kind="error" title={message} />
-		</Column>
-	{/if}
 	<Column lg={8}>
+		<!-- In the facts' column, so it stacks above them at every width. -->
+		{#if message}
+			<div class="message"><InlineNotification kind="error" title={message} /></div>
+		{/if}
 		<dl class="facts">
 			<div>
 				<dt>Flights as pilot</dt>
 				<dd>{user.flights}</dd>
+			</div>
+			<div>
+				<dt>Email</dt>
+				<dd>{user.email ?? 'None, no login'}</dd>
 			</div>
 			<div>
 				<dt>Last login</dt>
@@ -112,65 +213,107 @@
 					{user.last_login_at ? dateTime(user.last_login_at, data.timeZone) : 'Never'}
 				</dd>
 			</div>
-			{#if self}
-				<div>
-					<dt>Role</dt>
-					<dd>{ROLE_LABELS[user.role]}. You can’t change your own role.</dd>
-				</div>
-			{/if}
 		</dl>
-		<form
-			class="form"
-			method="POST"
-			action="?/save"
-			use:enhance={() => {
-				busy = true;
-				return async ({ result, update }) => {
-					busy = false;
-					if (result.type !== 'success') return update({ reset: false });
-					await previous.go();
-					toast(`${user.name} saved.`);
-				};
-			}}
+	</Column>
+	<Column narrow>
+		<h2 class="section">Groups</h2>
+		<DataTable
+			label="Groups"
+			columns={groupColumns}
+			rows={memberships}
+			rowKey={(group) => group.id}
+			rowHref={(group) =>
+				group.id === ORGANISATION_ROW ? undefined : resolve('/groups/[id]', { id: group.id })}
+			summary={user.groups.length === 0
+				? 'In no group'
+				: `In ${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
 		>
-			<TextInput label="Name" name="name" value={user.name} required autocomplete="off" />
-			<CheckboxGroup
-				legend="Teams"
-				name="team_id"
-				options={teamOptions}
-				value={user.team_ids}
-				helper="The teams they fly for; none for someone who doesn't fly. Past flights keep their team."
-			/>
-			<TextInput
-				label={self ? 'Email' : 'Email (optional)'}
-				name="email"
-				type="email"
-				value={user.email ?? ''}
-				required={self}
-				autocomplete="off"
-				helper={self
-					? 'You log in with this address.'
-					: 'To log in with the Google account for this address. Empty: no login.'}
-			/>
-			{#if self}
-				<input type="hidden" name="role" value={user.role} />
-			{:else}
-				<div>
-					<RadioButtonGroup legend="Role" name="role" options={ROLE_OPTIONS} bind:value={role} />
-					<p class="help">{ROLE_HELP}</p>
-				</div>
-			{/if}
-			<div class="buttons">
-				<Button type="submit" disabled={busy} fill>Save</Button>
-				<Button kind="secondary" href={previous.href} onclick={previous.onclick} fill>Cancel</Button
-				>
-			</div>
-		</form>
+			{#snippet toolbar()}
+				<!-- Disabled, not hidden, when they're in every group: that changes
+					     with a new group (Carbon's disabled states), as on a group's page. -->
+				{#if addable.length > 0}
+					{@render addToGroup()}
+				{:else}
+					<Button disabled>Add to group</Button>
+				{/if}
+			{/snippet}
+			{#snippet rowAction(group)}
+				{#if group.id === ORGANISATION_ROW}
+					{#if may(data.account, 'users.manage', null)}
+						<span class="actions">
+							<Modal
+								title="Edit roles"
+								triggerIcon={Edit}
+								triggerSize="md"
+								triggerLabel="Edit roles in the organisation"
+								label="{user.name} in the organisation"
+								submitLabel="Save"
+								action="?/organisationRoles"
+								error={organisationRolesMessage}
+								onsuccess={() => toast(`Roles in the organisation saved.`)}
+							>
+								<CheckboxGroup
+									legend="Roles"
+									name="role"
+									options={roleOptions}
+									value={user.roles}
+									helper="None for someone who only has roles in groups."
+								/>
+								<!-- A disabled checkbox isn't posted; Admin stays. -->
+								{#if data.lastAdmin}<input type="hidden" name="role" value="admin" />{/if}
+							</Modal>
+							<!-- No Remove: everyone is in the organisation. The slot keeps the
+								     pencils in line (carbon-expert's suggestion). -->
+							<span class="slot" aria-hidden="true"></span>
+						</span>
+					{/if}
+				{:else if manages(group.id)}
+					<span class="actions">
+						<Modal
+							title="Edit roles"
+							triggerIcon={Edit}
+							triggerSize="md"
+							triggerLabel="Edit roles in {group.name}"
+							label="{user.name} in {group.name}"
+							submitLabel="Save"
+							action="?/groupRoles"
+							error={groupRolesMessage}
+							onsuccess={() => toast(`Roles in ${group.name} saved.`)}
+						>
+							<input type="hidden" name="group_id" value={group.id} />
+							<CheckboxGroup
+								legend="Roles"
+								name="role"
+								options={groupRoleOptions}
+								value={group.roles}
+							/>
+						</Modal>
+						<Modal
+							title="Remove from group"
+							label={user.name}
+							triggerIcon={SubtractAlt}
+							triggerSize="md"
+							triggerLabel="Remove {user.name} from {group.name}"
+							submitLabel="Remove from group"
+							action="?/leaveGroup"
+							error={leaveMessage}
+							onsuccess={() => toast(`${user.name} removed from ${group.name}.`)}
+						>
+							<input type="hidden" name="group_id" value={group.id} />
+							<p>
+								{user.name} loses their roles in {group.name}. Their flights stay as they are. You
+								can add them again later.
+							</p>
+						</Modal>
+					</span>
+				{/if}
+			{/snippet}
+		</DataTable>
 	</Column>
 </Grid>
 
 <style>
-	/* 32px before the form, as between fields. */
+	/* Related facts 16px apart. */
 	.facts {
 		display: grid;
 		gap: var(--cds-spacing-05);
@@ -191,26 +334,26 @@
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 	}
 
-	/* Carbon's in-page form: fields 32px apart, 48px before the buttons. */
-	.form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--cds-spacing-07);
+	.section {
+		margin-top: var(--cds-spacing-07);
+		margin-bottom: var(--cds-spacing-05);
+		/* The column has no gutter; line up with the table's text. */
+		padding-inline: var(--cds-spacing-05);
+		font-size: var(--cds-heading-03-font-size);
+		font-weight: var(--cds-heading-03-font-weight);
+		line-height: var(--cds-heading-03-line-height);
 	}
 
-	.help {
-		margin-top: var(--cds-spacing-03);
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-helper-text-01-font-size);
-		line-height: var(--cds-helper-text-01-line-height);
-		letter-spacing: var(--cds-helper-text-01-letter-spacing);
+	.actions {
+		display: inline-flex;
 	}
 
-	/* Carbon's fluid pair: equal halves of the fields' width, 1px apart. */
-	.buttons {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1px;
-		margin-top: var(--cds-spacing-05);
+	.message {
+		margin-bottom: var(--cds-spacing-07);
+	}
+
+	/* As wide as a md icon button. */
+	.slot {
+		inline-size: 2.5rem;
 	}
 </style>

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select f.takeoff_at, fb.full_capacity_mah as \"full_capacity_mah!\"\n           from flight_batteries fb\n           join flights f on f.id = fb.flight_id\n           where fb.battery_id = $1 and f.archived_at is null\n             and fb.full_capacity_mah is not null\n           order by f.takeoff_at, f.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "takeoff_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "takeoff_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "full_capacity_mah!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flight_batteries",
+            "name": "full_capacity_mah"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "ca7a56ec0169576c77ea270360943788da2a511d84bfb266978f24fd0c0569e3"
+}

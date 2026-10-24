@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select exists(select 1 from flights where id = any($1) and session_id is not null)\n               as \"exists!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "153e7f47415d761aa40a4d0f4e0c7d01d5afde0273fcd9865f6b94383fb3dbaa"
+}

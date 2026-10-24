@@ -2,7 +2,7 @@
 	@component
 	Carbon's small transactional modal around a form, opened by its own trigger
 	button: "New pilot" opens "New pilot" with Cancel and Create, and "Archive
-	team" opens a confirmation with Cancel and Archive team. The form posts
+	user" opens a confirmation with Cancel and Archive user. The form posts
 	to a SvelteKit form action. On success the modal closes and the page data
 	reloads; on a rejected change it stays open and shows `error`.
 
@@ -82,6 +82,12 @@
 	);
 
 	let busy = $state(false);
+	// The page's dialogs share one form result: `error` is this dialog's
+	// only after its own submit was refused since it opened.
+	let refused = $state(false);
+	$effect(() => {
+		if (open) refused = false;
+	});
 	let body: HTMLElement | undefined = $state();
 	let footer: HTMLElement | undefined = $state();
 	const submit = $derived(footer?.querySelector<HTMLElement>('[type=submit]'));
@@ -132,6 +138,7 @@
 					return async ({ result, update }) => {
 						busy = false;
 						await update();
+						refused = result.type === 'failure';
 						// A redirect, e.g. to the list after deleting, is a success too.
 						if (result.type === 'success' || result.type === 'redirect') {
 							open = false;
@@ -151,7 +158,7 @@
 					</Dialog.Close>
 				</div>
 				<div class="body" bind:this={body}>
-					{#if error}<InlineNotification kind="error" title={error} />{/if}
+					{#if refused && error}<InlineNotification kind="error" title={error} />{/if}
 					{@render children()}
 				</div>
 				<div class="footer" bind:this={footer}>

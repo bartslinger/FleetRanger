@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select exists(select 1 from groups where id = $1) as \"exists!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b0f3142f0217f624996d5976a240555622bdaf480d7993a67ef9a5b58d8b2801"
+}

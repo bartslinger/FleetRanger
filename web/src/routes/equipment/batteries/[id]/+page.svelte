@@ -33,12 +33,13 @@
 		)
 	]);
 
-	// Oldest first, as the chart reads.
+	// A point per flight, also of flights the user doesn't see: the battery's
+	// wear. Oldest first, as the chart reads.
 	const readings = $derived(
-		battery.flight_list
-			.filter((flight) => flight.full_capacity_mah !== null)
-			.map((flight) => ({ at: flight.takeoff_at, value: flight.full_capacity_mah! }))
-			.reverse()
+		battery.capacity_readings.map((reading) => ({
+			at: reading.takeoff_at,
+			value: reading.full_capacity_mah
+		}))
 	);
 
 	const percent = (value: number | null) => (value === null ? '—' : `${value}%`);
@@ -101,12 +102,11 @@
 />
 
 <Grid rowGap>
-	{#if message}
-		<Column narrow lg={8}>
-			<InlineNotification kind="error" title={message} />
-		</Column>
-	{/if}
 	<Column lg={8}>
+		<!-- In the form's column, so it stacks above it at every width. -->
+		{#if message}
+			<div class="message"><InlineNotification kind="error" title={message} /></div>
+		{/if}
 		<!-- Read-only facts, from the flight logs: the battery as of its latest flight. -->
 		<dl class="facts">
 			<div>
@@ -183,7 +183,7 @@
 				{readings}
 				formatValue={capacity}
 				formatTime={(at) => dateTime(at, data.timeZone)}
-				description="Line chart of the battery’s full charge capacity in mAh by flight date. The flights table below lists the same values."
+				description="Line chart of the battery’s full charge capacity in mAh by flight date, over all its flights. The flights table below lists the values of the flights you can see."
 			/>
 		</Column>
 	{/if}
@@ -202,6 +202,10 @@
 </Grid>
 
 <style>
+	.message {
+		margin-bottom: var(--cds-spacing-07);
+	}
+
 	/* As on a drone's page: facts 16px apart, 32px before the form. */
 	.facts {
 		display: grid;

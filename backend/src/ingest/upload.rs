@@ -18,8 +18,8 @@ use crate::{
 /// Who was chosen on the controller before the log was written.
 pub struct Chosen {
     pub pilot_id: Option<Uuid>,
-    /// The team the pilot was chosen with.
-    pub team_id: Option<Uuid>,
+    /// The group chosen with the pilot.
+    pub group_id: Option<Uuid>,
 }
 
 /// Checks an uploaded log against the hash the controller computed, and
@@ -67,7 +67,7 @@ pub async fn receive(
         &relative,
         size,
         chosen.pilot_id,
-        chosen.team_id,
+        chosen.group_id,
     )
     .await?)
 }

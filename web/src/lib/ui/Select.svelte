@@ -6,6 +6,7 @@
 <script lang="ts">
 	import type { HTMLSelectAttributes } from 'svelte/elements';
 	import ChevronDown from '@carbon/icons/es/chevron--down/16.js';
+	import WarningFilled from '@carbon/icons/es/warning--filled/16.js';
 	import Field from './Field.svelte';
 	import Icon from './Icon.svelte';
 
@@ -14,13 +15,23 @@
 		label: string;
 	}
 
+	/** Options under a label (a native optgroup); Carbon is silent on them. */
+	interface OptionGroup {
+		group: string;
+		options: Option[];
+	}
+
 	interface Props extends Omit<HTMLSelectAttributes, 'size'> {
 		label: string;
-		options: Option[];
+		options: (Option | OptionGroup)[];
 		helper?: string;
 		error?: string;
 		size?: 'sm' | 'md' | 'lg';
 		value?: string;
+		/** A prompt such as "Choose a group" for a choice without a default:
+		 * shown in the closed field, never in the list (Carbon's disabled,
+		 * hidden, selected option). The field's value is then empty. */
+		placeholder?: string;
 	}
 
 	let {
@@ -28,6 +39,7 @@
 		options,
 		helper,
 		error,
+		placeholder,
 		size = 'md',
 		value = $bindable(),
 		...rest
@@ -47,10 +59,24 @@
 			aria-describedby={error || helper ? `${id}-message` : undefined}
 			{...rest}
 		>
-			{#each options as option (option.value)}
-				<option value={option.value}>{option.label}</option>
+			{#if placeholder}
+				<option value="" disabled hidden selected>{placeholder}</option>
+			{/if}
+			{#each options as option ('group' in option ? `group:${option.group}` : option.value)}
+				{#if 'group' in option}
+					<optgroup label={option.group}>
+						{#each option.options as item (item.value)}
+							<option value={item.value}>{item.label}</option>
+						{/each}
+					</optgroup>
+				{:else}
+					<option value={option.value}>{option.label}</option>
+				{/if}
 			{/each}
 		</select>
+		{#if error}
+			<span class="error-icon"><Icon icon={WarningFilled} /></span>
+		{/if}
 		<span class="chevron"><Icon icon={ChevronDown} /></span>
 	</div>
 </Field>
@@ -89,9 +115,21 @@
 		background: var(--cds-field-hover);
 	}
 
+	/* Room for the error icon before the chevron, as in Carbon's Sass. */
 	select.invalid {
+		padding-right: var(--cds-spacing-10);
 		outline: 2px solid var(--cds-support-error);
 		outline-offset: -2px;
+	}
+
+	.error-icon {
+		position: absolute;
+		top: 50%;
+		right: var(--cds-spacing-08);
+		display: flex;
+		color: var(--cds-support-error);
+		transform: translateY(-50%);
+		pointer-events: none;
 	}
 
 	select:focus-visible {
@@ -106,7 +144,8 @@
 		cursor: not-allowed;
 	}
 
-	option {
+	option,
+	optgroup {
 		background: var(--cds-layer-01);
 		color: var(--cds-text-primary);
 	}

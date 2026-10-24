@@ -2,8 +2,9 @@
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { KINDS, type Kind, type Tab } from '#lib/equipment.js';
-	import { dateTime, health } from '#lib/format.js';
+	import { KINDS, lastPilot, type Kind, type Tab } from '#lib/equipment.js';
+	import { dateTime, duration, health } from '#lib/format.js';
+	import { may } from '#lib/permissions.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -23,26 +24,43 @@
 	// svelte-ignore state_referenced_locally
 	let tab: Tab = $state(page.state.equipmentTab ?? data.tab);
 
-	const lastFlight: TableColumn<Row> = $derived({
-		key: 'last_flight_at',
-		header: 'Last flight',
-		format: (item) => item.last_flight_at && dateTime(item.last_flight_at, data.timeZone)
-	});
+	// Over all its flights, also those the user doesn't see: they describe
+	// the machine. Carbon has no rule on the order; figures follow the
+	// identifiers and status, "Last flown by" beside "Last flight"
+	// (carbon-expert's suggestion).
+	const figures: TableColumn<Row>[] = $derived([
+		{
+			key: 'flights',
+			header: 'Flights',
+			numeric: true,
+			format: (item) => item.flights.toLocaleString('en-US')
+		},
+		{
+			key: 'air_time_s',
+			header: 'Air time',
+			numeric: true,
+			format: (item) => duration(item.air_time_s)
+		},
+		{ key: 'last_pilot_name', header: 'Last flown by', format: lastPilot },
+		{
+			key: 'last_flight_at',
+			header: 'Last flight',
+			format: (item) => item.last_flight_at && dateTime(item.last_flight_at, data.timeZone)
+		}
+	]);
 
 	const columns: Record<Kind, TableColumn<Row>[]> = $derived({
 		drones: [
 			{ key: 'serial', header: 'Serial number', identifier: true },
 			{ key: 'name', header: 'Name' },
-			{ key: 'team_name', header: 'Team' },
-			{ key: 'holder_name', header: 'Holder' },
-			lastFlight
+			{ key: 'group_name', header: 'Group' },
+			...figures
 		],
 		// As on a controller's page.
 		controllers: [
 			{ key: 'serial', header: 'Serial number', identifier: true },
 			{ key: 'name', header: 'Name' },
-			{ key: 'team_name', header: 'Team' },
-			{ key: 'holder_name', header: 'Holder' },
+			{ key: 'group_name', header: 'Group' },
 			{
 				key: 'paired',
 				header: 'Pairing',
@@ -50,12 +68,12 @@
 				// An unpaired controller can't upload; paired is the normal state.
 				status: (item) => (item.paired ? undefined : 'warning')
 			},
+			...figures,
 			{
 				key: 'synced_at',
 				header: 'Last sync',
 				format: (item) => (item.synced_at ? dateTime(item.synced_at, data.timeZone) : 'Never')
-			},
-			lastFlight
+			}
 		]
 	});
 
@@ -98,7 +116,7 @@
 
 <!-- The way to pair a controller, on the controllers' tab only (user's
      request, 2026-10-21; carbon-expert's advice): the table toolbar's primary
-     action, as "New …" on Users and Teams, or the empty state's. A link in a
+     action, as "New …" on Users and Groups, or the empty state's. A link in a
      button's look, as it opens the page that does it. -->
 {#snippet pair()}
 	<Button href={resolve('/pair')}>Pair a controller</Button>
@@ -132,8 +150,8 @@
 	{#if data.batteries.length === 0}
 		<EmptyState
 			title="No batteries yet"
-			body={data.account?.role === 'member'
-				? 'Batteries appear here once your team flies with them.'
+			body={!may(data.account, 'equipment.read', null)
+				? 'Batteries appear here once your group flies with them.'
 				: 'Batteries appear here when flight logs that use them are imported.'}
 		/>
 	{:else}
@@ -153,8 +171,8 @@
 	{#if rows.length === 0}
 		<EmptyState
 			title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
-			body={data.account?.role === 'member'
-				? 'Your team’s drones and remote controllers appear here once an admin assigns them to the team.'
+			body={!may(data.account, 'equipment.read', null)
+				? 'Drones and remote controllers appear here once your group flies them or an admin assigns them to your group.'
 				: kind === 'drones'
 					? 'Drones appear here when flight logs that use them are imported.'
 					: 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with a pairing code.'}

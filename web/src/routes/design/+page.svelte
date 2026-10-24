@@ -12,6 +12,7 @@
 	import Select from '#lib/ui/Select.svelte';
 	import Tag from '#lib/ui/Tag.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
+	import Toggle from '#lib/ui/Toggle.svelte';
 
 	interface ExampleFlight {
 		id: string;
@@ -72,7 +73,7 @@
 	] as const;
 
 	let name = $state('');
-	let team = $state('north');
+	let group = $state('north');
 </script>
 
 <PageHeader title="Components" description="Every component in its states. Only on the dev server.">
@@ -148,7 +149,7 @@
 				<InlineNotification kind="warning" title="DJI is not responding.">
 					Logs will be processed when it is back.
 				</InlineNotification>
-				<InlineNotification kind="success" title="Flight moved to Team North." />
+				<InlineNotification kind="success" title="Flight moved to North." />
 				<InlineNotification title="12 flights have no pilot." />
 			</div>
 		</Column>
@@ -172,11 +173,11 @@
 		</Column>
 		<Column md={4}>
 			<Select
-				label="Team"
-				bind:value={team}
+				label="Group"
+				bind:value={group}
 				options={[
-					{ value: 'north', label: 'Team North' },
-					{ value: 'south', label: 'Team South' }
+					{ value: 'north', label: 'North' },
+					{ value: 'south', label: 'South' }
 				]}
 			/>
 		</Column>
@@ -192,6 +193,11 @@
 				<Checkbox label="Show archived" />
 				<Checkbox label="Checked" checked />
 				<Checkbox label="Disabled" disabled />
+			</div>
+			<div class="row">
+				<Toggle label="Show archived" />
+				<Toggle label="On" checked />
+				<Toggle label="Disabled" disabled />
 			</div>
 		</Column>
 	</Grid>
