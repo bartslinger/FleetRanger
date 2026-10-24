@@ -1,9 +1,7 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
-	import { back } from '#lib/back.svelte.js';
 	import { GROUP_ROLE_HELP, GROUP_ROLES, ROLE_LABELS, roleList } from '#lib/roles.js';
 	import Button from '#lib/ui/Button.svelte';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
@@ -11,7 +9,6 @@
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
-	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
@@ -20,10 +17,6 @@
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
-
-	let busy = $state(false);
-	// Save and Cancel go back to where the user came from.
-	const previous = back(() => resolve('/groups'));
 
 	const group = $derived(data.group);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
@@ -93,6 +86,19 @@
 
 <PageHeader title={group.name} breadcrumb={[{ href: resolve('/groups'), label: 'Groups' }]}>
 	{#snippet actions()}
+		<!-- Its name in a dialog, so everything on the page applies at once
+		     (carbon-expert's advice: a dialog form for a few fields). -->
+		<Modal
+			title="Edit group"
+			triggerKind="tertiary"
+			label={group.name}
+			submitLabel="Save"
+			action="?/save"
+			error={message}
+			onsuccess={() => toast('Group saved.')}
+		>
+			<TextInput label="Name" name="name" value={group.name} required autocomplete="off" />
+		</Modal>
 		<!-- One action; the dialog asks where everything goes when the group
 		     isn't empty (carbon-expert's advice). -->
 		<Modal
@@ -157,33 +163,6 @@
 {/snippet}
 
 <Grid rowGap>
-	<Column lg={8}>
-		<!-- In the form's column, so it stacks above it at every width. -->
-		{#if message}
-			<div class="message"><InlineNotification kind="error" title={message} /></div>
-		{/if}
-		<form
-			class="form"
-			method="POST"
-			action="?/save"
-			use:enhance={() => {
-				busy = true;
-				return async ({ result, update }) => {
-					busy = false;
-					if (result.type !== 'success') return update({ reset: false });
-					await previous.go();
-					toast('Group saved.');
-				};
-			}}
-		>
-			<TextInput label="Name" name="name" value={group.name} required autocomplete="off" />
-			<div class="buttons">
-				<Button type="submit" disabled={busy} fill>Save</Button>
-				<Button kind="secondary" href={previous.href} onclick={previous.onclick} fill>Cancel</Button
-				>
-			</div>
-		</form>
-	</Column>
 	<Column narrow>
 		<h2 class="section">Members</h2>
 		{#if group.member_list.length === 0}
@@ -259,25 +238,6 @@
 </Grid>
 
 <style>
-	.message {
-		margin-bottom: var(--cds-spacing-07);
-	}
-
-	/* Carbon's in-page form: fields 32px apart, 48px before the buttons. */
-	.form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--cds-spacing-07);
-	}
-
-	/* Carbon's fluid pair: equal halves of the fields' width, 1px apart. */
-	.buttons {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1px;
-		margin-top: var(--cds-spacing-05);
-	}
-
 	.section {
 		margin-top: var(--cds-spacing-07);
 		margin-bottom: var(--cds-spacing-05);

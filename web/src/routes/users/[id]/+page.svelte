@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import { back } from '#lib/back.svelte.js';
 	import { dateTime } from '#lib/format.js';
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
@@ -30,10 +29,6 @@
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
-
-	let busy = $state(false);
-	// Save and Cancel go back to where the user came from.
-	const previous = back(() => resolve('/users'));
 
 	const user = $derived(data.user);
 	const archived = $derived(user.archived_at !== null);
@@ -127,7 +122,30 @@
 	status={archived ? 'Archived' : undefined}
 >
 	{#snippet actions()}
-		<!-- Apart from the form below: these apply at once. -->
+		<!-- The user's own fields in a dialog, so everything on the page applies
+		     at once (carbon-expert's advice: a dialog form for a few fields). -->
+		<Modal
+			title="Edit user"
+			triggerKind="tertiary"
+			label={user.name}
+			submitLabel="Save"
+			action="?/save"
+			error={form && 'editMessage' in form ? form.editMessage : undefined}
+			onsuccess={() => toast(`${user.name} saved.`)}
+		>
+			<TextInput label="Name" name="name" value={user.name} required autocomplete="off" />
+			<TextInput
+				label={self ? 'Email' : 'Email (optional)'}
+				name="email"
+				type="email"
+				value={user.email ?? ''}
+				required={self}
+				autocomplete="off"
+				helper={self
+					? 'You log in with this address.'
+					: 'To log in with the Google account for this address. Empty: no login.'}
+			/>
+		</Modal>
 		{#if archived}
 			<form
 				method="POST"
@@ -176,7 +194,7 @@
 
 <Grid rowGap>
 	<Column lg={8}>
-		<!-- In the form's column, so it stacks above it at every width. -->
+		<!-- In the facts' column, so it stacks above them at every width. -->
 		{#if message}
 			<div class="message"><InlineNotification kind="error" title={message} /></div>
 		{/if}
@@ -186,44 +204,16 @@
 				<dd>{user.flights}</dd>
 			</div>
 			<div>
+				<dt>Email</dt>
+				<dd>{user.email ?? 'None, no login'}</dd>
+			</div>
+			<div>
 				<dt>Last login</dt>
 				<dd>
 					{user.last_login_at ? dateTime(user.last_login_at, data.timeZone) : 'Never'}
 				</dd>
 			</div>
 		</dl>
-		<form
-			class="form"
-			method="POST"
-			action="?/save"
-			use:enhance={() => {
-				busy = true;
-				return async ({ result, update }) => {
-					busy = false;
-					if (result.type !== 'success') return update({ reset: false });
-					await previous.go();
-					toast(`${user.name} saved.`);
-				};
-			}}
-		>
-			<TextInput label="Name" name="name" value={user.name} required autocomplete="off" />
-			<TextInput
-				label={self ? 'Email' : 'Email (optional)'}
-				name="email"
-				type="email"
-				value={user.email ?? ''}
-				required={self}
-				autocomplete="off"
-				helper={self
-					? 'You log in with this address.'
-					: 'To log in with the Google account for this address. Empty: no login.'}
-			/>
-			<div class="buttons">
-				<Button type="submit" disabled={busy} fill>Save</Button>
-				<Button kind="secondary" href={previous.href} onclick={previous.onclick} fill>Cancel</Button
-				>
-			</div>
-		</form>
 	</Column>
 	<Column narrow>
 		<h2 class="section">Groups</h2>
@@ -323,7 +313,7 @@
 </Grid>
 
 <style>
-	/* 32px before the form, as between fields. */
+	/* Related facts 16px apart. */
 	.facts {
 		display: grid;
 		gap: var(--cds-spacing-05);
@@ -342,21 +332,6 @@
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-	}
-
-	/* Carbon's in-page form: fields 32px apart, 48px before the buttons. */
-	.form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--cds-spacing-07);
-	}
-
-	/* Carbon's fluid pair: equal halves of the fields' width, 1px apart. */
-	.buttons {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1px;
-		margin-top: var(--cds-spacing-05);
 	}
 
 	.section {
