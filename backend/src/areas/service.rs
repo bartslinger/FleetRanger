@@ -134,7 +134,8 @@ mod tests {
             grants: Grants::from_stored([(None, "admin".to_owned())]).unwrap(),
             login_session_id: Uuid::nil(),
             ip: [127, 0, 0, 1].into(),
-            email: String::new(),
+            email: None,
+            impersonated_by: None,
             name: String::new(),
         }
     }

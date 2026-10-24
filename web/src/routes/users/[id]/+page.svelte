@@ -146,6 +146,15 @@
 					: 'To log in with the Google account for this address. Empty: no login.'}
 			/>
 		</Modal>
+		{#if !self && !archived}
+			<!-- Every page then shows what they see, until Stop impersonating in the
+			     banner. A plain post: the backend sets the cookie and opens the
+			     start page. -->
+			<form method="POST" action="/auth/impersonate">
+				<input type="hidden" name="user" value={user.id} />
+				<Button type="submit" kind="tertiary">Impersonate user</Button>
+			</form>
+		{/if}
 		{#if archived}
 			<form
 				method="POST"

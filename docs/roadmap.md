@@ -45,6 +45,7 @@ Everyone is a user, with roles in groups or on the whole organisation and an opt
 - [x] OIDC login (Google), server-side sessions (not yet deployed)
 - [x] Users (with roles and an optional login), groups, devices (managed by admins; drones and controllers registered from logs)
 - [x] Policy module and access rules (flight visibility, setting a flight's pilot, moving flights)
+- [x] Impersonation: an admin acts as another user, for support, with a banner on every page
 - [ ] Audit log
 
 ## Phase 5: web

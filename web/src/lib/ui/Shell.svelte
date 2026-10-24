@@ -18,7 +18,8 @@
 	}
 
 	export interface ShellAccount {
-		email: string;
+		/** None for a user without a login, whom an admin impersonates. */
+		email: string | null;
 		name: string | null;
 	}
 
@@ -64,6 +65,9 @@
 		actions?: HeaderAction[];
 		/** Pages about the user's account, linked in the profile panel. */
 		profileLinks?: { href: string; label: string }[];
+		/** A page-wide message, such as a Banner, at the top of every page. Its
+		 * height is in `--banner-height` for pages sized to the window. */
+		banner?: Snippet;
 		children: Snippet;
 	}
 
@@ -75,10 +79,12 @@
 		theme: initialTheme,
 		actions = [],
 		profileLinks = [],
+		banner,
 		children
 	}: Props = $props();
 
 	let open = $state(false);
+	let bannerHeight = $state(0);
 	let menuButton: HTMLButtonElement | undefined = $state();
 	let navElement: HTMLElement | undefined = $state();
 
@@ -267,7 +273,7 @@
 				>
 					<div class="identity">
 						{#if account.name}<p class="account-name">{account.name}</p>{/if}
-						<p class="email">{account.email}</p>
+						{#if account.email}<p class="email">{account.email}</p>{/if}
 					</div>
 					<RadioButtonGroup
 						legend="Theme"
@@ -344,7 +350,13 @@
 	{/if}
 {/if}
 
-<main id="main-content" tabindex="-1" class:bare={!account}>
+<main
+	id="main-content"
+	tabindex="-1"
+	class:bare={!account}
+	style:--banner-height="{bannerHeight}px"
+>
+	{#if banner}<div bind:offsetHeight={bannerHeight}>{@render banner()}</div>{/if}
 	{@render children()}
 </main>
 
