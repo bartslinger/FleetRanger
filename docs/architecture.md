@@ -56,7 +56,7 @@ User's decisions, 2026-10-23, unless marked as mine. They replaced teams, the th
 - **Admin work is organisation-wide only, for now.** Groups get Viewer, Pilot and Editor; Admin is a role on the whole organisation, and only admins give roles. Group-level admins must stay easy to add (user's requirement): admin work is checked as a permission on every group involved, both groups for a move, so a Manager role later only grants those permissions on a group, plus two checks (nobody grants roles they don't hold, a group keeps a Manager) (my design).
 - **The last active admin can't lose Admin or be archived**, so nobody locks the organisation out through the app.
 - **With another active admin, an admin may give up their own Admin** (user's decision, 2026-10-23), replacing "admins can't change their own role"; they still can't archive or delete themselves or remove their own login.
-- How (my choices): the server checks the last admin with the active admins locked, and the user's page disables the Admin checkbox and Archive with a warning that says why. Giving roles in a group, renaming and deleting it need `groups.manage` on that group, creating one on the organisation.
+- How (my choices): the server checks the last admin with the active admins locked, and the Edit roles dialogs disable the last admin's Admin checkbox, saying why beside it (only admins see these pages, so the last admin only meets it on their own roles, where Archive isn't offered anyway). Giving roles in a group, renaming and deleting it need `groups.manage` on that group, creating one on the organisation.
 
 **Groups**
 
