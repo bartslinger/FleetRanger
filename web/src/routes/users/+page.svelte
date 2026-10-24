@@ -65,7 +65,11 @@
 	const rolesOf = (user: Row) =>
 		roleOptions.map((option) =>
 			option.value === 'admin' && lastAdmin(user)
-				? { ...option, helper: 'The only admin keeps this role.', disabled: true }
+				? {
+						...option,
+						helper: 'You are the only admin. Make another user an admin first.',
+						disabled: true
+					}
 				: option
 		);
 	const rolesMessage = $derived(form && 'rolesMessage' in form ? form.rolesMessage : undefined);

@@ -157,12 +157,11 @@
 {/snippet}
 
 <Grid rowGap>
-	{#if message}
-		<Column narrow lg={8}>
-			<InlineNotification kind="error" title={message} />
-		</Column>
-	{/if}
 	<Column lg={8}>
+		<!-- In the form's column, so it stacks above it at every width. -->
+		{#if message}
+			<div class="message"><InlineNotification kind="error" title={message} /></div>
+		{/if}
 		<form
 			class="form"
 			method="POST"
@@ -260,6 +259,10 @@
 </Grid>
 
 <style>
+	.message {
+		margin-bottom: var(--cds-spacing-07);
+	}
+
 	/* Carbon's in-page form: fields 32px apart, 48px before the buttons. */
 	.form {
 		display: flex;

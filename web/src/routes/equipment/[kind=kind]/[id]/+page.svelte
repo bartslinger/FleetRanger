@@ -66,12 +66,11 @@
 </PageHeader>
 
 <Grid rowGap>
-	{#if message}
-		<Column narrow lg={8}>
-			<InlineNotification kind="error" title={message} />
-		</Column>
-	{/if}
 	<Column lg={8}>
+		<!-- In the form's column, so it stacks above it at every width. -->
+		{#if message}
+			<div class="message"><InlineNotification kind="error" title={message} /></div>
+		{/if}
 		<!-- Read-only facts, from the flight logs. -->
 		<dl class="facts">
 			<div>
@@ -185,6 +184,10 @@
 </Grid>
 
 <style>
+	.message {
+		margin-bottom: var(--cds-spacing-07);
+	}
+
 	/* The link 16px after the facts, as between them; 32px before the form. */
 	.facts {
 		display: grid;
