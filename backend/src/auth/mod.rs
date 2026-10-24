@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 pub use oidc::Provider;
 
-use crate::policy::Grants;
+use crate::policy::{Grants, Permission};
 
 /// Whether the install is reached over HTTPS, set once at startup.
 static HTTPS: OnceLock<bool> = OnceLock::new();
@@ -52,6 +52,11 @@ fn login_cookie() -> &'static str {
     cookie_name("fleetranger_login", "__Host-fleetranger_login")
 }
 
+/// Holds the user an admin views as ("View as" in docs/architecture.md).
+fn view_as_cookie() -> &'static str {
+    cookie_name("fleetranger_view_as", "__Host-fleetranger_view_as")
+}
+
 /// Login sessions expire after this many days without use.
 const SESSION_IDLE_DAYS: i32 = 30;
 
@@ -72,7 +77,8 @@ impl Auth {
 }
 
 /// Who is making a request: a logged-in user. Handlers get one only through a
-/// valid login session, and pass it to the service functions they call.
+/// valid login session, and pass it to the service functions they call. When
+/// an admin views as another user, it is that user, with their roles.
 #[derive(Clone)]
 pub struct Actor {
     pub user_id: Uuid,
@@ -82,7 +88,17 @@ pub struct Actor {
     pub login_session_id: Uuid,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
     pub ip: IpAddr,
-    pub email: String,
+    /// None for a user without a login, whom an admin views as.
+    pub email: Option<String>,
+    pub name: String,
+    /// The admin viewing as this user, who is the one logged in.
+    pub viewed_by: Option<Viewer>,
+}
+
+/// An admin viewing as another user.
+#[derive(Clone)]
+pub struct Viewer {
+    pub user_id: Uuid,
     pub name: String,
 }
 
@@ -105,32 +121,66 @@ where
             .copied()
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
         let ip = client_ip(&parts.headers, peer);
-        let session = db::use_session(
-            &PgPool::from_ref(state),
-            &token_hash(token),
-            SESSION_IDLE_DAYS,
-        )
-        .await
-        .map_err(|error| {
-            tracing::error!(%error, "looking up a login session");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-        let grants = grants(&PgPool::from_ref(state), session.user_id)
+        let db = PgPool::from_ref(state);
+        let session = db::use_session(&db, &token_hash(token), SESSION_IDLE_DAYS)
             .await
             .map_err(|error| {
-                tracing::error!(%error, "reading a user's roles");
+                tracing::error!(%error, "looking up a login session");
                 StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-        Ok(Actor {
+            })?
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+        let grants = grants(&db, session.user_id).await.map_err(|error| {
+            tracing::error!(%error, "reading a user's roles");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let actor = Actor {
             user_id: session.user_id,
             grants,
             login_session_id: session.id,
             ip,
-            email: session.email,
+            email: Some(session.email),
             name: session.name,
-        })
+            viewed_by: None,
+        };
+        // Only a browser sends the cookie, which counts only while the one
+        // logged in may manage users; otherwise they simply see their own view.
+        let viewed = jar
+            .get(view_as_cookie())
+            .and_then(|cookie| Uuid::parse_str(cookie.value()).ok());
+        match viewed {
+            Some(user_id) if may_view_as(&actor, user_id) => {
+                view_as(&db, actor, user_id).await.map_err(|error| {
+                    tracing::error!(%error, "viewing as another user");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })
+            }
+            _ => Ok(actor),
+        }
     }
+}
+
+/// Whether this admin may view as that user: anyone but themselves.
+fn may_view_as(admin: &Actor, user_id: Uuid) -> bool {
+    admin.grants.may(Permission::UsersManage, None) && user_id != admin.user_id
+}
+
+/// The admin as the user they view as, or still themselves if that user is
+/// archived or gone.
+async fn view_as(db: &PgPool, admin: Actor, user_id: Uuid) -> sqlx::Result<Actor> {
+    let Some(user) = db::viewed_user(db, user_id).await? else {
+        return Ok(admin);
+    };
+    Ok(Actor {
+        user_id,
+        grants: grants(db, user_id).await?,
+        email: user.email,
+        name: user.name,
+        viewed_by: Some(Viewer {
+            user_id: admin.user_id,
+            name: admin.name,
+        }),
+        ..admin
+    })
 }
 
 /// A login session's token sent as `Authorization: Bearer …`, which only debug
@@ -207,4 +257,39 @@ pub async fn same_origin(
             .unwrap_or_default();
     }
     next.run(request).await
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::PgPool;
+
+    use super::{may_view_as, view_as};
+    use crate::testing;
+
+    #[sqlx::test]
+    async fn only_admins_view_as_someone_else_with_that_users_roles(db: PgPool) {
+        let admin = testing::user(&db, "Test Admin", &["admin"]).await;
+        let pilot = testing::user(&db, "Test Pilot", &["pilot"]).await;
+        let as_admin = testing::actor(&db, admin).await;
+        let as_pilot = testing::actor(&db, pilot).await;
+
+        assert!(may_view_as(&as_admin, pilot));
+        assert!(!may_view_as(&as_admin, admin));
+        assert!(!may_view_as(&as_pilot, admin));
+
+        let viewing = view_as(&db, as_admin.clone(), pilot).await.unwrap();
+        assert_eq!(viewing.user_id, pilot);
+        assert!(!viewing.grants.may(super::Permission::UsersManage, None));
+        assert_eq!(viewing.viewed_by.map(|viewer| viewer.user_id), Some(admin));
+
+        // An archived user can't be viewed as: the admin sees their own view.
+        sqlx::query("update users set archived_at = now() where id = $1")
+            .bind(pilot)
+            .execute(&db)
+            .await
+            .unwrap();
+        let viewing = view_as(&db, as_admin, pilot).await.unwrap();
+        assert_eq!(viewing.user_id, admin);
+        assert!(viewing.viewed_by.is_none());
+    }
 }

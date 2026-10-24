@@ -84,7 +84,8 @@ pub async fn bearer(
         // The audit log will name the connection here rather than a login session.
         login_session_id: access.grant_id,
         ip: crate::auth::client_ip(&parts.headers, peer),
-        email: access.email,
+        email: Some(access.email),
+        viewed_by: None,
         name: access.name,
     }))
 }

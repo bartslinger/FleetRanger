@@ -101,6 +101,24 @@ pub async fn use_session(
     .await
 }
 
+pub struct ViewedUser {
+    pub name: String,
+    pub email: Option<String>,
+}
+
+/// A user an admin views as, unless archived: with or without a login.
+pub async fn viewed_user(db: &PgPool, user_id: Uuid) -> sqlx::Result<Option<ViewedUser>> {
+    sqlx::query_as!(
+        ViewedUser,
+        r#"select u.name, l.email as "email?" from users u
+           left join logins l on l.user_id = u.id
+           where u.id = $1 and u.archived_at is null"#,
+        user_id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
 /// The user's roles: per group, and with no group on the whole organisation.
 pub async fn roles(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<(Option<Uuid>, String)>> {
     let rows = sqlx::query!(
