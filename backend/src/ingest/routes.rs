@@ -131,8 +131,12 @@ async fn put_log(
     Ok((status, Json(Received { result })))
 }
 
-/// android-v0.3.0's upload: the name in `X-File-Name`, and its `X-Team-Id`
-/// ignored, so the flight goes to the queue with its pilot.
+/// android-v0.3.0's upload: the name in `X-File-Name`, and the group chosen
+/// with the pilot in `X-Team-Id`, which is the group's id: the groups kept
+/// their teams' ids, and its pilot list gives each group's id as the team's.
+/// The same checks as for later apps then decide whether the flight gets it.
+/// Anything that isn't an id counts as no choice, so an older app's upload
+/// never fails over it.
 async fn receive_v0(
     controller: Controller,
     State(db): State<PgPool>,
@@ -143,7 +147,7 @@ async fn receive_v0(
 ) -> ApiResult<(StatusCode, Json<Received>)> {
     let chosen = upload::Chosen {
         pilot_id: id_header(&headers, "x-pilot-id")?,
-        group_id: None,
+        group_id: id_header(&headers, "x-team-id").unwrap_or(None),
     };
     let file_name = text_header(&headers, "x-file-name");
     let sha256 = text_header(&headers, "x-sha256");
