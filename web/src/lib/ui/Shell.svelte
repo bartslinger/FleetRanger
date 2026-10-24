@@ -18,7 +18,7 @@
 	}
 
 	export interface ShellAccount {
-		/** None for a user without a login, whom an admin views as. */
+		/** None for a user without a login, whom an admin impersonates. */
 		email: string | null;
 		name: string | null;
 	}

@@ -101,15 +101,18 @@ pub async fn use_session(
     .await
 }
 
-pub struct ViewedUser {
+pub struct ImpersonatedUser {
     pub name: String,
     pub email: Option<String>,
 }
 
-/// A user an admin views as, unless archived: with or without a login.
-pub async fn viewed_user(db: &PgPool, user_id: Uuid) -> sqlx::Result<Option<ViewedUser>> {
+/// A user an admin impersonates, unless archived: with or without a login.
+pub async fn impersonated_user(
+    db: &PgPool,
+    user_id: Uuid,
+) -> sqlx::Result<Option<ImpersonatedUser>> {
     sqlx::query_as!(
-        ViewedUser,
+        ImpersonatedUser,
         r#"select u.name, l.email as "email?" from users u
            left join logins l on l.user_id = u.id
            where u.id = $1 and u.archived_at is null"#,

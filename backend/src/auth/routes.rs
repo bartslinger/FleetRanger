@@ -23,8 +23,8 @@ use uuid::Uuid;
 use super::db::{self, LoginUser};
 use super::oidc::PendingLogin;
 use super::{
-    Actor, Auth, SESSION_IDLE_DAYS, client_ip, login_cookie, session_cookie, token_hash,
-    view_as_cookie,
+    Actor, Auth, SESSION_IDLE_DAYS, client_ip, impersonation_cookie, login_cookie, session_cookie,
+    token_hash,
 };
 use crate::oauth::OAuth;
 use crate::policy::{Grants, Permission};
@@ -40,8 +40,8 @@ where
         .route("/auth/login", get(login))
         .route("/auth/callback", get(callback))
         .route("/auth/logout", post(logout))
-        .route("/auth/view-as", post(view_as))
-        .route("/auth/view-as/stop", post(stop_viewing_as))
+        .route("/auth/impersonate", post(impersonate))
+        .route("/auth/impersonate/stop", post(stop_impersonating))
         .route("/api/me", get(me))
 }
 
@@ -200,43 +200,43 @@ async fn logout(State(db): State<PgPool>, jar: CookieJar) -> Response {
     }
     let jar = jar
         .remove(Cookie::build(session_cookie()).path("/"))
-        .remove(Cookie::build(view_as_cookie()).path("/"));
+        .remove(Cookie::build(impersonation_cookie()).path("/"));
     (jar, Redirect::to("/login?logged-out")).into_response()
 }
 
 #[derive(Deserialize)]
-struct ViewAsForm {
+struct ImpersonateForm {
     user: Uuid,
 }
 
-/// An admin starts viewing as another user (or switches to another one): the
+/// An admin starts impersonating another user (or switches to another one): the
 /// pages then show what that user sees, and changes are made as them, until
 /// they stop or log out.
-async fn view_as(
+async fn impersonate(
     State(auth): State<Arc<Auth>>,
     State(db): State<PgPool>,
     actor: Actor,
     jar: CookieJar,
-    Form(form): Form<ViewAsForm>,
+    Form(form): Form<ImpersonateForm>,
 ) -> Response {
-    // While viewing as someone, the request acts as them: check the admin.
-    let admin = match &actor.viewed_by {
-        Some(viewer) => viewer.user_id,
+    // While impersonating someone, the request acts as them: check the admin.
+    let admin = match &actor.impersonated_by {
+        Some(admin) => admin.user_id,
         None if actor.grants.may(Permission::UsersManage, None) => actor.user_id,
         None => return StatusCode::FORBIDDEN.into_response(),
     };
     if form.user == admin {
         return (StatusCode::BAD_REQUEST, "that is you").into_response();
     }
-    match db::viewed_user(&db, form.user).await {
+    match db::impersonated_user(&db, form.user).await {
         Ok(Some(_)) => {}
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(error) => {
-            tracing::error!(%error, "looking up a user to view as");
+            tracing::error!(%error, "looking up a user to impersonate");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
-    let cookie = Cookie::build((view_as_cookie(), form.user.to_string()))
+    let cookie = Cookie::build((impersonation_cookie(), form.user.to_string()))
         .path("/")
         .http_only(true)
         .secure(auth.secure_cookies())
@@ -244,23 +244,23 @@ async fn view_as(
     (jar.add(cookie), Redirect::to("/")).into_response()
 }
 
-/// Back to the admin's own view, on the page of the user they viewed as.
-async fn stop_viewing_as(jar: CookieJar) -> Response {
-    let back = match jar.get(view_as_cookie()) {
+/// Back to the admin themselves, on the page of the user they impersonated.
+async fn stop_impersonating(jar: CookieJar) -> Response {
+    let back = match jar.get(impersonation_cookie()) {
         Some(cookie) => match Uuid::parse_str(cookie.value()) {
             Ok(user) => format!("/users/{user}"),
             Err(_) => "/".to_owned(),
         },
         None => "/".to_owned(),
     };
-    let jar = jar.remove(Cookie::build(view_as_cookie()).path("/"));
+    let jar = jar.remove(Cookie::build(impersonation_cookie()).path("/"));
     (jar, Redirect::to(&back)).into_response()
 }
 
 #[derive(Serialize)]
 struct Me {
     id: Uuid,
-    /// None for a user without a login, whom an admin views as.
+    /// None for a user without a login, whom an admin impersonates.
     email: Option<String>,
     name: String,
     /// So the web app shows only what the user can use; the backend still
@@ -269,12 +269,12 @@ struct Me {
     /// Whether apps (such as AI assistants) can connect to this install, so
     /// the web app offers the list of connected apps only then.
     apps: bool,
-    /// The admin viewing as this user, for the web app's banner.
-    viewed_by: Option<ViewedBy>,
+    /// The admin impersonating this user, for the web app's banner.
+    impersonated_by: Option<ImpersonatedBy>,
 }
 
 #[derive(Serialize)]
-struct ViewedBy {
+struct ImpersonatedBy {
     id: Uuid,
     name: String,
 }
@@ -311,9 +311,9 @@ async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
         email: actor.email,
         name: actor.name,
         apps: !oauth.resources.is_empty(),
-        viewed_by: actor.viewed_by.map(|viewer| ViewedBy {
-            id: viewer.user_id,
-            name: viewer.name,
+        impersonated_by: actor.impersonated_by.map(|admin| ImpersonatedBy {
+            id: admin.user_id,
+            name: admin.name,
         }),
     })
 }

@@ -147,15 +147,15 @@
 			: []}
 	>
 		{#snippet banner()}
-			<!-- Always on screen while an admin views as someone (user's
+			<!-- At the top of every page while an admin impersonates someone (user's
 			     decision); warning, as changes are made as that user
 			     (carbon-expert's advice). -->
-			{#if data.account?.viewed_by}
-				<Banner kind="warning" title="Viewing as {data.account.name}">
+			{#if data.account?.impersonated_by}
+				<Banner kind="warning" title="Impersonating {data.account.name}">
 					Changes you make are made as them.
 					{#snippet action()}
-						<form method="POST" action="/auth/view-as/stop">
-							<Button type="submit" kind="ghost" size="sm">Stop viewing</Button>
+						<form method="POST" action="/auth/impersonate/stop">
+							<Button type="submit" kind="ghost" size="sm">Stop impersonating</Button>
 						</form>
 					{/snippet}
 				</Banner>
