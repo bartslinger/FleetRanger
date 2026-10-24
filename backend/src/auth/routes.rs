@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    Json, Router,
+    Form, Json, Router,
     extract::{ConnectInfo, FromRef, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Redirect, Response},
@@ -22,7 +22,10 @@ use uuid::Uuid;
 
 use super::db::{self, LoginUser};
 use super::oidc::PendingLogin;
-use super::{Actor, Auth, SESSION_IDLE_DAYS, client_ip, login_cookie, session_cookie, token_hash};
+use super::{
+    Actor, Auth, SESSION_IDLE_DAYS, client_ip, impersonation_cookie, login_cookie, session_cookie,
+    token_hash,
+};
 use crate::oauth::OAuth;
 use crate::policy::{Grants, Permission};
 
@@ -37,6 +40,8 @@ where
         .route("/auth/login", get(login))
         .route("/auth/callback", get(callback))
         .route("/auth/logout", post(logout))
+        .route("/auth/impersonate", post(impersonate))
+        .route("/auth/impersonate/stop", post(stop_impersonating))
         .route("/api/me", get(me))
 }
 
@@ -193,14 +198,70 @@ async fn logout(State(db): State<PgPool>, jar: CookieJar) -> Response {
         tracing::error!(%error, "revoking a login session");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    let jar = jar.remove(Cookie::build(session_cookie()).path("/"));
+    let jar = jar
+        .remove(Cookie::build(session_cookie()).path("/"))
+        .remove(Cookie::build(impersonation_cookie()).path("/"));
     (jar, Redirect::to("/login?logged-out")).into_response()
+}
+
+#[derive(Deserialize)]
+struct ImpersonateForm {
+    user: Uuid,
+}
+
+/// An admin starts impersonating another user (or switches to another one): the
+/// pages then show what that user sees, and changes are made as them, until
+/// they stop or log out.
+async fn impersonate(
+    State(auth): State<Arc<Auth>>,
+    State(db): State<PgPool>,
+    actor: Actor,
+    jar: CookieJar,
+    Form(form): Form<ImpersonateForm>,
+) -> Response {
+    // While impersonating someone, the request acts as them: check the admin.
+    let admin = match &actor.impersonated_by {
+        Some(admin) => admin.user_id,
+        None if actor.grants.may(Permission::UsersManage, None) => actor.user_id,
+        None => return StatusCode::FORBIDDEN.into_response(),
+    };
+    if form.user == admin {
+        return (StatusCode::BAD_REQUEST, "that is you").into_response();
+    }
+    match db::impersonated_user(&db, form.user).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            tracing::error!(%error, "looking up a user to impersonate");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+    let cookie = Cookie::build((impersonation_cookie(), form.user.to_string()))
+        .path("/")
+        .http_only(true)
+        .secure(auth.secure_cookies())
+        .same_site(SameSite::Lax);
+    (jar.add(cookie), Redirect::to("/")).into_response()
+}
+
+/// Back to the admin themselves, on the page of the user they impersonated.
+async fn stop_impersonating(jar: CookieJar) -> Response {
+    let back = match jar.get(impersonation_cookie()) {
+        Some(cookie) => match Uuid::parse_str(cookie.value()) {
+            Ok(user) => format!("/users/{user}"),
+            Err(_) => "/".to_owned(),
+        },
+        None => "/".to_owned(),
+    };
+    let jar = jar.remove(Cookie::build(impersonation_cookie()).path("/"));
+    (jar, Redirect::to(&back)).into_response()
 }
 
 #[derive(Serialize)]
 struct Me {
     id: Uuid,
-    email: String,
+    /// None for a user without a login, whom an admin impersonates.
+    email: Option<String>,
     name: String,
     /// So the web app shows only what the user can use; the backend still
     /// checks every request.
@@ -208,6 +269,14 @@ struct Me {
     /// Whether apps (such as AI assistants) can connect to this install, so
     /// the web app offers the list of connected apps only then.
     apps: bool,
+    /// The admin impersonating this user, for the web app's banner.
+    impersonated_by: Option<ImpersonatedBy>,
+}
+
+#[derive(Serialize)]
+struct ImpersonatedBy {
+    id: Uuid,
+    name: String,
 }
 
 /// What the user may do: on the whole organisation, where it counts for
@@ -242,6 +311,10 @@ async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
         email: actor.email,
         name: actor.name,
         apps: !oauth.resources.is_empty(),
+        impersonated_by: actor.impersonated_by.map(|admin| ImpersonatedBy {
+            id: admin.user_id,
+            name: admin.name,
+        }),
     })
 }
 

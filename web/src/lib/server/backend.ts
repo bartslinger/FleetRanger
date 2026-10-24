@@ -368,15 +368,18 @@ export interface ProcessingStatus {
 	}[];
 }
 
-/** The logged-in user, from `GET /api/me`. */
+/** The logged-in user, from `GET /api/me`, or the user an admin impersonates. */
 export interface Account {
 	id: string;
-	email: string;
+	/** None for a user without a login, whom an admin impersonates. */
+	email: string | null;
 	name: string;
 	/** What the user may do; see `#lib/permissions.js`. */
 	permissions: Permissions;
 	/** Whether apps (such as AI assistants) can connect to this install. */
 	apps: boolean;
+	/** The admin impersonating this user, who is the one logged in. */
+	impersonated_by: { id: string; name: string } | null;
 }
 
 /** An app asking to connect, from `POST /api/oauth/request`. */

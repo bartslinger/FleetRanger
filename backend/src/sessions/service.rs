@@ -278,7 +278,8 @@ mod tests {
             grants: crate::auth::grants(db, user_id).await.unwrap(),
             login_session_id: Uuid::nil(),
             ip: [127, 0, 0, 1].into(),
-            email: String::new(),
+            email: None,
+            impersonated_by: None,
             name: String::new(),
         }
     }

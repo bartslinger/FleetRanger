@@ -17,6 +17,9 @@ const WHITE = { theme: themes.white, key: 'whiteTheme' };
 // Token groups for Carbon features we don't build.
 const SKIPPED = /^(ai|chat|syntax)/;
 const COMPONENT_TOKENS = ['buttonTokens', 'tagTokens', 'notificationTokens', 'statusTokens'];
+// Component tokens the JS package gives for light themes only, with what
+// Carbon's Sass uses in the dark ones.
+const DARK_FROM_THEME = { notificationActionHover: 'layerHover01' };
 
 // Lowercased like Carbon's Sass names (size2XLarge -> --cds-size-2xlarge).
 const name = (token) => `--cds-${themes.formatTokenName(token).toLowerCase()}`;
@@ -29,6 +32,8 @@ function colors({ theme, key }) {
 		for (const [token, byTheme] of Object.entries(themes[group])) {
 			// A few component tokens exist only in light themes; leave them out.
 			if (byTheme[LIGHT.key] && byTheme[DARK.key]) values.push([token, byTheme[key]]);
+			else if (DARK_FROM_THEME[token])
+				values.push([token, byTheme[key] ?? theme[DARK_FROM_THEME[token]]]);
 		}
 	}
 	return new Map(values);
