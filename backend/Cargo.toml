@@ -10,7 +10,7 @@ anyhow = "1.0.104"
 # OAuth's PKCE check: the base64url form of a SHA-256.
 base64 = "0.23.1"
 axum = "0.8.9"
-axum-extra = { version = "0.12.6", features = ["cookie"] }
+axum-extra = { version = "0.12.6", features = ["cookie", "query"] }
 # Same date/time library as dji-log-parser.
 chrono = { version = "0.4.45", default-features = false, features = ["serde"] }
 cookie = { version = "0.18.2", default-features = false }
@@ -29,6 +29,9 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+# The public API's OpenAPI description, generated from its routes and types.
+utoipa = { version = "6.0.0", default-features = false, features = ["macros", "uuid", "chrono"] }
+utoipa-axum = "0.3.0"
 # 2.x rather than 3.x: dji-log-parser already depends on it.
 ureq = "2.12.1"
 uuid = { version = "1.28.0", features = ["serde", "v4"] }

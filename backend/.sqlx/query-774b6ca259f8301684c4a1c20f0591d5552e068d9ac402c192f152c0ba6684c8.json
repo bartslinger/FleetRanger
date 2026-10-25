@@ -1,0 +1,164 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select f.id, f.takeoff_at, f.landed_at, f.air_time_s, f.distance_m,\n                  (f.metrics->>'max_altitude_m')::float8 as max_height_m,\n                  f.pilot_id, f.group_id, f.session_id,\n                  (select a.id from aircraft a where a.serial = f.aircraft_serial) as drone_id,\n                  (select r.id from remote_controllers r where r.serial = f.rc_serial)\n                      as controller_id,\n                  array(select fb.battery_id from flight_batteries fb\n                        where fb.flight_id = f.id order by fb.slot) as \"battery_ids!\",\n                  coalesce((select jsonb_agg(jsonb_build_object('area', fa.area_id,\n                                                                'air_time_s', fa.air_time_s,\n                                                                'distance_m', fa.distance_m)\n                                             order by fa.air_time_s desc, fa.area_id)\n                            from flight_areas fa where fa.flight_id = f.id),\n                           '[]') as \"areas!\"\n           from flights f\n           where f.archived_at is null\n             and ($1 or f.pilot_id = $2 or f.group_id = any($3))\n             and ($4::text[] is null or f.aircraft_serial = any($4))\n             and ($5::text[] is null or f.rc_serial = any($5))\n             and ($6::timestamptz is null or f.takeoff_at >= $6)\n             and ($7::timestamptz is null or f.takeoff_at < $7)\n             and ($8::uuid[] is null or f.group_id = any($8) or ($9 and f.group_id is null))\n             and ($10::uuid[] is null or f.pilot_id = any($10) or ($11 and f.pilot_id is null))\n             and ($12::uuid[] is null or exists (select 1 from flight_areas fa\n                                                 where fa.flight_id = f.id\n                                                   and fa.area_id = any($12)))\n             and (($13::uuid[] is null and not $14)\n                  or f.session_id = any($13)\n                  or ($14 and f.session_id is null))\n             and ($15::timestamptz is null or (f.takeoff_at, f.id) < ($15, $16))\n             and ($18::uuid[] is null or f.id = any($18))\n           order by f.takeoff_at desc, f.id desc\n           limit $17",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "takeoff_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "takeoff_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "landed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "landed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "air_time_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "air_time_s"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "distance_m",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "distance_m"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "max_height_m",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "pilot_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "pilot_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "drone_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "controller_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "battery_ids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "areas!",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "UuidArray",
+        "TextArray",
+        "TextArray",
+        "Timestamptz",
+        "Timestamptz",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "UuidArray",
+        "Bool",
+        "Timestamptz",
+        "Uuid",
+        "Int8",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      true,
+      true,
+      true,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "774b6ca259f8301684c4a1c20f0591d5552e068d9ac402c192f152c0ba6684c8"
+}
