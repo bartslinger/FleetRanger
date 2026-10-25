@@ -1356,7 +1356,10 @@ mod tests {
         let pilot = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         testing::join(&db, pilot, south).await;
         let flight = flight(&db, Some(north), Some(pilot)).await;
-        let session = sessions::db::split(&db, &[flight], None).await.unwrap();
+        let session = sessions::db::split(&db, &[flight], None)
+            .await
+            .unwrap()
+            .unwrap();
         let state = async || -> (Option<Uuid>, Option<Uuid>, Option<Uuid>) {
             sqlx::query_as("select pilot_id, group_id, session_id from flights where id = $1")
                 .bind(flight)
@@ -1445,7 +1448,7 @@ mod tests {
             flight(&db, None, None).await,
             flight(&db, None, None).await,
         );
-        let session = sessions::db::split(&db, &[b], None).await.unwrap();
+        let session = sessions::db::split(&db, &[b], None).await.unwrap().unwrap();
 
         assert_eq!(archive(&db, &[a, b]).await.unwrap(), None);
         assert!(!any_archived(&db, &[a, b]).await.unwrap());

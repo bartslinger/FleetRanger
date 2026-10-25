@@ -2,6 +2,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::comments::{self, Comment};
 use super::db::{self, SessionSummary, Window};
 use crate::{
     auth::Actor,
@@ -114,7 +115,9 @@ pub async fn create(
         return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
     not_archived(db, &flight_ids).await?;
-    Ok(db::split(db, &flight_ids, group).await?)
+    db::split(db, &flight_ids, group)
+        .await?
+        .ok_or_else(stranded)
 }
 
 /// These flights, once, if there are any and the actor sees them all: only
@@ -150,12 +153,17 @@ pub async fn add(db: &PgPool, actor: &Actor, session: Uuid, flight_ids: &[Uuid])
     changed.extend(db::groups_left(db, &flight_ids).await?);
     policy::change_sessions(&actor.grants, &changed)?;
     not_archived(db, &flight_ids).await?;
-    Ok(db::add(db, session, &flight_ids).await?)
+    db::add(db, session, &flight_ids)
+        .await?
+        .ok_or_else(stranded)
 }
 
 /// Takes these flights out of their sessions; they stay flights, without a
 /// session. A session left without flights is deleted. Returns how many were
 /// in a session.
+///
+/// Here and when flights move to another session, a session with comments
+/// keeps its last flight: it is deleted only explicitly.
 pub async fn remove(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResult<u64> {
     let flight_ids = distinct(flight_ids);
     if flight_ids.is_empty() {
@@ -166,7 +174,14 @@ pub async fn remove(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResul
     }
     let changed = db::groups_left(db, &flight_ids).await?;
     policy::change_sessions(&actor.grants, &changed)?;
-    Ok(db::remove(db, &flight_ids).await?)
+    db::remove(db, &flight_ids).await?.ok_or_else(stranded)
+}
+
+fn stranded() -> ApiError {
+    ApiError::Conflict(
+        "A session with comments can’t lose its last flight. Delete the session instead."
+            .to_owned(),
+    )
 }
 
 /// A session with the flights of it the actor may see.
@@ -177,6 +192,8 @@ pub struct Session {
     pub group: db::OwnGroup,
     /// In takeoff order.
     pub flights: Vec<FlightDetail>,
+    /// Oldest first.
+    pub comments: Vec<Comment>,
 }
 
 /// A session the actor may see a flight of. Any other session is not found,
@@ -189,7 +206,23 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<Session> {
     }
     let group = db::own_group(db, id).await?.ok_or(ApiError::NotFound)?;
     flights::service::link_equipment(actor, &mut flights);
-    Ok(Session { id, group, flights })
+    let comments = comments::of_session(db, id).await?;
+    Ok(Session {
+        id,
+        group,
+        flights,
+        comments,
+    })
+}
+
+/// Deletes a session and its comments; its flights stay, without a session.
+pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
+    let groups = db::groups_of(db, &[id]).await?.ok_or(ApiError::NotFound)?;
+    policy::change_sessions(&actor.grants, &groups)?;
+    if !db::delete(db, id).await? {
+        return Err(ApiError::NotFound);
+    }
+    Ok(())
 }
 
 /// Merges sessions into the one that starts first, and returns it.
@@ -222,7 +255,9 @@ pub async fn split(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResult
             "Leave at least one flight in the session.".to_owned(),
         ));
     }
-    Ok(db::split(db, &flight_ids, groups[0]).await?)
+    db::split(db, &flight_ids, groups[0])
+        .await?
+        .ok_or_else(stranded)
 }
 
 /// Moves a session to a group, or to the organisation with None, and with
@@ -353,5 +388,99 @@ mod tests {
             db::groups_of(&db, &[joint]).await.unwrap(),
             Some(vec![None])
         );
+    }
+
+    /// A session with comments keeps its last flight until it is deleted
+    /// explicitly, and merging keeps its comments; one without comments goes
+    /// when its last flight leaves.
+    #[sqlx::test]
+    async fn comments_keep_their_session(db: PgPool) {
+        let north = testing::group(&db, "North").await;
+        let editor = testing::user(&db, "A", &["editor"]).await;
+        let editor = testing::actor(&db, editor).await;
+        let (a, b, c) = (
+            flight(&db, north).await,
+            flight(&db, north).await,
+            flight(&db, north).await,
+        );
+        let commented = create(&db, &editor, &[a], None).await.ok().unwrap();
+        let other = create(&db, &editor, &[b], None).await.ok().unwrap();
+        comments::add(&db, &editor, commented, "Landed early: wind")
+            .await
+            .ok()
+            .unwrap();
+
+        assert!(matches!(
+            remove(&db, &editor, &[a]).await,
+            Err(ApiError::Conflict(_))
+        ));
+        assert!(matches!(
+            add(&db, &editor, other, &[a]).await,
+            Err(ApiError::Conflict(_))
+        ));
+        assert!(create(&db, &editor, &[a], None).await.is_err());
+        assert_eq!(db::session_of(&db, &[a]).await.unwrap(), Some(commented));
+
+        let merged = merge(&db, &editor, &[commented, other]).await.ok().unwrap();
+        let gone = if merged == commented {
+            other
+        } else {
+            commented
+        };
+        assert_eq!(db::groups_of(&db, &[gone]).await.unwrap(), None);
+        assert_eq!(comments::of_session(&db, merged).await.unwrap().len(), 1);
+
+        delete(&db, &editor, merged).await.ok().unwrap();
+        assert_eq!(db::groups_of(&db, &[merged]).await.unwrap(), None);
+        assert_eq!(db::session_of(&db, &[a, b]).await.unwrap(), None);
+
+        let plain = create(&db, &editor, &[c], None).await.ok().unwrap();
+        remove(&db, &editor, &[c]).await.ok().unwrap();
+        assert_eq!(db::groups_of(&db, &[plain]).await.unwrap(), None);
+    }
+
+    /// Comments are written with `sessions.edit`, and only their authors
+    /// change them; unchanged text isn't marked edited.
+    #[sqlx::test]
+    async fn only_authors_change_comments(db: PgPool) {
+        let north = testing::group(&db, "North").await;
+        let author = testing::user(&db, "A", &["editor"]).await;
+        let author = testing::actor(&db, author).await;
+        let other = testing::user(&db, "B", &["editor"]).await;
+        let other = testing::actor(&db, other).await;
+        let viewer = testing::user(&db, "C", &["viewer"]).await;
+        let viewer = testing::actor(&db, viewer).await;
+        let session = create(&db, &author, &[flight(&db, north).await], None)
+            .await
+            .ok()
+            .unwrap();
+
+        assert!(comments::add(&db, &viewer, session, "Seen").await.is_err());
+        let id = comments::add(&db, &author, session, "Battery swap at 10:40")
+            .await
+            .ok()
+            .unwrap();
+        let edited = async || comments::of_session(&db, session).await.unwrap()[0].edited_at;
+        assert!(
+            comments::edit(&db, &other, session, id, "Changed")
+                .await
+                .is_err()
+        );
+        assert!(comments::delete(&db, &other, session, id).await.is_err());
+        comments::edit(&db, &author, session, id, " Battery swap at 10:40 ")
+            .await
+            .ok()
+            .unwrap();
+        assert_eq!(edited().await, None);
+        comments::edit(&db, &author, session, id, "Battery swap at 10:45")
+            .await
+            .ok()
+            .unwrap();
+        assert!(edited().await.is_some());
+        comments::delete(&db, &author, session, id)
+            .await
+            .ok()
+            .unwrap();
+        assert!(comments::of_session(&db, session).await.unwrap().is_empty());
     }
 }

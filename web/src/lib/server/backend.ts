@@ -166,6 +166,19 @@ export interface Session {
 	group_id: string | null;
 	group_name: string | null;
 	flights: FlightDetail[];
+	/** Oldest first. */
+	comments: SessionComment[];
+}
+
+/** A comment on a session: a record of what happened. */
+export interface SessionComment {
+	id: string;
+	author_id: string;
+	author_name: string;
+	body: string;
+	created_at: string;
+	/** When its author last changed it, if they did. */
+	edited_at: string | null;
 }
 
 /** A session's neighbours in a list, newer and older, with their first

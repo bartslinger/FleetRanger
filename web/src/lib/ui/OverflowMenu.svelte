@@ -31,6 +31,10 @@
 	interface Props {
 		/** The button's accessible name, e.g. "More actions". */
 		label: string;
+		/** A shorter tooltip, where the name says more than the eye needs,
+		 * e.g. "Actions" for "Actions for your comment of …" beside the
+		 * comment. The name must start with it. */
+		tooltip?: string;
 		items: OverflowItem[];
 		/** As small as text (a breadcrumb), as large as a row (48px, e.g. a
 		 * contained list's), or the batch action bar's. */
@@ -46,6 +50,7 @@
 
 	let {
 		label,
+		tooltip,
 		items,
 		variant = 'inline',
 		trigger = $bindable(null),
@@ -69,7 +74,7 @@
 				</DropdownMenu.Trigger>
 			{/snippet}
 		</Tooltip.Trigger>
-		<TooltipContent kind="icon">{label}</TooltipContent>
+		<TooltipContent kind="icon">{tooltip ?? label}</TooltipContent>
 	</Tooltip.Root>
 	<DropdownMenu.Portal>
 		<DropdownMenu.Content
