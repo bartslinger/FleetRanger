@@ -21,7 +21,8 @@
 		// Apps, over the public API.
 		'sessions:list':
 			'Read the sessions you can see in FleetRanger: their figures, pilots and areas',
-		'sessions:read': 'Read the comments on those sessions',
+		'sessions:read':
+			'Read the sessions you can see in FleetRanger, with their figures, pilots, areas and comments',
 		'flights:list': 'Read the flights you can see: their times, pilots, equipment and areas',
 		'groups:list': 'Read the list of groups',
 		'areas:list': 'Read the list of areas',
