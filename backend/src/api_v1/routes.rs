@@ -17,8 +17,8 @@ use super::{
     db::{self, After, FlightRow, InSession, SessionRow},
     decode, encode, limit,
     types::{
-        Area, AreaFigures, Battery, Comment, Device, Error, Expandable, Flight, Group, Me,
-        Organisation, Page, Person, Session,
+        Area, AreaFigures, Battery, Comment, Device, Error, Expandable, Flight, Group,
+        Impersonator, Me, Organisation, Page, Person, Session,
     },
 };
 use crate::{
@@ -85,6 +85,10 @@ async fn me(Extension(caller): Extension<Caller>) -> Json<Me> {
     Json(Me {
         id: caller.actor.user_id,
         name: caller.actor.name,
+        impersonated_by: caller.actor.impersonated_by.map(|admin| Impersonator {
+            id: admin.user_id,
+            name: admin.name,
+        }),
     })
 }
 

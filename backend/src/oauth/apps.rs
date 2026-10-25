@@ -52,9 +52,24 @@ impl AppInput {
                 "Enter no more than 10 return addresses.".to_owned(),
             ));
         }
-        if let Some(uri) = uris.iter().find(|uri| !redirect_uri_allowed(uri)) {
+        // HTTPS only: a trusted app isn't asked about, so it can't use the
+        // user's own computer, where any program could listen (RFC 6749,
+        // 10.2), as self-registered apps may.
+        if let Some(uri) = uris
+            .iter()
+            .find(|uri| !uri.starts_with("https://") || !redirect_uri_allowed(uri))
+        {
             return Err(ApiError::Invalid(format!(
                 "{uri} isn’t a valid return address. Use the full address, starting with https://."
+            )));
+        }
+        if let Some((_, uri)) = uris
+            .iter()
+            .enumerate()
+            .find(|(index, uri)| uris[..*index].contains(uri))
+        {
+            return Err(ApiError::Invalid(format!(
+                "{uri} is there twice. Enter each return address once."
             )));
         }
         Ok((name, uris))
@@ -156,6 +171,7 @@ mod tests {
             code_challenge: String::new(),
             scopes: vec!["sessions:list".to_owned()],
             resource: "https://fleet.example.org/api/v1".to_owned(),
+            impersonated_by: None,
         };
         let tokens = Tokens {
             access_sha256: &sha256("access"),
@@ -177,5 +193,76 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+}
+
+#[cfg(test)]
+mod impersonation_tests {
+    use super::*;
+    use crate::oauth::{
+        db::{Code, Tokens},
+        sha256,
+    };
+
+    async fn user(db: &PgPool, email: &str) -> Uuid {
+        let id: Uuid = sqlx::query_scalar("insert into users (name) values ($1) returning id")
+            .bind(email)
+            .fetch_one(db)
+            .await
+            .unwrap();
+        sqlx::query("insert into logins (user_id, email) values ($1, $2)")
+            .bind(id)
+            .bind(email)
+            .execute(db)
+            .await
+            .unwrap();
+        id
+    }
+
+    /// An app an admin opened while impersonating someone isn't in that
+    /// person's connected apps, and ends with the impersonation; the
+    /// person's own connection stays.
+    #[sqlx::test]
+    async fn impersonated_connections_end_with_the_impersonation(db: PgPool) {
+        let pilot = user(&db, "pilot@example.org").await;
+        let admin = user(&db, "admin@example.org").await;
+        let uris = ["https://app.example.org/callback".to_owned()];
+        let app = db::add_trusted(&db, "Test app", &uris).await.unwrap();
+        let connect = async |impersonated_by: Option<Uuid>, token: &str| {
+            let code = Code {
+                client_id: app,
+                user_id: pilot,
+                redirect_uri: uris[0].clone(),
+                code_challenge: String::new(),
+                scopes: vec!["sessions:list".to_owned()],
+                resource: "https://fleet.example.org/api/v1".to_owned(),
+                impersonated_by,
+            };
+            let tokens = Tokens {
+                access_sha256: &sha256(token),
+                refresh_sha256: &sha256(&format!("{token}-refresh")),
+                access_seconds: 60.0,
+            };
+            db::create_grant(&db, &code, &tokens).await.unwrap();
+        };
+        connect(None, "own").await;
+        connect(Some(admin), "impersonated").await;
+
+        let access = db::use_access(&db, &sha256("impersonated"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(access.user_id, pilot);
+        assert_eq!(access.impersonated_by, Some(admin));
+        assert_eq!(db::connections(&db, pilot).await.unwrap().len(), 1);
+
+        db::end_impersonation(&db, admin).await.unwrap();
+        assert!(
+            db::use_access(&db, &sha256("impersonated"))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(db::use_access(&db, &sha256("own")).await.unwrap().is_some());
     }
 }

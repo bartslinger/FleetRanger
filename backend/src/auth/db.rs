@@ -138,13 +138,14 @@ pub async fn roles(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<(Option<Uuid>
         .collect())
 }
 
-pub async fn revoke_session(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<()> {
-    sqlx::query!(
+/// Ends a login session; its user, if it was still open.
+pub async fn revoke_session(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<Uuid>> {
+    sqlx::query_scalar!(
         "update login_sessions set revoked_at = now()
-         where token_sha256 = $1 and revoked_at is null",
+         where token_sha256 = $1 and revoked_at is null
+         returning user_id",
         token_sha256,
     )
-    .execute(db)
-    .await?;
-    Ok(())
+    .fetch_optional(db)
+    .await
 }

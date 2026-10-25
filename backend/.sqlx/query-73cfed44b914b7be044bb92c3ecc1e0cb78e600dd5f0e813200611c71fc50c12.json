@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "delete from oauth_codes where code_sha256 = $1\n           returning client_id, user_id, redirect_uri, code_challenge, scopes, resource,\n                     expires_at > now() as \"valid!\"",
+  "query": "delete from oauth_codes where code_sha256 = $1\n           returning client_id, user_id, redirect_uri, code_challenge, scopes, resource,\n                     impersonated_by, expires_at > now() as \"valid!\"",
   "describe": {
     "columns": [
       {
@@ -71,6 +71,17 @@
       },
       {
         "ordinal": 6,
+        "name": "impersonated_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_codes",
+            "name": "impersonated_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
         "name": "valid!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -88,8 +99,9 @@
       false,
       false,
       false,
+      true,
       null
     ]
   },
-  "hash": "3476461c7203a3e6511768b0f0d43f9def36cdaad3003cf6296dfbe7209bc235"
+  "hash": "73cfed44b914b7be044bb92c3ecc1e0cb78e600dd5f0e813200611c71fc50c12"
 }

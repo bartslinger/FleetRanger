@@ -8,15 +8,11 @@ export const addressLines = (text: string) =>
 		.map((line) => line.trim())
 		.filter((line) => line !== '');
 
-const loopback = ['localhost', '127.0.0.1', '[::1]'];
-
+/** HTTPS only, as the backend asks of trusted apps. */
 function valid(address: string): boolean {
 	try {
 		const url = new URL(address);
-		return (
-			!address.includes('#') &&
-			(url.protocol === 'https:' || (url.protocol === 'http:' && loopback.includes(url.hostname)))
-		);
+		return !address.includes('#') && url.protocol === 'https:';
 	} catch {
 		return false;
 	}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update oauth_grants g set last_used_at = now()\n         from users u, logins l\n         where g.access_token_sha256 = $1 and g.access_expires_at > now()\n           and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id\n         returning g.id as grant_id, g.user_id, l.email, u.name, g.scopes, g.resource",
+  "query": "update oauth_grants g set last_used_at = now()\n           from users u, logins l\n           where g.access_token_sha256 = $1 and g.access_expires_at > now()\n             and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id\n           returning g.id as grant_id, g.user_id, l.email, u.name, g.scopes, g.resource,\n                     g.impersonated_by,\n                     (select a.name from users a where a.id = g.impersonated_by)\n                         as impersonator_name",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,23 @@
             "name": "resource"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "impersonated_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_grants",
+            "name": "impersonated_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "impersonator_name",
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -81,8 +98,10 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      null
     ]
   },
-  "hash": "d6e59f1b247ccd47de05c4aa68280e2f8bbb726012c9204097f3b04276ca80c7"
+  "hash": "fd7f06a273c2ccfe150690e72aaf3b46680a0ab147e4cce5fd7b2b119771ce8b"
 }
