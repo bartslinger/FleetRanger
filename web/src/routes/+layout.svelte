@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '#lib/ui/base.css';
 	import Area from '@carbon/icons/es/area/16.js';
+	import ApplicationWeb from '@carbon/icons/es/application--web/16.js';
 	import Drone from '@carbon/icons/es/drone/16.js';
 	import Enterprise from '@carbon/icons/es/enterprise/16.js';
 	import FlightRoster from '@carbon/icons/es/flight--roster/16.js';
@@ -106,6 +107,10 @@
 			: []),
 		...(may(data.account, 'areas.manage', null)
 			? [{ href: resolve('/areas'), label: 'Areas', icon: Area }]
+			: []),
+		// Only while apps can connect at all.
+		...(data.account?.apps && may(data.account, 'apps.manage', null)
+			? [{ href: resolve('/apps'), label: 'Apps', icon: ApplicationWeb }]
 			: []),
 		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone }
 	]);
