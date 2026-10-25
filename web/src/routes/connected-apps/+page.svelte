@@ -14,7 +14,7 @@
 	type Row = (typeof data.connections)[number];
 
 	/** What each scope lets an app do, briefly. */
-	const ACCESS: Record<string, string> = { 'flights:read': 'Reads flights and sessions' };
+	const ACCESS: Record<string, string> = { 'flights:read': 'Reads flights, sessions and comments' };
 
 	// On phones only the app and its address, which tells apps with the same
 	// name apart, so Disconnect stays in view.
