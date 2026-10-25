@@ -2,14 +2,14 @@
 //! `/.well-known/`, register at `/auth/oauth/register` and get tokens at
 //! `/auth/oauth/token`. The consent page is the web app's `/connect`, which
 //! checks and approves a request through `/api/oauth/…`, as does the list of
-//! connected apps.
+//! connected apps. Admins manage trusted apps through `/api/apps`.
 
 use axum::{
     Form, Json, Router,
     extract::{DefaultBodyLimit, FromRef, Path, State},
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use openidconnect::url::Url;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
-    ACCESS_SECONDS, CODE_SECONDS, IDLE_DAYS, OAuth,
+    ACCESS_SECONDS, CODE_SECONDS, IDLE_DAYS, OAuth, apps,
     db::{self, Code, Connection, Refreshed, Tokens},
     pkce_matches, random_token, sha256,
 };
@@ -52,6 +52,8 @@ where
         .route("/api/oauth/approve", post(approve))
         .route("/api/oauth/connections", get(connections))
         .route("/api/oauth/connections/{id}", delete(disconnect))
+        .route("/api/apps", get(apps::list).post(apps::add))
+        .route("/api/apps/{id}", put(apps::update).delete(apps::remove))
 }
 
 /// RFC 8414: where apps find the endpoints.
@@ -142,7 +144,7 @@ async fn register(State(db): State<PgPool>, Json(registration): Json<Registratio
 
 /// HTTPS, or plain HTTP to the user's own computer (apps such as Claude Code
 /// receive the code there); never with a fragment, and of a sensible length.
-fn redirect_uri_allowed(uri: &str) -> bool {
+pub(super) fn redirect_uri_allowed(uri: &str) -> bool {
     let Ok(url) = Url::parse(uri) else {
         return false;
     };
@@ -191,6 +193,7 @@ struct AuthorizationRequest {
 struct Valid {
     client_id: Uuid,
     app: String,
+    trusted: bool,
     redirect_uri: String,
     code_challenge: String,
     scopes: Vec<String>,
@@ -249,6 +252,7 @@ async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) ->
     let resource = resource.url.clone();
     Ok(Valid {
         client_id: client.id,
+        trusted: client.trusted,
         app: client.name,
         redirect_uri,
         code_challenge,
@@ -259,12 +263,14 @@ async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) ->
 
 /// What the consent page shows: the app's name, where it sends the user
 /// back (its host, as the name is only what the app says it is), and the
-/// scopes it asks for.
+/// scopes it asks for. A trusted app, which an admin added, gets no consent page:
+/// the web app approves its request at once.
 #[derive(Serialize)]
 struct RequestInfo {
     app: String,
     host: String,
     scopes: Vec<String>,
+    trusted: bool,
 }
 
 async fn check(
@@ -278,6 +284,7 @@ async fn check(
         host: host(&valid.redirect_uri),
         app: valid.app,
         scopes: valid.scopes,
+        trusted: valid.trusted,
     }))
 }
 

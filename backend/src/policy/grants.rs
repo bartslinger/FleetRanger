@@ -20,7 +20,7 @@ pub enum Permission {
     EquipmentMove,
     /// Unpairing controllers, and seeing and revoking others' pairing codes.
     ControllersManage,
-    // Batteries, areas, users and logs have no group, so these count only on
+    // Batteries, areas, users, logs and apps have no group, so these count only on
     // the whole organisation.
     BatteriesRename,
     UsersManage,
@@ -28,10 +28,12 @@ pub enum Permission {
     AreasManage,
     /// Seeing how log processing goes.
     LogsManage,
+    /// Adding trusted apps, which skip the consent screen.
+    AppsManage,
 }
 
 impl Permission {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::FlightsRead,
         Self::EquipmentRead,
         Self::FlightsFlyFor,
@@ -49,6 +51,7 @@ impl Permission {
         Self::GroupsManage,
         Self::AreasManage,
         Self::LogsManage,
+        Self::AppsManage,
     ];
 
     /// Its name in docs/architecture.md and the API, such as `flights.read`.
@@ -71,6 +74,7 @@ impl Permission {
             Self::GroupsManage => "groups.manage",
             Self::AreasManage => "areas.manage",
             Self::LogsManage => "logs.manage",
+            Self::AppsManage => "apps.manage",
         }
     }
 }

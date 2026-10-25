@@ -3,11 +3,13 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// An app that registered itself.
+/// An app that registered itself, or a trusted one an admin added.
 pub struct Client {
     pub id: Uuid,
     pub name: String,
     pub redirect_uris: Vec<String>,
+    /// Added by an admin: skips the consent screen.
+    pub trusted: bool,
 }
 
 pub async fn register(db: &PgPool, name: &str, redirect_uris: &[String]) -> sqlx::Result<Uuid> {
@@ -23,7 +25,7 @@ pub async fn register(db: &PgPool, name: &str, redirect_uris: &[String]) -> sqlx
 pub async fn client(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Client>> {
     sqlx::query_as!(
         Client,
-        "select id, name, redirect_uris from oauth_clients where id = $1",
+        "select id, name, redirect_uris, trusted from oauth_clients where id = $1",
         id
     )
     .fetch_optional(db)
@@ -240,8 +242,8 @@ pub async fn disconnect(db: &PgPool, user_id: Uuid, id: Uuid) -> sqlx::Result<bo
 }
 
 /// Removes what's no longer of use: expired codes, grants idle for longer
-/// than `idle_days`, and apps without a grant or code a day after registering,
-/// so open registration can't fill the table.
+/// than `idle_days`, and apps that registered themselves without a grant or code a
+/// day later, so open registration can't fill the table.
 pub async fn clean_up(db: &PgPool, idle_days: i32) -> sqlx::Result<()> {
     sqlx::query!("delete from oauth_codes where expires_at < now()")
         .execute(db)
@@ -254,11 +256,75 @@ pub async fn clean_up(db: &PgPool, idle_days: i32) -> sqlx::Result<()> {
     .await?;
     sqlx::query!(
         "delete from oauth_clients c
-         where c.created_at < now() - interval '1 day'
+         where not c.trusted and c.created_at < now() - interval '1 day'
            and not exists (select 1 from oauth_grants g where g.client_id = c.id)
            and not exists (select 1 from oauth_codes o where o.client_id = c.id)"
     )
     .execute(db)
     .await?;
     Ok(())
+}
+
+/// A trusted app, for the Apps page.
+#[derive(Serialize)]
+pub struct TrustedApp {
+    /// Its client_id, which the app is configured with.
+    pub id: Uuid,
+    pub name: String,
+    pub redirect_uris: Vec<String>,
+    /// How many people use it, as connected apps.
+    pub users: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+pub async fn trusted_apps(db: &PgPool) -> sqlx::Result<Vec<TrustedApp>> {
+    sqlx::query_as!(
+        TrustedApp,
+        r#"select c.id, c.name, c.redirect_uris, c.created_at,
+                  (select count(distinct g.user_id) from oauth_grants g where g.client_id = c.id)
+                      as "users!"
+           from oauth_clients c
+           where c.trusted
+           order by lower(c.name), c.id"#
+    )
+    .fetch_all(db)
+    .await
+}
+
+pub async fn add_trusted(db: &PgPool, name: &str, redirect_uris: &[String]) -> sqlx::Result<Uuid> {
+    sqlx::query_scalar!(
+        "insert into oauth_clients (name, redirect_uris, trusted) values ($1, $2, true)
+         returning id",
+        name,
+        redirect_uris,
+    )
+    .fetch_one(db)
+    .await
+}
+
+/// False if there is no such trusted app.
+pub async fn update_trusted(
+    db: &PgPool,
+    id: Uuid,
+    name: &str,
+    redirect_uris: &[String],
+) -> sqlx::Result<bool> {
+    let result = sqlx::query!(
+        "update oauth_clients set name = $2, redirect_uris = $3 where id = $1 and trusted",
+        id,
+        name,
+        redirect_uris,
+    )
+    .execute(db)
+    .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+/// Removes a trusted app; its users' codes and tokens go with it. False if
+/// there is no such trusted app.
+pub async fn remove_trusted(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    let result = sqlx::query!("delete from oauth_clients where id = $1 and trusted", id)
+        .execute(db)
+        .await?;
+    Ok(result.rows_affected() == 1)
 }

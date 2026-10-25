@@ -82,9 +82,10 @@ User's decisions, 2026-10-23, unless marked as mine. They replaced teams, the th
 | `flights.set_pilot`, `flights.archive`, `sessions.edit`, `equipment.rename` | | | ✓ | ✓ |
 | `flights.move`, `sessions.move`, `equipment.move`, `batteries.rename` | | | | ✓ |
 | `controllers.manage` | | | | ✓ |
-| `users.manage`, `groups.manage`, `areas.manage`, `logs.manage` | | | | ✓ |
+| `users.manage`, `groups.manage`, `areas.manage`, `logs.manage`, `apps.manage` | | | | ✓ |
 
 - **Two permissions for admin work the table first lacked** (user's decision, 2026-10-23, my proposal): `controllers.manage` on a group, for unpairing its controllers and seeing and revoking others' pairing codes for it; `logs.manage` on the organisation, for log processing.
+- **`apps.manage`** on the organisation, for adding trusted apps (my choice, 2026-10-25): given to Admin like the other admin pages.
 
 - **Admin doesn't include `flights.fly_for`** (user's decision, 2026-10-23): it puts someone in pilot lists, so an admin who flies also gets Pilot, in a group or on the whole organisation.
 - **Pilot doesn't read the group's flights:** a pilot always sees their own, so a guest pilot sees only theirs. A pilot who should see the group's work also gets Viewer or Editor.

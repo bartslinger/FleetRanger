@@ -21,7 +21,8 @@ export type Permission =
 	| 'users.manage'
 	| 'groups.manage'
 	| 'areas.manage'
-	| 'logs.manage';
+	| 'logs.manage'
+	| 'apps.manage';
 
 export interface Permissions {
 	/** Held on the whole organisation. */
