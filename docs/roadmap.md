@@ -8,7 +8,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replaced teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replaced the three fixed roles; see "Groups and roles" in [architecture.md](architecture.md) and the packages below. Teams, the fixed roles and holders are dropped (migration 0020); released as v0.7.0 and android-v0.4.0 on 2026-10-24, with fine-tuning after the release (user, 2026-10-24). Groups replace teams in the code, every access check asks for a permission on the groups tables, a flight's pilot and group are independent, uploads without a chosen group go to the queue, a session's own group decides who changes it, only flights without a session are archived, equipment is also seen through its flights with figures over all of them, pairing puts a controller in a group the creator chooses, holders are gone from the app, and the admin pages manage groups, their members' roles and roles on the whole organisation. The web app says "group" everywhere and shows what the user's permissions allow: sessions get a group chosen by their maker and can be moved with or without their flights, pilot lists put the group's own pilots first; MCP has the user's own access. The controller app has moved over (package 8): each pilot once, then the group they fly for, with "Other group"; it talks to a versioned controller API (`/api/controller/v1`, user's decision), while android-v0.3.0 keeps working, its uploads taking the group (team) chosen with the pilot, and it stays in landscape. Serving several organisations from one install follows after.
 
-**Now:** apps around the public API: adding them in the configuration, their navigation items and roles (see "Apps and the public API" below). Public API v1 is built, on main, not yet released. Controller notes are parked.
+**Now:** apps around the public API: adding them on an admin page, their navigation items and roles (see "Apps and the public API" below). Public API v1 is built, on main, not yet released. Controller notes are parked.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -131,7 +131,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 See "Apps" and "Public API" in [architecture.md](architecture.md).
 
 - [x] Public API v1 (2026-10-25): read-only, behind `FLEETRANGER_API`, its reference generated at `/api/v1/openapi.json`; OAuth's scopes per resource, and an app must name the resource. Reviewed, and the real OAuth flow run on dev. Not released yet.
-- [ ] Apps added in the install's configuration: a fixed return address, no consent screen
+- [ ] Apps added by admins on an admin page: a fixed return address, no consent screen
 - [ ] An app's item in the navigation
 - [ ] App roles, and the user's permissions in `/me` in the scopes' terms
 - [ ] Permissions brought in line with the API's scopes, with a summary level for people
