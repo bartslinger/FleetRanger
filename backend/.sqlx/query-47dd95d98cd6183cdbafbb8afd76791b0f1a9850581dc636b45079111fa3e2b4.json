@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select exists(select 1 from sessions s\n                         where s.id = any($1)\n                           and not exists (select 1 from flights f where f.session_id = s.id)\n                           and exists (select 1 from session_comments c\n                                       where c.session_id = s.id)) as \"stranded!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "stranded!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "47dd95d98cd6183cdbafbb8afd76791b0f1a9850581dc636b45079111fa3e2b4"
+}

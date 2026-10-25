@@ -75,7 +75,8 @@ pub async fn set_archived(db: &PgPool, actor: &Actor, id: Uuid, archived: bool) 
     get(db, actor, id).await
 }
 
-/// Only a user without flights can be deleted; others are archived.
+/// Only a user without flights or comments can be deleted; others are
+/// archived.
 pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
     let user = get(db, actor, id).await?;
     if id == actor.user_id {
@@ -83,7 +84,8 @@ pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
     }
     if user.flights > 0 || !db::delete(db, id).await? {
         return Err(ApiError::Conflict(
-            "This user has flights, so they can't be deleted. Archive them instead.".to_owned(),
+            "This user has flights or comments, so they can't be deleted. Archive them instead."
+                .to_owned(),
         ));
     }
     Ok(())

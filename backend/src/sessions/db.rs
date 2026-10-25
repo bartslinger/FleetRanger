@@ -418,6 +418,13 @@ pub async fn merge(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Uuid> {
     .execute(&mut *tx)
     .await?;
     sqlx::query!(
+        "update session_comments set session_id = $2 where session_id = any($1)",
+        ids,
+        target
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
         "delete from sessions where id = any($1) and id <> $2",
         ids,
         target
@@ -428,10 +435,19 @@ pub async fn merge(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Uuid> {
     Ok(target)
 }
 
+// Moving flights out of sessions: a session left without flights is deleted,
+// unless it has comments; then its last flight can't leave, and the change
+// returns None without changing anything (user's decision, 2026-10-25).
+
 /// Moves these flights into a new session of this group, and returns it.
 /// Deletes a session left without flights.
-pub async fn split(db: &PgPool, flight_ids: &[Uuid], group_id: Option<Uuid>) -> sqlx::Result<Uuid> {
+pub async fn split(
+    db: &PgPool,
+    flight_ids: &[Uuid],
+    group_id: Option<Uuid>,
+) -> sqlx::Result<Option<Uuid>> {
     let mut tx = locked(db).await?;
+    let left = sessions_of(&mut tx, flight_ids).await?;
     let session = sqlx::query_scalar!(
         "insert into sessions (group_id) values ($1) returning id",
         group_id
@@ -445,14 +461,19 @@ pub async fn split(db: &PgPool, flight_ids: &[Uuid], group_id: Option<Uuid>) -> 
     )
     .execute(&mut *tx)
     .await?;
+    if stranded(&mut tx, &left).await? {
+        return Ok(None);
+    }
     delete_empty(&mut tx).await?;
     tx.commit().await?;
-    Ok(session)
+    Ok(Some(session))
 }
 
-/// Moves these flights into the session. Deletes a session left without flights.
-pub async fn add(db: &PgPool, session: Uuid, flight_ids: &[Uuid]) -> sqlx::Result<()> {
+/// Moves these flights into the session. Deletes a session left without
+/// flights.
+pub async fn add(db: &PgPool, session: Uuid, flight_ids: &[Uuid]) -> sqlx::Result<Option<()>> {
     let mut tx = locked(db).await?;
+    let left = sessions_of(&mut tx, flight_ids).await?;
     sqlx::query!(
         "update flights set session_id = $2 where id = any($1)",
         flight_ids,
@@ -460,14 +481,19 @@ pub async fn add(db: &PgPool, session: Uuid, flight_ids: &[Uuid]) -> sqlx::Resul
     )
     .execute(&mut *tx)
     .await?;
+    if stranded(&mut tx, &left).await? {
+        return Ok(None);
+    }
     delete_empty(&mut tx).await?;
-    tx.commit().await
+    tx.commit().await?;
+    Ok(Some(()))
 }
 
 /// Takes these flights out of their sessions, and returns how many were in
 /// one. Deletes a session left without flights.
-pub async fn remove(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<u64> {
+pub async fn remove(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Option<u64>> {
     let mut tx = locked(db).await?;
+    let left = sessions_of(&mut tx, flight_ids).await?;
     let removed = sqlx::query!(
         "update flights set session_id = null where id = any($1) and session_id is not null",
         flight_ids
@@ -475,9 +501,59 @@ pub async fn remove(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<u64> {
     .execute(&mut *tx)
     .await?
     .rows_affected();
+    if stranded(&mut tx, &left).await? {
+        return Ok(None);
+    }
     delete_empty(&mut tx).await?;
     tx.commit().await?;
-    Ok(removed)
+    Ok(Some(removed))
+}
+
+/// The sessions these flights are in.
+async fn sessions_of(tx: &mut sqlx::PgConnection, flight_ids: &[Uuid]) -> sqlx::Result<Vec<Uuid>> {
+    sqlx::query_scalar!(
+        r#"select distinct session_id as "session_id!" from flights
+           where id = any($1) and session_id is not null"#,
+        flight_ids
+    )
+    .fetch_all(tx)
+    .await
+}
+
+/// Whether one of these sessions has comments but no flights any more.
+async fn stranded(tx: &mut sqlx::PgConnection, ids: &[Uuid]) -> sqlx::Result<bool> {
+    sqlx::query_scalar!(
+        r#"select exists(select 1 from sessions s
+                         where s.id = any($1)
+                           and not exists (select 1 from flights f where f.session_id = s.id)
+                           and exists (select 1 from session_comments c
+                                       where c.session_id = s.id)) as "stranded!""#,
+        ids
+    )
+    .fetch_one(tx)
+    .await
+}
+
+/// Deletes a session and its comments; its flights stay, without a session.
+/// Returns false if there is no such session.
+pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    let mut tx = locked(db).await?;
+    sqlx::query!(
+        "update flights set session_id = null where session_id = $1",
+        id
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!("delete from session_comments where session_id = $1", id)
+        .execute(&mut *tx)
+        .await?;
+    let found = sqlx::query!("delete from sessions where id = $1", id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
+        == 1;
+    tx.commit().await?;
+    Ok(found)
 }
 
 /// Moves a session to a group, or to the organisation with None, and with
@@ -512,9 +588,12 @@ pub async fn set_group(
     Ok(found)
 }
 
-pub(crate) async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
+/// Deletes the sessions without flights, except those with comments.
+async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
     sqlx::query!(
-        "delete from sessions s where not exists (select 1 from flights f where f.session_id = s.id)"
+        "delete from sessions s
+         where not exists (select 1 from flights f where f.session_id = s.id)
+           and not exists (select 1 from session_comments c where c.session_id = s.id)"
     )
     .execute(tx)
     .await?;
@@ -778,7 +857,7 @@ mod tests {
         assert_eq!(merged, b_session, "B's session starts first");
         assert_eq!(session_of(&db, first).await, Some(merged));
 
-        let split_off = split(&db, &[second], None).await.unwrap();
+        let split_off = split(&db, &[second], None).await.unwrap().unwrap();
         // A new flight of A right after `second` joins one of the sessions
         // without moving the split flight back.
         upload(&db, a, "09:00", "09:20", "10:01").await;

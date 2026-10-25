@@ -4,7 +4,8 @@
 use axum::{
     Json, Router,
     extract::{FromRef, Path, Query, State},
-    routing::{get, post},
+    http::StatusCode,
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -12,6 +13,7 @@ use uuid::Uuid;
 
 use chrono::{DateTime, Utc};
 
+use super::comments;
 use super::db::{Neighbours, SessionSummary, Window};
 use super::service::{self, Session};
 use crate::{
@@ -30,7 +32,12 @@ where
 {
     Router::new()
         .route("/api/sessions", get(list).post(create))
-        .route("/api/sessions/{id}", get(show))
+        .route("/api/sessions/{id}", get(show).delete(delete))
+        .route("/api/sessions/{id}/comments", post(add_comment))
+        .route(
+            "/api/sessions/{id}/comments/{comment_id}",
+            put(edit_comment).delete(delete_comment),
+        )
         .route("/api/sessions/{id}/neighbours", get(neighbours))
         .route("/api/sessions/{id}/flights", post(add))
         .route("/api/sessions/{id}/group", post(set_group))
@@ -263,4 +270,53 @@ async fn neighbours(
     Ok(Json(
         service::neighbours(&db, &actor, &filter.parse()?, id).await?,
     ))
+}
+
+/// Deletes a session and its comments; its flights stay, without a session.
+async fn delete(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    service::delete(&db, &actor, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct CommentText {
+    body: String,
+}
+
+#[derive(Serialize)]
+struct CommentId {
+    id: Uuid,
+}
+
+async fn add_comment(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Path(id): Path<Uuid>,
+    Json(comment): Json<CommentText>,
+) -> ApiResult<Json<CommentId>> {
+    let id = comments::add(&db, &actor, id, &comment.body).await?;
+    Ok(Json(CommentId { id }))
+}
+
+async fn edit_comment(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Path((session, id)): Path<(Uuid, Uuid)>,
+    Json(comment): Json<CommentText>,
+) -> ApiResult<Json<CommentId>> {
+    comments::edit(&db, &actor, session, id, &comment.body).await?;
+    Ok(Json(CommentId { id }))
+}
+
+async fn delete_comment(
+    actor: Actor,
+    State(db): State<PgPool>,
+    Path((session, id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<StatusCode> {
+    comments::delete(&db, &actor, session, id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

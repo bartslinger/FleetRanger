@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select c.author_id, s.group_id from session_comments c\n         join sessions s on s.id = c.session_id\n         where c.id = $1 and c.session_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "author_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "session_comments",
+            "name": "author_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "group_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "aef579df8a7442f3e73dc393494f3d35c5188b44c432277443d075a148be5463"
+}

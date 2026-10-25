@@ -231,14 +231,16 @@ pub async fn set_archived(
     Ok(Ok(()))
 }
 
-/// Deletes a user without flights, with their roles, login and login
-/// sessions. False if there is no such user or they have flights. The user's
-/// row is locked first, so a flight can't get this user in between: its
-/// foreign key check waits for the lock.
+/// Deletes a user without flights or comments, with their roles, login and
+/// login sessions. False if there is no such user or they have either. The
+/// user's row is locked first, so a flight or comment can't get this user in
+/// between: its foreign key check waits for the lock.
 pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
     let deletable = sqlx::query_scalar!(
-        r#"select not exists(select 1 from flights where pilot_id = $1) as "deletable!"
+        r#"select not exists(select 1 from flights where pilot_id = $1)
+                  and not exists(select 1 from session_comments where author_id = $1)
+                  as "deletable!"
            from users where id = $1 for update"#,
         id,
     )
