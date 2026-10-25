@@ -17,7 +17,7 @@
 	const ACCESS: Record<string, string> = {
 		'flights:read': 'Reads flights, sessions and comments',
 		'sessions:list': 'Reads sessions',
-		'sessions:read': 'Reads comments',
+		'sessions:read': 'Reads sessions and comments',
 		'flights:list': 'Reads flights',
 		'groups:list': 'Reads groups',
 		'areas:list': 'Reads areas',
