@@ -1,6 +1,7 @@
 //! Sessions: a pilot's consecutive flights, grouped for reporting. See
 //! "Sessions" in docs/architecture.md.
 
+pub mod comments;
 pub mod db;
 pub mod routes;
 pub mod service;

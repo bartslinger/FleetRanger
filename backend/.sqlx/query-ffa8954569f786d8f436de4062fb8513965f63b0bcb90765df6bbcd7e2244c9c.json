@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select not exists(select 1 from flights where pilot_id = $1)\n                  and not exists(select 1 from session_comments where author_id = $1)\n                  as \"deletable!\"\n           from users where id = $1 for update",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deletable!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ffa8954569f786d8f436de4062fb8513965f63b0bcb90765df6bbcd7e2244c9c"
+}
