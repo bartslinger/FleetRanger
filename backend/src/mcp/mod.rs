@@ -398,7 +398,7 @@ impl FleetRanger {
     }
 
     #[tool(
-        description = "One session with its flights, in takeoff order, and its time and distance per area."
+        description = "One session with its flights, in takeoff order, its time and distance per area, and its comments, oldest first: what people recorded about what happened."
     )]
     async fn get_session(
         &self,
@@ -410,7 +410,24 @@ impl FleetRanger {
             .map_err(api)?;
         let flights: Vec<FlightFacts> = session.flights.into_iter().map(Into::into).collect();
         let areas = AreaFacts::total(&flights);
-        json(serde_json::json!({ "id": session.id, "flights": flights, "areas": areas }))
+        let comments: Vec<_> = session
+            .comments
+            .into_iter()
+            .map(|comment| {
+                serde_json::json!({
+                    "author": comment.author_name,
+                    "written_at": comment.created_at,
+                    "edited_at": comment.edited_at,
+                    "text": comment.body,
+                })
+            })
+            .collect();
+        json(serde_json::json!({
+            "id": session.id,
+            "flights": flights,
+            "areas": areas,
+            "comments": comments,
+        }))
     }
 
     #[tool(

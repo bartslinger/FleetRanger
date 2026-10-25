@@ -8,6 +8,7 @@
 	import Checkbox from '#lib/ui/Checkbox.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import SessionFacts, { sessionGroup } from '#lib/SessionFacts.svelte';
+	import SessionComments from '#lib/SessionComments.svelte';
 	import PilotDialog from '#lib/PilotDialog.svelte';
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import ListFilters, {
@@ -342,6 +343,15 @@
 		openSession !== null && may(data.account, 'sessions.edit', openSession.group_id)
 	);
 	const flightsLabel = (count: number) => plural(count, 'flight');
+	// Its flights may include some the user doesn't see, so no count of them.
+	const deleteConsequences = $derived.by(() => {
+		const comments = openSession?.comments.length ?? 0;
+		const lost =
+			comments === 0
+				? ''
+				: `, and ${comments === 1 ? 'its comment is' : `its ${comments} comments are`} deleted`;
+		return `Session ${openedDay} is deleted. Its flights stay in Flights, without a session${lost}. This can’t be undone.`;
+	});
 
 	// Moving the open session to another group: sessions.move on both, and
 	// to move its flights along, flights.move on theirs and the new one.
@@ -585,6 +595,22 @@
 					}
 				]}
 			/>{/if}
+		{#if openSession && canEditOpen}
+			<!-- Deleting is the way to end a session with comments, which keeps
+			     its last flight (user's decision, 2026-10-25). -->
+			<Modal
+				title="Delete session"
+				triggerKind="danger-tertiary"
+				submitLabel="Delete session"
+				danger
+				action="?/deleteSession"
+				error={form && 'deleteMessage' in form ? form.deleteMessage : undefined}
+				onsuccess={() => toast('Session deleted.')}
+			>
+				<input type="hidden" name="session_id" value={openSession.id} />
+				<p>{deleteConsequences}</p>
+			</Modal>
+		{/if}
 	{/snippet}
 </PageHeader>
 
@@ -744,6 +770,23 @@
 									{/snippet}
 								</SessionFacts>
 							</div>
+							<!-- Keyed: a draft or an edit never follows to another session. -->
+							{#key openSession.id}
+								<SessionComments
+									sessionId={openSession.id}
+									comments={openSession.comments}
+									timeZone={data.timeZone}
+									userId={data.account?.id ?? ''}
+									canWrite={canEditOpen}
+									addError={form && 'commentMessage' in form ? form.commentMessage : undefined}
+									editError={form && 'editCommentMessage' in form
+										? form.editCommentMessage
+										: undefined}
+									deleteError={form && 'deleteCommentMessage' in form
+										? form.deleteCommentMessage
+										: undefined}
+								/>
+							{/key}
 						</div>
 					{/if}
 				</div>
