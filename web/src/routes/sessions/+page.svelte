@@ -350,7 +350,7 @@
 			comments === 0
 				? ''
 				: `, and ${comments === 1 ? 'its comment is' : `its ${comments} comments are`} deleted`;
-		return `Its flights stay in Flights, without a session${lost}. This can’t be undone.`;
+		return `Session ${openedDay} is deleted. Its flights stay in Flights, without a session${lost}. This can’t be undone.`;
 	});
 
 	// Moving the open session to another group: sessions.move on both, and
@@ -770,20 +770,23 @@
 									{/snippet}
 								</SessionFacts>
 							</div>
-							<SessionComments
-								sessionId={openSession.id}
-								comments={openSession.comments}
-								timeZone={data.timeZone}
-								userId={data.account?.id ?? ''}
-								canWrite={canEditOpen}
-								addError={form && 'commentMessage' in form ? form.commentMessage : undefined}
-								editError={form && 'editCommentMessage' in form
-									? form.editCommentMessage
-									: undefined}
-								deleteError={form && 'deleteCommentMessage' in form
-									? form.deleteCommentMessage
-									: undefined}
-							/>
+							<!-- Keyed: a draft or an edit never follows to another session. -->
+							{#key openSession.id}
+								<SessionComments
+									sessionId={openSession.id}
+									comments={openSession.comments}
+									timeZone={data.timeZone}
+									userId={data.account?.id ?? ''}
+									canWrite={canEditOpen}
+									addError={form && 'commentMessage' in form ? form.commentMessage : undefined}
+									editError={form && 'editCommentMessage' in form
+										? form.editCommentMessage
+										: undefined}
+									deleteError={form && 'deleteCommentMessage' in form
+										? form.deleteCommentMessage
+										: undefined}
+								/>
+							{/key}
 						</div>
 					{/if}
 				</div>

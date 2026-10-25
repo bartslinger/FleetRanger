@@ -1,9 +1,16 @@
 <!--
 	@component
 	Carbon's text area, for longer text such as a comment: a label, helper
-	text and an error message, and with `maxlength` Carbon's character counter
-	beside the label. The browser stops typing at the limit.
+	text and an error message, and with `limit` Carbon's character counter
+	beside the label. Text over the limit stays, so pasting never loses any:
+	the field is invalid with `overLimit` as its message until it's shortened
+	(carbon-expert's review). Use `characters` to check it.
 -->
+<script lang="ts" module>
+	/** Characters as the backend counts them (Unicode code points). */
+	export const characters = (text: string) => [...text].length;
+</script>
+
 <script lang="ts">
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
 	import WarningFilled from '@carbon/icons/es/warning--filled/16.js';
@@ -18,6 +25,10 @@
 		value?: string;
 		/** The text area, e.g. to focus it. */
 		ref?: HTMLTextAreaElement | null;
+		/** The most characters allowed, shown in the counter. */
+		limit?: number;
+		/** The message while the text is over the limit. */
+		overLimit?: string;
 	}
 
 	let {
@@ -27,29 +38,30 @@
 		value = $bindable(''),
 		ref = $bindable(null),
 		rows = 4,
-		maxlength,
+		limit,
+		overLimit,
 		...rest
 	}: Props = $props();
 
 	const id = $props.id();
-	// Characters as the browser counts them for maxlength (UTF-16 units),
-	// close enough to the backend's for any text people type.
-	const counter = $derived(maxlength == null ? undefined : `${value.length}/${maxlength}`);
+	const count = $derived(characters(value));
+	const over = $derived(limit != null && count > limit);
+	const counter = $derived(limit == null ? undefined : `${count}/${limit}`);
+	const message = $derived(error ?? (over ? overLimit : undefined));
 </script>
 
-<Field {id} {label} {helper} {error} {counter} disabled={rest.disabled}>
+<Field {id} {label} {helper} error={message} {counter} disabled={rest.disabled}>
 	<div class="wrapper">
 		<textarea
 			{id}
 			{rows}
-			{maxlength}
-			class:invalid={error}
+			class:invalid={message}
 			bind:value
 			bind:this={ref}
-			aria-invalid={error ? true : undefined}
-			aria-describedby={error || helper ? `${id}-message` : undefined}
+			aria-invalid={message ? true : undefined}
+			aria-describedby={message || helper ? `${id}-message` : undefined}
 			{...rest}></textarea>
-		{#if error}
+		{#if message}
 			<span class="error-icon"><Icon icon={WarningFilled} /></span>
 		{/if}
 	</div>
