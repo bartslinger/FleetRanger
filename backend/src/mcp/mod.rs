@@ -102,7 +102,7 @@ where
 /// access, read only: an admin's assistant sees what the admin sees.
 async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) -> Response {
     let (parts, body) = request.into_parts();
-    let bearer = match oauth::bearer(&gate.db, &parts, &gate.resource, SCOPE).await {
+    let bearer = match oauth::bearer(&gate.db, &parts, &gate.resource, Some(SCOPE)).await {
         Ok(bearer) => bearer,
         Err(error) => {
             tracing::error!(%error, "checking an MCP access token");
@@ -110,7 +110,7 @@ async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) ->
         }
     };
     let refusal = match bearer {
-        Bearer::Valid(actor) => Ok(actor),
+        Bearer::Valid(actor, _) => Ok(*actor),
         Bearer::Missing => Err((StatusCode::UNAUTHORIZED, None)),
         Bearer::Invalid => Err((StatusCode::UNAUTHORIZED, Some("invalid_token"))),
         Bearer::Insufficient => Err((StatusCode::FORBIDDEN, Some("insufficient_scope"))),

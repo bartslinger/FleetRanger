@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select serial from aircraft where id = any($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "aircraft",
+            "name": "serial"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c9d142cd7ae8c19118e1c1913797e131d9b7c5c9b7ed0e47d589c090a99ba5b2"
+}
