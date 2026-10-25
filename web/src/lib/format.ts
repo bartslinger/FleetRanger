@@ -117,14 +117,14 @@ export function fileSize(bytes: number): string {
 }
 
 /**
- * The areas flown, with their share of the air time, most first: "North
- * Block (84%), River Section (<1%)". Areas with the same name (one split by
- * another) count as one. As a fact, labelled "Area" or "Areas"; null if no
- * area was crossed.
+ * The areas flown, with the air time in each, most first: "North Block
+ * (1 h 32 min), River Section (<1 min)" (user's choice, 2026-10-25, over
+ * shares of the air time; no seconds). Areas with the same name (one split
+ * by another) count as one. As a fact, labelled "Area" or "Areas"; null if
+ * no area was crossed.
  */
-export function areaShares(
-	areas: { name: string; air_time_s: number }[],
-	airTime: number
+export function areaTimes(
+	areas: { name: string; air_time_s: number }[]
 ): { label: string; value: string; numeric: false } | null {
 	const byName: { name: string; seconds: number }[] = [];
 	for (const area of areas) {
@@ -134,13 +134,10 @@ export function areaShares(
 	}
 	if (byName.length === 0) return null;
 	byName.sort((a, b) => b.seconds - a.seconds);
-	const share = (seconds: number) => {
-		const percent = airTime > 0 ? Math.round((seconds / airTime) * 100) : 0;
-		return percent < 1 ? '<1%' : `${percent}%`;
-	};
+	const time = (seconds: number) => (seconds < 60 ? `<1${NBSP}min` : duration(seconds));
 	return {
 		label: byName.length === 1 ? 'Area' : 'Areas',
-		value: byName.map((area) => `${area.name} (${share(area.seconds)})`).join(', '),
+		value: byName.map((area) => `${area.name} (${time(area.seconds)})`).join(', '),
 		numeric: false
 	};
 }

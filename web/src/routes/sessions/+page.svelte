@@ -20,7 +20,7 @@
 	import Button from '#lib/ui/Button.svelte';
 	import { PAGE_SIZES, PERIOD_SIZE, query, type SessionListState } from './list.js';
 	import {
-		areaShares,
+		areaTimes,
 		clock,
 		day,
 		daySpan,
@@ -431,7 +431,7 @@
 						key: 'areas',
 						header: 'Areas',
 						wrap: true,
-						format: (flight) => areaShares(flight.areas, flight.air_time_s)?.value ?? '—'
+						format: (flight) => areaTimes(flight.areas)?.value ?? '—'
 					} satisfies TableColumn<Flight>
 				]
 			: []),
