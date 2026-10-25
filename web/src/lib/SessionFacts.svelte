@@ -5,7 +5,7 @@
 	suggested one, which should look alike.
 -->
 <script lang="ts" module>
-	import { areaShares, clock, dayMonth, distance, duration } from '#lib/format.js';
+	import { areaTimes, clock, dayMonth, distance, duration } from '#lib/format.js';
 	import { ORGANISATION } from '#lib/groups.js';
 
 	interface Flight {
@@ -97,12 +97,7 @@
 		{ label: 'Distance', value: distance(distanceM), numeric: true },
 		{ label: 'Flights', value: String(flights.length), numeric: true },
 		// Only when the flights crossed an area.
-		...[
-			areaShares(
-				flights.flatMap((flight) => flight.areas),
-				facts.airTime
-			)
-		]
+		...[areaTimes(flights.flatMap((flight) => flight.areas))]
 			.filter((fact) => fact !== null)
 			.map((fact) => ({ ...fact, wide: true }))
 	]);

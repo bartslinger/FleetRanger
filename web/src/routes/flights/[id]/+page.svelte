@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
-	import { areaShares, clock, dateTime, day, dayMonth, distance, duration } from '#lib/format.js';
+	import { areaTimes, clock, dateTime, day, dayMonth, distance, duration } from '#lib/format.js';
 	import { may } from '#lib/permissions.js';
 	import { groupOptions as groupChoices, ORGANISATION, sharedGroup } from '#lib/groups.js';
 	import { offered, pilotOptions as pilotOptions_ } from '#lib/pilots.js';
@@ -75,7 +75,7 @@
 			{ label: 'Air time', value: duration(flight.air_time_s), numeric: true },
 			{ label: 'Distance', value: distance(flight.distance_m), numeric: true },
 			// Only when the flight crossed an area.
-			...[areaShares(flight.areas, flight.air_time_s)].filter((fact) => fact !== null),
+			...[areaTimes(flight.areas)].filter((fact) => fact !== null),
 			...(flight.metrics.max_altitude_m === undefined
 				? []
 				: [
