@@ -164,6 +164,7 @@
 									variant="row"
 									vertical
 									label="Actions for your comment of {written(comment)}"
+									tooltip="Actions"
 									bind:trigger={
 										() => triggers[comment.id] ?? null,
 										(element) => (triggers[comment.id] = element)
