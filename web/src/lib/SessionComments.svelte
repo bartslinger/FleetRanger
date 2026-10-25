@@ -2,12 +2,14 @@
 	@component
 	A session's comments: a record of what happened, under its facts (user's
 	choice, 2026-10-25: available at first glance). Oldest first, each with
-	its author and time; editors add one at the end, and authors edit their
-	own in place or delete them from the comment's overflow menu.
+	its author and time. Editors add one with "Add comment" in the title row,
+	which opens a text area at the end, so while browsing the panel shows only
+	the comments (user's choice, 2026-10-25). Authors edit their own in place
+	or delete them from the comment's overflow menu.
 
 	Carbon has no comments component. carbon-expert's advice: an on-page
-	contained list with a title, an always-visible text area with a counter
-	to add, editing in place with Save and Cancel, and a danger confirmation
+	contained list with a title, a low-emphasis Add that opens a text area
+	with a counter in place, editing in place with Save and Cancel, and a danger confirmation
 	to delete, since the record's time can't be written again.
 -->
 <script lang="ts">
@@ -15,6 +17,7 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import { dateTime } from '#lib/format.js';
+	import Add from '@carbon/icons/es/add/16.js';
 	import Button from '#lib/ui/Button.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
@@ -62,6 +65,22 @@
 	let adding = $state(false);
 	let addRefused = $state(false);
 	let addField: HTMLTextAreaElement | null = $state(null);
+	// The text area shows only when asked for; a draft stays until added.
+	let writing = $state(false);
+	let addTrigger: HTMLElement | null = $state(null);
+
+	async function startWriting() {
+		writing = true;
+		addRefused = false;
+		await tick();
+		addField?.focus();
+	}
+
+	async function stopWriting() {
+		writing = false;
+		await tick();
+		addTrigger?.querySelector('button')?.focus();
+	}
 
 	// Editing one comment in place.
 	let editing: string | null = $state(null);
@@ -94,7 +113,14 @@
 </script>
 
 <section class="comments layer-01" aria-labelledby="comments-title">
-	<h2 class="title" id="comments-title" tabindex="-1" bind:this={heading}>Comments</h2>
+	<div class="header">
+		<h2 class="title" id="comments-title" tabindex="-1" bind:this={heading}>Comments</h2>
+		{#if canWrite && !writing}
+			<span class="add-trigger" bind:this={addTrigger}>
+				<Button kind="ghost" icon={Add} onclick={startWriting}>Add comment</Button>
+			</span>
+		{/if}
+	</div>
 	{#if comments.length === 0}
 		<p class="empty">{canWrite ? 'No comments yet.' : 'No comments.'}</p>
 	{:else}
@@ -188,7 +214,7 @@
 			{/each}
 		</ul>
 	{/if}
-	{#if canWrite}
+	{#if canWrite && writing}
 		<form
 			class="add"
 			method="POST"
@@ -200,10 +226,8 @@
 					await update({ reset: false });
 					addRefused = result.type === 'failure';
 					if (result.type === 'success') {
-						// The button turns disabled with the field empty: focus stays
-						// in the field, ready for the next (carbon-expert's review).
 						draft = '';
-						addField?.focus();
+						stopWriting();
 						toast('Comment added.');
 					}
 				};
@@ -214,16 +238,23 @@
 				<InlineNotification kind="error" title={addError} />
 			{/if}
 			<TextArea
-				label="Add a comment"
+				label="Comment"
 				name="body"
 				rows={3}
 				limit={MAX_LENGTH}
 				overLimit={TOO_LONG}
 				bind:value={draft}
 				bind:ref={addField}
+				onkeydown={(event) => {
+					if (event.key === 'Escape') {
+						event.preventDefault();
+						stopWriting();
+					}
+				}}
 			/>
 			<div class="buttons">
 				<Button type="submit" disabled={adding || !savable(draft)}>Add comment</Button>
+				<Button kind="secondary" onclick={stopWriting}>Cancel</Button>
 			</div>
 		</form>
 	{/if}
@@ -256,13 +287,18 @@
 		background: var(--cds-layer-01);
 	}
 
-	/* The list title on the panel, 48px high as a list row. */
-	.title {
+	/* The list title on the panel, 48px high as a list row, with Add comment
+	   at its end. */
+	.header {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		min-height: var(--cds-spacing-09);
+		padding-left: var(--cds-spacing-05);
+	}
+
+	.title {
 		margin: 0;
-		padding: 0 var(--cds-spacing-05);
 		font-size: var(--cds-heading-compact-01-font-size);
 		font-weight: var(--cds-heading-compact-01-font-weight);
 		line-height: var(--cds-heading-compact-01-line-height);
