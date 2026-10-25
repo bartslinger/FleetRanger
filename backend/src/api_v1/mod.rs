@@ -90,9 +90,7 @@ impl Caller {
     info(
         title = "FleetRanger API",
         version = "1",
-        description = "Read an organisation's sessions, flights and equipment, acting for a user \
-                       with their access. See the conventions in FleetRanger's docs/api-v1.md: ids \
-                       as references, `expand` for the objects, cursors for pages, times in UTC."
+        description = include_str!("description.md")
     ),
     tags(
         (name = "Me"), (name = "Organisation"), (name = "Sessions"), (name = "Flights"),

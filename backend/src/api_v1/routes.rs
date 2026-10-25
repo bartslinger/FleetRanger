@@ -77,7 +77,9 @@ const FLIGHT_EXPANSIONS: &[(&str, Option<&str>)] = &[
 
 const DEVICE_EXPANSIONS: &[(&str, Option<&str>)] = &[("group", None)];
 
-/// Who the user is.
+/// Who the user is
+///
+/// The user the token acts for.
 #[utoipa::path(
     get, path = "/api/v1/me", tag = "Me",
     responses((status = 200, body = Me), (status = 401, body = Error)),
@@ -90,7 +92,9 @@ async fn me(Extension(caller): Extension<Caller>) -> Json<Me> {
     })
 }
 
-/// What apps need of the organisation.
+/// The organisation
+///
+/// What apps need of it: its name and time zone.
 #[utoipa::path(
     get, path = "/api/v1/organisation", tag = "Organisation",
     responses((status = 200, body = Organisation), (status = 401, body = Error)),
@@ -123,12 +127,10 @@ struct Filters {
     area: Vec<String>,
 }
 
-/// Paging and expansion, for every list.
+/// Paging, for every list.
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 struct Paging {
-    /// Fields to expand, comma-separated, such as `pilots,flights.batteries`.
-    expand: Option<String>,
     /// How many at most: 1 to 100, 50 if not given.
     limit: Option<i64>,
     /// The `next_cursor` of the page before; not given for the first page.
@@ -150,17 +152,45 @@ struct FlightFilters {
 
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
-struct ExpandOnly {
-    /// Fields to expand, comma-separated.
+struct SessionExpand {
+    /// Fields to expand, comma-separated; a path expands what leads to it
+    /// too.
+    ///
+    /// - `group`, `pilots`, `areas.area`: come with the session
+    /// - `comments`: needs `sessions:read`
+    /// - `comments.author`: each comment's author
+    /// - `flights`: needs `flights:list`
+    /// - a flight's expansions after `flights.`, such as `flights.batteries`
+    ///   or `flights.areas.area`
     expand: Option<String>,
 }
 
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+struct FlightExpand {
+    /// Fields to expand, comma-separated.
+    ///
+    /// - `pilot`, `group`, `drone`, `controller`, `batteries`,
+    ///   `areas.area`: come with the flight
+    /// - `session`: needs `sessions:list`
+    expand: Option<String>,
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+struct DeviceExpand {
+    /// Fields to expand: `group`, which comes with the drone or controller.
+    expand: Option<String>,
+}
+
+/// List sessions
+///
 /// Sessions with a flight the user sees, newest first. Filters decide which
 /// sessions are listed, by their flights; a listed session shows the
 /// figures of all the flights the user sees in it.
 #[utoipa::path(
     get, path = "/api/v1/sessions", tag = "Sessions",
-    params(Filters, Paging),
+    params(Filters, SessionExpand, Paging),
     responses(
         (status = 200, body = Page<Session>), (status = 400, body = Error),
         (status = 401, body = Error), (status = 403, body = Error)
@@ -171,10 +201,11 @@ async fn list_sessions(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
     Query(filters): Query<Filters>,
+    Query(expansion): Query<SessionExpand>,
     Query(paging): Query<Paging>,
 ) -> Result<Json<Page<Session>>, V1Error> {
     caller.require("sessions:list")?;
-    let expand = Expand::parse(paging.expand.as_deref(), SESSION_EXPANSIONS, &caller)?;
+    let expand = Expand::parse(expansion.expand.as_deref(), SESSION_EXPANSIONS, &caller)?;
     let filter = filter(&api, &filters).await?;
     let limit = limit(paging.limit)?;
     let after = decode::<TimeCursor>(paging.cursor.as_deref())?;
@@ -201,10 +232,10 @@ async fn list_sessions(
     Ok(Json(Page { items, next_cursor }))
 }
 
-/// One session.
+/// Get a session
 #[utoipa::path(
     get, path = "/api/v1/sessions/{id}", tag = "Sessions",
-    params(("id" = Uuid, Path), ExpandOnly),
+    params(("id" = Uuid, Path), SessionExpand),
     responses(
         (status = 200, body = Session), (status = 401, body = Error),
         (status = 403, body = Error), (status = 404, body = Error)
@@ -215,7 +246,7 @@ async fn get_session(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
     Path(id): Path<Uuid>,
-    Query(query): Query<ExpandOnly>,
+    Query(query): Query<SessionExpand>,
 ) -> Result<Json<Session>, V1Error> {
     caller.require("sessions:list")?;
     let expand = Expand::parse(query.expand.as_deref(), SESSION_EXPANSIONS, &caller)?;
@@ -236,10 +267,12 @@ async fn get_session(
         .ok_or(V1Error::NotFound)
 }
 
+/// List flights
+///
 /// Flights the user sees, newest first. Archived flights aren't listed.
 #[utoipa::path(
     get, path = "/api/v1/flights", tag = "Flights",
-    params(Filters, FlightFilters, Paging),
+    params(Filters, FlightFilters, FlightExpand, Paging),
     responses(
         (status = 200, body = Page<Flight>), (status = 400, body = Error),
         (status = 401, body = Error), (status = 403, body = Error)
@@ -251,10 +284,11 @@ async fn list_flights(
     Extension(caller): Extension<Caller>,
     Query(filters): Query<Filters>,
     Query(flight_filters): Query<FlightFilters>,
+    Query(expansion): Query<FlightExpand>,
     Query(paging): Query<Paging>,
 ) -> Result<Json<Page<Flight>>, V1Error> {
     caller.require("flights:list")?;
-    let expand = Expand::parse(paging.expand.as_deref(), FLIGHT_EXPANSIONS, &caller)?;
+    let expand = Expand::parse(expansion.expand.as_deref(), FLIGHT_EXPANSIONS, &caller)?;
     let mut filter = filter(&api, &filters).await?;
     let (drones, _) = ids(&flight_filters.drone, "drone", false)?;
     let (controllers, _) = ids(&flight_filters.controller, "controller", false)?;
@@ -294,10 +328,10 @@ async fn list_flights(
     Ok(Json(Page { items, next_cursor }))
 }
 
-/// One flight.
+/// Get a flight
 #[utoipa::path(
     get, path = "/api/v1/flights/{id}", tag = "Flights",
-    params(("id" = Uuid, Path), ExpandOnly),
+    params(("id" = Uuid, Path), FlightExpand),
     responses(
         (status = 200, body = Flight), (status = 401, body = Error),
         (status = 403, body = Error), (status = 404, body = Error)
@@ -308,7 +342,7 @@ async fn get_flight(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
     Path(id): Path<Uuid>,
-    Query(query): Query<ExpandOnly>,
+    Query(query): Query<FlightExpand>,
 ) -> Result<Json<Flight>, V1Error> {
     caller.require("flights:list")?;
     let expand = Expand::parse(query.expand.as_deref(), FLIGHT_EXPANSIONS, &caller)?;
@@ -330,12 +364,14 @@ async fn get_flight(
         .ok_or(V1Error::NotFound)
 }
 
+/// List groups
+///
 /// Groups where the user holds a role, or that a flight they see belongs to,
 /// in the order they were added.
 #[utoipa::path(
     get, path = "/api/v1/groups", tag = "Groups",
     params(Paging),
-    responses((status = 200, body = Page<Group>), (status = 401, body = Error), (status = 403, body = Error)),
+    responses((status = 200, body = Page<Group>), (status = 400, body = Error), (status = 401, body = Error), (status = 403, body = Error)),
     security(("oauth" = ["groups:list"]))
 )]
 async fn list_groups(
@@ -344,7 +380,6 @@ async fn list_groups(
     Query(paging): Query<Paging>,
 ) -> Result<Json<Page<Group>>, V1Error> {
     caller.require("groups:list")?;
-    Expand::parse(paging.expand.as_deref(), &[], &caller)?;
     let limit = limit(paging.limit)?;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
     let scope = policy::flight_scope(&caller.actor);
@@ -360,12 +395,14 @@ async fn list_groups(
     Ok(Json(Page { items, next_cursor }))
 }
 
+/// List areas
+///
 /// Areas the flights the user sees passed through, in the order they were
 /// added. Names only, no boundaries.
 #[utoipa::path(
     get, path = "/api/v1/areas", tag = "Areas",
     params(Paging),
-    responses((status = 200, body = Page<Area>), (status = 401, body = Error), (status = 403, body = Error)),
+    responses((status = 200, body = Page<Area>), (status = 400, body = Error), (status = 401, body = Error), (status = 403, body = Error)),
     security(("oauth" = ["areas:list"]))
 )]
 async fn list_areas(
@@ -374,7 +411,6 @@ async fn list_areas(
     Query(paging): Query<Paging>,
 ) -> Result<Json<Page<Area>>, V1Error> {
     caller.require("areas:list")?;
-    Expand::parse(paging.expand.as_deref(), &[], &caller)?;
     let limit = limit(paging.limit)?;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
     let scope = policy::flight_scope(&caller.actor);
@@ -390,41 +426,49 @@ async fn list_areas(
     Ok(Json(Page { items, next_cursor }))
 }
 
+/// List drones
+///
 /// Drones the user sees, as in Equipment, in the order they were added.
 #[utoipa::path(
     get, path = "/api/v1/drones", tag = "Drones",
-    params(Paging),
+    params(DeviceExpand, Paging),
     responses((status = 200, body = Page<Device>), (status = 400, body = Error), (status = 401, body = Error), (status = 403, body = Error)),
     security(("oauth" = ["equipment:list"]))
 )]
 async fn list_drones(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
+    Query(expansion): Query<DeviceExpand>,
     Query(paging): Query<Paging>,
 ) -> Result<Json<Page<Device>>, V1Error> {
-    devices(&api, &caller, Kind::Aircraft, &paging)
+    devices(&api, &caller, Kind::Aircraft, &expansion, &paging)
         .await
         .map(Json)
 }
 
+/// List controllers
+///
 /// Remote controllers the user sees, as in Equipment, in the order they
 /// were added.
 #[utoipa::path(
     get, path = "/api/v1/controllers", tag = "Controllers",
-    params(Paging),
+    params(DeviceExpand, Paging),
     responses((status = 200, body = Page<Device>), (status = 400, body = Error), (status = 401, body = Error), (status = 403, body = Error)),
     security(("oauth" = ["equipment:list"]))
 )]
 async fn list_controllers(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
+    Query(expansion): Query<DeviceExpand>,
     Query(paging): Query<Paging>,
 ) -> Result<Json<Page<Device>>, V1Error> {
-    devices(&api, &caller, Kind::RemoteController, &paging)
+    devices(&api, &caller, Kind::RemoteController, &expansion, &paging)
         .await
         .map(Json)
 }
 
+/// List batteries
+///
 /// Batteries the user sees through their flights, in the order they were
 /// added.
 #[utoipa::path(
@@ -439,7 +483,6 @@ async fn list_batteries(
     Query(paging): Query<Paging>,
 ) -> Result<Json<Page<Battery>>, V1Error> {
     caller.require("equipment:list")?;
-    Expand::parse(paging.expand.as_deref(), &[], &caller)?;
     let limit = limit(paging.limit)? as usize;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
     let scope = policy::flight_scope(&caller.actor);
@@ -470,10 +513,11 @@ async fn devices(
     api: &Api,
     caller: &Caller,
     kind: Kind,
+    expansion: &DeviceExpand,
     paging: &Paging,
 ) -> Result<Page<Device>, V1Error> {
     caller.require("equipment:list")?;
-    let expand = Expand::parse(paging.expand.as_deref(), DEVICE_EXPANSIONS, caller)?;
+    let expand = Expand::parse(expansion.expand.as_deref(), DEVICE_EXPANSIONS, caller)?;
     let limit = limit(paging.limit)? as usize;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
     let mut all = equipment::service::list(&api.db, &caller.actor, kind).await?;
