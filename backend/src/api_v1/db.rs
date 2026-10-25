@@ -471,4 +471,69 @@ mod tests {
         assert_eq!(sorted, expected);
         assert_eq!(seen.len(), expected.len());
     }
+
+    /// An app sees what its user sees: a member of North gets North's
+    /// flights only, and a session shared with South's flights lists and
+    /// counts only North's.
+    #[sqlx::test]
+    async fn an_app_sees_only_its_users_flights(db: PgPool) {
+        let north = crate::testing::group(&db, "North").await;
+        let south = crate::testing::group(&db, "South").await;
+        let member = crate::testing::user(&db, "Test Member", &[]).await;
+        crate::testing::join(&db, member, north).await;
+        let session: Uuid = sqlx::query_scalar("insert into sessions default values returning id")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let ours = flight(&db, "2026-10-01T10:00:00Z").await;
+        let theirs = flight(&db, "2026-10-01T11:00:00Z").await;
+        let elsewhere = flight(&db, "2026-10-02T10:00:00Z").await;
+        for (id, group, in_session) in [
+            (ours, north, true),
+            (theirs, south, true),
+            (elsewhere, south, false),
+        ] {
+            sqlx::query("update flights set group_id = $2, session_id = case when $3 then $4 end where id = $1")
+                .bind(id)
+                .bind(group)
+                .bind(in_session)
+                .bind(session)
+                .execute(&db)
+                .await
+                .unwrap();
+        }
+        let scope = crate::testing::scope(&db, member).await;
+
+        let seen = flights(
+            &db,
+            &scope,
+            &Filter::default(),
+            InSession::default(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(seen.iter().map(|f| f.id).collect::<Vec<_>>(), vec![ours]);
+        let fetched = flights(
+            &db,
+            &scope,
+            &Filter::default(),
+            InSession::default(),
+            Some(&[theirs]),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(fetched.is_empty());
+
+        let sessions = sessions(&db, &scope, &Filter::default(), None, None, None)
+            .await
+            .unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].flight_count, 1);
+        assert_eq!(sessions[0].air_time_s, 60);
+    }
 }

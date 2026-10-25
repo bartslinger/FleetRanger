@@ -12,8 +12,8 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use axum::{
     Json, Router,
-    extract::{Request, State},
-    http::{HeaderValue, StatusCode, header},
+    extract::{FromRequestParts, Request, State},
+    http::{HeaderValue, StatusCode, header, request::Parts},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
@@ -26,6 +26,7 @@ use utoipa::{
     openapi::security::{AuthorizationCode, Flow, OAuth2, Scopes, SecurityScheme},
 };
 use utoipa_axum::router::OpenApiRouter;
+use uuid::Uuid;
 
 use crate::{
     auth::Actor,
@@ -291,6 +292,45 @@ impl IntoResponse for V1Error {
     }
 }
 
+/// Query parameters, repeatable (`?pilot=…&pilot=…`), refused in the API's
+/// own error shape when they don't parse.
+pub struct Params<T>(pub T);
+
+impl<T, S> FromRequestParts<S> for Params<T>
+where
+    T: DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = V1Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, V1Error> {
+        match axum_extra::extract::Query::<T>::from_request_parts(parts, state).await {
+            Ok(axum_extra::extract::Query(params)) => Ok(Self(params)),
+            Err(rejection) => Err(V1Error::Invalid(format!(
+                "The request’s parameters aren’t valid: {rejection}."
+            ))),
+        }
+    }
+}
+
+/// The id in the path, refused in the API's own error shape when it isn't
+/// one.
+pub struct PathId(pub Uuid);
+
+impl<S> FromRequestParts<S> for PathId
+where
+    S: Send + Sync,
+{
+    type Rejection = V1Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, V1Error> {
+        match axum::extract::Path::<Uuid>::from_request_parts(parts, state).await {
+            Ok(axum::extract::Path(id)) => Ok(Self(id)),
+            Err(_) => Err(V1Error::Invalid("That isn’t a valid id.".to_owned())),
+        }
+    }
+}
+
 /// The fields a request asked to expand, such as `flights.batteries`.
 pub struct Expand(BTreeSet<String>);
 
@@ -318,11 +358,14 @@ impl Expand {
             if let Some(scope) = scope {
                 caller.require(scope)?;
             }
-            // A path expands what leads to it too: `flights.batteries` the
-            // flights.
+            // A path expands what leads to it too, `flights.batteries` the
+            // flights, so their scopes are needed as well.
             let mut prefix = path;
             while let Some((parent, _)) = prefix.rsplit_once('.') {
-                if offered.iter().any(|(offered, _)| *offered == parent) {
+                if let Some((_, scope)) = offered.iter().find(|(offered, _)| *offered == parent) {
+                    if let Some(scope) = scope {
+                        caller.require(scope)?;
+                    }
                     paths.insert(parent.to_owned());
                 }
                 prefix = parent;
@@ -386,13 +429,13 @@ fn decode<T: DeserializeOwned>(cursor: Option<&str>) -> Result<Option<T>, V1Erro
 #[derive(Serialize, Deserialize)]
 struct TimeCursor {
     at: chrono::DateTime<chrono::Utc>,
-    id: uuid::Uuid,
+    id: Uuid,
 }
 
 /// Where a page of groups, areas or equipment ended: the last one's id.
 #[derive(Serialize, Deserialize)]
 struct IdCursor {
-    id: uuid::Uuid,
+    id: Uuid,
 }
 
 #[cfg(test)]

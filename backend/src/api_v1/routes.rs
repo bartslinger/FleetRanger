@@ -5,11 +5,7 @@
 
 use std::collections::HashMap;
 
-use axum::{
-    Extension, Json,
-    extract::{Path, State},
-};
-use axum_extra::extract::Query;
+use axum::{Extension, Json, extract::State};
 use chrono::NaiveDate;
 use serde::Deserialize;
 use utoipa::IntoParams;
@@ -17,7 +13,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 use super::{
-    Api, Caller, Expand, IdCursor, TimeCursor, V1Error,
+    Api, Caller, Expand, IdCursor, Params, PathId, TimeCursor, V1Error,
     db::{self, After, FlightRow, InSession, SessionRow},
     decode, encode, limit,
     types::{
@@ -200,9 +196,9 @@ struct DeviceExpand {
 async fn list_sessions(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Query(filters): Query<Filters>,
-    Query(expansion): Query<SessionExpand>,
-    Query(paging): Query<Paging>,
+    Params(filters): Params<Filters>,
+    Params(expansion): Params<SessionExpand>,
+    Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Session>>, V1Error> {
     caller.require("sessions:list")?;
     let expand = Expand::parse(expansion.expand.as_deref(), SESSION_EXPANSIONS, &caller)?;
@@ -245,8 +241,8 @@ async fn list_sessions(
 async fn get_session(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<SessionExpand>,
+    PathId(id): PathId,
+    Params(query): Params<SessionExpand>,
 ) -> Result<Json<Session>, V1Error> {
     caller.require("sessions:list")?;
     let expand = Expand::parse(query.expand.as_deref(), SESSION_EXPANSIONS, &caller)?;
@@ -282,10 +278,10 @@ async fn get_session(
 async fn list_flights(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Query(filters): Query<Filters>,
-    Query(flight_filters): Query<FlightFilters>,
-    Query(expansion): Query<FlightExpand>,
-    Query(paging): Query<Paging>,
+    Params(filters): Params<Filters>,
+    Params(flight_filters): Params<FlightFilters>,
+    Params(expansion): Params<FlightExpand>,
+    Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Flight>>, V1Error> {
     caller.require("flights:list")?;
     let expand = Expand::parse(expansion.expand.as_deref(), FLIGHT_EXPANSIONS, &caller)?;
@@ -341,8 +337,8 @@ async fn list_flights(
 async fn get_flight(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<FlightExpand>,
+    PathId(id): PathId,
+    Params(query): Params<FlightExpand>,
 ) -> Result<Json<Flight>, V1Error> {
     caller.require("flights:list")?;
     let expand = Expand::parse(query.expand.as_deref(), FLIGHT_EXPANSIONS, &caller)?;
@@ -377,7 +373,7 @@ async fn get_flight(
 async fn list_groups(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Query(paging): Query<Paging>,
+    Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Group>>, V1Error> {
     caller.require("groups:list")?;
     let limit = limit(paging.limit)?;
@@ -408,7 +404,7 @@ async fn list_groups(
 async fn list_areas(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Query(paging): Query<Paging>,
+    Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Area>>, V1Error> {
     caller.require("areas:list")?;
     let limit = limit(paging.limit)?;
@@ -438,8 +434,8 @@ async fn list_areas(
 async fn list_drones(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Query(expansion): Query<DeviceExpand>,
-    Query(paging): Query<Paging>,
+    Params(expansion): Params<DeviceExpand>,
+    Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Device>>, V1Error> {
     devices(&api, &caller, Kind::Aircraft, &expansion, &paging)
         .await
@@ -459,8 +455,8 @@ async fn list_drones(
 async fn list_controllers(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Query(expansion): Query<DeviceExpand>,
-    Query(paging): Query<Paging>,
+    Params(expansion): Params<DeviceExpand>,
+    Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Device>>, V1Error> {
     devices(&api, &caller, Kind::RemoteController, &expansion, &paging)
         .await
@@ -480,7 +476,7 @@ async fn list_controllers(
 async fn list_batteries(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
-    Query(paging): Query<Paging>,
+    Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Battery>>, V1Error> {
     caller.require("equipment:list")?;
     let limit = limit(paging.limit)? as usize;
