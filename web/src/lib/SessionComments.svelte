@@ -19,7 +19,7 @@
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
-	import TextArea from '#lib/ui/TextArea.svelte';
+	import TextArea, { characters } from '#lib/ui/TextArea.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import type { SessionComment } from '#lib/server/backend.js';
 
@@ -40,8 +40,17 @@
 	let { sessionId, comments, timeZone, userId, canWrite, addError, editError, deleteError }: Props =
 		$props();
 
-	/** The backend's limit. */
+	/** The backend's limit, in characters. */
 	const MAX_LENGTH = 4000;
+	const TOO_LONG = 'Shorten the comment to 4,000 characters.';
+	/** Something to save: not empty and not too long. */
+	const savable = (text: string) => text.trim() !== '' && characters(text.trim()) <= MAX_LENGTH;
+
+	/** The start of a comment, to say which one a dialog is about. */
+	function excerpt(text: string) {
+		const line = text.trim().split('\n')[0];
+		return characters(line) > 80 ? `${[...line].slice(0, 80).join('').trimEnd()}…` : line;
+	}
 
 	// The page's form actions, keeping the page's query (the open session).
 	const action = (name: string) => (page.url.search ? `${page.url.search}&/${name}` : `?/${name}`);
@@ -52,6 +61,7 @@
 	let draft = $state('');
 	let adding = $state(false);
 	let addRefused = $state(false);
+	let addField: HTMLTextAreaElement | null = $state(null);
 
 	// Editing one comment in place.
 	let editing: string | null = $state(null);
@@ -91,6 +101,17 @@
 		<ul class="list">
 			{#each comments as comment (comment.id)}
 				<li>
+					{#snippet meta()}
+						<p class="meta">
+							<span class="author">{comment.author_name}</span>
+							<span class="when">
+								<time datetime={comment.created_at}>{written(comment)}</time
+								>{#if comment.edited_at}<span title={dateTime(comment.edited_at, timeZone)}
+										>&ensp;·&ensp;Edited</span
+									>{/if}
+							</span>
+						</p>
+					{/snippet}
 					{#if editing === comment.id}
 						<form
 							class="edit"
@@ -108,13 +129,16 @@
 						>
 							<input type="hidden" name="session_id" value={sessionId} />
 							<input type="hidden" name="comment_id" value={comment.id} />
+							<!-- Who wrote it and when stay in view while it changes. -->
+							{@render meta()}
 							{#if editRefused && editError}
 								<InlineNotification kind="error" title={editError} />
 							{/if}
 							<TextArea
 								label="Edit comment"
 								name="body"
-								maxlength={MAX_LENGTH}
+								limit={MAX_LENGTH}
+								overLimit={TOO_LONG}
 								bind:value={editDraft}
 								bind:ref={editField}
 								onkeydown={(event) => {
@@ -125,21 +149,13 @@
 								}}
 							/>
 							<div class="buttons">
-								<Button type="submit" disabled={saving || editDraft.trim() === ''}>Save</Button>
+								<Button type="submit" disabled={saving || !savable(editDraft)}>Save</Button>
 								<Button kind="secondary" onclick={stopEditing}>Cancel</Button>
 							</div>
 						</form>
 					{:else}
 						<div class="comment">
-							<p class="meta">
-								<span class="author">{comment.author_name}</span>
-								<span class="when">
-									<time datetime={comment.created_at}>{written(comment)}</time
-									>{#if comment.edited_at}<span title={dateTime(comment.edited_at, timeZone)}
-											>&ensp;·&ensp;Edited</span
-										>{/if}
-								</span>
-							</p>
+							{@render meta()}
 							<p class="body">{comment.body}</p>
 						</div>
 						{#if canWrite && comment.author_id === userId}
@@ -182,7 +198,13 @@
 					adding = false;
 					await update({ reset: false });
 					addRefused = result.type === 'failure';
-					if (result.type === 'success') draft = '';
+					if (result.type === 'success') {
+						// The button turns disabled with the field empty: focus stays
+						// in the field, ready for the next (carbon-expert's review).
+						draft = '';
+						addField?.focus();
+						toast('Comment added.');
+					}
 				};
 			}}
 		>
@@ -194,11 +216,13 @@
 				label="Add a comment"
 				name="body"
 				rows={3}
-				maxlength={MAX_LENGTH}
+				limit={MAX_LENGTH}
+				overLimit={TOO_LONG}
 				bind:value={draft}
+				bind:ref={addField}
 			/>
 			<div class="buttons">
-				<Button type="submit" disabled={adding || draft.trim() === ''}>Add comment</Button>
+				<Button type="submit" disabled={adding || !savable(draft)}>Add comment</Button>
 			</div>
 		</form>
 	{/if}
@@ -221,8 +245,8 @@
 	<input type="hidden" name="session_id" value={sessionId} />
 	<input type="hidden" name="comment_id" value={deleting?.id} />
 	<p>
-		The comment of {deleting ? written(deleting) : ''} is removed from the session for everyone. This
-		can’t be undone.
+		“{deleting ? excerpt(deleting.body) : ''}”, written {deleting ? written(deleting) : ''}, is
+		deleted for everyone. This can’t be undone.
 	</p>
 </Modal>
 
