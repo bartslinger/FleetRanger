@@ -16,7 +16,7 @@
 
 	/** What each scope lets an app do. */
 	const ABILITIES: Record<string, string> = {
-		'flights:read': 'Read the flights and sessions you can see in FleetRanger'
+		'flights:read': 'Read the flights and sessions you can see in FleetRanger, with their comments'
 	};
 
 	// The app has the user's own access, read only.
