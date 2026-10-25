@@ -33,7 +33,7 @@ impl AppInput {
         let name = self.name.trim();
         if name.is_empty() || name.chars().count() > 100 {
             return Err(ApiError::Invalid(
-                "Give the app a name of at most 100 characters".to_owned(),
+                "Enter a name of at most 100 characters.".to_owned(),
             ));
         }
         let uris: Vec<String> = self
@@ -42,14 +42,19 @@ impl AppInput {
             .map(|uri| uri.trim().to_owned())
             .filter(|uri| !uri.is_empty())
             .collect();
-        if uris.is_empty() || uris.len() > 10 {
+        if uris.is_empty() {
             return Err(ApiError::Invalid(
-                "Give between 1 and 10 return addresses".to_owned(),
+                "Enter at least one return address.".to_owned(),
+            ));
+        }
+        if uris.len() > 10 {
+            return Err(ApiError::Invalid(
+                "Enter no more than 10 return addresses.".to_owned(),
             ));
         }
         if let Some(uri) = uris.iter().find(|uri| !redirect_uri_allowed(uri)) {
             return Err(ApiError::Invalid(format!(
-                "{uri} isn’t a valid return address: use HTTPS, or HTTP on this computer"
+                "{uri} isn’t a valid return address. Use the full address, starting with https://."
             )));
         }
         Ok((name, uris))

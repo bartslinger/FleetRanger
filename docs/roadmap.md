@@ -131,7 +131,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 See "Apps" and "Public API" in [architecture.md](architecture.md).
 
 - [x] Public API v1 (2026-10-25): read-only, behind `FLEETRANGER_API`, its reference generated at `/api/v1/openapi.json`; OAuth's scopes per resource, and an app must name the resource. Reviewed, and the real OAuth flow run on dev. Not released yet.
-- [ ] Apps added by admins on an admin page: a fixed return address, no consent screen
+- [x] Apps added by admins on an admin page (2026-10-25): name and return addresses, the client ID to copy from the app's page, no consent screen; deleting an app ends its users' access
 - [ ] An app's item in the navigation
 - [ ] App roles, and the user's permissions in `/me` in the scopes' terms
 - [ ] Permissions brought in line with the API's scopes, with a summary level for people

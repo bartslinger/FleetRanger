@@ -22,16 +22,25 @@ export async function load({ fetch, url }) {
 	// app isn't sent back an error, as it may not be who it says it is.
 	const query = request(url);
 	const result = await send<AppRequest>(fetch, 'POST', '/api/oauth/request', query);
+	// A trusted app, which an admin added, isn't asked about: back to it at once.
+	if (result.ok && result.data.trusted) {
+		const approved = await approve(fetch, query, true);
+		if (approved.ok) redirect(303, approved.data.redirect, { external: true });
+		return { request: null, query: '', problem: approved.message };
+	}
 	return result.ok
 		? { request: result.data, query: new URLSearchParams(query).toString(), problem: null }
 		: { request: null, query: '', problem: result.message };
 }
 
+/** The user's answer to the app's request, sent to the backend. */
+const approve = (fetch: typeof globalThis.fetch, query: Record<string, string>, allow: boolean) =>
+	send<{ redirect: string }>(fetch, 'POST', '/api/oauth/approve', { ...query, allow });
+
 async function answer(fetch: typeof globalThis.fetch, url: URL, allow: boolean) {
 	// Exactly the one action the button names.
 	if (actionNames(url).length !== 1) return { problem: 'Malformed request' };
-	const body = { ...request(url), allow };
-	const result = await send<{ redirect: string }>(fetch, 'POST', '/api/oauth/approve', body);
+	const result = await approve(fetch, request(url), allow);
 	if (!result.ok) return { problem: result.message };
 	// Back to the app, with a code or the refusal: an address the app
 	// registered, which the backend checked.
