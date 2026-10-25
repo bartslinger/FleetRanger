@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update login_sessions set revoked_at = now()\n         where token_sha256 = $1 and revoked_at is null\n         returning user_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "431fa9c3bfe3ecf4b5f25981ca95f58e996d2d0479fe23b5cbeb53d3d801dcde"
+}

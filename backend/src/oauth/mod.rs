@@ -16,8 +16,9 @@ use axum::{
 use base64::Engine;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
+use uuid::Uuid;
 
-use crate::auth::Actor;
+use crate::auth::{Actor, Impersonator};
 
 /// What an assistant can be allowed to do over MCP.
 pub const MCP_SCOPES: &[&str] = &["flights:read"];
@@ -116,10 +117,19 @@ pub async fn bearer(
         login_session_id: access.grant_id,
         ip: crate::auth::client_ip(&parts.headers, peer),
         email: Some(access.email),
-        impersonated_by: None,
+        impersonated_by: access
+            .impersonated_by
+            .zip(access.impersonator_name)
+            .map(|(user_id, name)| Impersonator { user_id, name }),
         name: access.name,
     };
     Ok(Bearer::Valid(Box::new(actor), access.scopes))
+}
+
+/// Ends the app connections an admin made while impersonating someone: at
+/// Stop impersonating, switching to someone else, and logging out.
+pub async fn end_impersonation(db: &PgPool, admin: Uuid) -> sqlx::Result<()> {
+    db::end_impersonation(db, admin).await
 }
 
 /// Removes expired codes, idle connections and apps that were never

@@ -51,7 +51,9 @@
 			<DecisionTile
 				title="Connect {app} to FleetRanger?"
 				description="{data.request.host} wants to read your flight data, as {data.account?.name}."
-				helper="What {app} reads is sent to {app}. You can disconnect it under Connected apps."
+				helper={data.account?.impersonated_by
+					? `What ${app} reads is sent to ${app}. It stays connected as ${data.account.name} until you stop impersonating.`
+					: `What ${app} reads is sent to ${app}. You can disconnect it under Connected apps.`}
 			>
 				<PermissionList
 					heading="{app} will be able to"

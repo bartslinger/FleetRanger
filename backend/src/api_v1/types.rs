@@ -34,6 +34,17 @@ pub struct Error {
 pub struct Me {
     pub id: Uuid,
     pub name: String,
+    /// The admin who connected the app while impersonating this user, to
+    /// see it as they do; null otherwise. Show it, as FleetRanger does in a
+    /// banner.
+    pub impersonated_by: Option<Impersonator>,
+}
+
+/// An admin impersonating the user.
+#[derive(Clone, Serialize, ToSchema)]
+pub struct Impersonator {
+    pub id: Uuid,
+    pub name: String,
 }
 
 #[derive(Clone, Serialize, ToSchema)]

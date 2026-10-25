@@ -5,6 +5,8 @@ Read an organisation's sessions, flights and equipment, acting for a user throug
 - **Tokens** come from the install's OAuth, issued for the resource `/api/v1`. Apps the install added skip the consent screen; others ask the user.
 - **Scopes** say which resources an app reaches and how deep: `<resource>:list`, `:read`, `:write`, each level including the one below. The user's own access still decides what is in each answer.
 - **401** for a missing, expired or wrong token. **403** only when the token lacks a scope the request needs, naming it. **404** for anything the user can't see, as if it didn't exist.
+- **Check the login on every page load**, for example with `/me`, also when a page shows only the app's own data. FleetRanger takes tokens back when a user disconnects the app, an admin removes it, or an admin who opened it while impersonating someone stops. On a 401, send the user through login again.
+- **Impersonation:** an admin may open the app as someone else. `/me` then names the admin in `impersonated_by`; show it, as FleetRanger does in a banner.
 
 ## Conventions
 

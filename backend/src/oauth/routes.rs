@@ -274,11 +274,12 @@ struct RequestInfo {
 }
 
 async fn check(
-    _actor: Actor,
+    actor: Actor,
     State(db): State<PgPool>,
     State(oauth): State<OAuth>,
     Json(request): Json<AuthorizationRequest>,
 ) -> ApiResult<Json<RequestInfo>> {
+    may_connect(&actor)?;
     let valid = validate(&db, &oauth, &request).await?;
     Ok(Json(RequestInfo {
         host: host(&valid.redirect_uri),
@@ -286,6 +287,19 @@ async fn check(
         scopes: valid.scopes,
         trusted: valid.trusted,
     }))
+}
+
+/// An admin impersonating a user without a login can't connect an app as
+/// them: its tokens would never work, as they only work for users who may
+/// log in.
+fn may_connect(actor: &Actor) -> ApiResult<()> {
+    if actor.email.is_none() {
+        return Err(ApiError::Invalid(format!(
+            "{} has no login, so apps can’t connect as them",
+            actor.name
+        )));
+    }
+    Ok(())
 }
 
 fn host(uri: &str) -> String {
@@ -315,6 +329,7 @@ async fn approve(
     State(oauth): State<OAuth>,
     Json(decision): Json<Decision>,
 ) -> ApiResult<Json<Redirect>> {
+    may_connect(&actor)?;
     let valid = validate(&db, &oauth, &decision.request).await?;
     let mut url = Url::parse(&valid.redirect_uri)
         .map_err(|_| ApiError::Invalid("Invalid return address".to_owned()))?;
@@ -327,6 +342,7 @@ async fn approve(
             code_challenge: valid.code_challenge,
             scopes: valid.scopes,
             resource: valid.resource,
+            impersonated_by: actor.impersonated_by.as_ref().map(|admin| admin.user_id),
         };
         db::create_code(&db, &sha256(&code), &stored, CODE_SECONDS).await?;
         Some(code)
@@ -563,6 +579,7 @@ mod tests {
             code_challenge: CHALLENGE.to_owned(),
             scopes: vec!["flights:read".to_owned()],
             resource: RESOURCE.to_owned(),
+            impersonated_by: None,
         };
         db::create_code(&db, &sha256("good"), &code, 60.0)
             .await
