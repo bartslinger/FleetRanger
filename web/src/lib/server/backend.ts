@@ -402,6 +402,8 @@ export interface AppRequest {
 	/** Where the app sends the user back: who it really is. */
 	host: string;
 	scopes: string[];
+	/** Added by an admin: approved without asking the user. */
+	trusted: boolean;
 }
 
 /** An app the user connected, from `GET /api/oauth/connections`. */
@@ -413,6 +415,17 @@ export interface Connection {
 	scopes: string[];
 	created_at: string;
 	last_used_at: string;
+}
+
+/** A trusted app, from `GET /api/apps`. */
+export interface TrustedApp {
+	/** Its client ID, which the app is configured with. */
+	id: string;
+	name: string;
+	redirect_uris: string[];
+	/** How many people use it. */
+	users: number;
+	created_at: string;
 }
 
 /** The user of the browser's login session, or null if it isn't logged in. */

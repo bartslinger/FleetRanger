@@ -2,14 +2,14 @@
 //! `/.well-known/`, register at `/auth/oauth/register` and get tokens at
 //! `/auth/oauth/token`. The consent page is the web app's `/connect`, which
 //! checks and approves a request through `/api/oauth/…`, as does the list of
-//! connected apps.
+//! connected apps. Admins manage trusted apps through `/api/apps`.
 
 use axum::{
     Form, Json, Router,
     extract::{DefaultBodyLimit, FromRef, Path, State},
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use openidconnect::url::Url;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
-    ACCESS_SECONDS, CODE_SECONDS, IDLE_DAYS, OAuth,
+    ACCESS_SECONDS, CODE_SECONDS, IDLE_DAYS, OAuth, apps,
     db::{self, Code, Connection, Refreshed, Tokens},
     pkce_matches, random_token, sha256,
 };
@@ -52,6 +52,8 @@ where
         .route("/api/oauth/approve", post(approve))
         .route("/api/oauth/connections", get(connections))
         .route("/api/oauth/connections/{id}", delete(disconnect))
+        .route("/api/apps", get(apps::list).post(apps::add))
+        .route("/api/apps/{id}", put(apps::update).delete(apps::remove))
 }
 
 /// RFC 8414: where apps find the endpoints.
@@ -142,7 +144,7 @@ async fn register(State(db): State<PgPool>, Json(registration): Json<Registratio
 
 /// HTTPS, or plain HTTP to the user's own computer (apps such as Claude Code
 /// receive the code there); never with a fragment, and of a sensible length.
-fn redirect_uri_allowed(uri: &str) -> bool {
+pub(super) fn redirect_uri_allowed(uri: &str) -> bool {
     let Ok(url) = Url::parse(uri) else {
         return false;
     };
@@ -191,6 +193,7 @@ struct AuthorizationRequest {
 struct Valid {
     client_id: Uuid,
     app: String,
+    trusted: bool,
     redirect_uri: String,
     code_challenge: String,
     scopes: Vec<String>,
@@ -249,6 +252,7 @@ async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) ->
     let resource = resource.url.clone();
     Ok(Valid {
         client_id: client.id,
+        trusted: client.trusted,
         app: client.name,
         redirect_uri,
         code_challenge,
@@ -259,26 +263,43 @@ async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) ->
 
 /// What the consent page shows: the app's name, where it sends the user
 /// back (its host, as the name is only what the app says it is), and the
-/// scopes it asks for.
+/// scopes it asks for. A trusted app, which an admin added, gets no consent page:
+/// the web app approves its request at once.
 #[derive(Serialize)]
 struct RequestInfo {
     app: String,
     host: String,
     scopes: Vec<String>,
+    trusted: bool,
 }
 
 async fn check(
-    _actor: Actor,
+    actor: Actor,
     State(db): State<PgPool>,
     State(oauth): State<OAuth>,
     Json(request): Json<AuthorizationRequest>,
 ) -> ApiResult<Json<RequestInfo>> {
+    may_connect(&actor)?;
     let valid = validate(&db, &oauth, &request).await?;
     Ok(Json(RequestInfo {
         host: host(&valid.redirect_uri),
         app: valid.app,
         scopes: valid.scopes,
+        trusted: valid.trusted,
     }))
+}
+
+/// An admin impersonating a user without a login can't connect an app as
+/// them: its tokens would never work, as they only work for users who may
+/// log in.
+fn may_connect(actor: &Actor) -> ApiResult<()> {
+    if actor.email.is_none() {
+        return Err(ApiError::Invalid(format!(
+            "{} has no login, so apps can’t connect as them",
+            actor.name
+        )));
+    }
+    Ok(())
 }
 
 fn host(uri: &str) -> String {
@@ -308,6 +329,7 @@ async fn approve(
     State(oauth): State<OAuth>,
     Json(decision): Json<Decision>,
 ) -> ApiResult<Json<Redirect>> {
+    may_connect(&actor)?;
     let valid = validate(&db, &oauth, &decision.request).await?;
     let mut url = Url::parse(&valid.redirect_uri)
         .map_err(|_| ApiError::Invalid("Invalid return address".to_owned()))?;
@@ -320,6 +342,7 @@ async fn approve(
             code_challenge: valid.code_challenge,
             scopes: valid.scopes,
             resource: valid.resource,
+            impersonated_by: actor.impersonated_by.as_ref().map(|admin| admin.user_id),
         };
         db::create_code(&db, &sha256(&code), &stored, CODE_SECONDS).await?;
         Some(code)
@@ -556,6 +579,7 @@ mod tests {
             code_challenge: CHALLENGE.to_owned(),
             scopes: vec!["flights:read".to_owned()],
             resource: RESOURCE.to_owned(),
+            impersonated_by: None,
         };
         db::create_code(&db, &sha256("good"), &code, 60.0)
             .await
