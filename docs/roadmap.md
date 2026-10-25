@@ -42,6 +42,7 @@ Everyone is a user, with roles in groups or on the whole organisation and an opt
 - [x] Only uploads join sessions by themselves (same night's sync); the rest by hand: new session, add to session, flights without session
 - [x] Suggested sessions to review (one by one; making all of them at once only if it turns out to be needed)
 - [~] Comments on sessions, and deleting a session explicitly
+- [ ] Rethink the open session's layout (user, 2026-10-25): long comments under the facts push the flights table down, and pointing at a flight in the table, which brings it out on the map, happens with the map scrolled out of view
 
 ## Phase 4: login and access
 
