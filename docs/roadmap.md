@@ -8,7 +8,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replaced teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replaced the three fixed roles; see "Groups and roles" in [architecture.md](architecture.md) and the packages below. Teams, the fixed roles and holders are dropped (migration 0020); released as v0.7.0 and android-v0.4.0 on 2026-10-24, with fine-tuning after the release (user, 2026-10-24). Groups replace teams in the code, every access check asks for a permission on the groups tables, a flight's pilot and group are independent, uploads without a chosen group go to the queue, a session's own group decides who changes it, only flights without a session are archived, equipment is also seen through its flights with figures over all of them, pairing puts a controller in a group the creator chooses, holders are gone from the app, and the admin pages manage groups, their members' roles and roles on the whole organisation. The web app says "group" everywhere and shows what the user's permissions allow: sessions get a group chosen by their maker and can be moved with or without their flights, pilot lists put the group's own pilots first; MCP has the user's own access. The controller app has moved over (package 8): each pilot once, then the group they fly for, with "Other group"; it talks to a versioned controller API (`/api/controller/v1`, user's decision), while android-v0.3.0 keeps working, its uploads taking the group (team) chosen with the pilot, and it stays in landscape. Serving several organisations from one install follows after.
 
-**Now:** releasing v0.9.0.
+**Now:** apps and the public API (`/api/v1`), see "Apps" in [architecture.md](architecture.md): the API, apps in the configuration, their roles and navigation items. Controller notes are parked.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -134,12 +134,12 @@ Each package leaves a working app with its tests passing. Groups are added besid
 
 ## Later
 
-- Session reports with organisation-specific fields
+- Figures recorded per session, right after flying (such as custom fields)
 - Sharing flights, also outside the organisation
 - Invite links for accounts
-- A stable public API (user's wish, 2026-10-24): the web app and backend still change together, but external parties should eventually talk to the backend directly. That needs a versioned API with a documented contract kept stable across releases, as the controller API already is (`/api/controller/v1`), and access for other apps (OAuth already lets apps act for a user).
+- [~] A stable public API (user's wish, 2026-10-24; design started 2026-10-25): the web app and backend still change together, but external parties should eventually talk to the backend directly. That needs a versioned API with a documented contract kept stable across releases, as the controller API already is (`/api/controller/v1`), and access for other apps (OAuth already lets apps act for a user).
 - Link media
 
 ## Open questions
 
-None at the moment.
+- Where figures recorded per session live: custom fields in FleetRanger, or elsewhere. Postponed (user, 2026-10-25): apps start without them.
