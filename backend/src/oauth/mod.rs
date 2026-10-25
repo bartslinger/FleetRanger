@@ -3,6 +3,7 @@
 //! one resource (e.g. `/mcp`) and its scopes; what a resource then allows is
 //! that resource's business. See "Identity and access" in docs/architecture.md.
 
+mod apps;
 mod db;
 pub mod routes;
 
