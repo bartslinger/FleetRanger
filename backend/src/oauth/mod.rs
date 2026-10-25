@@ -68,10 +68,10 @@ pub enum Bearer {
     Valid(Box<Actor>, Vec<String>),
     /// No bearer token.
     Missing,
-    /// Unknown or expired, or its user may no longer log in (RFC 6750:
-    /// `invalid_token`).
+    /// Unknown or expired, for another resource, or its user may no longer
+    /// log in (RFC 6750: `invalid_token`): the app needs a new one.
     Invalid,
-    /// Valid, but for another resource or without the scope
+    /// Valid for this resource, but without the scope
     /// (`insufficient_scope`).
     Insufficient,
 }
@@ -95,9 +95,10 @@ pub async fn bearer(
     let Some(access) = db::use_access(db, &sha256(token)).await? else {
         return Ok(Bearer::Invalid);
     };
-    if access.resource != resource
-        || scope.is_some_and(|scope| !access.scopes.iter().any(|granted| granted == scope))
-    {
+    if access.resource != resource {
+        return Ok(Bearer::Invalid);
+    }
+    if scope.is_some_and(|scope| !access.scopes.iter().any(|granted| granted == scope)) {
         return Ok(Bearer::Insufficient);
     }
     let peer = parts

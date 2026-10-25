@@ -57,12 +57,12 @@ where
 /// RFC 8414: where apps find the endpoints.
 async fn server_metadata(State(oauth): State<OAuth>) -> Json<serde_json::Value> {
     let issuer = &oauth.issuer;
-    let mut scopes: Vec<&str> = oauth
-        .resources
-        .iter()
-        .flat_map(|resource| resource.scopes.iter().copied())
-        .collect();
-    scopes.dedup();
+    let mut scopes: Vec<&str> = Vec::new();
+    for &scope in oauth.resources.iter().flat_map(|resource| resource.scopes) {
+        if !scopes.contains(&scope) {
+            scopes.push(scope);
+        }
+    }
     Json(json!({
         "issuer": issuer,
         "authorization_endpoint": format!("{issuer}/connect"),
@@ -221,12 +221,16 @@ async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) ->
         .filter(|challenge| (43..=128).contains(&challenge.len()))
         .filter(|_| request.code_challenge_method.as_deref() == Some("S256"))
         .ok_or_else(|| invalid("Request not secured (PKCE)"))?;
-    let resource = match (&request.resource, &*oauth.resources) {
-        (Some(url), _) => oauth.resource(url),
-        (None, [only]) => Some(only),
-        (None, _) => None,
-    }
-    .ok_or_else(|| invalid("Unknown part of FleetRanger"))?;
+    // The app names the part of FleetRanger it wants (RFC 8707), as MCP
+    // requires of assistants; FleetRanger never guesses it (user's decision,
+    // 2026-10-25).
+    let resource = request
+        .resource
+        .as_deref()
+        .ok_or_else(|| invalid("The app didn’t say which part of FleetRanger it wants"))?;
+    let resource = oauth
+        .resource(resource)
+        .ok_or_else(|| invalid("Unknown part of FleetRanger"))?;
     // Without scopes, all the resource's.
     let scopes: Vec<String> = match request.scope.as_deref().map(str::trim) {
         None | Some("") => resource
