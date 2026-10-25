@@ -43,8 +43,8 @@
 			<p>
 				{app.users > 0
 					? `${people} use ${app.name}. Their access ends at once: the app can’t read anything from FleetRanger for them anymore.`
-					: `${app.name} can’t log anyone in anymore.`}
-				Adding it again gives it a new client ID, to set in the app again.
+					: `People can no longer log in to ${app.name} with FleetRanger.`}
+				Adding {app.name} again gives it a new client ID.
 			</p>
 		</Modal>
 	{/snippet}
@@ -70,7 +70,7 @@
 				</dd>
 			</div>
 			<div>
-				<dt>Used by</dt>
+				<dt>People</dt>
 				<dd>{app.users > 0 ? people : 'Nobody yet'}</dd>
 			</div>
 			<div>

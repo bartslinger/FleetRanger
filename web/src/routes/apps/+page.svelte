@@ -20,7 +20,14 @@
 		}
 	};
 
-	const rows = $derived(data.apps.map((app) => ({ ...app, host: host(app.redirect_uris[0]) })));
+	const rows = $derived(
+		data.apps.map((app) => ({
+			...app,
+			host:
+				host(app.redirect_uris[0]) +
+				(app.redirect_uris.length > 1 ? ` +${app.redirect_uris.length - 1}` : '')
+		}))
+	);
 	type Row = (typeof rows)[number];
 
 	const count = (value: number) => value.toLocaleString('en-US');
@@ -48,7 +55,7 @@
 		{#if data.apps.length === 0}
 			<EmptyState
 				title="No apps yet"
-				body="Add the web apps your organisation runs alongside FleetRanger. People open them with their FleetRanger login, without being asked for permission, and see only what they can see here."
+				body="Add an app to let people open it with their FleetRanger login."
 				action={newApp}
 			/>
 		{:else}
