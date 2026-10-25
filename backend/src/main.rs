@@ -1,3 +1,4 @@
+mod api_v1;
 mod areas;
 mod auth;
 mod batteries;
@@ -157,12 +158,21 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         }
     };
     let issuer = config.public_url.as_str().trim_end_matches('/').to_owned();
-    // The resources OAuth issues tokens for: only /mcp so far, when it's on.
-    let resources: Vec<String> = if config.mcp {
-        vec![mcp::resource(&issuer)]
-    } else {
-        Vec::new()
-    };
+    // The resources OAuth issues tokens for: /mcp and /api/v1, when they're on.
+    let mut resources = Vec::new();
+    if config.mcp {
+        resources.push(oauth::Resource {
+            url: mcp::resource(&issuer),
+            scopes: oauth::MCP_SCOPES,
+        });
+    }
+    if config.api {
+        resources.push(oauth::Resource {
+            url: api_v1::resource(&issuer),
+            scopes: oauth::API_SCOPES,
+        });
+    }
+    let oauth_on = !resources.is_empty();
     auth::set_https(config.public_url.scheme() == "https");
     let state = AppState {
         db,
@@ -184,25 +194,42 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         },
     };
 
-    // Off unless the install switches it on (FLEETRANGER_MCP), and OAuth
-    // with it while it is its only resource.
-    let mcp = if config.mcp {
+    // Off unless the install switches them on (FLEETRANGER_MCP,
+    // FLEETRANGER_API), and OAuth with them. Both answer in the time zone.
+    if config.mcp || config.api {
         mcp::db::today(&state.db, &config.time_zone)
             .await
             .with_context(|| format!("TIME_ZONE {} is not a known time zone", config.time_zone))?;
+    }
+    let mut apps = Router::new();
+    if config.mcp {
         let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
         hosts.extend(config.public_url.host_str().map(str::to_owned));
         tracing::info!("MCP server on at /mcp");
+        apps = apps.merge(mcp::router(
+            state.db.clone(),
+            config.time_zone.clone(),
+            &issuer,
+            hosts,
+        ));
+    }
+    if config.api {
+        tracing::info!("public API on at /api/v1");
+        apps = apps.merge(api_v1::router(api_v1::Api {
+            db: state.db.clone(),
+            time_zone: config.time_zone.clone().into(),
+            organisation_name: config.organisation_name.clone().map(Into::into),
+            resource: api_v1::resource(&issuer).into(),
+        }));
+    }
+    if oauth_on {
         tokio::spawn(oauth::clean_up_hourly(state.db.clone()));
-        mcp::router(state.db.clone(), config.time_zone.clone(), &issuer, hosts)
-            .merge(oauth::routes::router())
-    } else {
-        Router::new()
-    };
+        apps = apps.merge(oauth::routes::router());
+    }
 
     let app = Router::new()
         .route("/healthz", get(health::check))
-        .merge(mcp)
+        .merge(apps)
         .merge(areas::routes::router())
         .merge(auth::routes::router())
         .merge(batteries::routes::router())
