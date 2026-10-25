@@ -108,11 +108,11 @@
 		...(may(data.account, 'areas.manage', null)
 			? [{ href: resolve('/areas'), label: 'Areas', icon: Area }]
 			: []),
-		// Only while apps can connect at all.
+		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone },
+		// Last (user's choice), and only while apps can connect at all.
 		...(data.account?.apps && may(data.account, 'apps.manage', null)
 			? [{ href: resolve('/apps'), label: 'Apps', icon: ApplicationWeb }]
-			: []),
-		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone }
+			: [])
 	]);
 </script>
 
