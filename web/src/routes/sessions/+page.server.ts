@@ -2,6 +2,7 @@ import { MAPBOX_ACCESS_TOKEN, TIME_ZONE } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
+	remove,
 	send,
 	type Devices,
 	type FlightChoices,
@@ -85,5 +86,45 @@ export const actions = {
 		// All its flights gone, the session is too: back to the list.
 		if (form.get('all') === 'true') redirect(303, '/sessions');
 		return { removed: result.data.removed };
+	},
+	/** Deletes the open session and its comments, and goes back to the list as it was. */
+	deleteSession: async ({ fetch, request, url }) => {
+		const form = await request.formData();
+		const id = String(form.get('session_id') ?? '');
+		const result = await remove(fetch, `/api/sessions/${encodeURIComponent(id)}`);
+		if (!result.ok) return fail(result.status, { deleteMessage: result.message });
+		const list = new URLSearchParams(url.searchParams);
+		list.delete('session');
+		redirect(303, list.size > 0 ? `/sessions?${list}` : '/sessions');
+	},
+	addComment: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const id = String(form.get('session_id') ?? '');
+		const body = { body: String(form.get('body') ?? '') };
+		const path = `/api/sessions/${encodeURIComponent(id)}/comments`;
+		const result = await send<{ id: string }>(fetch, 'POST', path, body);
+		if (!result.ok) return fail(result.status, { commentMessage: result.message });
+		return { commented: result.data.id };
+	},
+	editComment: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const path = commentPath(form);
+		const body = { body: String(form.get('body') ?? '') };
+		const result = await send<{ id: string }>(fetch, 'PUT', path, body);
+		if (!result.ok) return fail(result.status, { editCommentMessage: result.message });
+		return { commentEdited: result.data.id };
+	},
+	deleteComment: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const result = await remove(fetch, commentPath(form));
+		if (!result.ok) return fail(result.status, { deleteCommentMessage: result.message });
+		return { commentDeleted: true };
 	}
 };
+
+/** The comment a form names, with its session. */
+function commentPath(form: FormData) {
+	const session = encodeURIComponent(String(form.get('session_id') ?? ''));
+	const comment = encodeURIComponent(String(form.get('comment_id') ?? ''));
+	return `/api/sessions/${session}/comments/${comment}`;
+}
