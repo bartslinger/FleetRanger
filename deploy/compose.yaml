@@ -43,6 +43,8 @@ services:
       FLEETRANGER_SESSION_GAP_MINUTES: ${FLEETRANGER_SESSION_GAP_MINUTES:-}
       TIME_ZONE: ${TIME_ZONE:-UTC}
       FLEETRANGER_MCP: ${FLEETRANGER_MCP:-}
+      FLEETRANGER_API: ${FLEETRANGER_API:-}
+      FLEETRANGER_ORGANISATION_NAME: ${FLEETRANGER_ORGANISATION_NAME:-}
     # The owner of the flight log directory, so uploads and the logs copied
     # there before share one owner (the image's default is uid 65532).
     user: ${FLEETRANGER_UID:-65532}:${FLEETRANGER_GID:-65532}

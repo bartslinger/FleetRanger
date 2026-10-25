@@ -33,6 +33,12 @@ pub struct Config {
     /// Whether AI assistants can query the install over MCP
     /// (`FLEETRANGER_MCP=on`); off by default.
     pub mcp: bool,
+    /// Whether apps can use the public API at `/api/v1`
+    /// (`FLEETRANGER_API=on`); off by default.
+    pub api: bool,
+    /// The organisation's name, for apps (`FLEETRANGER_ORGANISATION_NAME`),
+    /// until organisations have settings of their own.
+    pub organisation_name: Option<String>,
 }
 
 pub struct OidcConfig {
@@ -80,11 +86,9 @@ impl Config {
                 None => 120,
             };
         let time_zone = non_empty_var("TIME_ZONE").unwrap_or_else(|| "UTC".to_owned());
-        let mcp = match non_empty_var("FLEETRANGER_MCP").as_deref() {
-            None | Some("off") => false,
-            Some("on") => true,
-            Some(_) => anyhow::bail!("FLEETRANGER_MCP must be on or off"),
-        };
+        let mcp = switch("FLEETRANGER_MCP")?;
+        let api = switch("FLEETRANGER_API")?;
+        let organisation_name = non_empty_var("FLEETRANGER_ORGANISATION_NAME");
 
         Ok(Self {
             bind,
@@ -97,10 +101,21 @@ impl Config {
             session_gap_minutes,
             time_zone,
             mcp,
+            api,
+            organisation_name,
         })
     }
 }
 
 fn non_empty_var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.is_empty())
+}
+
+/// A feature an install switches on: `on`, or `off` (the default).
+fn switch(name: &str) -> Result<bool> {
+    match non_empty_var(name).as_deref() {
+        None | Some("off") => Ok(false),
+        Some("on") => Ok(true),
+        Some(_) => anyhow::bail!("{name} must be on or off"),
+    }
 }

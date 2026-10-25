@@ -18,7 +18,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
-    ACCESS_SECONDS, CODE_SECONDS, IDLE_DAYS, OAuth, SCOPES,
+    ACCESS_SECONDS, CODE_SECONDS, IDLE_DAYS, OAuth,
     db::{self, Code, Connection, Refreshed, Tokens},
     pkce_matches, random_token, sha256,
 };
@@ -57,12 +57,18 @@ where
 /// RFC 8414: where apps find the endpoints.
 async fn server_metadata(State(oauth): State<OAuth>) -> Json<serde_json::Value> {
     let issuer = &oauth.issuer;
+    let mut scopes: Vec<&str> = Vec::new();
+    for &scope in oauth.resources.iter().flat_map(|resource| resource.scopes) {
+        if !scopes.contains(&scope) {
+            scopes.push(scope);
+        }
+    }
     Json(json!({
         "issuer": issuer,
         "authorization_endpoint": format!("{issuer}/connect"),
         "token_endpoint": format!("{issuer}/auth/oauth/token"),
         "registration_endpoint": format!("{issuer}/auth/oauth/register"),
-        "scopes_supported": SCOPES,
+        "scopes_supported": scopes,
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
@@ -78,14 +84,12 @@ async fn resource_metadata(
     State(oauth): State<OAuth>,
     Path(path): Path<String>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let resource = format!("{}/{path}", oauth.issuer);
-    if !oauth.resources.contains(&resource) {
-        return Err(ApiError::NotFound);
-    }
+    let url = format!("{}/{path}", oauth.issuer);
+    let resource = oauth.resource(&url).ok_or(ApiError::NotFound)?;
     Ok(Json(json!({
-        "resource": resource,
+        "resource": url,
         "authorization_servers": [oauth.issuer],
-        "scopes_supported": SCOPES,
+        "scopes_supported": resource.scopes,
         "bearer_methods_supported": ["header"],
     })))
 }
@@ -217,20 +221,32 @@ async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) ->
         .filter(|challenge| (43..=128).contains(&challenge.len()))
         .filter(|_| request.code_challenge_method.as_deref() == Some("S256"))
         .ok_or_else(|| invalid("Request not secured (PKCE)"))?;
+    // The app names the part of FleetRanger it wants (RFC 8707), as MCP
+    // requires of assistants; FleetRanger never guesses it (user's decision,
+    // 2026-10-25).
+    let resource = request
+        .resource
+        .as_deref()
+        .ok_or_else(|| invalid("The app didn’t say which part of FleetRanger it wants"))?;
+    let resource = oauth
+        .resource(resource)
+        .ok_or_else(|| invalid("Unknown part of FleetRanger"))?;
+    // Without scopes, all the resource's.
     let scopes: Vec<String> = match request.scope.as_deref().map(str::trim) {
-        None | Some("") => SCOPES.iter().map(|&scope| scope.to_owned()).collect(),
+        None | Some("") => resource
+            .scopes
+            .iter()
+            .map(|&scope| scope.to_owned())
+            .collect(),
         Some(scope) => scope.split(' ').map(str::to_owned).collect(),
     };
-    if !scopes.iter().all(|scope| SCOPES.contains(&scope.as_str())) {
+    if !scopes
+        .iter()
+        .all(|scope| resource.scopes.contains(&scope.as_str()))
+    {
         return Err(invalid("Access FleetRanger doesn’t give"));
     }
-    let resource = match (&request.resource, &*oauth.resources) {
-        (Some(resource), resources) if resources.contains(resource) => resource.clone(),
-        (None, [only]) => only.clone(),
-        _ => {
-            return Err(invalid("Unknown part of FleetRanger"));
-        }
-    };
+    let resource = resource.url.clone();
     Ok(Valid {
         client_id: client.id,
         app: client.name,

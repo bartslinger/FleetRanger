@@ -1,0 +1,104 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select f.session_id as \"id!\", s.group_id,\n                  min(f.takeoff_at) as \"first_takeoff_at!\",\n                  max(f.landed_at) as \"last_landed_at!\",\n                  count(*) as \"flight_count!\",\n                  sum(f.air_time_s)::bigint as \"air_time_s!\",\n                  sum(f.distance_m) as \"distance_m!\",\n                  array_remove(array_agg(distinct f.pilot_id), null) as \"pilot_ids!\",\n                  coalesce((select jsonb_agg(jsonb_build_object('area', t.area_id,\n                                                                'air_time_s', t.air_time_s,\n                                                                'distance_m', t.distance_m)\n                                             order by t.air_time_s desc, t.area_id)\n                            from (select fa.area_id, sum(fa.air_time_s) as air_time_s,\n                                         sum(fa.distance_m) as distance_m\n                                  from flight_areas fa\n                                  join flights v on v.id = fa.flight_id\n                                  where v.session_id = f.session_id\n                                    and ($1 or v.pilot_id = $2 or v.group_id = any($3))\n                                  group by fa.area_id) t),\n                           '[]') as \"areas!\"\n           from flights f\n           join sessions s on s.id = f.session_id\n           where ($1 or f.pilot_id = $2 or f.group_id = any($3))\n             and ($4::uuid[] is null or f.session_id = any($4))\n             and f.session_id in (\n                 select g.session_id from flights g\n                 where g.session_id is not null\n                   and ($1 or g.pilot_id = $2 or g.group_id = any($3))\n                   and ($5::text[] is null or g.aircraft_serial = any($5))\n                   and ($6::text[] is null or g.rc_serial = any($6))\n                   and ($7::timestamptz is null or g.takeoff_at >= $7)\n                   and ($8::timestamptz is null or g.takeoff_at < $8)\n                   and ($9::uuid[] is null\n                        or g.session_id in (select id from sessions\n                                            where group_id = any($9)\n                                               or ($10 and group_id is null)))\n                   and ($11::uuid[] is null or g.pilot_id = any($11)\n                        or ($12 and g.pilot_id is null))\n                   and ($13::uuid[] is null or exists (select 1 from flight_areas fa\n                                                       where fa.flight_id = g.id\n                                                         and fa.area_id = any($13))))\n           group by f.session_id, s.group_id\n           having $14::timestamptz is null or (min(f.takeoff_at), f.session_id) < ($14, $15)\n           order by min(f.takeoff_at) desc, f.session_id desc\n           limit $16",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "first_takeoff_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_landed_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "flight_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "air_time_s!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "distance_m!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "pilot_ids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "areas!",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "UuidArray",
+        "UuidArray",
+        "TextArray",
+        "TextArray",
+        "Timestamptz",
+        "Timestamptz",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "b2de2389233fc25dbfd723b8ee52a4237fa5d3757bec5e0a8ae20118c5d002c1"
+}

@@ -18,8 +18,20 @@ use sqlx::PgPool;
 
 use crate::auth::Actor;
 
-/// What an app can be allowed to do. Writes come later.
-pub const SCOPES: &[&str] = &["flights:read"];
+/// What an assistant can be allowed to do over MCP.
+pub const MCP_SCOPES: &[&str] = &["flights:read"];
+
+/// What an app can be allowed to do with the public API: per resource and
+/// level, a level including the ones below it (see docs/api-v1.md). Only
+/// the scopes its endpoints use; writes come later.
+pub const API_SCOPES: &[&str] = &[
+    "sessions:list",
+    "sessions:read",
+    "flights:list",
+    "groups:list",
+    "areas:list",
+    "equipment:list",
+];
 
 /// How long a code from the consent page is valid.
 const CODE_SECONDS: f64 = 60.0;
@@ -29,33 +41,48 @@ const ACCESS_SECONDS: f64 = 3600.0;
 const IDLE_DAYS: i32 = 30;
 
 /// The install as an authorization server: its own address (the issuer) and
-/// the resources it issues tokens for, e.g. `https://fleet.example.org/mcp`.
+/// the resources it issues tokens for.
 #[derive(Clone)]
 pub struct OAuth {
     pub issuer: String,
-    pub resources: Arc<[String]>,
+    pub resources: Arc<[Resource]>,
+}
+
+/// A part of FleetRanger that takes access tokens, such as
+/// `https://fleet.example.org/mcp`, and the scopes it knows.
+pub struct Resource {
+    pub url: String,
+    pub scopes: &'static [&'static str],
+}
+
+impl OAuth {
+    fn resource(&self, url: &str) -> Option<&Resource> {
+        self.resources.iter().find(|resource| resource.url == url)
+    }
 }
 
 /// What a request's bearer token is worth for a resource and scope.
 pub enum Bearer {
-    /// A valid access token for them, acting for this user.
-    Valid(Actor),
+    /// A valid access token for them, acting for this user, with all the
+    /// scopes the user allowed.
+    Valid(Box<Actor>, Vec<String>),
     /// No bearer token.
     Missing,
-    /// Unknown or expired, or its user may no longer log in (RFC 6750:
-    /// `invalid_token`).
+    /// Unknown or expired, for another resource, or its user may no longer
+    /// log in (RFC 6750: `invalid_token`): the app needs a new one.
     Invalid,
-    /// Valid, but for another resource or without the scope
+    /// Valid for this resource, but without the scope
     /// (`insufficient_scope`).
     Insufficient,
 }
 
-/// Checks the request's access token against this resource and scope.
+/// Checks the request's access token against this resource and, if given,
+/// scope.
 pub async fn bearer(
     db: &PgPool,
     parts: &Parts,
     resource: &str,
-    scope: &str,
+    scope: Option<&str>,
 ) -> sqlx::Result<Bearer> {
     let Some(token) = parts
         .headers
@@ -68,7 +95,10 @@ pub async fn bearer(
     let Some(access) = db::use_access(db, &sha256(token)).await? else {
         return Ok(Bearer::Invalid);
     };
-    if access.resource != resource || !access.scopes.iter().any(|granted| granted == scope) {
+    if access.resource != resource {
+        return Ok(Bearer::Invalid);
+    }
+    if scope.is_some_and(|scope| !access.scopes.iter().any(|granted| granted == scope)) {
         return Ok(Bearer::Insufficient);
     }
     let peer = parts
@@ -78,7 +108,7 @@ pub async fn bearer(
     let Some(peer) = peer else {
         return Ok(Bearer::Invalid);
     };
-    Ok(Bearer::Valid(Actor {
+    let actor = Actor {
         user_id: access.user_id,
         grants: crate::auth::grants(db, access.user_id).await?,
         // The audit log will name the connection here rather than a login session.
@@ -87,7 +117,8 @@ pub async fn bearer(
         email: Some(access.email),
         impersonated_by: None,
         name: access.name,
-    }))
+    };
+    Ok(Bearer::Valid(Box::new(actor), access.scopes))
 }
 
 /// Removes expired codes, idle connections and apps that were never
