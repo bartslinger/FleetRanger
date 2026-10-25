@@ -196,11 +196,19 @@ async fn logout(
     State(db): State<PgPool>,
     jar: CookieJar,
 ) -> Response {
-    if let Some(cookie) = jar.get(session_cookie())
-        && let Err(error) = db::revoke_session(&db, &token_hash(cookie.value())).await
-    {
-        tracing::error!(%error, "revoking a login session");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    if let Some(cookie) = jar.get(session_cookie()) {
+        match db::revoke_session(&db, &token_hash(cookie.value())).await {
+            Ok(Some(user)) => {
+                if let Err(status) = end_impersonation(&db, user).await {
+                    return status.into_response();
+                }
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::error!(%error, "revoking a login session");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
     }
     let jar = jar
         .remove(removal(&auth, session_cookie()))
@@ -232,6 +240,10 @@ async fn impersonate(
     if form.user == admin {
         return (StatusCode::BAD_REQUEST, "that is you").into_response();
     }
+    // Apps connected as the previous user stay with that impersonation.
+    if let Err(status) = end_impersonation(&db, admin).await {
+        return status.into_response();
+    }
     match db::impersonated_user(&db, form.user).await {
         Ok(Some(_)) => {}
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -249,7 +261,18 @@ async fn impersonate(
 }
 
 /// Back to the admin themselves, on the page of the user they impersonated.
-async fn stop_impersonating(State(auth): State<Arc<Auth>>, jar: CookieJar) -> Response {
+async fn stop_impersonating(
+    State(auth): State<Arc<Auth>>,
+    State(db): State<PgPool>,
+    actor: Actor,
+    jar: CookieJar,
+) -> Response {
+    let admin = actor
+        .impersonated_by
+        .map_or(actor.user_id, |admin| admin.user_id);
+    if let Err(status) = end_impersonation(&db, admin).await {
+        return status.into_response();
+    }
     let back = match jar.get(impersonation_cookie()) {
         Some(cookie) => match Uuid::parse_str(cookie.value()) {
             Ok(user) => format!("/users/{user}"),
@@ -259,6 +282,17 @@ async fn stop_impersonating(State(auth): State<Arc<Auth>>, jar: CookieJar) -> Re
     };
     let jar = jar.remove(removal(&auth, impersonation_cookie()));
     (jar, Redirect::to(&back)).into_response()
+}
+
+/// Takes back the apps an admin connected while impersonating someone
+/// ("Impersonation in apps" in docs/architecture.md).
+async fn end_impersonation(db: &PgPool, admin: Uuid) -> Result<(), StatusCode> {
+    crate::oauth::end_impersonation(db, admin)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "ending app connections made while impersonating");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
 }
 
 #[derive(Serialize)]

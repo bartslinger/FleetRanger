@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select g.id, c.name as app,\n                  coalesce(substring(c.redirect_uris[1] from '^[a-z]+://([^/:?#]+)'), '')\n                      as \"host!\",\n                  g.scopes, g.created_at, g.last_used_at\n           from oauth_grants g join oauth_clients c on c.id = g.client_id\n           where g.user_id = $1\n           order by g.created_at desc",
+  "query": "select g.id, c.name as app,\n                  coalesce(substring(c.redirect_uris[1] from '^[a-z]+://([^/:?#]+)'), '')\n                      as \"host!\",\n                  g.scopes, g.created_at, g.last_used_at\n           from oauth_grants g join oauth_clients c on c.id = g.client_id\n           where g.user_id = $1 and g.impersonated_by is null\n           order by g.created_at desc",
   "describe": {
     "columns": [
       {
@@ -79,5 +79,5 @@
       false
     ]
   },
-  "hash": "63f72af30420e7cd4c848eac17e6b56b569ea9c76abb451ebe95b3d717a8bae1"
+  "hash": "88571de67c72519743501f36478a670c91a0289cb7a9a9a87f7e7bdf2a0b7cb3"
 }

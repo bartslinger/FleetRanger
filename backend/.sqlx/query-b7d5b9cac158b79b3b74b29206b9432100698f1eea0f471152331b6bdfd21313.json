@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from oauth_clients c\n         where not c.trusted and c.created_at < now() - interval '1 day'\n           and not exists (select 1 from oauth_grants g where g.client_id = c.id)\n           and not exists (select 1 from oauth_codes o where o.client_id = c.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b7d5b9cac158b79b3b74b29206b9432100698f1eea0f471152331b6bdfd21313"
+}
