@@ -47,6 +47,18 @@ pub fn is_unique_violation(error: &sqlx::Error) -> bool {
         .is_some_and(|error| error.is_unique_violation())
 }
 
+/// An app role that doesn't exist (any more), refused by its foreign key.
+pub fn unknown_app_role(error: sqlx::Error) -> ApiError {
+    if error
+        .as_database_error()
+        .is_some_and(|error| error.is_foreign_key_violation())
+    {
+        ApiError::Invalid("One of the app roles no longer exists. Reload the page.".to_owned())
+    } else {
+        error.into()
+    }
+}
+
 /// A trimmed, non-empty name.
 pub fn name(value: &str) -> ApiResult<String> {
     let name = value.trim();

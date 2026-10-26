@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use serde::Serialize;
-use sqlx::PgPool;
+use serde::{Deserialize, Serialize};
+use sqlx::{PgConnection, PgPool, types::Json};
 use uuid::Uuid;
 
 /// An app that registered itself, or a trusted one an admin added.
@@ -182,6 +182,8 @@ pub enum Refreshed {
 /// Who an access token acts for, and what for.
 pub struct Access {
     pub grant_id: Uuid,
+    /// The app the token belongs to.
+    pub client_id: Uuid,
     pub user_id: Uuid,
     pub email: String,
     pub name: String,
@@ -202,7 +204,7 @@ pub async fn use_access(db: &PgPool, access_sha256: &[u8]) -> sqlx::Result<Optio
            from users u, logins l
            where g.access_token_sha256 = $1 and g.access_expires_at > now()
              and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id
-           returning g.id as grant_id, g.user_id, l.email, u.name, g.scopes, g.resource,
+           returning g.id as grant_id, g.client_id, g.user_id, l.email, u.name, g.scopes, g.resource,
                      g.impersonated_by,
                      (select a.name from users a where a.id = g.impersonated_by)
                          as impersonator_name"#,
@@ -291,15 +293,49 @@ pub struct TrustedApp {
     pub id: Uuid,
     pub name: String,
     pub redirect_uris: Vec<String>,
+    /// Its roles, by name.
+    pub roles: Json<Vec<AppRole>>,
     /// How many people use it, as connected apps.
     pub users: i64,
     pub created_at: DateTime<Utc>,
+}
+
+/// A role an app declared, as an admin typed it in.
+#[derive(Serialize, Deserialize)]
+pub struct AppRole {
+    pub id: Uuid,
+    /// What the app sees.
+    pub key: String,
+    /// What admins see.
+    pub name: String,
+    /// How many active users hold it, on a group or the organisation.
+    pub holders: i64,
+}
+
+/// A role as an admin sets it on an app: without an id, a new one.
+pub struct RoleFields<'a> {
+    pub id: Option<Uuid>,
+    pub key: &'a str,
+    pub name: &'a str,
 }
 
 pub async fn trusted_apps(db: &PgPool) -> sqlx::Result<Vec<TrustedApp>> {
     sqlx::query_as!(
         TrustedApp,
         r#"select c.id, c.name, c.redirect_uris, c.created_at,
+                  coalesce((select jsonb_agg(jsonb_build_object(
+                                'id', r.id, 'key', r.key, 'name', r.name,
+                                'holders', (select count(distinct h.user_id)
+                                            from (select user_id from group_app_roles
+                                                  where app_role_id = r.id
+                                                  union all
+                                                  select user_id from organisation_app_roles
+                                                  where app_role_id = r.id) h
+                                            join users u on u.id = h.user_id
+                                            where u.archived_at is null))
+                                order by lower(r.name), r.id)
+                            from app_roles r where r.client_id = c.id),
+                           '[]') as "roles!: Json<Vec<AppRole>>",
                   (select count(distinct g.user_id) from oauth_grants g where g.client_id = c.id)
                       as "users!"
            from oauth_clients c
@@ -310,33 +346,99 @@ pub async fn trusted_apps(db: &PgPool) -> sqlx::Result<Vec<TrustedApp>> {
     .await
 }
 
-pub async fn add_trusted(db: &PgPool, name: &str, redirect_uris: &[String]) -> sqlx::Result<Uuid> {
-    sqlx::query_scalar!(
+/// Adds a trusted app with its roles. None if a role's id isn't new.
+pub async fn add_trusted(
+    db: &PgPool,
+    name: &str,
+    redirect_uris: &[String],
+    roles: &[RoleFields<'_>],
+) -> sqlx::Result<Option<Uuid>> {
+    let mut tx = db.begin().await?;
+    let id = sqlx::query_scalar!(
         "insert into oauth_clients (name, redirect_uris, trusted) values ($1, $2, true)
          returning id",
         name,
         redirect_uris,
     )
-    .fetch_one(db)
-    .await
+    .fetch_one(&mut *tx)
+    .await?;
+    if !set_app_roles(&mut tx, id, roles).await? {
+        return Ok(None);
+    }
+    tx.commit().await?;
+    Ok(Some(id))
 }
 
-/// False if there is no such trusted app.
+/// False if there is no such trusted app, or a role's id isn't one of its
+/// roles. Roles left out (None) stay as they are.
 pub async fn update_trusted(
     db: &PgPool,
     id: Uuid,
     name: &str,
     redirect_uris: &[String],
+    roles: Option<&[RoleFields<'_>]>,
 ) -> sqlx::Result<bool> {
+    let mut tx = db.begin().await?;
     let result = sqlx::query!(
         "update oauth_clients set name = $2, redirect_uris = $3 where id = $1 and trusted",
         id,
         name,
         redirect_uris,
     )
-    .execute(db)
+    .execute(&mut *tx)
     .await?;
-    Ok(result.rows_affected() == 1)
+    if result.rows_affected() != 1 {
+        return Ok(false);
+    }
+    if let Some(roles) = roles
+        && !set_app_roles(&mut tx, id, roles).await?
+    {
+        return Ok(false);
+    }
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Makes these the app's roles: roles left out are removed, with everyone's
+/// grants of them. False if an id isn't one of the app's roles.
+async fn set_app_roles(
+    db: &mut PgConnection,
+    client_id: Uuid,
+    roles: &[RoleFields<'_>],
+) -> sqlx::Result<bool> {
+    let kept: Vec<Uuid> = roles.iter().filter_map(|role| role.id).collect();
+    sqlx::query!(
+        "delete from app_roles where client_id = $1 and id <> all($2)",
+        client_id,
+        &kept,
+    )
+    .execute(&mut *db)
+    .await?;
+    for role in roles {
+        let done = match role.id {
+            Some(id) => sqlx::query!(
+                "update app_roles set key = $3, name = $4 where id = $1 and client_id = $2",
+                id,
+                client_id,
+                role.key,
+                role.name,
+            ),
+            None => sqlx::query!(
+                "insert into app_roles (client_id, key, name) values ($1, $2, $3)",
+                client_id,
+                role.key,
+                role.name,
+            ),
+        }
+        .execute(&mut *db)
+        .await?
+        .rows_affected()
+            == 1;
+        if !done {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 /// Removes a trusted app; its users' codes and tokens go with it. False if
@@ -358,4 +460,70 @@ pub async fn end_impersonation(db: &PgPool, admin: Uuid) -> sqlx::Result<()> {
         .execute(db)
         .await?;
     Ok(())
+}
+
+/// A user's roles of one app: on the organisation, and per group.
+#[derive(Default)]
+pub struct HeldAppRoles {
+    pub organisation: Vec<String>,
+    pub groups: Vec<(Uuid, Vec<String>)>,
+}
+
+pub async fn held_app_roles(
+    db: &PgPool,
+    client_id: Uuid,
+    user_id: Uuid,
+) -> sqlx::Result<HeldAppRoles> {
+    let organisation = sqlx::query_scalar!(
+        "select r.key from organisation_app_roles o
+         join app_roles r on r.id = o.app_role_id
+         where r.client_id = $1 and o.user_id = $2
+         order by r.key",
+        client_id,
+        user_id,
+    )
+    .fetch_all(db)
+    .await?;
+    let groups = sqlx::query!(
+        r#"select g.group_id, array_agg(r.key order by r.key) as "keys!"
+           from group_app_roles g
+           join app_roles r on r.id = g.app_role_id
+           where r.client_id = $1 and g.user_id = $2
+           group by g.group_id
+           order by g.group_id"#,
+        client_id,
+        user_id,
+    )
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .map(|row| (row.group_id, row.keys))
+    .collect();
+    Ok(HeldAppRoles {
+        organisation,
+        groups,
+    })
+}
+
+/// An app role to offer in the roles dialogs, with its app.
+#[derive(Serialize)]
+pub struct OfferedAppRole {
+    pub id: Uuid,
+    pub name: String,
+    pub app_id: Uuid,
+    pub app: String,
+}
+
+/// Every trusted app's roles, by app and then name.
+pub async fn offered_app_roles(db: &PgPool) -> sqlx::Result<Vec<OfferedAppRole>> {
+    sqlx::query_as!(
+        OfferedAppRole,
+        "select r.id, r.name, c.id as app_id, c.name as app
+         from app_roles r
+         join oauth_clients c on c.id = r.client_id
+         where c.trusted
+         order by lower(c.name), c.id, lower(r.name), r.id",
+    )
+    .fetch_all(db)
+    .await
 }

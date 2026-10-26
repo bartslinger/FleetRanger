@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select c.id, c.name, c.redirect_uris, c.created_at,\n                  (select count(distinct g.user_id) from oauth_grants g where g.client_id = c.id)\n                      as \"users!\"\n           from oauth_clients c\n           where c.trusted\n           order by lower(c.name), c.id",
+  "query": "select r.id, r.name, c.id as app_id, c.name as app\n         from app_roles r\n         join oauth_clients c on c.id = r.client_id\n         where c.trusted\n         order by lower(c.name), c.id, lower(r.name), r.id",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "oauth_clients",
+            "table": "app_roles",
             "name": "id"
           }
         }
@@ -20,38 +20,32 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "oauth_clients",
+            "table": "app_roles",
             "name": "name"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "redirect_uris",
-        "type_info": "TextArray",
+        "name": "app_id",
+        "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "oauth_clients",
-            "name": "redirect_uris"
+            "name": "id"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "created_at",
-        "type_info": "Timestamptz",
+        "name": "app",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "oauth_clients",
-            "name": "created_at"
+            "name": "name"
           }
         }
-      },
-      {
-        "ordinal": 4,
-        "name": "users!",
-        "type_info": "Int8",
-        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -61,9 +55,8 @@
       false,
       false,
       false,
-      false,
-      null
+      false
     ]
   },
-  "hash": "4521bcfccf2574353ffc901b34fec1be3041e770ea9c69fe09c7c59b8d935a39"
+  "hash": "307755a1caa16019d1c8ecd44e120cd4d99850960b7b6a99a8a2e348ecd3a272"
 }

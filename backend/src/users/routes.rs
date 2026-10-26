@@ -42,6 +42,8 @@ struct Body {
     #[serde(default)]
     roles: Vec<String>,
     email: Option<String>,
+    /// Apps' roles on the whole organisation, by id; left out keeps them.
+    app_roles: Option<Vec<Uuid>>,
 }
 
 impl From<Body> for UserInput {
@@ -50,6 +52,7 @@ impl From<Body> for UserInput {
             name: body.name,
             roles: body.roles,
             email: body.email,
+            app_roles: body.app_roles,
         }
     }
 }
