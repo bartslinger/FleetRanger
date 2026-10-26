@@ -90,6 +90,9 @@
 		/** The key of a row in its hover state while what it stands for is
 		 * pointed at elsewhere, e.g. its track on a map. */
 		hoveredRow?: string | null;
+		/** The key of the row shown in detail beside the table, e.g. in a side
+		 * panel: Carbon's selected look and `aria-current`, without checkboxes. */
+		currentRow?: string | null;
 	}
 
 	let {
@@ -115,7 +118,8 @@
 		rowAction,
 		rowState,
 		onrowhover,
-		hoveredRow = null
+		hoveredRow = null,
+		currentRow = null
 	}: Props = $props();
 
 	const selectableKeys = $derived(selectable ? rows.filter(selectable).map(rowKey) : []);
@@ -266,7 +270,8 @@
 				{@const href = rowHref?.(row)}
 				<tr
 					class:linked={href}
-					class:selected={chosen}
+					class:selected={chosen || key === currentRow}
+					aria-current={key === currentRow ? true : undefined}
 					class:stated={state}
 					class:hovered={key === hoveredRow}
 					onmouseenter={onrowhover && (() => onrowhover(row))}
@@ -666,5 +671,10 @@
 	tbody tr.selected td {
 		background: var(--cds-layer-selected-01);
 		color: var(--cds-text-primary);
+	}
+
+	tbody tr.selected:hover td,
+	tbody tr.selected.hovered td {
+		background: var(--cds-layer-selected-hover-01);
 	}
 </style>

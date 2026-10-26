@@ -256,11 +256,12 @@
 					/>
 				</div>
 				<DataTable
-					label="Example flights, small"
+					label="Example flights, small, the second current"
 					{columns}
 					rows={flights}
 					rowKey={(flight) => flight.id}
 					size="sm"
+					currentRow="2"
 				>
 					{#snippet cell(flight, column)}
 						{#if column.key === 'pilot'}
