@@ -1,6 +1,8 @@
 // An app's return addresses, entered one per line on the Apps pages. The
 // backend checks them too; this explains a mistake before sending.
 
+import { dev } from '$app/env';
+
 /** The non-empty lines of the text area. */
 export const addressLines = (text: string) =>
 	text
@@ -8,11 +10,17 @@ export const addressLines = (text: string) =>
 		.map((line) => line.trim())
 		.filter((line) => line !== '');
 
-/** HTTPS only, as the backend asks of trusted apps. */
+/** HTTPS only, as the backend asks of trusted apps; the dev server, run
+ * against a debug backend, also allows http:// to this computer, so an app
+ * developed locally can be trusted. */
 function valid(address: string): boolean {
 	try {
 		const url = new URL(address);
-		return !address.includes('#') && url.protocol === 'https:';
+		const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+		return (
+			!address.includes('#') &&
+			(url.protocol === 'https:' || (dev && url.protocol === 'http:' && loopback))
+		);
 	} catch {
 		return false;
 	}
@@ -28,7 +36,8 @@ export function addressError(text: string): string | undefined {
 	const bad = lines.flatMap((line, index) => (line !== '' && !valid(line) ? [index + 1] : []));
 	if (bad.length > 0) {
 		const others = bad.length > 1 ? ` ${bad.length - 1} more lines aren’t either.` : '';
-		return `Line ${bad[0]} isn’t a valid web address. Use the full address, starting with https://.${others}`;
+		const start = dev ? 'https://, or http:// on this computer' : 'https://';
+		return `Line ${bad[0]} isn’t a valid web address. Use the full address, starting with ${start}.${others}`;
 	}
 	const seen = new Map<string, number>();
 	for (const [index, line] of lines.entries()) {

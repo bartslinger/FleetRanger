@@ -68,13 +68,18 @@ impl AppInput {
         }
         // HTTPS only: a trusted app isn't asked about, so it can't use the
         // user's own computer, where any program could listen (RFC 6749,
-        // 10.2), as self-registered apps may.
-        if let Some(uri) = uris
-            .iter()
-            .find(|uri| !uri.starts_with("https://") || !redirect_uri_allowed(uri))
-        {
+        // 10.2), as self-registered apps may. Debug builds, never deployed,
+        // allow it, so an app developed locally can be trusted and get roles.
+        if let Some(uri) = uris.iter().find(|uri| {
+            !redirect_uri_allowed(uri) || !(uri.starts_with("https://") || cfg!(debug_assertions))
+        }) {
+            let hint = if cfg!(debug_assertions) {
+                "starting with https://, or http:// on this computer"
+            } else {
+                "starting with https://"
+            };
             return Err(ApiError::Invalid(format!(
-                "{uri} isn’t a valid return address. Use the full address, starting with https://."
+                "{uri} isn’t a valid return address. Use the full address, {hint}."
             )));
         }
         if let Some((_, uri)) = uris
