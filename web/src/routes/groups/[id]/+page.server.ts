@@ -6,17 +6,20 @@ import {
 	type Group,
 	type GroupDetail,
 	type Member,
+	type OfferedAppRole,
 	type User
 } from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
-	const [group, users, groups] = await Promise.all([
+	const [group, users, groups, appRoles] = await Promise.all([
 		get<GroupDetail>(fetch, `/api/groups/${params.id}`),
 		get<User[]>(fetch, '/api/users'),
-		get<Group[]>(fetch, '/api/groups')
+		get<Group[]>(fetch, '/api/groups'),
+		get<OfferedAppRole[]>(fetch, '/api/apps/roles')
 	]);
 	return {
 		group,
+		appRoles,
 		// Who can be added: active users not in it yet.
 		candidates: users
 			.filter((user) => !group.member_list.some((member) => member.user_id === user.id))
@@ -39,7 +42,8 @@ export const actions = {
 		if (!user) return fail(400, { rolesMessage: 'Choose a user.' });
 		const roles = form.getAll('role').map(String);
 		const result = await send<Member[]>(fetch, 'PUT', `/api/groups/${params.id}/members/${user}`, {
-			roles
+			roles,
+			app_roles: form.getAll('app_role').map(String)
 		});
 		if (!result.ok) return fail(result.status, { rolesMessage: result.message });
 		return { member: result.data.find((member) => member.user_id === user)?.name };

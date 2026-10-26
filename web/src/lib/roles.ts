@@ -1,7 +1,7 @@
 // Roles as the web app shows them; see "Groups and roles" in
 // docs/architecture.md.
 
-import type { GroupRole, OrganisationRole } from '#lib/server/backend.js';
+import type { GroupRole, OfferedAppRole, OrganisationRole } from '#lib/server/backend.js';
 
 export const ROLE_LABELS: Record<OrganisationRole, string> = {
 	viewer: 'Viewer',
@@ -31,4 +31,31 @@ export const ORGANISATION_ROLES: OrganisationRole[] = [...GROUP_ROLES, 'admin'];
 /** Roles as a list for a cell: "Pilot, Editor". */
 export function roleList(roles: OrganisationRole[]): string {
 	return roles.map((role) => ROLE_LABELS[role]).join(', ');
+}
+
+/** The apps' roles grouped by app, in the order given (by app, then name). */
+export function byApp(appRoles: OfferedAppRole[]) {
+	const apps: { id: string; name: string; roles: OfferedAppRole[] }[] = [];
+	for (const role of appRoles) {
+		const last = apps.at(-1);
+		if (last?.id === role.app_id) last.roles.push(role);
+		else apps.push({ id: role.app_id, name: role.app, roles: [role] });
+	}
+	return apps;
+}
+
+/** FleetRanger's roles and then each app's, for a cell:
+ * "Pilot, Editor · Reports: Report viewer" (carbon-expert's advice). */
+export function allRoles(
+	roles: OrganisationRole[],
+	appRoleIds: string[],
+	appRoles: OfferedAppRole[]
+): string {
+	const held = appRoles.filter((role) => appRoleIds.includes(role.id));
+	return [
+		roleList(roles),
+		...byApp(held).map((app) => `${app.name}: ${app.roles.map((role) => role.name).join(', ')}`)
+	]
+		.filter(Boolean)
+		.join(' · ');
 }

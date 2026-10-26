@@ -4,6 +4,7 @@
 	import { dateTime } from '#lib/format.js';
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
+	import AppRoleGroups from '#lib/AppRoleGroups.svelte';
 	import { ORGANISATION } from '#lib/groups.js';
 	import { may } from '#lib/permissions.js';
 	import {
@@ -12,7 +13,7 @@
 		ORGANISATION_ROLES,
 		ROLE_HELP,
 		ROLE_LABELS,
-		roleList
+		allRoles
 	} from '#lib/roles.js';
 	import type { OrganisationRole } from '#lib/server/backend.js';
 	import Button from '#lib/ui/Button.svelte';
@@ -59,10 +60,11 @@
 		id: string;
 		name: string;
 		roles: OrganisationRole[];
+		app_roles: string[];
 	}
 	const ORGANISATION_ROW = 'organisation';
 	const memberships: Membership[] = $derived([
-		{ id: ORGANISATION_ROW, name: ORGANISATION, roles: user.roles },
+		{ id: ORGANISATION_ROW, name: ORGANISATION, roles: user.roles, app_roles: user.app_roles },
 		...user.groups
 	]);
 	const groupColumns: TableColumn<Membership>[] = [
@@ -71,7 +73,7 @@
 			key: 'roles',
 			header: 'Roles',
 			wrap: true,
-			format: (group) => roleList(group.roles) || null
+			format: (group) => allRoles(group.roles, group.app_roles, data.appRoles) || null
 		}
 	];
 	const organisationRolesMessage = $derived(
@@ -113,6 +115,7 @@
 			required
 		/>
 		<CheckboxGroup legend="Roles" name="role" options={groupRoleOptions} value={[]} />
+		<AppRoleGroups appRoles={data.appRoles} value={[]} />
 	</Modal>
 {/snippet}
 
@@ -270,6 +273,7 @@
 								/>
 								<!-- A disabled checkbox isn't posted; Admin stays. -->
 								{#if data.lastAdmin}<input type="hidden" name="role" value="admin" />{/if}
+								<AppRoleGroups appRoles={data.appRoles} value={user.app_roles} />
 							</Modal>
 							<!-- No Remove: everyone is in the organisation. The slot keeps the
 								     pencils in line (carbon-expert's suggestion). -->
@@ -296,6 +300,7 @@
 								options={groupRoleOptions}
 								value={group.roles}
 							/>
+							<AppRoleGroups appRoles={data.appRoles} value={group.app_roles} />
 						</Modal>
 						<Modal
 							title="Remove from group"
