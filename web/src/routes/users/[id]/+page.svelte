@@ -114,7 +114,7 @@
 			bind:value={addedTo}
 			required
 		/>
-		<CheckboxGroup legend="Roles" name="role" options={groupRoleOptions} value={[]} />
+		<CheckboxGroup legend="FleetRanger roles" name="role" options={groupRoleOptions} value={[]} />
 		<AppRoleGroups appRoles={data.appRoles} value={[]} />
 	</Modal>
 {/snippet}
@@ -265,7 +265,7 @@
 								onsuccess={() => toast(`Roles in the organisation saved.`)}
 							>
 								<CheckboxGroup
-									legend="Roles"
+									legend="FleetRanger roles"
 									name="role"
 									options={roleOptions}
 									value={user.roles}
@@ -295,7 +295,7 @@
 						>
 							<input type="hidden" name="group_id" value={group.id} />
 							<CheckboxGroup
-								legend="Roles"
+								legend="FleetRanger roles"
 								name="role"
 								options={groupRoleOptions}
 								value={group.roles}

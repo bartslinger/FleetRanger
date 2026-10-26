@@ -136,11 +136,11 @@
 						helper="To log in with the Google account for this address. Leave empty for a pilot who doesn't use the website."
 					/>
 					<CheckboxGroup
-						legend="Roles on the whole organisation"
+						legend="FleetRanger roles"
 						name="role"
 						options={roleOptions}
 						value={[]}
-						helper="None for someone who only has roles in groups. Add them to groups on their page."
+						helper="On the whole organisation. None for someone who only has roles in groups; add them to groups on their page."
 					/>
 					<AppRoleGroups appRoles={data.appRoles} value={[]} />
 				</Modal>
@@ -160,7 +160,7 @@
 				>
 					<input type="hidden" name="user_id" value={user.id} />
 					<CheckboxGroup
-						legend="Roles"
+						legend="FleetRanger roles"
 						name="role"
 						options={rolesOf(user)}
 						value={user.roles}
