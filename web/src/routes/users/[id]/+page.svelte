@@ -368,6 +368,13 @@
 
 	/* As wide as a md icon button. */
 	.slot {
-		inline-size: 2.5rem;
+		inline-size: var(--cds-spacing-08);
+	}
+
+	/* As the md icon buttons, which grow on phones (IconButton.svelte). */
+	@media (max-width: 41.99rem) {
+		.slot {
+			inline-size: var(--cds-spacing-09);
+		}
 	}
 </style>
