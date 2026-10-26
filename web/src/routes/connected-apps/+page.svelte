@@ -21,6 +21,7 @@
 		'flights:list': 'Reads flights',
 		'groups:list': 'Reads groups',
 		'areas:list': 'Reads areas',
+		'areas:read': 'Reads areas and their boundaries',
 		'equipment:list': 'Reads equipment'
 	};
 
