@@ -132,10 +132,7 @@
 			<div class="lead">
 				<h1 id="title">The flight logbook that fills itself</h1>
 				<div>
-					<p class="intro">
-						Pilots pick their name on the controller, and every flight arrives with its pilot,
-						drone, hours and track. Open source, for DJI Enterprise fleets, on servers you control.
-					</p>
+					<p class="intro">Open-source flight logging for DJI Enterprise, on your own server.</p>
 					<div class="actions">
 						<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
 						<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
