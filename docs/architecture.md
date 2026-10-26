@@ -255,6 +255,7 @@ User's decisions, 2026-10-21.
 - **Holding an app role on a group makes someone a member** (user's decision, 2026-10-26), listed with it like any member: being a member means holding a role there, and gives nothing by itself.
 - **Admin doesn't include app roles** (user's decision, 2026-10-26): admins give themselves the roles they need.
 - **The app learns the user's roles from `/api/v1/me`** (user's decision, 2026-10-26): `app_roles`, only the calling app's, on the organisation and per group, apart from FleetRanger's own permissions. It needs no scope (my choice). Apps check `/me` on every page load, so a change reaches them on the next page.
+- **`/api/v1/groups` counts app roles** (user's decision, 2026-10-26), so an app can name the groups a role covers: it lists the groups where the user holds any app's role, and all of them for someone holding one of the calling app's roles on the organisation.
 - **Storage** (schema approved by the user, 2026-10-26): `app_roles` per OAuth client, given in `group_app_roles` and `organisation_app_roles`, beside `group_members` and `organisation_roles`. Removing an app or a role removes everyone's grants of it.
 
 ## Public API

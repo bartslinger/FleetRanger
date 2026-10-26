@@ -8,7 +8,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replaced teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replaced the three fixed roles; see "Groups and roles" in [architecture.md](architecture.md) and the packages below. Teams, the fixed roles and holders are dropped (migration 0020); released as v0.7.0 and android-v0.4.0 on 2026-10-24, with fine-tuning after the release (user, 2026-10-24). Groups replace teams in the code, every access check asks for a permission on the groups tables, a flight's pilot and group are independent, uploads without a chosen group go to the queue, a session's own group decides who changes it, only flights without a session are archived, equipment is also seen through its flights with figures over all of them, pairing puts a controller in a group the creator chooses, holders are gone from the app, and the admin pages manage groups, their members' roles and roles on the whole organisation. The web app says "group" everywhere and shows what the user's permissions allow: sessions get a group chosen by their maker and can be moved with or without their flights, pilot lists put the group's own pilots first; MCP has the user's own access. The controller app has moved over (package 8): each pilot once, then the group they fly for, with "Other group"; it talks to a versioned controller API (`/api/controller/v1`, user's decision), while android-v0.3.0 keeps working, its uploads taking the group (team) chosen with the pilot, and it stays in landscape. Serving several organisations from one install follows after.
 
-**Now:** app roles (see "Apps and the public API" below); an app's navigation item waits (user, 2026-10-26: the first change to FleetRanger's UI from an outside app, not yet sure if and how). An app on top of the API is tried on dev before v0.10.0 is deployed. Controller notes are parked.
+**Now:** app roles are built, for v0.11.0 (see "Apps and the public API" below); an app's navigation item waits (user, 2026-10-26: the first change to FleetRanger's UI from an outside app, not yet sure if and how). An app on top of the API is tried on dev before v0.10.0 is deployed. Controller notes are parked.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -133,7 +133,7 @@ See "Apps" and "Public API" in [architecture.md](architecture.md).
 - [x] Public API v1 (2026-10-25): read-only, behind `FLEETRANGER_API`, its reference generated at `/api/v1/openapi.json`; OAuth's scopes per resource, and an app must name the resource. Reviewed, and the real OAuth flow run on dev. Released in v0.10.0.
 - [x] Apps added by admins on an admin page (2026-10-25): name and return addresses, the client ID to copy from the app's page, no consent screen; deleting an app ends its users' access
 - [ ] An app's item in the navigation
-- [~] App roles, typed in on the Apps page, given in the users and groups dialogs, in `/me` as `app_roles`
+- [x] App roles (2026-10-26): typed in on the Apps page, given in the users and groups dialogs, in `/me` as `app_roles`; `/groups` also lists the groups they cover. Planned for v0.11.0
 - [ ] The user's permissions in `/me` in the scopes' terms
 - [ ] Permissions brought in line with the API's scopes, with a summary level for people
 - [ ] Example answers in the API's reference
