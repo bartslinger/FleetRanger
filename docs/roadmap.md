@@ -136,6 +136,7 @@ See "Apps" and "Public API" in [architecture.md](architecture.md).
 - [ ] App roles, and the user's permissions in `/me` in the scopes' terms
 - [ ] Permissions brought in line with the API's scopes, with a summary level for people
 - [ ] Example answers in the API's reference
+- [x] Area boundaries for apps (2026-10-26): `areas:read` and `expand=geometry` on `/areas`, which lists all areas
 
 ## Before production use
 

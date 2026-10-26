@@ -115,6 +115,7 @@ sequenceDiagram
 | Google | Browser and backend | The login: Google learns who logs in and when | Login (OIDC) |
 | Mapbox | Browser | Map tile requests, so Mapbox learns roughly which area is viewed. Tracks are drawn in the browser and never sent | Maps |
 | AI assistant's provider | Assistant, through `/mcp` | Flight summaries the user asks for (no raw logs, telemetry, tracks or locations) | Optional; off unless the install switches it on |
+| Apps | App, through `/api/v1`, as a user who connected it | What the app's scopes reach of what that user sees: summaries and names, and with `areas:read` the areas' boundaries (no raw logs, telemetry, tracks or takeoff points) | Optional; off unless the install switches it on |
 
 Nothing else: no analytics, error reporting or update checks to outside services. The controller app talks only to its install; it gets updates from the install too, and a person confirms each one.
 

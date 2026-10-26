@@ -1,7 +1,7 @@
 <!--
 	The consent page: an app (e.g. an AI assistant) asks to act for the user.
 	It lists what the app will and won't be able to do: read what the user
-	sees, but change nothing and get no tracks or locations.
+	sees, but change nothing and get no flight tracks or takeoff points.
 -->
 <script lang="ts">
 	import Button from '#lib/ui/Button.svelte';
@@ -26,11 +26,12 @@
 		'flights:list': 'Read the flights you can see: their times, pilots, equipment and areas',
 		'groups:list': 'Read the list of groups',
 		'areas:list': 'Read the list of areas',
+		'areas:read': 'Read the areas, with their boundaries',
 		'equipment:list': 'Read the lists of drones, controllers and batteries'
 	};
 
 	// The app has the user's own access, read only.
-	const limits = ['Change anything', 'See tracks or locations'];
+	const limits = ['Change anything', 'See flight tracks or takeoff points'];
 
 	// The answer goes with the app's request as the server checked it, never
 	// the raw query, which could name another action.
