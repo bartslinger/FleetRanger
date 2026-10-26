@@ -32,6 +32,7 @@ pub const API_SCOPES: &[&str] = &[
     "flights:list",
     "groups:list",
     "areas:list",
+    "areas:read",
     "equipment:list",
 ];
 

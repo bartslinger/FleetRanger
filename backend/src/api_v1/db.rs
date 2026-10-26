@@ -371,28 +371,27 @@ pub async fn groups(
     .await
 }
 
-/// The areas the flights the user sees passed through, as MCP's directory
-/// lists them; with a role on the organisation, all.
+pub struct ListedArea {
+    pub id: Uuid,
+    pub name: String,
+    pub geometry: Option<Value>,
+}
+
+/// All the organisation's areas (user's decision, 2026-10-26: every user sees
+/// them, as on the web app's maps), with their boundaries when asked.
 pub async fn areas(
     db: &PgPool,
-    scope: &FlightScope,
+    geometry: bool,
     after: Option<Uuid>,
     limit: i64,
-) -> sqlx::Result<Vec<Named>> {
+) -> sqlx::Result<Vec<ListedArea>> {
     sqlx::query_as!(
-        Named,
-        "select a.id, a.name from areas a
-         where ($1
-                or exists (select 1 from flight_areas fa
-                           join flights f on f.id = fa.flight_id
-                           where fa.area_id = a.id and f.archived_at is null
-                             and (f.pilot_id = $2 or f.group_id = any($3))))
-           and ($4::uuid is null or a.id > $4)
-         order by a.id
-         limit $5",
-        scope.all,
-        scope.user_id,
-        &scope.group_ids,
+        ListedArea,
+        "select id, name, case when $1 then boundary end as geometry from areas
+         where $2::uuid is null or id > $2
+         order by id
+         limit $3",
+        geometry,
         after,
         limit,
     )

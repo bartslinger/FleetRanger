@@ -73,6 +73,9 @@ const FLIGHT_EXPANSIONS: &[(&str, Option<&str>)] = &[
 
 const DEVICE_EXPANSIONS: &[(&str, Option<&str>)] = &[("group", None)];
 
+/// An area's boundary is a location, a level deeper than its name.
+const AREA_EXPANSIONS: &[(&str, Option<&str>)] = &[("geometry", Some("areas:read"))];
+
 /// Who the user is
 ///
 /// The user the token acts for.
@@ -176,6 +179,13 @@ struct FlightExpand {
 #[into_params(parameter_in = Query)]
 struct DeviceExpand {
     /// Fields to expand: `group`, which comes with the drone or controller.
+    expand: Option<String>,
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+struct AreaExpand {
+    /// Fields to expand: `geometry`, the area's boundary (`areas:read`).
     expand: Option<String>,
 }
 
@@ -393,30 +403,32 @@ async fn list_groups(
 
 /// List areas
 ///
-/// Areas the flights the user sees passed through, in the order they were
-/// added. Names only, no boundaries.
+/// The organisation's areas, in the order they were added. Their boundaries
+/// only with `expand=geometry`, which needs `areas:read`.
 #[utoipa::path(
     get, path = "/api/v1/areas", tag = "Areas",
-    params(Paging),
+    params(AreaExpand, Paging),
     responses((status = 200, body = Page<Area>), (status = 400, body = Error), (status = 401, body = Error), (status = 403, body = Error)),
     security(("oauth" = ["areas:list"]))
 )]
 async fn list_areas(
     State(api): State<Api>,
     Extension(caller): Extension<Caller>,
+    Params(expansion): Params<AreaExpand>,
     Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Area>>, V1Error> {
     caller.require("areas:list")?;
+    let expand = Expand::parse(expansion.expand.as_deref(), AREA_EXPANSIONS, &caller)?;
     let limit = limit(paging.limit)?;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
-    let scope = policy::flight_scope(&caller.actor);
-    let mut rows = db::areas(&api.db, &scope, after, limit + 1).await?;
+    let mut rows = db::areas(&api.db, expand.has("geometry"), after, limit + 1).await?;
     let next_cursor = next(&mut rows, limit, |row| encode(&IdCursor { id: row.id }));
     let items = rows
         .into_iter()
         .map(|row| Area {
             id: row.id,
             name: row.name,
+            geometry: row.geometry,
         })
         .collect();
     Ok(Json(Page { items, next_cursor }))
@@ -675,6 +687,7 @@ async fn areas_by_id(api: &Api, ids: &[Uuid]) -> Result<HashMap<Uuid, Area>, V1E
                 Area {
                     id: row.id,
                     name: row.name,
+                    geometry: None,
                 },
             )
         })
@@ -932,4 +945,26 @@ async fn flights(
             areas: area_figures(&row.areas, areas.as_ref()),
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Area boundaries are locations: a token for the list of areas can't
+    /// expand them.
+    #[sqlx::test]
+    async fn area_boundaries_need_areas_read(db: sqlx::PgPool) {
+        let user = crate::testing::user(&db, "A", &["viewer"]).await;
+        let mut caller = Caller {
+            actor: crate::testing::actor(&db, user).await,
+            scopes: vec!["areas:list".to_owned()],
+        };
+        assert!(matches!(
+            Expand::parse(Some("geometry"), AREA_EXPANSIONS, &caller),
+            Err(V1Error::MissingScope("areas:read"))
+        ));
+        caller.scopes = vec!["areas:read".to_owned()];
+        assert!(Expand::parse(Some("geometry"), AREA_EXPANSIONS, &caller).is_ok());
+    }
 }

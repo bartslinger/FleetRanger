@@ -55,6 +55,12 @@ pub struct Group {
 pub struct Area {
     pub id: Uuid,
     pub name: String,
+    /// Only with `expand=geometry` (scope `areas:read`): the area's boundary
+    /// as a GeoJSON geometry, a `Polygon` or a `MultiPolygon`, in WGS 84
+    /// longitude and latitude. Neighbouring areas share their border exactly.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Object>)]
+    pub geometry: Option<serde_json::Value>,
 }
 
 /// A pilot or a comment's author.
