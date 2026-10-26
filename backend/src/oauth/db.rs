@@ -370,13 +370,13 @@ pub async fn add_trusted(
 }
 
 /// False if there is no such trusted app, or a role's id isn't one of its
-/// roles.
+/// roles. Roles left out (None) stay as they are.
 pub async fn update_trusted(
     db: &PgPool,
     id: Uuid,
     name: &str,
     redirect_uris: &[String],
-    roles: &[RoleFields<'_>],
+    roles: Option<&[RoleFields<'_>]>,
 ) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
     let result = sqlx::query!(
@@ -387,7 +387,12 @@ pub async fn update_trusted(
     )
     .execute(&mut *tx)
     .await?;
-    if result.rows_affected() != 1 || !set_app_roles(&mut tx, id, roles).await? {
+    if result.rows_affected() != 1 {
+        return Ok(false);
+    }
+    if let Some(roles) = roles
+        && !set_app_roles(&mut tx, id, roles).await?
+    {
         return Ok(false);
     }
     tx.commit().await?;
