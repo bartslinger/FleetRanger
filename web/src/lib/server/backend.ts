@@ -471,7 +471,8 @@ export async function send<T>(
 	}
 	if (response.status === 403 || response.status === 404) error(response.status);
 	if (!response.ok) error(502, `The backend answered ${response.status}.`);
-	return { ok: true, data: await response.json() };
+	// 204 No Content: nothing to parse, e.g. after saving an app.
+	return { ok: true, data: response.status === 204 ? (null as T) : await response.json() };
 }
 
 /** Deletes something; like `send`, a refusal (400 or 409) comes back with its message. */
