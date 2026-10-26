@@ -25,8 +25,8 @@ use crate::{
 pub(super) struct AppInput {
     name: String,
     redirect_uris: Vec<String>,
-    #[serde(default)]
-    roles: Vec<RoleInput>,
+    /// Left out keeps them, so editing the name doesn't send them along.
+    roles: Option<Vec<RoleInput>>,
 }
 
 /// One of the app's roles; without an id, a new one.
@@ -38,7 +38,7 @@ struct RoleInput {
 }
 
 /// An app's input as checked: name, return addresses and roles.
-type Checked<'a> = (&'a str, Vec<String>, Vec<RoleFields<'a>>);
+type Checked<'a> = (&'a str, Vec<String>, Option<Vec<RoleFields<'a>>>);
 
 impl AppInput {
     /// The name trimmed, return addresses as apps may register them, and
@@ -86,8 +86,10 @@ impl AppInput {
                 "{uri} is there twice. Enter each return address once."
             )));
         }
-        let roles = self
-            .roles
+        let Some(roles) = &self.roles else {
+            return Ok((name, uris, None));
+        };
+        let roles = roles
             .iter()
             .map(RoleInput::checked)
             .collect::<ApiResult<Vec<_>>>()?;
@@ -112,7 +114,7 @@ impl AppInput {
                 )));
             }
         }
-        Ok((name, uris, roles))
+        Ok((name, uris, Some(roles)))
     }
 }
 
@@ -173,7 +175,7 @@ pub(super) async fn add(
 ) -> ApiResult<(StatusCode, Json<Added>)> {
     policy::require(&actor, Permission::AppsManage, None)?;
     let (name, uris, roles) = input.checked()?;
-    let id = db::add_trusted(&db, name, &uris, &roles)
+    let id = db::add_trusted(&db, name, &uris, &roles.unwrap_or_default())
         .await
         .map_err(roles_taken)?
         .ok_or_else(|| ApiError::Invalid("A new app has only new roles.".to_owned()))?;
@@ -189,7 +191,7 @@ pub(super) async fn update(
 ) -> ApiResult<StatusCode> {
     policy::require(&actor, Permission::AppsManage, None)?;
     let (name, uris, roles) = input.checked()?;
-    if !db::update_trusted(&db, id, name, &uris, &roles)
+    if !db::update_trusted(&db, id, name, &uris, roles.as_deref())
         .await
         .map_err(roles_taken)?
     {
