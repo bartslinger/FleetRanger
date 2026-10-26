@@ -673,6 +673,12 @@
 		color: var(--cds-text-primary);
 	}
 
+	/* Carbon's selected borders, above and below; cells draw their top border. */
+	tbody tr.selected td,
+	tbody tr.selected + tr td {
+		border-top-color: var(--cds-border-subtle-selected-01);
+	}
+
 	tbody tr.selected:hover td,
 	tbody tr.selected.hovered td {
 		background: var(--cds-layer-selected-hover-01);
