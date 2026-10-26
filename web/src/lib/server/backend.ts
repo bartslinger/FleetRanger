@@ -249,6 +249,8 @@ export interface Member {
 	email: string | null;
 	/** In the order viewer, pilot, editor. */
 	roles: GroupRole[];
+	/** Apps' roles, by id. */
+	app_roles: string[];
 }
 
 /** A group with its members, from `/api/groups/{id}`. */
@@ -263,7 +265,9 @@ export interface User {
 	/** Roles on the whole organisation, in the order viewer, pilot, editor, admin. */
 	roles: OrganisationRole[];
 	/** The groups they are a member of, by name, with their roles there. */
-	groups: { id: string; name: string; roles: GroupRole[] }[];
+	groups: { id: string; name: string; roles: GroupRole[]; app_roles: string[] }[];
+	/** Apps' roles on the whole organisation, by id. */
+	app_roles: string[];
 	/** The login's email; null if the user can't log in. */
 	email: string | null;
 	last_login_at: string | null;
@@ -423,6 +427,8 @@ export interface TrustedApp {
 	id: string;
 	name: string;
 	redirect_uris: string[];
+	/** Its roles, by name. */
+	roles: AppRole[];
 	/** How many people use it. */
 	users: number;
 	created_at: string;
@@ -471,7 +477,8 @@ export async function send<T>(
 	}
 	if (response.status === 403 || response.status === 404) error(response.status);
 	if (!response.ok) error(502, `The backend answered ${response.status}.`);
-	return { ok: true, data: await response.json() };
+	// 204 No Content: nothing to parse, e.g. after saving an app.
+	return { ok: true, data: response.status === 204 ? (null as T) : await response.json() };
 }
 
 /** Deletes something; like `send`, a refusal (400 or 409) comes back with its message. */
@@ -504,4 +511,23 @@ export async function get<T>(fetch: typeof globalThis.fetch, path: string): Prom
 	if (response.status === 403 || response.status === 404) error(response.status);
 	if (!response.ok) error(502, `The backend answered ${response.status}.`);
 	return response.json();
+}
+
+/** A role an app declared, as an admin typed it in. */
+export interface AppRole {
+	id: string;
+	/** What the app sees. */
+	key: string;
+	/** What admins see. */
+	name: string;
+	/** How many active users hold it, on a group or the organisation. */
+	holders: number;
+}
+
+/** An app's role to offer in the roles dialogs, from `GET /api/apps/roles`. */
+export interface OfferedAppRole {
+	id: string;
+	name: string;
+	app_id: string;
+	app: string;
 }

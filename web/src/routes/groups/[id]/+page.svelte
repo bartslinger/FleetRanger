@@ -2,7 +2,8 @@
 	import { resolve } from '$app/paths';
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
-	import { GROUP_ROLE_HELP, GROUP_ROLES, ROLE_LABELS, roleList } from '#lib/roles.js';
+	import AppRoleGroups from '#lib/AppRoleGroups.svelte';
+	import { allRoles, GROUP_ROLE_HELP, GROUP_ROLES, ROLE_LABELS } from '#lib/roles.js';
 	import Button from '#lib/ui/Button.svelte';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -38,7 +39,7 @@
 			key: 'roles',
 			header: 'Roles',
 			wrap: true,
-			format: (member) => roleList(ordered(member.roles))
+			format: (member) => allRoles(ordered(member.roles), member.app_roles, data.appRoles)
 		},
 		{ key: 'email', header: 'Login', wideOnly: true }
 	];
@@ -158,7 +159,8 @@
 			options={data.candidates.map((user) => ({ value: user.id, label: user.name }))}
 			required
 		/>
-		<CheckboxGroup legend="Roles" name="role" options={roleOptions} value={[]} />
+		<CheckboxGroup legend="FleetRanger roles" name="role" options={roleOptions} value={[]} />
+		<AppRoleGroups appRoles={data.appRoles} value={[]} />
 	</Modal>
 {/snippet}
 
@@ -204,11 +206,12 @@
 						>
 							<input type="hidden" name="user_id" value={member.user_id} />
 							<CheckboxGroup
-								legend="Roles"
+								legend="FleetRanger roles"
 								name="role"
 								options={roleOptions}
 								value={member.roles}
 							/>
+							<AppRoleGroups appRoles={data.appRoles} value={member.app_roles} />
 						</Modal>
 						<Modal
 							title="Remove member"

@@ -110,7 +110,7 @@ async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) ->
         }
     };
     let refusal = match bearer {
-        Bearer::Valid(actor, _) => Ok(*actor),
+        Bearer::Valid { actor, .. } => Ok(*actor),
         Bearer::Missing => Err((StatusCode::UNAUTHORIZED, None)),
         Bearer::Invalid => Err((StatusCode::UNAUTHORIZED, Some("invalid_token"))),
         Bearer::Insufficient => Err((StatusCode::FORBIDDEN, Some("insufficient_scope"))),

@@ -1,11 +1,20 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { get, remove, send, type Group, type Member, type User } from '#lib/server/backend.js';
+import {
+	get,
+	remove,
+	send,
+	type Group,
+	type Member,
+	type OfferedAppRole,
+	type User
+} from '#lib/server/backend.js';
 
 export async function load({ fetch, params }) {
-	const [user, users, groups] = await Promise.all([
+	const [user, users, groups, appRoles] = await Promise.all([
 		get<User>(fetch, `/api/users/${params.id}`),
 		get<User[]>(fetch, '/api/users'),
-		get<Group[]>(fetch, '/api/groups')
+		get<Group[]>(fetch, '/api/groups'),
+		get<OfferedAppRole[]>(fetch, '/api/apps/roles')
 	]);
 	// The server keeps the last active admin; the page explains it.
 	const admins = users.filter((other) => other.roles.includes('admin'));
@@ -14,7 +23,7 @@ export async function load({ fetch, params }) {
 	const otherGroups = groups
 		.filter((group) => !user.groups.some((own) => own.id === group.id))
 		.map(({ id, name }) => ({ id, name }));
-	return { user, lastAdmin, otherGroups };
+	return { user, lastAdmin, otherGroups, appRoles };
 }
 
 export const actions = {
@@ -35,7 +44,12 @@ export const actions = {
 	organisationRoles: async ({ fetch, params, request }) => {
 		const form = await request.formData();
 		const user = await get<User>(fetch, `/api/users/${params.id}`);
-		const body = { name: user.name, roles: form.getAll('role').map(String), email: user.email };
+		const body = {
+			name: user.name,
+			roles: form.getAll('role').map(String),
+			email: user.email,
+			app_roles: form.getAll('app_role').map(String)
+		};
 		const result = await send<User>(fetch, 'PUT', `/api/users/${params.id}`, body);
 		if (!result.ok) return fail(result.status, { organisationRolesMessage: result.message });
 		return { organisationSaved: true };
@@ -46,8 +60,10 @@ export const actions = {
 		const group = String(form.get('group_id') ?? '');
 		if (!group) return fail(400, { groupRolesMessage: 'Choose a group.' });
 		const roles = form.getAll('role').map(String);
+		const appRoles = form.getAll('app_role').map(String);
 		const result = await send<Member[]>(fetch, 'PUT', `/api/groups/${group}/members/${params.id}`, {
-			roles
+			roles,
+			app_roles: appRoles
 		});
 		if (!result.ok) return fail(result.status, { groupRolesMessage: result.message });
 		return { groupSaved: true };

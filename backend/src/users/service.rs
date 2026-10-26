@@ -16,6 +16,8 @@ pub struct UserInput {
     pub roles: Vec<String>,
     /// Empty or None: no login.
     pub email: Option<String>,
+    /// Apps' roles on the whole organisation, by id; None keeps them.
+    pub app_roles: Option<Vec<Uuid>>,
 }
 
 /// A lowercase email address, or None if it isn't one.
@@ -106,6 +108,7 @@ struct Checked {
     name: String,
     roles: Vec<String>,
     email: Option<String>,
+    app_roles: Option<Vec<Uuid>>,
 }
 
 impl Checked {
@@ -134,6 +137,7 @@ impl Checked {
                 .map(|role| role.as_str().to_owned())
                 .collect(),
             email,
+            app_roles: input.app_roles.clone(),
         })
     }
 
@@ -142,15 +146,17 @@ impl Checked {
             name: &self.name,
             roles: &self.roles,
             email: self.email.as_deref(),
+            app_roles: self.app_roles.as_deref(),
         }
     }
 }
 
+/// A taken email address, or an app role that no longer exists.
 fn email_taken(error: sqlx::Error) -> ApiError {
     if error::is_unique_violation(&error) {
         ApiError::Conflict("Another user already logs in with this email address.".to_owned())
     } else {
-        error.into()
+        error::unknown_app_role(error)
     }
 }
 
@@ -164,6 +170,7 @@ mod tests {
             name: name.to_owned(),
             roles: roles.iter().map(|role| (*role).to_owned()).collect(),
             email: None,
+            app_roles: None,
         }
     }
 

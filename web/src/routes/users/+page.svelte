@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Edit from '@carbon/icons/es/edit/16.js';
-	import { ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS, roleList } from '#lib/roles.js';
+	import AppRoleGroups from '#lib/AppRoleGroups.svelte';
+	import { allRoles, ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS } from '#lib/roles.js';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -36,7 +37,7 @@
 			key: 'roles',
 			header: 'Roles',
 			wrap: true,
-			format: (user) => roleList(user.roles) || null
+			format: (user) => allRoles(user.roles, user.app_roles, data.appRoles) || null
 		},
 		{ key: 'groups', header: 'Groups', wrap: true, format: groupNames },
 		{ key: 'email', header: 'Login', wideOnly: true },
@@ -135,12 +136,13 @@
 						helper="To log in with the Google account for this address. Leave empty for a pilot who doesn't use the website."
 					/>
 					<CheckboxGroup
-						legend="Roles on the whole organisation"
+						legend="FleetRanger roles"
 						name="role"
 						options={roleOptions}
 						value={[]}
-						helper="None for someone who only has roles in groups. Add them to groups on their page."
+						helper="On the whole organisation. None for someone who only has roles in groups; add them to groups on their page."
 					/>
+					<AppRoleGroups appRoles={data.appRoles} value={[]} />
 				</Modal>
 			{/snippet}
 			{#snippet rowAction(user)}
@@ -158,7 +160,7 @@
 				>
 					<input type="hidden" name="user_id" value={user.id} />
 					<CheckboxGroup
-						legend="Roles"
+						legend="FleetRanger roles"
 						name="role"
 						options={rolesOf(user)}
 						value={user.roles}
@@ -166,6 +168,7 @@
 					/>
 					<!-- A disabled checkbox isn't posted; Admin stays. -->
 					{#if lastAdmin(user)}<input type="hidden" name="role" value="admin" />{/if}
+					<AppRoleGroups appRoles={data.appRoles} value={user.app_roles} />
 				</Modal>
 			{/snippet}
 		</DataTable>

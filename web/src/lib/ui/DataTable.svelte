@@ -14,6 +14,8 @@
 		numeric?: boolean;
 		/** Serial numbers and other codes: tabular figures with a slashed zero. */
 		identifier?: boolean;
+		/** Strings typed exactly elsewhere, e.g. an app role's key: Plex Mono. */
+		code?: boolean;
 		/** Lists, e.g. names: may wrap onto more lines rather than widen the table. */
 		wrap?: boolean;
 		/** Left out on phones (below md), e.g. so a row's action stays in view. */
@@ -294,6 +296,7 @@
 						<td
 							class:numeric={column.numeric}
 							class:identifier={column.identifier}
+							class:code={column.code}
 							class:wrap={column.wrap}
 							class:with-control={column.after}
 							class:wide-only={column.wideOnly}
@@ -425,6 +428,12 @@
 
 	.identifier {
 		font-variant-numeric: tabular-nums slashed-zero;
+	}
+
+	.code {
+		font-family: var(--cds-font-family-mono);
+		font-size: var(--cds-code-02-font-size);
+		letter-spacing: var(--cds-code-02-letter-spacing);
 	}
 
 	/* A wrapping cell keeps the row height while it fits on one line. */

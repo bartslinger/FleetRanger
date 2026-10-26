@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update oauth_grants g set last_used_at = now()\n           from users u, logins l\n           where g.access_token_sha256 = $1 and g.access_expires_at > now()\n             and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id\n           returning g.id as grant_id, g.user_id, l.email, u.name, g.scopes, g.resource,\n                     g.impersonated_by,\n                     (select a.name from users a where a.id = g.impersonated_by)\n                         as impersonator_name",
+  "query": "update oauth_grants g set last_used_at = now()\n           from users u, logins l\n           where g.access_token_sha256 = $1 and g.access_expires_at > now()\n             and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id\n           returning g.id as grant_id, g.client_id, g.user_id, l.email, u.name, g.scopes, g.resource,\n                     g.impersonated_by,\n                     (select a.name from users a where a.id = g.impersonated_by)\n                         as impersonator_name",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_grants",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "user_id",
         "type_info": "Uuid",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "email",
         "type_info": "Text",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "name",
         "type_info": "Text",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "scopes",
         "type_info": "TextArray",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "resource",
         "type_info": "Text",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "impersonated_by",
         "type_info": "Uuid",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "impersonator_name",
         "type_info": "Text",
         "origin": "Expression"
@@ -99,9 +110,10 @@
       false,
       false,
       false,
+      false,
       true,
       null
     ]
   },
-  "hash": "fd7f06a273c2ccfe150690e72aaf3b46680a0ab147e4cce5fd7b2b119771ce8b"
+  "hash": "b77dbfc33e51becaf99da5e7971d4943bdd75486bd9338201592ab9a8da8735b"
 }

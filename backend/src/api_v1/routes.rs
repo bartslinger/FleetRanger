@@ -17,8 +17,8 @@ use super::{
     db::{self, After, FlightRow, InSession, SessionRow},
     decode, encode, limit,
     types::{
-        Area, AreaFigures, Battery, Comment, Device, Error, Expandable, Flight, Group, Me,
-        Organisation, Page, Person, Session,
+        AppRoles, Area, AreaFigures, Battery, Comment, Device, Error, Expandable, Flight, Group,
+        GroupAppRoles, Me, Organisation, Page, Person, Session,
     },
 };
 use crate::{
@@ -26,6 +26,7 @@ use crate::{
     equipment::{self, db::Kind},
     flights::db::Filter,
     mcp,
+    oauth::{self, HeldAppRoles},
     policy::{self, FlightScope},
 };
 
@@ -78,17 +79,33 @@ const AREA_EXPANSIONS: &[(&str, Option<&str>)] = &[("geometry", Some("areas:read
 
 /// Who the user is
 ///
-/// The user the token acts for.
+/// The user the token acts for, with the roles they hold in the calling app.
+/// Changes to them show at once, so check this on every page load.
 #[utoipa::path(
     get, path = "/api/v1/me", tag = "Me",
     responses((status = 200, body = Me), (status = 401, body = Error)),
     security(("oauth" = []))
 )]
-async fn me(Extension(caller): Extension<Caller>) -> Json<Me> {
-    Json(Me {
+async fn me(
+    State(api): State<Api>,
+    Extension(caller): Extension<Caller>,
+) -> Result<Json<Me>, V1Error> {
+    let held = match caller.client_id {
+        Some(client_id) => oauth::held_app_roles(&api.db, client_id, caller.actor.user_id).await?,
+        None => HeldAppRoles::default(),
+    };
+    Ok(Json(Me {
         id: caller.actor.user_id,
         name: caller.actor.name,
-    })
+        app_roles: AppRoles {
+            organisation: held.organisation,
+            groups: held
+                .groups
+                .into_iter()
+                .map(|(group, roles)| GroupAppRoles { group, roles })
+                .collect(),
+        },
+    }))
 }
 
 /// The organisation
@@ -372,8 +389,10 @@ async fn get_flight(
 
 /// List groups
 ///
-/// Groups where the user holds a role, or that a flight they see belongs to,
-/// in the order they were added.
+/// Groups where the user holds a role, FleetRanger's or an app's, or that a
+/// flight they see belongs to; all of them for a user who reads every flight
+/// or holds one of the calling app's roles on the organisation. In the order
+/// they were added.
 #[utoipa::path(
     get, path = "/api/v1/groups", tag = "Groups",
     params(Paging),
@@ -389,7 +408,7 @@ async fn list_groups(
     let limit = limit(paging.limit)?;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
     let scope = policy::flight_scope(&caller.actor);
-    let mut rows = db::groups(&api.db, &scope, after, limit + 1).await?;
+    let mut rows = db::groups(&api.db, &scope, caller.client_id, after, limit + 1).await?;
     let next_cursor = next(&mut rows, limit, |row| encode(&IdCursor { id: row.id }));
     let items = rows
         .into_iter()
@@ -959,6 +978,7 @@ mod tests {
         let mut caller = Caller {
             actor: crate::testing::actor(&db, user).await,
             scopes: vec!["areas:list".to_owned()],
+            client_id: None,
         };
         assert!(matches!(
             Expand::parse(Some("geometry"), AREA_EXPANSIONS, &caller),

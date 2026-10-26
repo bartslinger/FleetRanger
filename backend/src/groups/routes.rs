@@ -41,6 +41,9 @@ struct GroupInput {
 #[derive(Deserialize)]
 struct RolesInput {
     roles: Vec<String>,
+    /// Apps' roles, by id.
+    #[serde(default)]
+    app_roles: Vec<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -102,7 +105,7 @@ async fn set_roles(
     Json(input): Json<RolesInput>,
 ) -> ApiResult<Json<Vec<Member>>> {
     Ok(Json(
-        service::set_roles(&db, &actor, id, user_id, &input.roles).await?,
+        service::set_roles(&db, &actor, id, user_id, &input.roles, &input.app_roles).await?,
     ))
 }
 
