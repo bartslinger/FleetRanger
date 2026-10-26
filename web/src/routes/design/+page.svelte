@@ -8,6 +8,7 @@
 	import Grid from '#lib/ui/Grid.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
+	import NumberInput from '#lib/ui/NumberInput.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import Tag from '#lib/ui/Tag.svelte';
@@ -74,6 +75,7 @@
 
 	let name = $state('');
 	let group = $state('north');
+	let batteries = $state(4);
 </script>
 
 <PageHeader title="Components" description="Every component in its states. Only on the dev server.">
@@ -199,6 +201,33 @@
 				<Toggle label="On" checked />
 				<Toggle label="Disabled" disabled />
 			</div>
+		</Column>
+	</Grid>
+
+	<Grid rowGap>
+		<Column>
+			<h2>Number input</h2>
+		</Column>
+		<Column md={4}>
+			<NumberInput
+				label="Batteries"
+				helper="Enter a number from 0 to 12."
+				min={0}
+				max={12}
+				bind:value={batteries}
+			/>
+		</Column>
+		<Column md={4}>
+			<NumberInput label="Small" size="sm" min={0} value={0} />
+		</Column>
+		<Column md={4}>
+			<NumberInput label="Flights" value={0} error="Enter a whole number of 1 or more." />
+		</Column>
+		<Column md={4}>
+			<NumberInput label="Read only" value={7} readonly />
+		</Column>
+		<Column md={4}>
+			<NumberInput label="Disabled" value={2} disabled />
 		</Column>
 	</Grid>
 
