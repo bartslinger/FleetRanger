@@ -159,7 +159,7 @@
 			options={data.candidates.map((user) => ({ value: user.id, label: user.name }))}
 			required
 		/>
-		<CheckboxGroup legend="Roles" name="role" options={roleOptions} value={[]} />
+		<CheckboxGroup legend="FleetRanger roles" name="role" options={roleOptions} value={[]} />
 		<AppRoleGroups appRoles={data.appRoles} value={[]} />
 	</Modal>
 {/snippet}
@@ -206,7 +206,7 @@
 						>
 							<input type="hidden" name="user_id" value={member.user_id} />
 							<CheckboxGroup
-								legend="Roles"
+								legend="FleetRanger roles"
 								name="role"
 								options={roleOptions}
 								value={member.roles}
