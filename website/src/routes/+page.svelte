@@ -1,8 +1,11 @@
 <script lang="ts">
 	import Email from '@carbon/icons/es/email/16.js';
 	import Launch from '@carbon/icons/es/launch/16.js';
-	import DataPrivacy from '@carbon/pictograms/es/data--privacy/index.js';
+	import Contract from '@carbon/pictograms/es/contract/index.js';
 	import Drone from '@carbon/pictograms/es/drone/index.js';
+	import Insights from '@carbon/pictograms/es/insights/index.js';
+	import Keystores from '@carbon/pictograms/es/keystores/index.js';
+	import ListCheckbox from '@carbon/pictograms/es/list--checkbox/index.js';
 	import OpenSource from '@carbon/pictograms/es/open-source/index.js';
 	import Servers from '@carbon/pictograms/es/servers/index.js';
 	import Button from '$ui/Button.svelte';
@@ -32,13 +35,13 @@
 	const points = [
 		{
 			pictogram: Servers,
-			title: 'One install per organisation',
-			text: 'FleetRanger runs on a server you control, and your flight logs are stored there only.'
+			title: 'On your own premises',
+			text: 'FleetRanger runs on your own servers, on site or in your own data centre. Your flight logs are stored there only.'
 		},
 		{
-			pictogram: DataPrivacy,
-			title: 'Pilots see their own flights',
-			text: 'Unless you give them more access. Raw logs and full telemetry are never shown to users.'
+			pictogram: Keystores,
+			title: 'Permissions for every team',
+			text: 'Roles per group or for the whole organisation, with your own single sign-on.'
 		},
 		{
 			pictogram: OpenSource,
@@ -49,6 +52,24 @@
 			pictogram: Drone,
 			title: 'Made for DJI Enterprise',
 			text: 'For drones flown with DJI Pilot 2, on controllers such as the DJI RC Pro.'
+		}
+	];
+
+	const pains = [
+		{
+			pictogram: Contract,
+			title: 'No more logging by hand',
+			text: 'Pilots just fly. Every flight is recorded without them having to write anything down.'
+		},
+		{
+			pictogram: ListCheckbox,
+			title: 'Every flight accounted for',
+			text: 'Pilots pick their name on the controller, so every flight lands in the logbook with its pilot, drone and track.'
+		},
+		{
+			pictogram: Insights,
+			title: 'Fleet insights',
+			text: 'Hours flown per drone, battery and group, and the areas where your fleet works.'
 		}
 	];
 
@@ -87,21 +108,21 @@
 			text: 'Every flight with its time in the air, distance, drone, controller and pilot. Sessions can be merged and split.'
 		},
 		{
-			title: 'Tracks on a map',
-			text: "Each flight's track on a satellite map, and all tracks of a session together."
+			title: 'Connect your own apps',
+			text: 'Apps and AI assistants sign in through OAuth and see only what their user may see. Admins add trusted apps and give their roles per person.'
 		},
 		{
-			title: 'Teams and equipment',
-			text: 'Pilots work in teams. Drones and controllers are registered from their logs, so the fleet list keeps itself up to date.'
+			title: 'Groups and equipment',
+			text: 'Pilots work in groups, with roles per person. Drones and controllers are registered from their logs, so the fleet list keeps itself up to date.'
 		}
 	];
 </script>
 
 <svelte:head>
-	<title>FleetRanger: flight logs for DJI Enterprise fleets, on your own server</title>
+	<title>FleetRanger: the flight logbook that fills itself</title>
 	<meta
 		name="description"
-		content="FleetRanger collects the flight logs of your DJI Enterprise fleet and turns them into a logbook of sessions, pilots and tracks, on your own server."
+		content="Pilots pick their name on the controller, and every flight arrives with its pilot, drone, hours and track. Open-source flight logging for DJI Enterprise fleets, on your own servers."
 	/>
 </svelte:head>
 
@@ -109,9 +130,12 @@
 	<Grid centered>
 		<Column md={8} lg={7}>
 			<div class="lead">
-				<h1 id="title">Own your flight logs</h1>
+				<h1 id="title">The flight logbook that fills itself</h1>
 				<div>
-					<p class="intro">Open-source flight logging for DJI Enterprise, on your own server.</p>
+					<p class="intro">
+						Pilots pick their name on the controller, and every flight arrives with its pilot,
+						drone, hours and track. Open source, for DJI Enterprise fleets, on servers you control.
+					</p>
 					<div class="actions">
 						<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
 						<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
@@ -127,6 +151,26 @@
 					alt="A session in FleetRanger: a flight's track on a satellite map, with its pilot, team, times and distance, and the list of its flights."
 				/>
 			</div>
+		</Column>
+	</Grid>
+</section>
+
+<section aria-labelledby="pains-title">
+	<Grid centered rowGap>
+		<Column><div class="rule"></div></Column>
+		<Column>
+			<h2 id="pains-title">Less paperwork, more insight</h2>
+		</Column>
+		<Column>
+			<ul class="pains">
+				{#each pains as pain (pain.title)}
+					<li>
+						<span class="pictogram"><Icon icon={pain.pictogram} /></span>
+						<h3>{pain.title}</h3>
+						<p>{pain.text}</p>
+					</li>
+				{/each}
+			</ul>
 		</Column>
 	</Grid>
 </section>
@@ -147,22 +191,6 @@
 					</li>
 				{/each}
 			</ul>
-		</Column>
-	</Grid>
-</section>
-
-<section class="quote" aria-label="What a pilot says">
-	<Grid centered>
-		<Column md={8} lg={8}>
-			<figure>
-				<blockquote>
-					<p>
-						Our flight logs are too sensitive for the cloud. FleetRanger keeps them on our own
-						server, and makes our operations much simpler.
-					</p>
-				</blockquote>
-				<figcaption>Drone pilot and satisfied FleetRanger user</figcaption>
-			</figure>
 		</Column>
 	</Grid>
 </section>
@@ -201,6 +229,22 @@
 	</Grid>
 </section>
 
+<section class="quote" aria-label="What a pilot says">
+	<Grid centered>
+		<Column md={8} lg={8}>
+			<figure>
+				<blockquote>
+					<p>
+						Our flight logs are too sensitive for the cloud. FleetRanger keeps them on our own
+						server, and makes our operations much simpler.
+					</p>
+				</blockquote>
+				<figcaption>Drone pilot and satisfied FleetRanger user</figcaption>
+			</figure>
+		</Column>
+	</Grid>
+</section>
+
 <section id="features" aria-labelledby="features-title">
 	<Grid centered rowGap>
 		<Column><div class="rule"></div></Column>
@@ -225,8 +269,8 @@
 		<Column md={8} lg={8}>
 			<h2 id="start-title">Set it up for your fleet</h2>
 			<p class="body">
-				To run FleetRanger for your organisation, write to {CONTACT}. We offer installation, support
-				and consultation as paid services.
+				FleetRanger is free to run yourself. Need a feature for your organisation? We build it into
+				FleetRanger, so you keep getting new versions. Write to {CONTACT}.
 			</p>
 			<div class="actions">
 				<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
@@ -578,6 +622,29 @@
 	}
 
 	.tiles p {
+		margin-top: var(--cds-spacing-03);
+		color: var(--cds-text-secondary);
+	}
+
+	/* The pains as base tiles with a pictogram, unlike the points' open list. */
+	.pains {
+		display: grid;
+		gap: var(--cds-spacing-05);
+		margin-top: var(--cds-spacing-09);
+	}
+
+	@media (min-width: 66rem) {
+		.pains {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+
+	.pains li {
+		padding: var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-spacing-07);
+		background: var(--cds-layer-01);
+	}
+
+	.pains p {
 		margin-top: var(--cds-spacing-03);
 		color: var(--cds-text-secondary);
 	}
