@@ -94,6 +94,8 @@ sequenceDiagram
 - Every access decision goes through one policy module in the backend. Service functions take the acting user, so a handler can't skip the check.
 - Users with flights are archived, never deleted, so history keeps referring to them. An archived user can't log in. A group can be deleted only once it's empty.
 
+**Apps.** Apps act for a user through OAuth, with that user's access and the scopes the user allowed. Apps an admin adds on the Apps page skip the consent screen, so their return addresses must be HTTPS: on the user's own computer any program could listen. Debug builds, which are never deployed, also accept `http://` there, so an app developed locally can be added and given roles; any port matches, as for apps that register themselves (RFC 8252). An app's roles say only what the app may let a user do; FleetRanger's own access doesn't change with them.
+
 ## Data on the server
 
 | What | Where | Who can see it |
