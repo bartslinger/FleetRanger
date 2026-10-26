@@ -12,12 +12,12 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
-    db::{self, TrustedApp},
+    db::{self, OfferedAppRole, RoleFields, TrustedApp},
     routes::redirect_uri_allowed,
 };
 use crate::{
     auth::Actor,
-    error::{ApiError, ApiResult},
+    error::{self, ApiError, ApiResult},
     policy::{self, Permission},
 };
 
@@ -25,11 +25,25 @@ use crate::{
 pub(super) struct AppInput {
     name: String,
     redirect_uris: Vec<String>,
+    #[serde(default)]
+    roles: Vec<RoleInput>,
 }
 
+/// One of the app's roles; without an id, a new one.
+#[derive(Deserialize)]
+struct RoleInput {
+    id: Option<Uuid>,
+    key: String,
+    name: String,
+}
+
+/// An app's input as checked: name, return addresses and roles.
+type Checked<'a> = (&'a str, Vec<String>, Vec<RoleFields<'a>>);
+
 impl AppInput {
-    /// The name trimmed, and return addresses as apps may register them.
-    fn checked(&self) -> ApiResult<(&str, Vec<String>)> {
+    /// The name trimmed, return addresses as apps may register them, and
+    /// roles with keys the app can rely on.
+    fn checked(&self) -> ApiResult<Checked<'_>> {
         let name = self.name.trim();
         if name.is_empty() || name.chars().count() > 100 {
             return Err(ApiError::Invalid(
@@ -72,7 +86,60 @@ impl AppInput {
                 "{uri} is there twice. Enter each return address once."
             )));
         }
-        Ok((name, uris))
+        let roles = self
+            .roles
+            .iter()
+            .map(RoleInput::checked)
+            .collect::<ApiResult<Vec<_>>>()?;
+        if roles.len() > 50 {
+            return Err(ApiError::Invalid("Enter no more than 50 roles.".to_owned()));
+        }
+        for (index, role) in roles.iter().enumerate() {
+            let before = &roles[..index];
+            if before.iter().any(|other| other.key == role.key) {
+                return Err(ApiError::Invalid(format!(
+                    "{} is there twice. Give each role its own key.",
+                    role.key
+                )));
+            }
+            if before
+                .iter()
+                .any(|other| other.name.to_lowercase() == role.name.to_lowercase())
+            {
+                return Err(ApiError::Invalid(format!(
+                    "{} is there twice. Give each role its own name.",
+                    role.name
+                )));
+            }
+        }
+        Ok((name, uris, roles))
+    }
+}
+
+impl RoleInput {
+    /// The key as the app will see it, and the name trimmed.
+    fn checked(&self) -> ApiResult<RoleFields<'_>> {
+        let key = self.key.trim();
+        let mut chars = key.chars();
+        let valid = chars.next().is_some_and(|c| c.is_ascii_lowercase())
+            && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            && key.len() <= 64;
+        if !valid {
+            return Err(ApiError::Invalid(format!(
+                "{key} isn’t a valid key. Use lowercase letters, digits and underscores, starting with a letter, at most 64."
+            )));
+        }
+        let name = self.name.trim();
+        if name.is_empty() || name.chars().count() > 100 {
+            return Err(ApiError::Invalid(format!(
+                "Enter a name of at most 100 characters for {key}."
+            )));
+        }
+        Ok(RoleFields {
+            id: self.id,
+            key,
+            name,
+        })
     }
 }
 
@@ -84,6 +151,16 @@ pub(super) async fn list(
     Ok(Json(db::trusted_apps(&db).await?))
 }
 
+/// The apps' roles, for the dialogs that give roles to users and members.
+pub(super) async fn roles(
+    actor: Actor,
+    State(db): State<PgPool>,
+) -> ApiResult<Json<Vec<OfferedAppRole>>> {
+    if !actor.grants.may(Permission::UsersManage, None) {
+        policy::require(&actor, Permission::GroupsManage, None)?;
+    }
+    Ok(Json(db::offered_app_roles(&db).await?))
+}
 #[derive(Serialize)]
 pub(super) struct Added {
     id: Uuid,
@@ -95,8 +172,11 @@ pub(super) async fn add(
     Json(input): Json<AppInput>,
 ) -> ApiResult<(StatusCode, Json<Added>)> {
     policy::require(&actor, Permission::AppsManage, None)?;
-    let (name, uris) = input.checked()?;
-    let id = db::add_trusted(&db, name, &uris).await?;
+    let (name, uris, roles) = input.checked()?;
+    let id = db::add_trusted(&db, name, &uris, &roles)
+        .await
+        .map_err(roles_taken)?
+        .ok_or_else(|| ApiError::Invalid("A new app has only new roles.".to_owned()))?;
     tracing::info!(%id, name, by = %actor.user_id, "trusted app added");
     Ok((StatusCode::CREATED, Json(Added { id })))
 }
@@ -108,11 +188,25 @@ pub(super) async fn update(
     Json(input): Json<AppInput>,
 ) -> ApiResult<StatusCode> {
     policy::require(&actor, Permission::AppsManage, None)?;
-    let (name, uris) = input.checked()?;
-    if !db::update_trusted(&db, id, name, &uris).await? {
+    let (name, uris, roles) = input.checked()?;
+    if !db::update_trusted(&db, id, name, &uris, &roles)
+        .await
+        .map_err(roles_taken)?
+    {
         return Err(ApiError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Two roles that swap keys or names meet the unique constraints halfway.
+fn roles_taken(error: sqlx::Error) -> ApiError {
+    if error::is_unique_violation(&error) {
+        ApiError::Conflict(
+            "Roles can’t swap keys or names in one change. Save in two steps.".to_owned(),
+        )
+    } else {
+        error.into()
+    }
 }
 
 /// Removes an app: its users' tokens stop working at once.
@@ -151,7 +245,10 @@ mod tests {
             .await
             .unwrap();
         let uris = ["https://app.example.org/callback".to_owned()];
-        let app = db::add_trusted(&db, "Test app", &uris).await.unwrap();
+        let app = db::add_trusted(&db, "Test app", &uris, &[])
+            .await
+            .unwrap()
+            .unwrap();
         sqlx::query("update oauth_clients set created_at = now() - interval '2 days'")
             .execute(&db)
             .await
@@ -227,7 +324,10 @@ mod impersonation_tests {
         let pilot = user(&db, "pilot@example.org").await;
         let admin = user(&db, "admin@example.org").await;
         let uris = ["https://app.example.org/callback".to_owned()];
-        let app = db::add_trusted(&db, "Test app", &uris).await.unwrap();
+        let app = db::add_trusted(&db, "Test app", &uris, &[])
+            .await
+            .unwrap()
+            .unwrap();
         let connect = async |impersonated_by: Option<Uuid>, token: &str| {
             let code = Code {
                 client_id: app,

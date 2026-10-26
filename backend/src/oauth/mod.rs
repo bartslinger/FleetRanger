@@ -5,7 +5,10 @@
 
 mod apps;
 mod db;
+
 pub mod routes;
+
+pub use db::{HeldAppRoles, held_app_roles};
 
 use std::{net::SocketAddr, sync::Arc};
 
@@ -67,8 +70,12 @@ impl OAuth {
 /// What a request's bearer token is worth for a resource and scope.
 pub enum Bearer {
     /// A valid access token for them, acting for this user, with all the
-    /// scopes the user allowed.
-    Valid(Box<Actor>, Vec<String>),
+    /// scopes the user allowed, for the app it belongs to.
+    Valid {
+        actor: Box<Actor>,
+        scopes: Vec<String>,
+        client_id: Uuid,
+    },
     /// No bearer token.
     Missing,
     /// Unknown or expired, for another resource, or its user may no longer
@@ -124,7 +131,11 @@ pub async fn bearer(
             .map(|(user_id, name)| Impersonator { user_id, name }),
         name: access.name,
     };
-    Ok(Bearer::Valid(Box::new(actor), access.scopes))
+    Ok(Bearer::Valid {
+        actor: Box::new(actor),
+        scopes: access.scopes,
+        client_id: access.client_id,
+    })
 }
 
 /// Ends the app connections an admin made while impersonating someone: at

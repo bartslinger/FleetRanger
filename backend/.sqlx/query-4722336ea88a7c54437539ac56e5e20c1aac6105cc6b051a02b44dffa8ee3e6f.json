@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select u.id as user_id, u.name, l.email as \"email?\",\n                  array(select m.role from group_members m\n                        where m.group_id = $1 and m.user_id = u.id\n                        order by array_position(array['viewer', 'pilot', 'editor'], m.role))\n                      as \"roles!\",\n                  array(select a.app_role_id from group_app_roles a\n                        where a.group_id = $1 and a.user_id = u.id\n                        order by a.app_role_id) as \"app_roles!\"\n           from users u\n           left join logins l on l.user_id = u.id\n           where u.archived_at is null\n             and (exists (select 1 from group_members m where m.group_id = $1 and m.user_id = u.id)\n                  or exists (select 1 from group_app_roles a\n                             where a.group_id = $1 and a.user_id = u.id))\n           order by lower(u.name), u.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "email?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "roles!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "app_roles!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "4722336ea88a7c54437539ac56e5e20c1aac6105cc6b051a02b44dffa8ee3e6f"
+}

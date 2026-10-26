@@ -51,22 +51,27 @@ pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResu
     get(db, actor, id).await
 }
 
-/// Gives a member these roles in the group, adding them if they aren't in it
-/// yet: at least one, and only the roles a group has (Admin is on the whole
-/// organisation only). Taking someone out of a group is `remove_member`.
+/// Gives a member these roles in the group, FleetRanger's and apps', adding
+/// them if they aren't in it yet: at least one, and only the roles a group
+/// has (Admin is on the whole organisation only). Taking someone out of a
+/// group is `remove_member`.
 pub async fn set_roles(
     db: &PgPool,
     actor: &Actor,
     id: Uuid,
     user_id: Uuid,
     roles: &[String],
+    app_roles: &[Uuid],
 ) -> ApiResult<Vec<Member>> {
     policy::require(actor, Permission::GroupsManage, Some(id))?;
     let roles = group_roles(roles)?;
-    if roles.is_empty() {
+    if roles.is_empty() && app_roles.is_empty() {
         return Err(ApiError::Invalid("Choose at least one role.".to_owned()));
     }
-    if !db::set_roles(db, id, user_id, &roles).await? {
+    if !db::set_roles(db, id, user_id, &roles, app_roles)
+        .await
+        .map_err(error::unknown_app_role)?
+    {
         return Err(ApiError::NotFound);
     }
     Ok(db::members(db, id).await?)
@@ -79,7 +84,7 @@ pub async fn remove_member(
     user_id: Uuid,
 ) -> ApiResult<Vec<Member>> {
     policy::require(actor, Permission::GroupsManage, Some(id))?;
-    if !db::set_roles(db, id, user_id, &[]).await? {
+    if !db::set_roles(db, id, user_id, &[], &[]).await? {
         return Err(ApiError::NotFound);
     }
     Ok(db::members(db, id).await?)
@@ -170,12 +175,12 @@ mod tests {
 
         for roles in [vec![], vec!["admin".to_owned()]] {
             assert!(matches!(
-                set_roles(&db, &admin, north, pilot, &roles).await,
+                set_roles(&db, &admin, north, pilot, &roles, &[]).await,
                 Err(ApiError::Invalid(_))
             ));
         }
         let roles = ["editor", "pilot", "pilot"].map(str::to_owned);
-        let Ok(members) = set_roles(&db, &admin, north, pilot, &roles).await else {
+        let Ok(members) = set_roles(&db, &admin, north, pilot, &roles, &[]).await else {
             panic!("a member with roles is added");
         };
         assert_eq!(members[0].roles, ["pilot", "editor"]);

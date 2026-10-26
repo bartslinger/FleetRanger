@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into group_app_roles (group_id, user_id, app_role_id)\n         select $1, $2, unnest($3::uuid[])\n         on conflict do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8955423b6ffa379333324fe46242a77dde6cc82ac5ad51799f6b62ed47ef8697"
+}

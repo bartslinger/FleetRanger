@@ -53,6 +53,7 @@ where
         .route("/api/oauth/connections", get(connections))
         .route("/api/oauth/connections/{id}", delete(disconnect))
         .route("/api/apps", get(apps::list).post(apps::add))
+        .route("/api/apps/roles", get(apps::roles))
         .route("/api/apps/{id}", put(apps::update).delete(apps::remove))
 }
 

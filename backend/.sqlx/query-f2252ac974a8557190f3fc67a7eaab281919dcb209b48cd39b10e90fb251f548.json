@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select g.id, g.name from groups g\n         where ($1\n                or exists (select 1 from organisation_app_roles o\n                           join app_roles r on r.id = o.app_role_id\n                           where o.user_id = $2 and r.client_id = $6)\n                or exists (select 1 from group_members m\n                           where m.group_id = g.id and m.user_id = $2)\n                or exists (select 1 from group_app_roles a\n                           where a.group_id = g.id and a.user_id = $2)\n                or exists (select 1 from flights f\n                           where f.group_id = g.id and f.archived_at is null\n                             and (f.pilot_id = $2 or f.group_id = any($3))))\n           and ($4::uuid is null or g.id > $4)\n         order by g.id\n         limit $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "UuidArray",
+        "Uuid",
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "f2252ac974a8557190f3fc67a7eaab281919dcb209b48cd39b10e90fb251f548"
+}
