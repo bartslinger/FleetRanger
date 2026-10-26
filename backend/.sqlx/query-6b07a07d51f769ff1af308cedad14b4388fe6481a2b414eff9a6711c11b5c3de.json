@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select a.id, a.name from areas a\n         where ($1\n                or exists (select 1 from flight_areas fa\n                           join flights f on f.id = fa.flight_id\n                           where fa.area_id = a.id and f.archived_at is null\n                             and (f.pilot_id = $2 or f.group_id = any($3))))\n           and ($4::uuid is null or a.id > $4)\n         order by a.id\n         limit $5",
+  "query": "select id, name, case when $1 then boundary end as geometry from areas\n         where $2::uuid is null or id > $2\n         order by id\n         limit $3",
   "describe": {
     "columns": [
       {
@@ -24,21 +24,26 @@
             "name": "name"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "geometry",
+        "type_info": "Jsonb",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
         "Bool",
         "Uuid",
-        "UuidArray",
-        "Uuid",
         "Int8"
       ]
     },
     "nullable": [
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "9cb407824c05fca1d80da375e2d6e0ff90920f9285a80265984d5ab989d23506"
+  "hash": "6b07a07d51f769ff1af308cedad14b4388fe6481a2b414eff9a6711c11b5c3de"
 }
