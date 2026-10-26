@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select c.id, c.name, c.redirect_uris, c.created_at,\n                  coalesce((select jsonb_agg(jsonb_build_object(\n                                'id', r.id, 'key', r.key, 'name', r.name,\n                                'holders', (select count(distinct h.user_id)\n                                            from (select user_id from group_app_roles\n                                                  where app_role_id = r.id\n                                                  union all\n                                                  select user_id from organisation_app_roles\n                                                  where app_role_id = r.id) h\n                                            join users u on u.id = h.user_id\n                                            where u.archived_at is null))\n                                order by lower(r.name), r.id)\n                            from app_roles r where r.client_id = c.id),\n                           '[]') as \"roles!: Json<Vec<AppRole>>\",\n                  (select count(distinct g.user_id) from oauth_grants g where g.client_id = c.id)\n                      as \"users!\"\n           from oauth_clients c\n           where c.trusted\n           order by lower(c.name), c.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_clients",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_clients",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "redirect_uris",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "oauth_clients",
+            "name": "redirect_uris"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_clients",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "roles!: Json<Vec<AppRole>>",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "users!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "2621ee652ea54b38b76f55e7e11ee03ce6da77b6790bb96842fbf0b4f2f61ca6"
+}

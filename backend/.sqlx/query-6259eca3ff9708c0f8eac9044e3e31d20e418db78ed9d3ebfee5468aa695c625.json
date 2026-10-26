@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select r.key from organisation_app_roles o\n         join app_roles r on r.id = o.app_role_id\n         where r.client_id = $1 and o.user_id = $2\n         order by r.key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "app_roles",
+            "name": "key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6259eca3ff9708c0f8eac9044e3e31d20e418db78ed9d3ebfee5468aa695c625"
+}

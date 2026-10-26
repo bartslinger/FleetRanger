@@ -24,6 +24,8 @@ pub struct Member {
     pub email: Option<String>,
     /// Sorted: viewer, pilot, editor.
     pub roles: Vec<String>,
+    /// Apps' roles, by id.
+    pub app_roles: Vec<Uuid>,
 }
 
 /// Groups by name; `id` narrows it to one.
@@ -31,9 +33,13 @@ pub async fn list(db: &PgPool, id: Option<Uuid>) -> sqlx::Result<Vec<Group>> {
     sqlx::query_as!(
         Group,
         r#"select g.id, g.name,
-                  (select count(distinct m.user_id) from group_members m
-                   join users u on u.id = m.user_id
-                   where m.group_id = g.id and u.archived_at is null) as "members!",
+                  (select count(*) from users u
+                   where u.archived_at is null
+                     and (exists (select 1 from group_members m
+                                  where m.group_id = g.id and m.user_id = u.id)
+                          or exists (select 1 from group_app_roles a
+                                     where a.group_id = g.id and a.user_id = u.id)))
+                      as "members!",
                   (select count(*) from flights where group_id = g.id) as "flights!",
                   (select count(*) from sessions where group_id = g.id) as "sessions!",
                   (select count(*) from aircraft where group_id = g.id) as "drones!",
@@ -52,13 +58,19 @@ pub async fn members(db: &PgPool, group_id: Uuid) -> sqlx::Result<Vec<Member>> {
     sqlx::query_as!(
         Member,
         r#"select u.id as user_id, u.name, l.email as "email?",
-                  array_agg(m.role order by array_position(array['viewer', 'pilot', 'editor'],
-                                                           m.role)) as "roles!"
-           from group_members m
-           join users u on u.id = m.user_id
+                  array(select m.role from group_members m
+                        where m.group_id = $1 and m.user_id = u.id
+                        order by array_position(array['viewer', 'pilot', 'editor'], m.role))
+                      as "roles!",
+                  array(select a.app_role_id from group_app_roles a
+                        where a.group_id = $1 and a.user_id = u.id
+                        order by a.app_role_id) as "app_roles!"
+           from users u
            left join logins l on l.user_id = u.id
-           where m.group_id = $1 and u.archived_at is null
-           group by u.id, u.name, l.email
+           where u.archived_at is null
+             and (exists (select 1 from group_members m where m.group_id = $1 and m.user_id = u.id)
+                  or exists (select 1 from group_app_roles a
+                             where a.group_id = $1 and a.user_id = u.id))
            order by lower(u.name), u.id"#,
         group_id,
     )
@@ -80,13 +92,15 @@ pub async fn rename(db: &PgPool, id: Uuid, name: &str) -> sqlx::Result<bool> {
     Ok(result.rows_affected() == 1)
 }
 
-/// Makes these a user's roles in the group: none removes them from it.
-/// False if the group or user doesn't exist, or the user is archived.
+/// Makes these a user's roles in the group, FleetRanger's and apps': none
+/// removes them from it. False if the group or user doesn't exist, or the
+/// user is archived.
 pub async fn set_roles(
     db: &PgPool,
     group_id: Uuid,
     user_id: Uuid,
     roles: &[String],
+    app_roles: &[Uuid],
 ) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
     let found = sqlx::query_scalar!(
@@ -116,6 +130,25 @@ pub async fn set_roles(
         group_id,
         user_id,
         roles,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "delete from group_app_roles
+         where group_id = $1 and user_id = $2 and app_role_id <> all($3)",
+        group_id,
+        user_id,
+        app_roles,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "insert into group_app_roles (group_id, user_id, app_role_id)
+         select $1, $2, unnest($3::uuid[])
+         on conflict do nothing",
+        group_id,
+        user_id,
+        app_roles,
     )
     .execute(&mut *tx)
     .await?;

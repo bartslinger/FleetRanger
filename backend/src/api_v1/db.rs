@@ -341,11 +341,13 @@ pub async fn controller_serials(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<S
 // The lists of groups and areas are in the order they were added, which ids
 // follow; a page starts after the last id of the one before.
 
-/// The groups where the user holds a role, or that a flight they see
-/// belongs to; with a role on the organisation, all.
+/// The groups where the user is a member, by a role of FleetRanger's or of
+/// any app, or that a flight they see belongs to; all of them with
+/// `flights.read` or one of the calling app's roles on the organisation.
 pub async fn groups(
     db: &PgPool,
     scope: &FlightScope,
+    client_id: Option<Uuid>,
     after: Option<Uuid>,
     limit: i64,
 ) -> sqlx::Result<Vec<Named>> {
@@ -353,8 +355,13 @@ pub async fn groups(
         Named,
         "select g.id, g.name from groups g
          where ($1
+                or exists (select 1 from organisation_app_roles o
+                           join app_roles r on r.id = o.app_role_id
+                           where o.user_id = $2 and r.client_id = $6)
                 or exists (select 1 from group_members m
                            where m.group_id = g.id and m.user_id = $2)
+                or exists (select 1 from group_app_roles a
+                           where a.group_id = g.id and a.user_id = $2)
                 or exists (select 1 from flights f
                            where f.group_id = g.id and f.archived_at is null
                              and (f.pilot_id = $2 or f.group_id = any($3))))
@@ -366,6 +373,7 @@ pub async fn groups(
         &scope.group_ids,
         after,
         limit,
+        client_id,
     )
     .fetch_all(db)
     .await
@@ -534,5 +542,68 @@ mod tests {
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].flight_count, 1);
         assert_eq!(sessions[0].air_time_s, 60);
+    }
+
+    /// An app sees only its own roles, and someone holding one of them on
+    /// the organisation sees every group's name; another app's role makes
+    /// them a member of that group only.
+    #[sqlx::test]
+    async fn apps_see_their_own_roles(db: PgPool) {
+        let reader = crate::testing::user(&db, "Test reader", &[]).await;
+        let north = crate::testing::group(&db, "Test North").await;
+        let south = crate::testing::group(&db, "Test South").await;
+        let role = async |app: &str, key: &str| -> (Uuid, Uuid) {
+            sqlx::query_as(
+                "with c as (insert into oauth_clients (name, redirect_uris, trusted)
+                            values ($1, '{}', true) returning id)
+                 insert into app_roles (client_id, key, name)
+                 select id, $2, $2 from c returning client_id, id",
+            )
+            .bind(app)
+            .bind(key)
+            .fetch_one(&db)
+            .await
+            .unwrap()
+        };
+        let (reports, viewer) = role("Test reports", "report_viewer").await;
+        let (other, planner) = role("Test other", "planner").await;
+        sqlx::query("insert into organisation_app_roles (user_id, app_role_id) values ($1, $2)")
+            .bind(reader)
+            .bind(viewer)
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query(
+            "insert into group_app_roles (group_id, user_id, app_role_id) values ($1, $2, $3)",
+        )
+        .bind(north)
+        .bind(reader)
+        .bind(planner)
+        .execute(&db)
+        .await
+        .unwrap();
+
+        let held = crate::oauth::held_app_roles(&db, reports, reader)
+            .await
+            .unwrap();
+        assert_eq!(held.organisation, ["report_viewer"]);
+        assert!(held.groups.is_empty());
+        let held = crate::oauth::held_app_roles(&db, other, reader)
+            .await
+            .unwrap();
+        assert!(held.organisation.is_empty());
+        assert_eq!(held.groups, [(north, vec!["planner".to_owned()])]);
+
+        let scope = crate::testing::scope(&db, reader).await;
+        let listed = async |client: Uuid| -> Vec<Uuid> {
+            groups(&db, &scope, Some(client), None, 10)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|group| group.id)
+                .collect()
+        };
+        assert_eq!(listed(reports).await, [north, south]);
+        assert_eq!(listed(other).await, [north]);
     }
 }

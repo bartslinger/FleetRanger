@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select g.id, g.name,\n                  (select count(distinct m.user_id) from group_members m\n                   join users u on u.id = m.user_id\n                   where m.group_id = g.id and u.archived_at is null) as \"members!\",\n                  (select count(*) from flights where group_id = g.id) as \"flights!\",\n                  (select count(*) from sessions where group_id = g.id) as \"sessions!\",\n                  (select count(*) from aircraft where group_id = g.id) as \"drones!\",\n                  (select count(*) from remote_controllers where group_id = g.id)\n                      as \"controllers!\"\n           from groups g\n           where $1::uuid is null or g.id = $1\n           order by lower(g.name), g.id",
+  "query": "select g.id, g.name,\n                  (select count(*) from users u\n                   where u.archived_at is null\n                     and (exists (select 1 from group_members m\n                                  where m.group_id = g.id and m.user_id = u.id)\n                          or exists (select 1 from group_app_roles a\n                                     where a.group_id = g.id and a.user_id = u.id)))\n                      as \"members!\",\n                  (select count(*) from flights where group_id = g.id) as \"flights!\",\n                  (select count(*) from sessions where group_id = g.id) as \"sessions!\",\n                  (select count(*) from aircraft where group_id = g.id) as \"drones!\",\n                  (select count(*) from remote_controllers where group_id = g.id)\n                      as \"controllers!\"\n           from groups g\n           where $1::uuid is null or g.id = $1\n           order by lower(g.name), g.id",
   "describe": {
     "columns": [
       {
@@ -71,5 +71,5 @@
       null
     ]
   },
-  "hash": "58b18c6281eb6f61707a5b1c6c13675b07ab3f93bb9720ebd14915f775a6ce59"
+  "hash": "983ccbae9d404cf1fb645e354f693d2b3cca5530652a7b249050f778da849143"
 }

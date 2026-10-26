@@ -49,11 +49,13 @@ pub struct Api {
     pub resource: Arc<str>,
 }
 
-/// The user a request acts for, and the scopes their token carries.
+/// The user a request acts for, the scopes their token carries, and the app
+/// it belongs to: none for a login session in a debug build.
 #[derive(Clone)]
 pub struct Caller {
     pub actor: Actor,
     scopes: Vec<String>,
+    client_id: Option<Uuid>,
 }
 
 impl Caller {
@@ -162,9 +164,14 @@ async fn authenticate(State(api): State<Api>, request: Request, next: Next) -> R
         Err(error) => return V1Error::from(error).into_response(),
     };
     let caller = match bearer {
-        Bearer::Valid(actor, scopes) => Ok(Caller {
+        Bearer::Valid {
+            actor,
+            scopes,
+            client_id,
+        } => Ok(Caller {
             actor: *actor,
             scopes,
+            client_id: Some(client_id),
         }),
         Bearer::Missing => Err(V1Error::Unauthorized(None)),
         Bearer::Invalid => Err(V1Error::Unauthorized(Some("invalid_token"))),
@@ -179,6 +186,7 @@ async fn authenticate(State(api): State<Api>, request: Request, next: Next) -> R
                 .map(|actor| Caller {
                     actor,
                     scopes: API_SCOPES.iter().map(|scope| (*scope).to_owned()).collect(),
+                    client_id: None,
                 })
                 .map_err(|_| V1Error::Unauthorized(error))
         }
@@ -452,6 +460,7 @@ mod tests {
         let caller = Caller {
             actor: crate::testing::actor(&db, user).await,
             scopes: vec!["sessions:read".to_owned()],
+            client_id: None,
         };
         assert!(caller.allows("sessions:list"));
         assert!(caller.allows("sessions:read"));

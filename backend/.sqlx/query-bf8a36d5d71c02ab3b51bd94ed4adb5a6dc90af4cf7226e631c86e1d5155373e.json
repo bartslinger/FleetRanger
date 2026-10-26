@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from app_roles where client_id = $1 and id <> all($2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bf8a36d5d71c02ab3b51bd94ed4adb5a6dc90af4cf7226e631c86e1d5155373e"
+}
