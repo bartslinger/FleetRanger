@@ -119,6 +119,7 @@ impl Modify for Security {
                 }
                 "groups:list" => "The list of groups.",
                 "areas:list" => "The list of areas, by name.",
+                "areas:read" => "Areas with their boundaries.",
                 "equipment:list" => "The lists of drones, controllers and batteries.",
                 other => other,
             };

@@ -1,4 +1,4 @@
-Read an organisation's sessions, flights and equipment, acting for a user through OAuth, with that user's access: an app sees what its user sees in FleetRanger. Version 1 is read-only and holds no locations: no tracks, area boundaries or takeoff points.
+Read an organisation's sessions, flights and equipment, acting for a user through OAuth, with that user's access: an app sees what its user sees in FleetRanger. Version 1 is read-only and without tracks or takeoff points; the only locations are the areas' boundaries, with `areas:read`.
 
 ## Access
 
@@ -31,7 +31,7 @@ Expansions nest with a dot, at most three levels deep, and a path expands what l
 
 `GET /api/v1/sessions?from=2026-10-01&to=2026-10-31&expand=comments.author,flights.batteries,flights.areas.area`
 
-What the web app shows on a session or flight (its group, pilots, areas and equipment) comes with it, so expanding it needs no further scope. A scope is needed only where an expansion reaches another resource or level: a session's `comments` (`sessions:read`) and `flights` (`flights:list`), a flight's `session` (`sessions:list`). Asking for one the token lacks is refused with a 403, never silently left out.
+What the web app shows on a session or flight (its group, pilots, areas and equipment) comes with it, so expanding it needs no further scope. A scope is needed only where an expansion reaches another resource or level: a session's `comments` (`sessions:read`) and `flights` (`flights:list`), a flight's `session` (`sessions:list`), an area's `geometry` (`areas:read`). Asking for one the token lacks is refused with a 403, never silently left out.
 
 ## Paging
 
