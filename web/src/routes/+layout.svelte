@@ -142,6 +142,7 @@
 <Tooltip.Provider delayDuration={100}>
 	<Shell
 		name="FleetRanger"
+		home={resolve('/')}
 		logo={favicon}
 		{nav}
 		account={data.account}
