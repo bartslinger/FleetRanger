@@ -42,7 +42,6 @@
 	import { mergeProps, Tooltip } from 'bits-ui';
 	import UserAvatar from '@carbon/icons/es/user--avatar/20.js';
 	import { afterNavigate } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { setTheme, type Theme } from '#lib/theme.js';
 	import Button from './Button.svelte';
@@ -54,6 +53,9 @@
 
 	interface Props {
 		name: string;
+		/** The product name's link, already passed through `resolve()`. Its nav
+		 * item is current only on its exact path. */
+		home: string;
 		/** The product's logo, before its name. */
 		logo?: string;
 		nav: NavItem[];
@@ -73,6 +75,7 @@
 
 	let {
 		name,
+		home,
 		logo,
 		nav,
 		account,
@@ -176,8 +179,6 @@
 		if (panelOpen && next && !inPanel(next)) panelOpen = null;
 	}
 
-	const home = resolve('/');
-
 	function isCurrent(href: string): boolean {
 		// resolve() can return relative paths (`./`), so compare absolute ones.
 		const absolute = (path: string) => new URL(path, page.url.href).pathname.replace(/\/$/, '');
@@ -242,6 +243,7 @@
 			</svg>
 		</button>
 	{/if}
+	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller -->
 	<a class="name" href={home} use:startsTrail>
 		{#if logo}<img src={logo} alt="" width="20" height="20" />{/if}{name}
 	</a>
