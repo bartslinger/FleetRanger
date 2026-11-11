@@ -151,6 +151,7 @@ See "Apps" and "Public API" in [architecture.md](architecture.md).
 - Sharing flights, also outside the organisation
 - Invite links for accounts
 - Link media
+- Tooltips without JavaScript: the current ones let a fast-moving cursor select their text (user, 2026-11-11)
 
 ## Open questions
 
