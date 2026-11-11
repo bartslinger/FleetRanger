@@ -27,23 +27,5 @@ export const actions = {
 			if (!saved.ok) return fail(saved.status, { message: saved.message });
 		}
 		return { created: result.data.name };
-	},
-	/** A user's roles, as on a group's members; name and email stay. With
-	 * several groups only Admin is set here, the rest in the groups. */
-	roles: async ({ fetch, request }) => {
-		const form = await request.formData();
-		const id = String(form.get('user_id') ?? '');
-		const user = await get<User>(fetch, `/api/users/${id}`);
-		const roles = postedRoles(form);
-		const only = await onlyGroup(fetch);
-		// Two changes: the roles in the only group, then Admin on the organisation.
-		if (only) {
-			const saved = await saveInOnlyGroup(fetch, only, user, roles.group, roles.appRoles);
-			if (!saved.ok) return fail(saved.status, { rolesMessage: saved.message });
-		}
-		const body = { name: user.name, roles: roles.organisation, email: user.email };
-		const result = await send<User>(fetch, 'PUT', `/api/users/${id}`, body);
-		if (!result.ok) return fail(result.status, { rolesMessage: result.message });
-		return { saved: result.data.name };
 	}
 };

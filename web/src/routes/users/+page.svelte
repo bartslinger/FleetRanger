@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import Edit from '@carbon/icons/es/edit/16.js';
 	import AppRoleGroups from '#lib/AppRoleGroups.svelte';
 	import {
 		allRoles,
@@ -31,7 +30,7 @@
 	// roles there and Admin are one set of roles (user's decision, 2026-11-11).
 	const single = $derived(data.onlyGroup !== null);
 	const inOnlyGroup = (user: Row) => user.groups.find((group) => group.id === data.onlyGroup);
-	/** The roles the dialog shows checked. */
+	/** The roles held, Admin and those in the only group. */
 	const shownRoles = (user: Row): OrganisationRole[] => [
 		...((inOnlyGroup(user)?.roles ?? []) as GroupRole[]),
 		...user.roles
@@ -70,23 +69,6 @@
 			helper: ROLE_HELP[role]
 		}))
 	);
-
-	// The last active admin keeps Admin, as on the user's page.
-	const admins = $derived(
-		data.users.filter((user) => user.archived_at === null && user.roles.includes('admin'))
-	);
-	const lastAdmin = (user: Row) => admins.length === 1 && admins[0].id === user.id;
-	const rolesOf = (user: Row) =>
-		roleOptions.map((option) =>
-			option.value === 'admin' && lastAdmin(user)
-				? {
-						...option,
-						helper: 'You are the only admin. Make another user an admin first.',
-						disabled: true
-					}
-				: option
-		);
-	const rolesMessage = $derived(form && 'rolesMessage' in form ? form.rolesMessage : undefined);
 
 	function showArchived(show: boolean) {
 		goto(resolve(show ? '/users?archived' : '/users'), {
@@ -158,34 +140,6 @@
 							: 'Other roles are given in groups, on their page once created.'}
 					/>
 					{#if single}<AppRoleGroups appRoles={data.appRoles} value={[]} />{/if}
-				</Modal>
-			{/snippet}
-			{#snippet rowAction(user)}
-				<!-- As a group's members' Edit roles; archiving stays on the user's page. -->
-				<Modal
-					title="Edit roles"
-					triggerIcon={Edit}
-					triggerSize="md"
-					triggerLabel="Edit roles of {user.name}"
-					label="{user.name} in the organisation"
-					submitLabel="Save"
-					action="?/roles"
-					error={rolesMessage}
-					onsuccess={() => toast(`Roles of ${user.name} saved.`)}
-				>
-					<input type="hidden" name="user_id" value={user.id} />
-					<CheckboxGroup
-						legend="FleetRanger roles"
-						name="role"
-						options={rolesOf(user)}
-						value={shownRoles(user)}
-						helper={single ? undefined : 'Other roles are given in groups, on their page.'}
-					/>
-					<!-- A disabled checkbox isn't posted; Admin stays. -->
-					{#if lastAdmin(user)}<input type="hidden" name="role" value="admin" />{/if}
-					{#if single}
-						<AppRoleGroups appRoles={data.appRoles} value={inOnlyGroup(user)?.app_roles ?? []} />
-					{/if}
 				</Modal>
 			{/snippet}
 		</DataTable>
