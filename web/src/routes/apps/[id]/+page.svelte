@@ -106,7 +106,7 @@
 				<!-- Replaces the table, and offers its action (Carbon's empty states). -->
 				<EmptyState
 					title="No roles yet"
-					body="Roles say what people may do in {app.name}. Add the roles its instructions name, then give them to people on the Users and Groups pages."
+					body="Roles say what people may do in {app.name}. Add the roles its instructions name, then give them to people on their pages under Users, or on a group's page."
 				>
 					{#snippet action()}<RoleDialog app={app.name} error={roleMessage} />{/snippet}
 				</EmptyState>

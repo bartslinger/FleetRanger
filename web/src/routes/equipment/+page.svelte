@@ -155,7 +155,7 @@
 	{#if data.batteries.length === 0}
 		<EmptyState
 			title="No batteries yet"
-			body={!may(data.account, 'equipment.read', null)
+			body={!may(data.account, 'equipment.read', null) && showsGroups(data.account)
 				? 'Batteries appear here once your group flies with them.'
 				: 'Batteries appear here when flight logs that use them are imported.'}
 		/>
@@ -176,7 +176,7 @@
 	{#if rows.length === 0}
 		<EmptyState
 			title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
-			body={!may(data.account, 'equipment.read', null)
+			body={!may(data.account, 'equipment.read', null) && showsGroups(data.account)
 				? 'Drones and remote controllers appear here once your group flies them or an admin assigns them to your group.'
 				: kind === 'drones'
 					? 'Drones appear here when flight logs that use them are imported.'

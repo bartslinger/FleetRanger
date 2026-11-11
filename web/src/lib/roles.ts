@@ -10,19 +10,22 @@ export const ROLE_LABELS: Record<OrganisationRole, string> = {
 	admin: 'Admin'
 };
 
-/** What each role allows on the whole organisation, for helper text. */
+/** What each role allows, for helper text: Admin on the whole organisation,
+ * the others while it has only one group (see the permissions table in
+ * docs/architecture.md). */
 export const ROLE_HELP: Record<OrganisationRole, string> = {
 	viewer: 'Sees all flights, sessions and equipment.',
-	pilot: 'Flies for the organisation.',
-	editor: 'Sees and organises all flights and sessions.',
-	admin: 'Manages users, groups and equipment. Doesn’t fly.'
+	pilot: 'Flies, sees their own flights and pairs controllers.',
+	editor: 'Sees and organises all flights and sessions, names equipment and pairs controllers.',
+	admin: 'Manages everything, including users, groups and apps. Flies only with Pilot as well.'
 };
 
 /** What each role allows in a group. */
 export const GROUP_ROLE_HELP: Record<GroupRole, string> = {
 	viewer: 'Sees the group’s flights, sessions and equipment.',
-	pilot: 'Flies for the group.',
-	editor: 'Sees and organises the group’s flights and sessions.'
+	pilot: 'Flies for the group, sees their own flights and pairs controllers for it.',
+	editor:
+		'Sees and organises the group’s flights and sessions, names its equipment and pairs controllers for it.'
 };
 
 export const GROUP_ROLES: GroupRole[] = ['viewer', 'pilot', 'editor'];

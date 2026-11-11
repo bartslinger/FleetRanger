@@ -73,7 +73,7 @@
 		{#if destinations.length === 0}
 			<EmptyState
 				title="You can’t pair controllers yet"
-				body="Pairing needs the Pilot or Editor role in a group. Ask an admin for one."
+				body="Pairing needs the Pilot or Editor role. Ask an admin for one."
 			/>
 		{:else}
 			<form
