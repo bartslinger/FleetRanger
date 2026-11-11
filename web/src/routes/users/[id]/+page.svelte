@@ -64,8 +64,8 @@
 		single
 			? allRoles(shownRoles, inOnlyGroup?.app_roles ?? [], data.appRoles) || 'None'
 			: user.roles.includes('admin')
-				? 'Admin'
-				: 'None'
+				? 'Yes'
+				: 'No'
 	);
 
 	type Membership = (typeof user.groups)[number];
@@ -228,7 +228,7 @@
 				</dd>
 			</div>
 			<div>
-				<dt>{single ? 'Roles' : 'On the organisation'}</dt>
+				<dt>{single ? 'Roles' : 'Admin'}</dt>
 				<dd class="with-action">
 					{rolesFact}
 					{#if may(data.account, 'users.manage', null)}
