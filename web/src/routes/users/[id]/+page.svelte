@@ -269,6 +269,7 @@
 				rows={user.groups}
 				rowKey={(group) => group.id}
 				rowHref={(group) => resolve('/groups/[id]', { id: group.id })}
+				linkOnly
 				summary={user.groups.length === 0
 					? 'In no group'
 					: `In ${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
