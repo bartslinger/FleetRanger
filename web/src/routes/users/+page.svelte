@@ -3,7 +3,13 @@
 	import { resolve } from '$app/paths';
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import AppRoleGroups from '#lib/AppRoleGroups.svelte';
-	import { allRoles, ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS } from '#lib/roles.js';
+	import {
+		allRoles,
+		ORGANISATION_ROLES,
+		rolesAcrossGroups,
+		ROLE_HELP,
+		ROLE_LABELS
+	} from '#lib/roles.js';
 	import type { GroupRole, OrganisationRole } from '#lib/server/backend.js';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -31,18 +37,12 @@
 		...user.roles
 	];
 
-	// With several groups: Admin, then each group's roles, cut short so a
-	// row stays a few lines (carbon-expert's earlier advice on the groups).
+	// With several groups: Admin, then each role with where it's held.
 	function roleSummary(user: Row): string | null {
 		if (single) {
 			return allRoles(shownRoles(user), inOnlyGroup(user)?.app_roles ?? [], data.appRoles) || null;
 		}
-		const groups = user.groups.map(
-			(group) => `${allRoles(group.roles, group.app_roles, data.appRoles)} in ${group.name}`
-		);
-		const shown =
-			groups.length <= 3 ? groups : [...groups.slice(0, 2), `${groups.length - 2} more groups`];
-		return [...(user.roles.includes('admin') ? ['Admin'] : []), ...shown].join('; ') || null;
+		return rolesAcrossGroups(user.roles.includes('admin'), user.groups, data.appRoles) || null;
 	}
 
 	// Name, roles, then the rest; the status column only while archived
