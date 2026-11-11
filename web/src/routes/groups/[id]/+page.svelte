@@ -175,6 +175,7 @@
 				rows={group.member_list}
 				rowKey={(member) => member.user_id}
 				rowHref={(member) => resolve('/users/[id]', { id: member.user_id })}
+				linkOnly
 				{summary}
 			>
 				{#snippet toolbar()}
