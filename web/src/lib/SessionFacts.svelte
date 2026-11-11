@@ -6,7 +6,6 @@
 -->
 <script lang="ts" module>
 	import { areaTimes, clock, dayMonth, distance, duration } from '#lib/format.js';
-	import { ORGANISATION } from '#lib/groups.js';
 
 	interface Flight {
 		takeoff_at: string;
@@ -14,7 +13,7 @@
 		air_time_s: number;
 		distance_m: number;
 		pilot_name: string | null;
-		group_name: string | null;
+		group_name: string;
 		areas: { name: string; air_time_s: number }[];
 	}
 
@@ -41,14 +40,13 @@
 			/** The flights' groups: those a suggested session would get. */
 			groups: names(
 				flights.map((flight) => flight.group_name),
-				ORGANISATION
+				''
 			)
 		};
 	}
 
 	/** A session's own group, as its facts say it. */
-	export const sessionGroup = (session: { group_name: string | null }) =>
-		session.group_name ?? ORGANISATION;
+	export const sessionGroup = (session: { group_name: string }) => session.group_name;
 </script>
 
 <script lang="ts">
@@ -67,9 +65,19 @@
 		/** A field choosing the group instead of the fact, e.g. for a session
 		 * still to be made. */
 		groupField?: Snippet;
+		/** Whether to show the group: only once the organisation has several. */
+		showGroup?: boolean;
 	}
 
-	let { flights, timeZone, group, pilotAction, groupAction, groupField }: Props = $props();
+	let {
+		flights,
+		timeZone,
+		group,
+		pilotAction,
+		groupAction,
+		groupField,
+		showGroup = true
+	}: Props = $props();
 
 	const facts = $derived(summary(flights, timeZone));
 	const distanceM = $derived(flights.reduce((total, flight) => total + flight.distance_m, 0));
@@ -110,7 +118,7 @@
 			{facts.pilots}{#if pilotAction}{@render pilotAction()}{/if}
 		</dd>
 	</div>
-	{#if !groupField}
+	{#if !groupField && showGroup}
 		<div>
 			<dt>Group</dt>
 			<dd class="with-action">

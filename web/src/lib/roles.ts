@@ -13,7 +13,7 @@ export const ROLE_LABELS: Record<OrganisationRole, string> = {
 /** What each role allows on the whole organisation, for helper text. */
 export const ROLE_HELP: Record<OrganisationRole, string> = {
 	viewer: 'Sees all flights, sessions and equipment.',
-	pilot: 'Flies for every group.',
+	pilot: 'Flies for the organisation.',
 	editor: 'Sees and organises all flights and sessions.',
 	admin: 'Manages users, groups and equipment. Doesn’t fly.'
 };

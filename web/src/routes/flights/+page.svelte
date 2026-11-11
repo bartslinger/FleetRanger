@@ -24,9 +24,9 @@
 	import { anywhere, may, readsSeveralGroups, type Permission } from '#lib/permissions.js';
 	import {
 		groupOptions as groupChoices,
-		ORGANISATION,
 		sessionGroupChoice,
-		sharedGroup
+		sharedGroup,
+		showsGroups
 	} from '#lib/groups.js';
 	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import { pilotOptions } from '#lib/pilots.js';
@@ -62,7 +62,7 @@
 			format: (flight) => distance(flight.distance_m)
 		},
 		{ key: 'pilot_name', header: 'Pilot' },
-		{ key: 'group_name', header: 'Group', format: (flight) => flight.group_name ?? ORGANISATION },
+		...(showsGroups(data.account) ? [{ key: 'group_name', header: 'Group' } as const] : []),
 		{
 			key: 'aircraft_serial',
 			header: 'Drone',
@@ -146,7 +146,10 @@
 	const canChange = $derived(BATCH.some((permission) => anywhere(data.account, permission)));
 	const changeable = (flight: Row) =>
 		BATCH.some((permission) => may(data.account, permission, flight.group_id));
-	const can = (permission: Permission) => anywhere(data.account, permission);
+	// Moving to another group only once there are several.
+	const can = (permission: Permission) =>
+		anywhere(data.account, permission) &&
+		(permission !== 'flights.move' || showsGroups(data.account));
 
 	/** The group the batch's flights share: the selected ones', or for all
 	 * matching flights the one group filtered on. */
@@ -155,13 +158,12 @@
 	}
 	/** The groups of the batch's flights as far as the page knows them: the
 	 * selected rows', or for all matching flights the one group filtered on. */
-	function batchGroups(ids: string[]): { group_id: string | null; group_name: string | null }[] {
+	function batchGroups(ids: string[]): { group_id: string; group_name: string }[] {
 		if (!allMatching) return selectedRows(ids);
 		if (data.state.groups.length !== 1) return [];
 		const [only] = data.state.groups;
-		if (only === 'none') return [{ group_id: null, group_name: null }];
 		const group = data.devices.groups.find((group) => group.id === only);
-		return group?.id ? [{ group_id: group.id, group_name: group.name }] : [];
+		return group ? [{ group_id: group.id, group_name: group.name }] : [];
 	}
 	// Where the user may move flights to.
 	const groupOptions = $derived(groupChoices(data.account, 'flights.move', data.choices.groups));

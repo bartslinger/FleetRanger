@@ -2,7 +2,6 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { back } from '#lib/back.svelte.js';
-	import { ORGANISATION } from '#lib/groups.js';
 	import { KINDS, lastPilot } from '#lib/equipment.js';
 	import { dateTime, duration } from '#lib/format.js';
 	import Button from '#lib/ui/Button.svelte';
@@ -33,11 +32,10 @@
 
 	// Where the user may move it, and where it is now.
 	const groupOptions = $derived([
-		...(data.toOrganisation || item.group_id === null ? [{ value: '', label: ORGANISATION }] : []),
 		...data.groups.map((group) => ({ value: group.id, label: group.name })),
-		...(item.group_id && !data.groups.some((group) => group.id === item.group_id)
-			? [{ value: item.group_id, label: item.group_name ?? '' }]
-			: [])
+		...(data.groups.some((group) => group.id === item.group_id)
+			? []
+			: [{ value: item.group_id, label: item.group_name }])
 	]);
 	const flights = $derived(
 		`${resolve('/flights')}${filtered(data.kind === 'drones' ? { drone: item.serial } : { controller: item.serial })}`
@@ -122,10 +120,10 @@
 				</div>
 			{/if}
 			<!-- Who can't change it sees it here. -->
-			{#if !data.move}
+			{#if !data.move && data.showsGroups}
 				<div>
 					<dt>Group</dt>
-					<dd>{item.group_name ?? ORGANISATION}</dd>
+					<dd>{item.group_name}</dd>
 				</div>
 			{/if}
 		</dl>
@@ -162,15 +160,10 @@
 					<input type="hidden" name="name" value={item.name ?? ''} />
 				{/if}
 				{#if data.move}
-					<Select
-						label="Group"
-						name="group_id"
-						options={groupOptions}
-						value={item.group_id ?? ''}
-					/>
+					<Select label="Group" name="group_id" options={groupOptions} value={item.group_id} />
 				{:else}
 					<!-- Unchanged: moving needs equipment.move on both groups. -->
-					<input type="hidden" name="group_id" value={item.group_id ?? ''} />
+					<input type="hidden" name="group_id" value={item.group_id} />
 				{/if}
 				<div class="buttons">
 					<Button type="submit" disabled={busy} fill>Save</Button>

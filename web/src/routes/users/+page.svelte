@@ -4,6 +4,7 @@
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import AppRoleGroups from '#lib/AppRoleGroups.svelte';
 	import { allRoles, ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS } from '#lib/roles.js';
+	import type { GroupRole, OrganisationRole } from '#lib/server/backend.js';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -20,26 +21,35 @@
 
 	type Row = (typeof data.users)[number];
 
-	// The groups by name only; their roles are on the user's page. A long
-	// list is cut short so a row stays one line (carbon-expert's suggestion).
-	function groupNames(user: Row): string | null {
-		const names = user.groups.map((group) => group.name);
-		if (names.length <= 3) return names.join(', ') || null;
-		return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+	// While the organisation has only one group, nothing shows it: a user's
+	// roles there and Admin are one set of roles (user's decision, 2026-11-11).
+	const single = $derived(data.onlyGroup !== null);
+	const inOnlyGroup = (user: Row) => user.groups.find((group) => group.id === data.onlyGroup);
+	/** The roles the dialog shows checked. */
+	const shownRoles = (user: Row): OrganisationRole[] => [
+		...((inOnlyGroup(user)?.roles ?? []) as GroupRole[]),
+		...user.roles
+	];
+
+	// With several groups: Admin, then each group's roles, cut short so a
+	// row stays a few lines (carbon-expert's earlier advice on the groups).
+	function roleSummary(user: Row): string | null {
+		if (single) {
+			return allRoles(shownRoles(user), inOnlyGroup(user)?.app_roles ?? [], data.appRoles) || null;
+		}
+		const groups = user.groups.map(
+			(group) => `${allRoles(group.roles, group.app_roles, data.appRoles)} in ${group.name}`
+		);
+		const shown =
+			groups.length <= 3 ? groups : [...groups.slice(0, 2), `${groups.length - 2} more groups`];
+		return [...(user.roles.includes('admin') ? ['Admin'] : []), ...shown].join('; ') || null;
 	}
 
-	// As a group's members (the organisation is the top group, user's
-	// decision): name, roles, then the rest; the status column only while
-	// archived users are shown.
+	// Name, roles, then the rest; the status column only while archived
+	// users are shown.
 	const columns: TableColumn<Row>[] = $derived([
 		{ key: 'name', header: 'Name' },
-		{
-			key: 'roles',
-			header: 'Roles',
-			wrap: true,
-			format: (user) => allRoles(user.roles, user.app_roles, data.appRoles) || null
-		},
-		{ key: 'groups', header: 'Groups', wrap: true, format: groupNames },
+		{ key: 'roles', header: 'Roles', wrap: true, format: roleSummary },
 		{ key: 'email', header: 'Login', wideOnly: true },
 		...(data.archived
 			? [
@@ -52,11 +62,14 @@
 			: [])
 	]);
 
-	const roleOptions = ORGANISATION_ROLES.map((role) => ({
-		value: role,
-		label: ROLE_LABELS[role],
-		helper: ROLE_HELP[role]
-	}));
+	// With several groups only Admin is given here; the rest in the groups.
+	const roleOptions = $derived(
+		(single ? ORGANISATION_ROLES : (['admin'] as const)).map((role) => ({
+			value: role,
+			label: ROLE_LABELS[role],
+			helper: ROLE_HELP[role]
+		}))
+	);
 
 	// The last active admin keeps Admin, as on the user's page.
 	const admins = $derived(
@@ -140,9 +153,11 @@
 						name="role"
 						options={roleOptions}
 						value={[]}
-						helper="On the whole organisation. None for someone who only has roles in groups; add them to groups on their page."
+						helper={single
+							? undefined
+							: 'Other roles are given in groups, on their page once created.'}
 					/>
-					<AppRoleGroups appRoles={data.appRoles} value={[]} />
+					{#if single}<AppRoleGroups appRoles={data.appRoles} value={[]} />{/if}
 				</Modal>
 			{/snippet}
 			{#snippet rowAction(user)}
@@ -163,12 +178,14 @@
 						legend="FleetRanger roles"
 						name="role"
 						options={rolesOf(user)}
-						value={user.roles}
-						helper="None for someone who only has roles in groups."
+						value={shownRoles(user)}
+						helper={single ? undefined : 'Other roles are given in groups, on their page.'}
 					/>
 					<!-- A disabled checkbox isn't posted; Admin stays. -->
 					{#if lastAdmin(user)}<input type="hidden" name="role" value="admin" />{/if}
-					<AppRoleGroups appRoles={data.appRoles} value={user.app_roles} />
+					{#if single}
+						<AppRoleGroups appRoles={data.appRoles} value={inOnlyGroup(user)?.app_roles ?? []} />
+					{/if}
 				</Modal>
 			{/snippet}
 		</DataTable>

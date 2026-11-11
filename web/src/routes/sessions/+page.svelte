@@ -4,7 +4,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { anywhere, may, readsSeveralGroups } from '#lib/permissions.js';
-	import { groupOptions as groupChoices } from '#lib/groups.js';
+	import { groupOptions as groupChoices, showsGroups } from '#lib/groups.js';
 	import Checkbox from '#lib/ui/Checkbox.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import SessionFacts, { sessionGroup } from '#lib/SessionFacts.svelte';
@@ -85,7 +85,7 @@
 			format: (session) => distance(session.distance_m)
 		},
 		{ key: 'pilots', header: 'Pilot', format: (session) => session.pilots.join(', ') },
-		{ key: 'group_name', header: 'Group', format: (session) => sessionGroup(session) }
+		...(showsGroups(data.account) ? [{ key: 'group_name', header: 'Group' } as const] : [])
 	]);
 
 	// Merging: sessions.edit on each session's own group.
@@ -356,7 +356,9 @@
 	// Moving the open session to another group: sessions.move on both, and
 	// to move its flights along, flights.move on theirs and the new one.
 	const canMoveSession = $derived(
-		openSession !== null && may(data.account, 'sessions.move', openSession.group_id)
+		openSession !== null &&
+			showsGroups(data.account) &&
+			may(data.account, 'sessions.move', openSession.group_id)
 	);
 	// The chosen group, starting at the session's own.
 	let moveTo = $derived(openSession?.group_id ?? '');
@@ -369,7 +371,7 @@
 	});
 	const canMoveFlights = $derived(
 		openFlights.every((flight) => may(data.account, 'flights.move', flight.group_id)) &&
-			may(data.account, 'flights.move', moveTo || null)
+			may(data.account, 'flights.move', moveTo)
 	);
 	/** The flights the user sees that aren't in the chosen group yet. */
 	const othersThere = $derived(
@@ -698,7 +700,8 @@
 													<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
 												</span>
 												<span class="card-who">
-													{session.pilots.join(', ')} · {sessionGroup(session)}
+													{session.pilots.join(', ')}{#if showsGroups(data.account)}
+														· {sessionGroup(session)}{/if}
 												</span>
 												<span class="card-numbers">
 													{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the
@@ -718,6 +721,7 @@
 									flights={openSession.flights}
 									timeZone={data.timeZone}
 									group={sessionGroup(openSession)}
+									showGroup={showsGroups(data.account)}
 								>
 									{#snippet pilotAction()}
 										{#if canSetPilots}

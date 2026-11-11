@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { KINDS, lastPilot, type Kind, type Tab } from '#lib/equipment.js';
 	import { dateTime, duration, health } from '#lib/format.js';
+	import { showsGroups } from '#lib/groups.js';
 	import { may } from '#lib/permissions.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -49,18 +50,22 @@
 		}
 	]);
 
+	// Once the organisation has several groups.
+	const group: TableColumn<Row>[] = $derived(
+		showsGroups(data.account) ? [{ key: 'group_name', header: 'Group' }] : []
+	);
 	const columns: Record<Kind, TableColumn<Row>[]> = $derived({
 		drones: [
 			{ key: 'serial', header: 'Serial number', identifier: true },
 			{ key: 'name', header: 'Name' },
-			{ key: 'group_name', header: 'Group' },
+			...group,
 			...figures
 		],
 		// As on a controller's page.
 		controllers: [
 			{ key: 'serial', header: 'Serial number', identifier: true },
 			{ key: 'name', header: 'Name' },
-			{ key: 'group_name', header: 'Group' },
+			...group,
 			{
 				key: 'paired',
 				header: 'Pairing',

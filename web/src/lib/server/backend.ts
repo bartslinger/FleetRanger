@@ -20,9 +20,9 @@ export interface FlightSummary {
 	rc_name: string | null;
 	pilot_id: string | null;
 	pilot_name: string | null;
-	/** Null: in the organisation's queue. */
-	group_id: string | null;
-	group_name: string | null;
+	/** Its group. */
+	group_id: string;
+	group_name: string;
 	/** Null: in no session. */
 	session_id: string | null;
 	/** Set for an archived flight: left out everywhere but the archived filter. */
@@ -67,9 +67,8 @@ export interface Device {
 export interface Devices {
 	aircraft: Device[];
 	controllers: Device[];
-	/** No id: the flights without a group (the organisation queue); with
-	 * `session=any`, the sessions' own groups, no id for the organisation. */
-	groups: { id: string | null; name: string | null }[];
+	/** With `session=any`, the sessions' own groups. */
+	groups: { id: string; name: string }[];
 	/** No id: the flights without a pilot. */
 	pilots: { id: string | null; name: string | null }[];
 	areas: { id: string; name: string }[];
@@ -104,9 +103,9 @@ export interface FlightDetail {
 	rc_name: string | null;
 	pilot_id: string | null;
 	pilot_name: string | null;
-	/** Null: in the organisation's queue. */
-	group_id: string | null;
-	group_name: string | null;
+	/** Its group. */
+	group_id: string;
+	group_name: string;
 	/** Null: in no session. */
 	session_id: string | null;
 	track: Track;
@@ -145,10 +144,10 @@ export interface SessionSummary {
 	distance_m: number;
 	/** Names in alphabetical order. */
 	pilots: string[];
-	/** The session's own group, which decides who changes it; null for the
-	 * organisation. Its flights may be in other groups. */
-	group_id: string | null;
-	group_name: string | null;
+	/** The session's own group, which decides who changes it. Its flights
+	 * may be in other groups. */
+	group_id: string;
+	group_name: string;
 	/** Each visible flight's times and takeoff point, in takeoff order: the day strip. */
 	flight_times: DayStripFlight[];
 }
@@ -162,9 +161,9 @@ export interface SessionPage {
 /** A session with its visible flights in takeoff order, from `GET /api/sessions/{id}`. */
 export interface Session {
 	id: string;
-	/** Its own group; null for the organisation. */
-	group_id: string | null;
-	group_name: string | null;
+	/** Its own group. */
+	group_id: string;
+	group_name: string;
 	flights: FlightDetail[];
 	/** Oldest first. */
 	comments: SessionComment[];
@@ -262,12 +261,10 @@ export interface GroupDetail extends Group {
 export interface User {
 	id: string;
 	name: string;
-	/** Roles on the whole organisation, in the order viewer, pilot, editor, admin. */
-	roles: OrganisationRole[];
+	/** Roles on the whole organisation: Admin, or none. */
+	roles: 'admin'[];
 	/** The groups they are a member of, by name, with their roles there. */
 	groups: { id: string; name: string; roles: GroupRole[]; app_roles: string[] }[];
-	/** Apps' roles on the whole organisation, by id. */
-	app_roles: string[];
 	/** The login's email; null if the user can't log in. */
 	email: string | null;
 	last_login_at: string | null;
@@ -324,9 +321,9 @@ export interface Equipment {
 	id: string;
 	serial: string;
 	name: string | null;
-	/** Null: directly in the organisation. */
-	group_id: string | null;
-	group_name: string | null;
+	/** Its group, which decides who changes it. */
+	group_id: string;
+	group_name: string;
 	/** Over all its flights, also those the user doesn't see. */
 	flights: number;
 	air_time_s: number;
@@ -355,8 +352,8 @@ export interface PairingCode {
 	id: string;
 	code: string;
 	created_by: string;
-	/** The group the controller joins; null for the organisation. */
-	group: string | null;
+	/** The group the controller joins. */
+	group: string;
 	created_at: string;
 	expires_at: string;
 }
@@ -397,6 +394,9 @@ export interface Account {
 	apps: boolean;
 	/** The admin impersonating this user, who is the one logged in. */
 	impersonated_by: { id: string; name: string } | null;
+	/** Whether the organisation has more than one group; until then no
+	 * groups are shown. */
+	several_groups: boolean;
 }
 
 /** An app asking to connect, from `POST /api/oauth/request`. */

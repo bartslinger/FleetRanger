@@ -4,7 +4,7 @@
 	import Button from '#lib/ui/Button.svelte';
 	import { areaTimes, clock, dateTime, day, dayMonth, distance, duration } from '#lib/format.js';
 	import { may } from '#lib/permissions.js';
-	import { groupOptions as groupChoices, ORGANISATION, sharedGroup } from '#lib/groups.js';
+	import { groupOptions as groupChoices, sharedGroup, showsGroups } from '#lib/groups.js';
 	import { offered, pilotOptions as pilotOptions_ } from '#lib/pilots.js';
 	import Column from '#lib/ui/Column.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
@@ -37,7 +37,7 @@
 	const canMove = $derived(may(data.account, 'flights.move', flight.group_id));
 	const groupOptions = $derived(groupChoices(data.account, 'flights.move', data.choices.groups));
 	function groupSet(result: Record<string, unknown> | undefined) {
-		const group = (result?.groupName as string | null) ?? ORGANISATION;
+		const group = result?.groupName as string;
 		toast(`Flight moved to ${group}.`);
 	}
 
@@ -57,7 +57,7 @@
 	const groups: Fact[][] = $derived([
 		[
 			{ label: 'Pilot', value: flight.pilot_name ?? 'Unknown' },
-			{ label: 'Group', value: flight.group_name ?? ORGANISATION },
+			...(showsGroups(data.account) ? [{ label: 'Group', value: flight.group_name }] : []),
 			// Whoever sees the flight may open its session; named as its page is.
 			{
 				label: 'Session',
@@ -209,7 +209,7 @@
 										label="Group"
 										name="group_id"
 										options={groupOptions}
-										value={flight.group_id ?? ''}
+										value={flight.group_id}
 									/>
 									<p class="help">The flight keeps its pilot and session.</p>
 								</Modal>

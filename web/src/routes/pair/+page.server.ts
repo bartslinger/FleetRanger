@@ -6,9 +6,8 @@ import { get, remove, send, type PairingCode } from '#lib/server/backend.js';
 
 export async function load({ fetch }) {
 	return {
-		// Where the controller can go: the groups where the user may pair, and
-		// the organisation itself when they may pair there.
-		destinations: await get<{ groups: { id: string; name: string }[]; organisation: boolean }>(
+		// Where the controller can go: the groups where the user may pair.
+		destinations: await get<{ groups: { id: string; name: string }[] }>(
 			fetch,
 			'/api/pairing-codes/groups'
 		),
@@ -23,12 +22,11 @@ export const actions = {
 		const group = String(form.get('group_id') ?? '');
 		if (!group) return fail(400, { groupError: 'Choose a group for the controller.' });
 		const hours = Number(form.get('hours'));
-		const result = await send<{ code: string; group: string | null; expires_at: string }>(
+		const result = await send<{ code: string; group: string; expires_at: string }>(
 			fetch,
 			'POST',
 			'/api/pairing-codes',
-			// "organisation": no group, as the select's empty value is its prompt.
-			{ group: group === 'organisation' ? null : group, hours }
+			{ group, hours }
 		);
 		if (!result.ok) return fail(result.status, { message: result.message });
 		return { created: result.data };

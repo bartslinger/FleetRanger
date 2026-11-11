@@ -61,8 +61,10 @@ export function anywhere(holder: Holder, permission: Permission): boolean {
 
 /** Whether the user sees the flights of more than one group: the lists then
  * filter by group. */
-export function readsSeveralGroups(holder: Holder): boolean {
-	if (!holder) return false;
+export function readsSeveralGroups(
+	holder: (Holder & { several_groups: boolean }) | null | undefined
+): boolean {
+	if (!holder?.several_groups) return false;
 	const { organisation, groups } = holder.permissions;
 	return (
 		organisation.includes('flights.read') ||

@@ -11,20 +11,7 @@
 
 	let { data, form }: PageProps = $props();
 
-	interface Row {
-		id: string;
-		name: string;
-		members: number;
-		flights: number;
-	}
-
-	const ORGANISATION_ROW = 'organisation';
-	// The organisation first, as the top group (user's decision): not a link, as
-	// its members are all users, which sets it apart from the groups.
-	const rows: Row[] = $derived([
-		{ id: ORGANISATION_ROW, name: 'Organisation, all users', ...data.organisation },
-		...data.groups
-	]);
+	type Row = (typeof data.groups)[number];
 
 	const count = (value: number) => value.toLocaleString('en-US');
 	const columns: TableColumn<Row>[] = [
@@ -53,20 +40,20 @@
 		<DataTable
 			label="Groups"
 			{columns}
-			{rows}
+			rows={data.groups}
 			rowKey={(group) => group.id}
-			rowHref={(group) =>
-				group.id === ORGANISATION_ROW ? undefined : resolve('/groups/[id]', { id: group.id })}
+			rowHref={(group) => resolve('/groups/[id]', { id: group.id })}
 			summary={`${count(data.groups.length)} ${data.groups.length === 1 ? 'group' : 'groups'} in the organisation`}
 		>
 			{#snippet toolbar()}
 				{@render newGroup()}
 			{/snippet}
 		</DataTable>
-		{#if data.groups.length === 0}
+		{#if data.groups.length === 1}
 			<p class="note">
-				Groups hold flights, sessions and equipment, and give their members roles there. A small
-				organisation doesn't need them: without groups, everything is in the organisation.
+				Everything is in {data.groups[0].name}, and while it's the only group, the rest of the app
+				doesn't show it. Groups hold flights, sessions and equipment, and give their members roles
+				there; with a second group, each item and role belongs to one of them.
 			</p>
 		{/if}
 	</Column>

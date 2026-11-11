@@ -16,8 +16,8 @@
 		flights: {
 			id: string;
 			pilot_id: string | null;
-			group_id: string | null;
-			group_name: string | null;
+			group_id: string;
+			group_name: string;
 		}[];
 		/** Which flights those are, e.g. "All 3 flights in the session." */
 		which: string;

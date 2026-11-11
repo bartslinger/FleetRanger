@@ -8,6 +8,7 @@ import {
 	type OfferedAppRole,
 	type User
 } from '#lib/server/backend.js';
+import { postedRoles, saveInOnlyGroup } from '#lib/server/userRoles.js';
 
 export async function load({ fetch, params }) {
 	const [user, users, groups, appRoles] = await Promise.all([
@@ -23,7 +24,10 @@ export async function load({ fetch, params }) {
 	const otherGroups = groups
 		.filter((group) => !user.groups.some((own) => own.id === group.id))
 		.map(({ id, name }) => ({ id, name }));
-	return { user, lastAdmin, otherGroups, appRoles };
+	// While there is only one group, its roles are shown with Admin and no
+	// groups are shown.
+	const onlyGroup = groups.length === 1 ? groups[0].id : null;
+	return { user, lastAdmin, otherGroups, appRoles, onlyGroup };
 }
 
 export const actions = {
@@ -40,16 +44,18 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { editMessage: result.message });
 		return { saved: true };
 	},
-	/** The roles on the organisation, edited as a group's are; name and email stay. */
+	/** Admin on the organisation, and while there is only one group the
+	 * roles in it; name and email stay. */
 	organisationRoles: async ({ fetch, params, request }) => {
 		const form = await request.formData();
 		const user = await get<User>(fetch, `/api/users/${params.id}`);
-		const body = {
-			name: user.name,
-			roles: form.getAll('role').map(String),
-			email: user.email,
-			app_roles: form.getAll('app_role').map(String)
-		};
+		const roles = postedRoles(form);
+		const groups = await get<Group[]>(fetch, '/api/groups');
+		if (groups.length === 1) {
+			const saved = await saveInOnlyGroup(fetch, groups[0], user, roles.group, roles.appRoles);
+			if (!saved.ok) return fail(saved.status, { organisationRolesMessage: saved.message });
+		}
+		const body = { name: user.name, roles: roles.organisation, email: user.email };
 		const result = await send<User>(fetch, 'PUT', `/api/users/${params.id}`, body);
 		if (!result.ok) return fail(result.status, { organisationRolesMessage: result.message });
 		return { organisationSaved: true };
