@@ -98,8 +98,6 @@ async fn me(
         id: caller.actor.user_id,
         name: caller.actor.name,
         app_roles: AppRoles {
-            // Kept for apps that read it: app roles are given only in groups.
-            organisation: Vec::new(),
             groups: held
                 .groups
                 .into_iter()
@@ -391,9 +389,8 @@ async fn get_flight(
 /// List groups
 ///
 /// Groups where the user holds a role, FleetRanger's or an app's, or that a
-/// flight they see belongs to; all of them for a user who reads every flight
-/// or holds one of the calling app's roles on the organisation. In the order
-/// they were added.
+/// flight they see belongs to; all of them for a user who reads every flight.
+/// In the order they were added.
 #[utoipa::path(
     get, path = "/api/v1/groups", tag = "Groups",
     params(Paging),

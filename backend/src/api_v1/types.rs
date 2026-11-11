@@ -38,12 +38,10 @@ pub struct Me {
 }
 
 /// The calling app's roles that the user holds, by the keys the admin gave
-/// them on FleetRanger's Apps page. What a role allows is the app's to
-/// decide. A role on the organisation counts for every group.
+/// them on FleetRanger's Apps page, per group. What a role allows is the
+/// app's to decide.
 #[derive(Clone, Serialize, ToSchema)]
 pub struct AppRoles {
-    /// Roles on the whole organisation.
-    pub organisation: Vec<String>,
     /// Only the groups where the user holds one of the app's roles.
     pub groups: Vec<GroupAppRoles>,
 }
