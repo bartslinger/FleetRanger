@@ -61,8 +61,7 @@ struct PilotChange {
 #[derive(Deserialize)]
 struct GroupChange {
     flight_ids: Vec<Uuid>,
-    /// None: the organisation's queue.
-    group_id: Option<Uuid>,
+    group_id: Uuid,
 }
 
 #[derive(Serialize)]

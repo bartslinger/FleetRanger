@@ -272,7 +272,8 @@ mod tests {
     #[sqlx::test]
     async fn only_admins_impersonate_someone_else_with_that_users_roles(db: PgPool) {
         let admin = testing::user(&db, "Test Admin", &["admin"]).await;
-        let pilot = testing::user(&db, "Test Pilot", &["pilot"]).await;
+        let pilot =
+            testing::member(&db, "Test Pilot", testing::general(&db).await, &["pilot"]).await;
         let as_admin = testing::actor(&db, admin).await;
         let as_pilot = testing::actor(&db, pilot).await;
 

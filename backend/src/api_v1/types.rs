@@ -129,7 +129,7 @@ pub struct Comment {
 #[derive(Clone, Serialize, ToSchema)]
 pub struct Session {
     pub id: Uuid,
-    /// The session's own group; null for the organisation. Expandable.
+    /// The session's own group, always given. Expandable.
     pub group: Option<Expandable<Group>>,
     pub first_takeoff_at: DateTime<Utc>,
     pub last_landed_at: DateTime<Utc>,

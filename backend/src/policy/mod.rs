@@ -29,8 +29,8 @@ pub fn require(actor: &Actor, permission: Permission, group: Option<Uuid>) -> Ap
 /// whoever holds `controllers.manage` on the group the controller joins.
 /// Creating one needs `controllers.pair`; see "Clients" in
 /// docs/architecture.md.
-pub fn manage_pairing_code(actor: &Actor, created_by: Uuid, group: Option<Uuid>) -> bool {
-    actor.user_id == created_by || actor.grants.may(Permission::ControllersManage, group)
+pub fn manage_pairing_code(actor: &Actor, created_by: Uuid, group: Uuid) -> bool {
+    actor.user_id == created_by || actor.grants.may(Permission::ControllersManage, Some(group))
 }
 
 /// Which flights an actor sees, as the parameters of the visibility condition
@@ -63,10 +63,10 @@ pub fn flight_scope(actor: &Actor) -> FlightScope {
 fn on_all(
     grants: &Grants,
     permission: Permission,
-    groups: &[Option<Uuid>],
+    groups: &[Uuid],
     refusal: &str,
 ) -> ApiResult<()> {
-    if grants.may_on_all(permission, groups) {
+    if grants.may_in_all(permission, groups) {
         Ok(())
     } else if grants.anywhere(permission) {
         Err(ApiError::Conflict(refusal.to_owned()))
@@ -79,7 +79,7 @@ fn on_all(
 /// groups: `sessions.edit` on every session that changes, the ones flights
 /// join and the ones they leave. The flights' own groups don't count: a
 /// session never changes them.
-pub fn change_sessions(grants: &Grants, session_groups: &[Option<Uuid>]) -> ApiResult<()> {
+pub fn change_sessions(grants: &Grants, session_groups: &[Uuid]) -> ApiResult<()> {
     on_all(
         grants,
         Permission::SessionsEdit,
@@ -88,18 +88,18 @@ pub fn change_sessions(grants: &Grants, session_groups: &[Option<Uuid>]) -> ApiR
     )
 }
 
-/// Whether the actor may move a session from one group to another, or with
-/// None to the organisation: `sessions.move` on both, and to move its flights
+/// Whether the actor may move a session from one group to another:
+/// `sessions.move` on both, and to move its flights
 /// along, `flights.move` on their groups and the new one.
 ///
 /// - `flight_groups`: the group of each of its flights, if they move along.
 pub fn move_session(
     grants: &Grants,
-    from: Option<Uuid>,
-    to: Option<Uuid>,
-    flight_groups: Option<&[Option<Uuid>]>,
+    from: Uuid,
+    to: Uuid,
+    flight_groups: Option<&[Uuid]>,
 ) -> ApiResult<()> {
-    let session = grants.may_on_all(Permission::SessionsMove, &[from, to]);
+    let session = grants.may_in_all(Permission::SessionsMove, &[from, to]);
     let flights = flight_groups.is_none_or(|groups| move_flights(grants, groups, to).is_ok());
     if session && flights {
         Ok(())
@@ -116,13 +116,13 @@ pub fn move_session(
 /// - `renames`: whether the name changes.
 pub fn change_equipment(
     grants: &Grants,
-    item_group: Option<Uuid>,
-    new_group: Option<Uuid>,
+    item_group: Uuid,
+    new_group: Uuid,
     renames: bool,
 ) -> ApiResult<()> {
-    let renaming = !renames || grants.may(Permission::EquipmentRename, item_group);
+    let renaming = !renames || grants.may(Permission::EquipmentRename, Some(item_group));
     let moving = new_group == item_group
-        || grants.may_on_all(Permission::EquipmentMove, &[item_group, new_group]);
+        || grants.may_in_all(Permission::EquipmentMove, &[item_group, new_group]);
     if renaming && moving {
         Ok(())
     } else {
@@ -137,7 +137,7 @@ pub fn change_equipment(
 pub fn change_flights(
     grants: &Grants,
     permission: Permission,
-    flight_groups: &[Option<Uuid>],
+    flight_groups: &[Uuid],
 ) -> ApiResult<()> {
     on_all(
         grants,
@@ -147,15 +147,11 @@ pub fn change_flights(
     )
 }
 
-/// Whether the actor may move flights of these groups to another group, or
-/// with None to the queue: `flights.move` on every group involved.
-pub fn move_flights(
-    grants: &Grants,
-    flight_groups: &[Option<Uuid>],
-    to: Option<Uuid>,
-) -> ApiResult<()> {
-    if grants.may_on_all(Permission::FlightsMove, flight_groups)
-        && grants.may(Permission::FlightsMove, to)
+/// Whether the actor may move flights of these groups to another group:
+/// `flights.move` on every group involved.
+pub fn move_flights(grants: &Grants, flight_groups: &[Uuid], to: Uuid) -> ApiResult<()> {
+    if grants.may_in_all(Permission::FlightsMove, flight_groups)
+        && grants.may(Permission::FlightsMove, Some(to))
     {
         Ok(())
     } else {
@@ -171,14 +167,8 @@ mod tests {
     const B: Uuid = Uuid::from_u128(2);
     const C: Uuid = Uuid::from_u128(3);
 
-    // Today's roles as migration 0018 filled them.
-
     fn admin() -> Grants {
         Grants::from_stored([(None, "admin".to_owned())]).unwrap()
-    }
-
-    fn all_flights() -> Grants {
-        Grants::from_stored([(None, "viewer".to_owned())]).unwrap()
     }
 
     /// A member of these groups: Pilot and Editor in each.
@@ -191,6 +181,16 @@ mod tests {
         .unwrap()
     }
 
+    /// A viewer in these groups.
+    fn viewer(groups: &[Uuid]) -> Grants {
+        Grants::from_stored(
+            groups
+                .iter()
+                .map(|group| (Some(*group), "viewer".to_owned())),
+        )
+        .unwrap()
+    }
+
     /// An editor renames their own groups' equipment, not another group's
     /// that they see through a flight; moving is admin work, on both groups.
     /// Saving without a change needs nothing.
@@ -198,45 +198,41 @@ mod tests {
     fn editors_rename_own_groups_equipment_and_admins_move_it() {
         let (own, second, other) = (A, C, B);
         let mine = member(&[own, second]);
-        assert!(change_equipment(&mine, Some(own), Some(own), true).is_ok());
-        assert!(change_equipment(&mine, Some(other), Some(other), true).is_err());
-        assert!(change_equipment(&mine, None, None, true).is_err());
-        assert!(change_equipment(&mine, Some(other), Some(other), false).is_ok());
-        assert!(change_equipment(&mine, Some(own), Some(second), false).is_err());
-        assert!(change_equipment(&admin(), Some(own), None, true).is_ok());
-        assert!(change_equipment(&all_flights(), None, None, true).is_err());
+        assert!(change_equipment(&mine, own, own, true).is_ok());
+        assert!(change_equipment(&mine, other, other, true).is_err());
+        assert!(change_equipment(&mine, other, other, false).is_ok());
+        assert!(change_equipment(&mine, own, second, false).is_err());
+        assert!(change_equipment(&admin(), own, other, true).is_ok());
+        assert!(change_equipment(&viewer(&[own]), own, own, true).is_err());
     }
 
     /// A member of two groups sets the pilot of both groups' flights, but
-    /// not of another group's or the queue's; an admin of any.
+    /// not of another group's; an admin of any.
     #[test]
     fn member_sets_pilots_of_own_groups_flights_only() {
         let (own, second, other) = (A, C, B);
-        let set = |grants: &Grants, groups: &[Option<Uuid>]| {
+        let set = |grants: &Grants, groups: &[Uuid]| {
             change_flights(grants, Permission::FlightsSetPilot, groups)
         };
         let mine = member(&[own, second]);
-        assert!(set(&mine, &[Some(own), Some(second)]).is_ok());
-        assert!(set(&mine, &[Some(own), Some(other)]).is_err());
-        assert!(set(&mine, &[None]).is_err());
-        assert!(set(&admin(), &[Some(other), None]).is_ok());
-        assert!(set(&all_flights(), &[Some(own)]).is_err());
-        assert!(set(&member(&[]), &[None]).is_err());
+        assert!(set(&mine, &[own, second]).is_ok());
+        assert!(set(&mine, &[own, other]).is_err());
+        assert!(set(&admin(), &[other, own]).is_ok());
+        assert!(set(&viewer(&[own]), &[own]).is_err());
+        assert!(set(&member(&[]), &[own]).is_err());
     }
 
     /// A member changes only their own groups' sessions: a change that
-    /// touches another group's session, or one in the organisation, is
-    /// refused as a whole.
+    /// touches another group's session is refused as a whole.
     #[test]
     fn members_change_only_sessions_of_their_own_groups() {
         let (own, second, other) = (A, C, B);
         let mine = member(&[own, second]);
-        assert!(change_sessions(&mine, &[Some(own), Some(second)]).is_ok());
-        assert!(change_sessions(&mine, &[Some(own), Some(other)]).is_err());
-        assert!(change_sessions(&mine, &[Some(own), None]).is_err());
-        assert!(change_sessions(&member(&[]), &[Some(own)]).is_err());
-        assert!(change_sessions(&all_flights(), &[Some(own)]).is_err());
-        assert!(change_sessions(&admin(), &[Some(own), Some(other)]).is_ok());
+        assert!(change_sessions(&mine, &[own, second]).is_ok());
+        assert!(change_sessions(&mine, &[own, other]).is_err());
+        assert!(change_sessions(&member(&[]), &[own]).is_err());
+        assert!(change_sessions(&viewer(&[own]), &[own]).is_err());
+        assert!(change_sessions(&admin(), &[own, other]).is_ok());
     }
 
     /// Changing a session's group is admin work, also for an editor of both
@@ -245,7 +241,7 @@ mod tests {
     fn only_admins_move_sessions() {
         let (own, other) = (A, B);
         let mine = member(&[own, other]);
-        assert!(move_session(&mine, Some(own), Some(other), None).is_err());
-        assert!(move_session(&admin(), Some(own), None, Some(&[Some(other)])).is_ok());
+        assert!(move_session(&mine, own, other, None).is_err());
+        assert!(move_session(&admin(), own, other, Some(&[other])).is_ok());
     }
 }

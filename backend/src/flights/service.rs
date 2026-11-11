@@ -168,14 +168,8 @@ pub async fn set_pilot(
     Ok(db::set_pilot(db, &ids, pilot_id).await?)
 }
 
-/// Moves a batch of flights to a group, or to the queue with None. They keep
-/// their pilot.
-pub async fn set_group(
-    db: &PgPool,
-    actor: &Actor,
-    ids: &[Uuid],
-    group_id: Option<Uuid>,
-) -> ApiResult<u64> {
+/// Moves a batch of flights to a group. They keep their pilot.
+pub async fn set_group(db: &PgPool, actor: &Actor, ids: &[Uuid], group_id: Uuid) -> ApiResult<u64> {
     let ids = distinct(ids)?;
     // Refused before not found, so this doesn't tell whether flights exist.
     let flight_groups = db::groups_of(db, &ids).await?;
@@ -187,9 +181,7 @@ pub async fn set_group(
     if flight_groups.is_none() {
         return Err(ApiError::NotFound);
     }
-    if let Some(group) = group_id
-        && !db::group_exists(db, group).await?
-    {
+    if !db::group_exists(db, group_id).await? {
         return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
     Ok(db::set_group(db, &ids, group_id).await?)

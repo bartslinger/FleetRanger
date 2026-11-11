@@ -27,10 +27,10 @@ pub struct SessionSummary {
     pub distance_m: f64,
     /// Names, in alphabetical order; empty if none.
     pub pilots: Vec<String>,
-    /// The session's own group, which decides who changes it; None for the
-    /// organisation. Its flights may be in other groups.
-    pub group_id: Option<Uuid>,
-    pub group_name: Option<String>,
+    /// The session's own group, which decides who changes it. Its flights
+    /// may be in other groups.
+    pub group_id: Uuid,
+    pub group_name: String,
     /// Each visible flight's `takeoff_at`, `landed_at`, `air_time_s` and
     /// takeoff point (`from`, [lon, lat, alt]), in takeoff order: the web
     /// app's day strip, with day and night where the session was flown.
@@ -73,7 +73,7 @@ pub async fn list(
                 sum(f.distance_m) as "distance_m!",
                 array_remove(array_agg(distinct u.name), null) as "pilots!",
                 s.group_id,
-                gr.name as "group_name?",
+                gr.name as group_name,
                 jsonb_agg(jsonb_build_object('takeoff_at', f.takeoff_at, 'landed_at', f.landed_at,
                                              'air_time_s', f.air_time_s,
                                              'from', f.track->'coordinates'->0,
@@ -82,7 +82,7 @@ pub async fn list(
          from flights f
          join sessions s on s.id = f.session_id
          left join users u on u.id = f.pilot_id
-         left join groups gr on gr.id = s.group_id
+         join groups gr on gr.id = s.group_id
          where f.session_id is not null
            and ($1
                 or f.pilot_id = $2
@@ -284,26 +284,26 @@ pub(crate) async fn locked(
 
 /// The group of each of these sessions, or None if one of them doesn't
 /// exist.
-pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
+pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Uuid>>> {
     let groups = sqlx::query_scalar!("select group_id from sessions where id = any($1)", ids)
         .fetch_all(db)
         .await?;
     Ok((groups.len() == ids.len()).then_some(groups))
 }
 
-/// A session's own group, by id and name; None for the organisation.
+/// A session's own group, by id and name.
 #[derive(Serialize)]
 pub struct OwnGroup {
-    pub group_id: Option<Uuid>,
-    pub group_name: Option<String>,
+    pub group_id: Uuid,
+    pub group_name: String,
 }
 
 /// The group of a session, or None if it doesn't exist.
 pub async fn own_group(db: &PgPool, id: Uuid) -> sqlx::Result<Option<OwnGroup>> {
     sqlx::query_as!(
         OwnGroup,
-        r#"select s.group_id, g.name as "group_name?"
-           from sessions s left join groups g on g.id = s.group_id
+        r#"select s.group_id, g.name as group_name
+           from sessions s join groups g on g.id = s.group_id
            where s.id = $1"#,
         id
     )
@@ -361,7 +361,7 @@ pub async fn groups_in(
 
 /// The groups of the sessions these flights are in, once each; flights
 /// without a session add none.
-pub async fn groups_left(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Vec<Option<Uuid>>> {
+pub async fn groups_left(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar!(
         "select s.group_id from sessions s
          where s.id in (select session_id from flights where id = any($1))",
@@ -373,7 +373,7 @@ pub async fn groups_left(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Vec<O
 
 /// The group of every flight in these sessions, or None if one of them
 /// doesn't exist. The visibility check is the policy's job, not this query's.
-pub async fn flight_groups(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Option<Uuid>>>> {
+pub async fn flight_groups(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Uuid>>> {
     let flights = sqlx::query!(
         r#"select session_id as "session_id!", group_id from flights where session_id = any($1)"#,
         ids
@@ -441,11 +441,7 @@ pub async fn merge(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Uuid> {
 
 /// Moves these flights into a new session of this group, and returns it.
 /// Deletes a session left without flights.
-pub async fn split(
-    db: &PgPool,
-    flight_ids: &[Uuid],
-    group_id: Option<Uuid>,
-) -> sqlx::Result<Option<Uuid>> {
+pub async fn split(db: &PgPool, flight_ids: &[Uuid], group_id: Uuid) -> sqlx::Result<Option<Uuid>> {
     let mut tx = locked(db).await?;
     let left = sessions_of(&mut tx, flight_ids).await?;
     let session = sqlx::query_scalar!(
@@ -556,13 +552,12 @@ pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
     Ok(found)
 }
 
-/// Moves a session to a group, or to the organisation with None, and with
-/// `with_flights` its flights as well. Returns false if there is no such
+/// Moves a session to a group, and with `with_flights` its flights as well. Returns false if there is no such
 /// session.
 pub async fn set_group(
     db: &PgPool,
     id: Uuid,
-    group_id: Option<Uuid>,
+    group_id: Uuid,
     with_flights: bool,
 ) -> sqlx::Result<bool> {
     let mut tx = locked(db).await?;
@@ -630,7 +625,7 @@ pub async fn place_upload(db: &PgPool, raw_log_id: Uuid, gap: SessionGap) -> sql
         r#"select f.session_id as "session_id!"
            from flights f
            join sessions s on s.id = f.session_id
-           where f.pilot_id = $1 and s.group_id is not distinct from $5
+           where f.pilot_id = $1 and s.group_id = $5
              and f.takeoff_at < $3::timestamptz + make_interval(mins => $4)
              and f.landed_at > $2::timestamptz - make_interval(mins => $4)
            order by greatest(f.takeoff_at - $3::timestamptz, $2::timestamptz - f.landed_at),
@@ -703,8 +698,8 @@ mod tests {
         .await;
         sqlx::query_scalar(
             "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
-                                  track, pilot_id)
-             values ($1, $2, $3, 0, 0, '{}', $4)
+                                  track, pilot_id, group_id)
+             select $1, $2, $3, 0, 0, '{}', $4, id from groups where name = 'General'
              returning id",
         )
         .bind(raw_log)
@@ -723,7 +718,7 @@ mod tests {
         upload_for(db, pilot, None, takeoff, landed, received).await
     }
 
-    /// As `upload`, with the group chosen on the controller.
+    /// As `upload`, with the group chosen on the controller (None: General).
     async fn upload_for(
         db: &PgPool,
         pilot: Uuid,
@@ -733,7 +728,7 @@ mod tests {
         received: &str,
     ) -> Uuid {
         let flight = flight(db, pilot, takeoff, landed).await;
-        sqlx::query("update flights set group_id = $2 where id = $1")
+        sqlx::query("update flights set group_id = coalesce($2, group_id) where id = $1")
             .bind(flight)
             .bind(group)
             .execute(db)
@@ -837,7 +832,7 @@ mod tests {
         for (flight, group) in [(first, north), (other_group, south)] {
             let session = session_of(&db, flight).await.unwrap();
             let groups = groups_of(&db, &[session]).await.unwrap();
-            assert_eq!(groups, Some(vec![Some(group)]));
+            assert_eq!(groups, Some(vec![group]));
         }
     }
 
@@ -857,7 +852,10 @@ mod tests {
         assert_eq!(merged, b_session, "B's session starts first");
         assert_eq!(session_of(&db, first).await, Some(merged));
 
-        let split_off = split(&db, &[second], None).await.unwrap().unwrap();
+        let split_off = split(&db, &[second], crate::testing::general(&db).await)
+            .await
+            .unwrap()
+            .unwrap();
         // A new flight of A right after `second` joins one of the sessions
         // without moving the split flight back.
         upload(&db, a, "09:00", "09:20", "10:01").await;
@@ -995,7 +993,7 @@ mod tests {
         let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
         let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
         let outsider = insert_id(&db, "insert into users (name) values ('C') returning id").await;
-        let session = insert_id(&db, "insert into sessions default values returning id").await;
+        let session = insert_id(&db, "insert into sessions (group_id) select id from groups where name = 'General' returning id").await;
         for (pilot, group, takeoff, landed) in
             [(a, north, "08:00", "08:20"), (b, south, "08:30", "08:50")]
         {

@@ -309,6 +309,9 @@ struct Me {
     apps: bool,
     /// The admin impersonating this user, for the web app's banner.
     impersonated_by: Option<ImpersonatedBy>,
+    /// Whether the organisation has more than one group: until then the web
+    /// app shows no groups (user's decision, 2026-11-11).
+    several_groups: bool,
 }
 
 #[derive(Serialize)]
@@ -342,8 +345,16 @@ impl From<&Grants> for Permissions {
 }
 
 /// The logged-in user, or 401.
-async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
-    Json(Me {
+async fn me(
+    actor: Actor,
+    State(oauth): State<OAuth>,
+    State(db): State<PgPool>,
+) -> Result<Json<Me>, StatusCode> {
+    let several_groups = db::several_groups(&db).await.map_err(|error| {
+        tracing::error!(%error, "counting groups");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(Me {
         id: actor.user_id,
         permissions: Permissions::from(&actor.grants),
         email: actor.email,
@@ -353,7 +364,8 @@ async fn me(actor: Actor, State(oauth): State<OAuth>) -> Json<Me> {
             id: admin.user_id,
             name: admin.name,
         }),
-    })
+        several_groups,
+    }))
 }
 
 /// Deletes one of our cookies. Browsers ignore a `__Host-` cookie without

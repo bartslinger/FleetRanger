@@ -162,23 +162,28 @@ pub enum Deleted {
     NotFound,
     /// The group still holds something, and nothing was to be moved.
     NotEmpty,
+    /// It is the only group, which everything is in.
+    LastGroup,
 }
 
 /// Deletes a group with its memberships. With `move_to`, everything in it
 /// moves first: flights, sessions, drones and controllers, the logs chosen
-/// for it on a controller, and open pairing codes for it; `Some(None)` moves
-/// them to the organisation (flights to the queue). Without it, only an empty
+/// for it on a controller, and open pairing codes for it. Without it, only an empty
 /// group is deleted; its logs lose their group and its codes go with it.
 ///
 /// The group's row is locked first, so nothing can be put in it in between:
 /// a foreign key check on it waits for the lock.
-pub async fn delete(db: &PgPool, id: Uuid, move_to: Option<Option<Uuid>>) -> sqlx::Result<Deleted> {
+pub async fn delete(db: &PgPool, id: Uuid, move_to: Option<Uuid>) -> sqlx::Result<Deleted> {
     let mut tx = db.begin().await?;
-    let found = sqlx::query_scalar!("select id from groups where id = $1 for update", id)
-        .fetch_optional(&mut *tx)
+    // Every group is locked, so two deletions can't each leave the other last.
+    let groups = sqlx::query_scalar!("select id from groups order by id for update")
+        .fetch_all(&mut *tx)
         .await?;
-    if found.is_none() {
+    if !groups.contains(&id) {
         return Ok(Deleted::NotFound);
+    }
+    if groups.len() == 1 {
+        return Ok(Deleted::LastGroup);
     }
     match move_to {
         Some(target) => move_contents(&mut tx, id, target).await?,
@@ -208,7 +213,7 @@ async fn is_empty(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     .await
 }
 
-async fn move_contents(db: &mut PgConnection, from: Uuid, to: Option<Uuid>) -> sqlx::Result<()> {
+async fn move_contents(db: &mut PgConnection, from: Uuid, to: Uuid) -> sqlx::Result<()> {
     sqlx::query!(
         "with flights as (update flights set group_id = $2 where group_id = $1),
               sessions as (update sessions set group_id = $2 where group_id = $1),

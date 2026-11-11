@@ -89,10 +89,11 @@ async fn remove(
 ) -> ApiResult<StatusCode> {
     let move_to = match query.move_to.as_deref() {
         None => None,
-        Some("organisation") => Some(None),
-        Some(value) => Some(Some(value.parse().map_err(|_| {
-            ApiError::Invalid("move_to must be a group id or organisation".to_owned())
-        })?)),
+        Some(value) => Some(
+            value
+                .parse()
+                .map_err(|_| ApiError::Invalid("move_to must be a group id".to_owned()))?,
+        ),
     };
     service::delete(&db, &actor, id, move_to).await?;
     Ok(StatusCode::NO_CONTENT)

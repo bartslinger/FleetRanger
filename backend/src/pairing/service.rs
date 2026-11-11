@@ -25,20 +25,14 @@ const MAX_HOURS: i64 = 7 * 24;
 pub struct Created {
     pub id: Uuid,
     pub code: String,
-    /// The group the controller joins; None for the organisation.
-    pub group: Option<String>,
+    /// The group the controller joins.
+    pub group: String,
     pub expires_at: DateTime<Utc>,
 }
 
 /// Creates a single-use code that pairs a controller, valid for `hours`, with
-/// `controllers.pair` on the group the controller joins, or with None on the
-/// organisation, where it goes in no group.
-pub async fn create(
-    db: &PgPool,
-    actor: &Actor,
-    group: Option<Uuid>,
-    hours: i64,
-) -> ApiResult<Created> {
+/// `controllers.pair` on the group the controller joins.
+pub async fn create(db: &PgPool, actor: &Actor, group: Uuid, hours: i64) -> ApiResult<Created> {
     if !actor.grants.anywhere(Permission::ControllersPair) {
         return Err(ApiError::Forbidden);
     }
@@ -47,37 +41,24 @@ pub async fn create(
             "A code is valid for 1 to {MAX_HOURS} hours."
         )));
     }
-    if !actor.grants.may(Permission::ControllersPair, group) {
+    if !actor.grants.may(Permission::ControllersPair, Some(group)) {
         return Err(ApiError::Invalid(
             "Choose one of your groups for the controller.".to_owned(),
         ));
     }
-    let group = match group {
-        Some(id) => Some(
-            flights::db::groups_named(db, &[id])
-                .await?
-                .pop()
-                .ok_or_else(|| ApiError::Invalid("Choose an existing group.".to_owned()))?,
-        ),
-        None => None,
-    };
+    let group = flights::db::groups_named(db, &[group])
+        .await?
+        .pop()
+        .ok_or_else(|| ApiError::Invalid("Choose an existing group.".to_owned()))?;
     let expires_at = Utc::now() + Duration::hours(hours);
     // A taken code is unlikely (32^8 codes); try a few times.
     for _ in 0..5 {
         let code = random_code();
-        if let Some(id) = db::add_code(
-            db,
-            &code,
-            actor.user_id,
-            group.as_ref().map(|g| g.id),
-            expires_at,
-        )
-        .await?
-        {
+        if let Some(id) = db::add_code(db, &code, actor.user_id, group.id, expires_at).await? {
             return Ok(Created {
                 id,
                 code,
-                group: group.map(|g| g.name),
+                group: group.name,
                 expires_at,
             });
         }
@@ -141,24 +122,29 @@ pub async fn pair(
 /// list for when it's offline.
 #[derive(Serialize)]
 pub struct Pilots {
-    /// None when the controller is in the organisation.
+    /// Always given; optional for older versions of the app.
     pub controller_group: Option<Uuid>,
-    /// Every group, by name; empty when the organisation has none, and then
-    /// the controller asks for no group.
+    /// Every group, by name; empty while the organisation has only one, and
+    /// then the controller asks for no group and the flights go to its own.
     pub groups: Vec<flights::db::GroupChoice>,
     pub pilots: Vec<db::Pilot>,
 }
 
 pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<Pilots> {
+    let mut groups = flights::db::group_choices(db).await?;
+    if groups.len() == 1 {
+        groups.clear();
+    }
     Ok(Pilots {
-        controller_group: controller.group_id,
-        groups: flights::db::group_choices(db).await?,
+        controller_group: Some(controller.group_id),
+        groups,
         pilots: db::pilots(db).await?,
     })
 }
 
 /// The pilots android-v0.3.0 offers: once per group they are a pilot in,
-/// which it calls a team. Its uploads go to the queue, whatever it chose.
+/// which it calls a team. Its uploads go to the controller's group, whatever
+/// it chose.
 #[derive(Serialize)]
 pub struct PilotList {
     /// The controller's group, which it calls a team.
@@ -168,19 +154,16 @@ pub struct PilotList {
 
 pub async fn pilots_v0(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
     Ok(PilotList {
-        team_id: controller.group_id,
+        team_id: Some(controller.group_id),
         pilots: db::pilot_choices(db).await?,
     })
 }
 
 /// Where a controller paired with the actor's code can go: the groups where
-/// they hold `controllers.pair`, and the organisation itself (no group) when
-/// they hold it there, which covers every group too (user's decision,
-/// 2026-10-23).
+/// they hold `controllers.pair`, every group for an admin.
 #[derive(Serialize)]
 pub struct Destinations {
     pub groups: Vec<flights::db::GroupChoice>,
-    pub organisation: bool,
 }
 
 pub async fn destinations(db: &PgPool, actor: &Actor) -> ApiResult<Destinations> {
@@ -190,10 +173,7 @@ pub async fn destinations(db: &PgPool, actor: &Actor) -> ApiResult<Destinations>
     } else {
         flights::db::groups_named(db, &pair.groups).await?
     };
-    Ok(Destinations {
-        groups,
-        organisation: pair.all,
-    })
+    Ok(Destinations { groups })
 }
 
 /// Unpairs a controller from the web app, with `controllers.manage` on its
@@ -206,7 +186,7 @@ pub async fn unpair(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
     let group = db::controller_group(db, id)
         .await?
         .ok_or(ApiError::NotFound)?;
-    policy::require(actor, Permission::ControllersManage, group)?;
+    policy::require(actor, Permission::ControllersManage, Some(group))?;
     if db::unpair(db, id).await? {
         Ok(())
     } else {

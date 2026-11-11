@@ -175,8 +175,8 @@ impl Grants {
     }
 
     /// The check: whether the actor may do this on a group, or with None on
-    /// what is directly in the organisation. A role on the organisation
-    /// counts on every group.
+    /// what has no group, such as users and areas. A role on the
+    /// organisation counts on every group.
     pub fn may(&self, permission: Permission, group: Option<Uuid>) -> bool {
         self.organisation.iter().any(|role| role.grants(permission))
             || group.is_some_and(|group| {
@@ -187,8 +187,10 @@ impl Grants {
     }
 
     /// The check on every group involved, such as all flights of a batch.
-    pub fn may_on_all(&self, permission: Permission, groups: &[Option<Uuid>]) -> bool {
-        groups.iter().all(|group| self.may(permission, *group))
+    pub fn may_in_all(&self, permission: Permission, groups: &[Uuid]) -> bool {
+        groups
+            .iter()
+            .all(|group| self.may(permission, Some(*group)))
     }
 
     /// Whether the actor holds the permission on any group or the
@@ -260,26 +262,24 @@ mod tests {
     }
 
     /// A role on a group counts there only, never on another group or on
-    /// what is directly in the organisation (the queue); a role on the
-    /// organisation counts everywhere.
+    /// what has no group; Admin on the organisation counts everywhere.
     #[test]
     fn roles_count_where_they_are_held() {
         let editor = grants(&[(Some(NORTH), "editor"), (Some(SOUTH), "pilot")]);
         assert!(editor.may(Permission::FlightsSetPilot, Some(NORTH)));
         assert!(!editor.may(Permission::FlightsSetPilot, Some(SOUTH)));
         assert!(!editor.may(Permission::FlightsSetPilot, None));
-        assert!(!editor.may_on_all(Permission::FlightsRead, &[Some(NORTH), Some(SOUTH)]));
+        assert!(!editor.may_in_all(Permission::FlightsRead, &[NORTH, SOUTH]));
         // A pilot doesn't read the group's flights.
         let read = editor.scope(Permission::FlightsRead);
         assert!(!read.all);
         assert_eq!(read.groups, [NORTH]);
 
         // Only Pilot puts someone in pilot lists, not Admin.
-        assert!(!grants(&[(None, "admin")]).anywhere(Permission::FlightsFlyFor));
-
-        let viewer = grants(&[(None, "viewer")]);
-        assert!(viewer.may_on_all(Permission::FlightsRead, &[Some(NORTH), None]));
-        assert!(!viewer.anywhere(Permission::FlightsArchive));
+        let admin = grants(&[(None, "admin")]);
+        assert!(!admin.anywhere(Permission::FlightsFlyFor));
+        assert!(admin.may_in_all(Permission::FlightsRead, &[NORTH, SOUTH]));
+        assert!(admin.may(Permission::UsersManage, None));
     }
 
     /// The web app decides what to offer from `permissions()` with the same
@@ -287,7 +287,8 @@ mod tests {
     #[test]
     fn listed_permissions_agree_with_the_check() {
         let mixed = grants(&[
-            (None, "viewer"),
+            (None, "admin"),
+            (Some(SOUTH), "viewer"),
             (Some(NORTH), "editor"),
             (Some(NORTH), "pilot"),
         ]);

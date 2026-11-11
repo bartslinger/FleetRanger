@@ -39,7 +39,6 @@ pub async fn add(db: &PgPool, email: &str, name: &str, admin: bool) -> Result<()
         name,
         roles: &roles,
         email: Some(&email),
-        app_roles: None,
     };
     db::insert(db, &fields).await?;
     tracing::info!(email, admin, "user added; the login is tied on first use");

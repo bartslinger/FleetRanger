@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select count(*) > 1 as \"several!\" from groups",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "several!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6ce38a3f56b6480f16dcc26ad1831e909933193a29b99cef7fb717de4f4d40d3"
+}

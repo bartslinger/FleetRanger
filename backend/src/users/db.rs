@@ -7,11 +7,8 @@ use uuid::Uuid;
 pub struct User {
     pub id: Uuid,
     pub name: String,
-    /// Their roles on the whole organisation, in the order viewer, pilot,
-    /// editor, admin.
+    /// Their roles on the whole organisation: Admin, or none.
     pub roles: Vec<String>,
-    /// Apps' roles on the whole organisation, by id.
-    pub app_roles: Vec<Uuid>,
     /// The groups they are a member of, by name, with their roles there.
     pub groups: Json<Vec<Membership>>,
     /// The login's email address; none if the user can't log in.
@@ -37,8 +34,6 @@ pub struct UserFields<'a> {
     pub roles: &'a [String],
     /// Lowercase; None removes the login.
     pub email: Option<&'a str>,
-    /// Apps' roles on the whole organisation, by id; None keeps them.
-    pub app_roles: Option<&'a [Uuid]>,
 }
 
 /// Why a change was refused.
@@ -54,10 +49,7 @@ pub async fn list(db: &PgPool, archived: bool, id: Option<Uuid>) -> sqlx::Result
         User,
         r#"select u.id, u.name,
                   array(select r.role from organisation_roles r where r.user_id = u.id
-                        order by array_position(array['viewer', 'pilot', 'editor', 'admin'],
-                                                r.role)) as "roles!",
-                  array(select a.app_role_id from organisation_app_roles a
-                        where a.user_id = u.id order by a.app_role_id) as "app_roles!",
+                        order by r.role) as "roles!",
                   coalesce((select jsonb_agg(jsonb_build_object(
                                 'id', g.id, 'name', g.name,
                                 'roles', array(select m.role from group_members m
@@ -101,7 +93,6 @@ pub async fn insert(db: &PgPool, fields: &UserFields<'_>) -> sqlx::Result<Uuid> 
     .await?;
     set_roles(&mut tx, id, fields.roles).await?;
     set_login(&mut tx, id, fields.email).await?;
-    set_app_roles(&mut tx, id, fields.app_roles).await?;
     tx.commit().await?;
     Ok(id)
 }
@@ -126,7 +117,6 @@ pub async fn update(
     }
     set_roles(&mut tx, id, fields.roles).await?;
     set_login(&mut tx, id, fields.email).await?;
-    set_app_roles(&mut tx, id, fields.app_roles).await?;
     tx.commit().await?;
     Ok(Ok(()))
 }
@@ -159,34 +149,6 @@ async fn set_roles(db: &mut PgConnection, id: Uuid, roles: &[String]) -> sqlx::R
          on conflict do nothing",
         id,
         roles,
-    )
-    .execute(db)
-    .await?;
-    Ok(())
-}
-
-/// Makes these the user's app roles on the whole organisation; None keeps
-/// them.
-async fn set_app_roles(
-    db: &mut PgConnection,
-    id: Uuid,
-    app_roles: Option<&[Uuid]>,
-) -> sqlx::Result<()> {
-    let Some(app_roles) = app_roles else {
-        return Ok(());
-    };
-    sqlx::query!(
-        "delete from organisation_app_roles where user_id = $1 and app_role_id <> all($2)",
-        id,
-        app_roles,
-    )
-    .execute(&mut *db)
-    .await?;
-    sqlx::query!(
-        "insert into organisation_app_roles (user_id, app_role_id) select $1, unnest($2::uuid[])
-         on conflict do nothing",
-        id,
-        app_roles,
     )
     .execute(db)
     .await?;

@@ -68,11 +68,14 @@ async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [] | ["serve"] => serve(&config, db).await,
-        ["import"] => ingest::import::run(&db, &config.log_dir).await,
+        ["import"] => ingest::import::run(&db, &config.log_dir, None).await,
+        ["import", "--group", group] => {
+            ingest::import::run(&db, &config.log_dir, Some(group)).await
+        }
         ["add-user", email, name] => users::add(&db, email, name, false).await,
         ["add-user", "--admin", email, name] => users::add(&db, email, name, true).await,
         _ => bail!(
-            "unknown command {args:?}; expected serve, import or add-user [--admin] <email> <name>"
+            "unknown command {args:?}; expected serve, import [--group <name>] or add-user [--admin] <email> <name>"
         ),
     }
 }

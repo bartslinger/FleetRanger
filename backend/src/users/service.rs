@@ -11,13 +11,10 @@ use crate::{
 /// What an admin enters for a user.
 pub struct UserInput {
     pub name: String,
-    /// Roles on the whole organisation; none for someone who has roles only
-    /// in groups, or none yet.
+    /// Roles on the whole organisation: Admin, or none.
     pub roles: Vec<String>,
     /// Empty or None: no login.
     pub email: Option<String>,
-    /// Apps' roles on the whole organisation, by id; None keeps them.
-    pub app_roles: Option<Vec<Uuid>>,
 }
 
 /// A lowercase email address, or None if it isn't one.
@@ -108,7 +105,6 @@ struct Checked {
     name: String,
     roles: Vec<String>,
     email: Option<String>,
-    app_roles: Option<Vec<Uuid>>,
 }
 
 impl Checked {
@@ -116,8 +112,10 @@ impl Checked {
         let name = error::name(&input.name)?;
         let mut roles = Vec::new();
         for role in &input.roles {
+            // Viewer, Pilot and Editor are given in groups.
             roles.push(
                 Role::parse(role)
+                    .filter(|role| *role == Role::Admin)
                     .ok_or_else(|| ApiError::Invalid("Choose known roles.".to_owned()))?,
             );
         }
@@ -137,7 +135,6 @@ impl Checked {
                 .map(|role| role.as_str().to_owned())
                 .collect(),
             email,
-            app_roles: input.app_roles.clone(),
         })
     }
 
@@ -146,7 +143,6 @@ impl Checked {
             name: &self.name,
             roles: &self.roles,
             email: self.email.as_deref(),
-            app_roles: self.app_roles.as_deref(),
         }
     }
 }
@@ -170,7 +166,6 @@ mod tests {
             name: name.to_owned(),
             roles: roles.iter().map(|role| (*role).to_owned()).collect(),
             email: None,
-            app_roles: None,
         }
     }
 
@@ -184,7 +179,7 @@ mod tests {
 
         assert!(set_archived(&db, &actor, first, true).await.is_ok());
         assert!(matches!(
-            update(&db, &actor, second, &input("B", &["viewer"])).await,
+            update(&db, &actor, second, &input("B", &[])).await,
             Err(ApiError::Conflict(_))
         ));
         assert!(matches!(
@@ -193,10 +188,6 @@ mod tests {
         ));
 
         assert!(set_archived(&db, &actor, first, false).await.is_ok());
-        assert!(
-            update(&db, &actor, second, &input("B", &["viewer"]))
-                .await
-                .is_ok()
-        );
+        assert!(update(&db, &actor, second, &input("B", &[])).await.is_ok());
     }
 }

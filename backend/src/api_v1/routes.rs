@@ -98,7 +98,8 @@ async fn me(
         id: caller.actor.user_id,
         name: caller.actor.name,
         app_roles: AppRoles {
-            organisation: held.organisation,
+            // Kept for apps that read it: app roles are given only in groups.
+            organisation: Vec::new(),
             groups: held
                 .groups
                 .into_iter()
@@ -408,7 +409,7 @@ async fn list_groups(
     let limit = limit(paging.limit)?;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
     let scope = policy::flight_scope(&caller.actor);
-    let mut rows = db::groups(&api.db, &scope, caller.client_id, after, limit + 1).await?;
+    let mut rows = db::groups(&api.db, &scope, after, limit + 1).await?;
     let next_cursor = next(&mut rows, limit, |row| encode(&IdCursor { id: row.id }));
     let items = rows
         .into_iter()
@@ -558,7 +559,7 @@ async fn devices(
         encode(&IdCursor { id: row.id })
     });
     let groups = if expand.has("group") {
-        let ids: Vec<Uuid> = rows.iter().filter_map(|row| row.group_id).collect();
+        let ids: Vec<Uuid> = rows.iter().map(|row| row.group_id).collect();
         Some(groups_by_id(api, &ids).await?)
     } else {
         None
@@ -569,7 +570,7 @@ async fn devices(
             id: row.id,
             name: row.name,
             serial: row.serial,
-            group: row.group_id.map(|id| pick(id, groups.as_ref())),
+            group: Some(pick(row.group_id, groups.as_ref())),
         })
         .collect();
     Ok(Page { items, next_cursor })
@@ -746,7 +747,7 @@ async fn sessions(
 ) -> Result<Vec<Session>, V1Error> {
     let session_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
     let groups = if expand.has("group") {
-        let ids: Vec<Uuid> = rows.iter().filter_map(|row| row.group_id).collect();
+        let ids: Vec<Uuid> = rows.iter().map(|row| row.group_id).collect();
         Some(groups_by_id(api, &ids).await?)
     } else {
         None
@@ -813,7 +814,7 @@ async fn sessions(
         .into_iter()
         .map(|row| Session {
             id: row.id,
-            group: row.group_id.map(|id| pick(id, groups.as_ref())),
+            group: Some(pick(row.group_id, groups.as_ref())),
             first_takeoff_at: row.first_takeoff_at,
             last_landed_at: row.last_landed_at,
             air_time_s: row.air_time_s,
@@ -850,7 +851,7 @@ async fn flights(
         None
     };
     let groups = if expand.has("group") {
-        let ids: Vec<Uuid> = rows.iter().filter_map(|row| row.group_id).collect();
+        let ids: Vec<Uuid> = rows.iter().map(|row| row.group_id).collect();
         Some(groups_by_id(api, &ids).await?)
     } else {
         None
@@ -938,7 +939,7 @@ async fn flights(
             id: row.id,
             name: row.name.clone(),
             serial: row.serial.clone(),
-            group: row.group_id.map(Expandable::Id),
+            group: Some(Expandable::Id(row.group_id)),
         }),
         None => Expandable::Id(id),
     };
@@ -952,7 +953,7 @@ async fn flights(
             distance_m: row.distance_m.round() as i64,
             max_height_m: row.max_height_m.map(|height| height.round() as i64),
             pilot: row.pilot_id.map(|id| pick(id, pilots.as_ref())),
-            group: row.group_id.map(|id| pick(id, groups.as_ref())),
+            group: Some(pick(row.group_id, groups.as_ref())),
             session: row.session_id.map(|id| pick(id, sessions.as_ref())),
             drone: row.drone_id.map(|id| device(id, drones.as_ref())),
             controller: row.controller_id.map(|id| device(id, controllers.as_ref())),
@@ -974,7 +975,7 @@ mod tests {
     /// expand them.
     #[sqlx::test]
     async fn area_boundaries_need_areas_read(db: sqlx::PgPool) {
-        let user = crate::testing::user(&db, "A", &["viewer"]).await;
+        let user = crate::testing::user(&db, "A", &[]).await;
         let mut caller = Caller {
             actor: crate::testing::actor(&db, user).await,
             scopes: vec!["areas:list".to_owned()],

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "insert into raw_logs (sha256, path, size_bytes) values ($1, $2, $3)\n         on conflict do nothing\n         returning id",
+  "query": "insert into raw_logs (sha256, path, size_bytes, group_id) values ($1, $2, $3, $4)\n         on conflict do nothing\n         returning id",
   "describe": {
     "columns": [
       {
@@ -19,12 +19,13 @@
       "Left": [
         "Bytea",
         "Text",
-        "Int8"
+        "Int8",
+        "Uuid"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "4272332982643308cba3246c0fa1d025f2f8b7399d801999227a24d770b5ccd4"
+  "hash": "5fc46e522dfa098209cdcd45cd1e3ed2f0ad2e94b5dbd05489ee8dcd8b22c878"
 }

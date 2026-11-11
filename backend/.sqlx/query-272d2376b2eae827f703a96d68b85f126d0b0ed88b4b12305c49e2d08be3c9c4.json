@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select c.id, c.name, c.redirect_uris, c.created_at,\n                  coalesce((select jsonb_agg(jsonb_build_object(\n                                'id', r.id, 'key', r.key, 'name', r.name,\n                                'holders', (select count(distinct h.user_id)\n                                            from (select user_id from group_app_roles\n                                                  where app_role_id = r.id\n                                                  union all\n                                                  select user_id from organisation_app_roles\n                                                  where app_role_id = r.id) h\n                                            join users u on u.id = h.user_id\n                                            where u.archived_at is null))\n                                order by lower(r.name), r.id)\n                            from app_roles r where r.client_id = c.id),\n                           '[]') as \"roles!: Json<Vec<AppRole>>\",\n                  (select count(distinct g.user_id) from oauth_grants g where g.client_id = c.id)\n                      as \"users!\"\n           from oauth_clients c\n           where c.trusted\n           order by lower(c.name), c.id",
+  "query": "select c.id, c.name, c.redirect_uris, c.created_at,\n                  coalesce((select jsonb_agg(jsonb_build_object(\n                                'id', r.id, 'key', r.key, 'name', r.name,\n                                'holders', (select count(distinct h.user_id)\n                                            from group_app_roles h\n                                            join users u on u.id = h.user_id\n                                            where h.app_role_id = r.id and u.archived_at is null))\n                                order by lower(r.name), r.id)\n                            from app_roles r where r.client_id = c.id),\n                           '[]') as \"roles!: Json<Vec<AppRole>>\",\n                  (select count(distinct g.user_id) from oauth_grants g where g.client_id = c.id)\n                      as \"users!\"\n           from oauth_clients c\n           where c.trusted\n           order by lower(c.name), c.id",
   "describe": {
     "columns": [
       {
@@ -72,5 +72,5 @@
       null
     ]
   },
-  "hash": "2621ee652ea54b38b76f55e7e11ee03ce6da77b6790bb96842fbf0b4f2f61ca6"
+  "hash": "272d2376b2eae827f703a96d68b85f126d0b0ed88b4b12305c49e2d08be3c9c4"
 }
