@@ -36,7 +36,8 @@ RUN set -eu; \
       arm64) echo aarch64-unknown-linux-musl > /rust-target ;; \
       *) echo "unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac; \
-    rustup target add "$(cat /rust-target)"
+    rustup target add "$(cat /rust-target)"; \
+    rustup component add clippy
 
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
@@ -51,6 +52,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     set -eu; \
     target="$(cat /rust-target)"; \
+    # No release with code that can panic ([lints.clippy] in Cargo.toml).
+    cargo clippy --locked --release; \
     cargo zigbuild --locked --release --target "$target"; \
     cp "target/$target/release/fleetranger" /fleetranger
 
