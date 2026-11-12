@@ -165,6 +165,7 @@ One install serving several organisations, for a hosted service where FleetRange
 - Invite links for accounts
 - Link media
 - Tooltips without JavaScript: the current ones let a fast-moving cursor select their text (user, 2026-11-11)
+- Random (UUIDv4) ids for rows users see, instead of UUIDv7, which reveals when a row was created (user, 2026-11-12)
 
 ## Open questions
 
