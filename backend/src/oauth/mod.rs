@@ -47,6 +47,14 @@ const ACCESS_SECONDS: f64 = 3600.0;
 /// A connection ends after this many days without use, like a login session.
 const IDLE_DAYS: i32 = 30;
 
+/// What the install offers apps (`FLEETRANGER_MCP`, `FLEETRANGER_API`), so
+/// the web app offers connected apps only where they can connect.
+#[derive(Clone, Copy)]
+pub struct AppsOn {
+    pub mcp: bool,
+    pub api: bool,
+}
+
 /// The install as an authorization server: its own address (the issuer) and
 /// the resources it issues tokens for.
 #[derive(Clone)]

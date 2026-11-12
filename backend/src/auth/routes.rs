@@ -27,7 +27,7 @@ use super::{
     Actor, Auth, SESSION_IDLE_DAYS, client_ip, impersonation_cookie, login_cookie, session_cookie,
     token_hash,
 };
-use crate::api_v1::PublicApi;
+use crate::oauth::AppsOn;
 use crate::oauth::OAuth;
 use crate::policy::{Grants, Permission};
 
@@ -38,7 +38,7 @@ where
     crate::db::Tenants: FromRef<S>,
     Arc<Auth>: FromRef<S>,
     OAuth: FromRef<S>,
-    PublicApi: FromRef<S>,
+    AppsOn: FromRef<S>,
 {
     Router::new()
         .route("/auth/login", get(login))
@@ -428,7 +428,7 @@ impl From<&Grants> for Permissions {
 /// The logged-in user, or 401.
 async fn me(
     actor: Actor,
-    State(PublicApi(api)): State<PublicApi>,
+    State(apps): State<AppsOn>,
     State(system): State<System>,
     mut db: Db,
 ) -> Result<Json<Me>, StatusCode> {
@@ -449,7 +449,7 @@ async fn me(
         permissions: Permissions::from(&actor.grants),
         email: actor.email,
         name: actor.name,
-        apps: settings.mcp || api,
+        apps: (apps.mcp && settings.mcp) || apps.api,
         time_zone: settings.time_zone,
         organisations,
         impersonated_by: actor.impersonated_by.map(|admin| ImpersonatedBy {

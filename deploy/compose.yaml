@@ -43,6 +43,7 @@ services:
       OIDC_ISSUER: ${OIDC_ISSUER:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      FLEETRANGER_MCP: ${FLEETRANGER_MCP:-}
       FLEETRANGER_API: ${FLEETRANGER_API:-}
     # The owner of the flight log directory, so uploads and the logs copied
     # there before share one owner (the image's default is uid 65532).

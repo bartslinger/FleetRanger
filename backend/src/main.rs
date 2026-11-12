@@ -90,7 +90,7 @@ struct AppState {
     auth: Arc<Auth>,
     activity: Activity,
     changes: Changes,
-    api: api_v1::PublicApi,
+    apps: oauth::AppsOn,
     log_dir: LogDir,
     android_apk: AndroidApk,
     oauth: OAuth,
@@ -120,9 +120,9 @@ impl FromRef<AppState> for LogDir {
     }
 }
 
-impl FromRef<AppState> for api_v1::PublicApi {
+impl FromRef<AppState> for oauth::AppsOn {
     fn from_ref(state: &AppState) -> Self {
-        state.api
+        state.apps
     }
 }
 
@@ -169,12 +169,17 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
         }
     };
     let issuer = config.public_url.as_str().trim_end_matches('/').to_owned();
-    // The resources OAuth issues tokens for: /mcp, which each organisation
-    // switches on for itself, and /api/v1 when the install has it on.
-    let mut resources = vec![oauth::Resource {
-        url: mcp::resource(&issuer),
-        scopes: oauth::MCP_SCOPES,
-    }];
+    // The resources OAuth issues tokens for: /mcp and /api/v1, when the
+    // install has them on (FLEETRANGER_MCP, FLEETRANGER_API); each
+    // organisation then switches MCP on for itself (user's decision,
+    // 2026-11-12). OAuth runs only with one of them.
+    let mut resources = Vec::new();
+    if config.mcp {
+        resources.push(oauth::Resource {
+            url: mcp::resource(&issuer),
+            scopes: oauth::MCP_SCOPES,
+        });
+    }
     if config.api {
         resources.push(oauth::Resource {
             url: api_v1::resource(&issuer),
@@ -191,7 +196,10 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
         }),
         activity,
         changes: changes.clone(),
-        api: api_v1::PublicApi(config.api),
+        apps: oauth::AppsOn {
+            mcp: config.mcp,
+            api: config.api,
+        },
         log_dir: LogDir(config.log_dir.clone()),
         android_apk: AndroidApk {
             path: config.android_apk.clone(),
@@ -203,14 +211,18 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
         },
     };
 
-    let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
-    hosts.extend(config.public_url.host_str().map(str::to_owned));
-    let mut apps = Router::new().merge(mcp::router(
-        state.system.clone(),
-        state.tenants.clone(),
-        &issuer,
-        hosts,
-    ));
+    let mut apps = Router::new();
+    if config.mcp {
+        let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
+        hosts.extend(config.public_url.host_str().map(str::to_owned));
+        tracing::info!("MCP server on at /mcp");
+        apps = apps.merge(mcp::router(
+            state.system.clone(),
+            state.tenants.clone(),
+            &issuer,
+            hosts,
+        ));
+    }
     if config.api {
         tracing::info!("public API on at /api/v1");
         apps = apps.merge(api_v1::router(api_v1::Api {
@@ -219,8 +231,10 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
             resource: api_v1::resource(&issuer).into(),
         }));
     }
-    tokio::spawn(oauth::clean_up_hourly(state.system.clone()));
-    apps = apps.merge(oauth::routes::router());
+    if config.mcp || config.api {
+        tokio::spawn(oauth::clean_up_hourly(state.system.clone()));
+        apps = apps.merge(oauth::routes::router());
+    }
 
     let app = Router::new()
         .route("/healthz", get(health::check))

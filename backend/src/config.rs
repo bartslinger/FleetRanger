@@ -29,6 +29,9 @@ pub struct Config {
     /// The controller app the download page offers (`FLEETRANGER_ANDROID_APK`,
     /// `/data/android/FleetRanger.apk` by default); without it the page says so.
     pub android_apk: PathBuf,
+    /// Whether the install offers MCP at `/mcp` (`FLEETRANGER_MCP=on`); off
+    /// by default. Each organisation then switches it on for itself.
+    pub mcp: bool,
     /// Whether apps can use the public API at `/api/v1`
     /// (`FLEETRANGER_API=on`); off by default.
     pub api: bool,
@@ -73,6 +76,7 @@ impl Config {
             }),
             None => None,
         };
+        let mcp = switch("FLEETRANGER_MCP")?;
         let api = switch("FLEETRANGER_API")?;
 
         Ok(Self {
@@ -84,6 +88,7 @@ impl Config {
             public_url,
             oidc,
             android_apk,
+            mcp,
             api,
         })
     }
