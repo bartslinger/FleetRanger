@@ -15,11 +15,11 @@ use sqlx::types::Uuid;
 use tokio::time::Instant;
 
 use super::activity::{Activity, Stage};
+use super::db::{self, Saved};
+use super::dji;
 use super::flight::{self, BatteryInfo, Flight, Serials};
-use super::{db, dji};
 use crate::db::{System, Tenants};
 use crate::organisations;
-use crate::sessions;
 
 /// How long to wait before looking for new logs when none are pending.
 const IDLE_PAUSE: Duration = Duration::from_secs(10);
@@ -126,32 +126,49 @@ async fn process_next(
         .await
         .with_context(|| format!("while processing {}", log.path))?;
     activity.stage(Stage::Saving);
-    match processed {
+    let failed = match processed {
         Ok(decoded) => {
-            // Only a flight seen for the first time: processing a log again
-            // must not put a flight back that someone took out of its session.
-            if db::save_result(db, log.id, decoded.flight.as_ref()).await? {
-                let gap = organisations::settings(db).await?.session_gap;
-                sessions::db::place_upload(db, log.id, gap).await?;
-            }
-            match &decoded.flight {
-                Some(flight) => tracing::info!(
-                    path = log.path,
-                    air_time_s = flight.air_time_s,
-                    distance_m = flight.distance_m.round(),
-                    dji_total_time_s = decoded.dji_total_time_s.round(),
-                    dji_total_distance_m = decoded.dji_total_distance_m.round(),
-                    "processed log"
-                ),
-                None => tracing::info!(path = log.path, "processed log: no takeoff"),
+            let gap = organisations::settings(db).await?.session_gap;
+            match db::save_result(db, &log, decoded.flight.as_ref(), gap).await? {
+                Saved::Done => {
+                    match &decoded.flight {
+                        Some(flight) => tracing::info!(
+                            path = log.path,
+                            air_time_s = flight.air_time_s,
+                            distance_m = flight.distance_m.round(),
+                            dji_total_time_s = decoded.dji_total_time_s.round(),
+                            dji_total_distance_m = decoded.dji_total_distance_m.round(),
+                            "processed log"
+                        ),
+                        None => tracing::info!(path = log.path, "processed log: no takeoff"),
+                    }
+                    None
+                }
+                Saved::Refused(reason) => Some(reason),
+                Saved::Superseded => {
+                    superseded(&log);
+                    None
+                }
             }
         }
-        Err(reason) => {
-            db::mark_failed(db, log.id, &reason).await?;
+        Err(reason) => Some(reason),
+    };
+    if let Some(reason) = failed {
+        if db::mark_failed(db, &log, &reason).await? {
             tracing::warn!(path = log.path, reason, "log failed to process");
+        } else {
+            superseded(&log);
         }
     }
     Ok(true)
+}
+
+/// A result that came too late: the log changed, or another worker took it.
+fn superseded(log: &db::PendingLog) {
+    tracing::info!(
+        path = log.path,
+        "log changed while processing: processed again"
+    );
 }
 
 async fn process(

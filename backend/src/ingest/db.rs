@@ -10,12 +10,28 @@ use super::flight::{BatteryUse, Flight};
 use crate::{
     areas,
     policy::{self, Permission},
+    sessions::{self, SessionGap},
 };
 
+/// A pending log as the loop claimed it. Its result is written only while
+/// the log still has this content and this attempt: a new version uploaded
+/// meanwhile, or another worker's claim, makes it stale (see `save_result`).
 pub struct PendingLog {
     pub id: Uuid,
     pub path: String,
     pub organisation_id: Uuid,
+    pub sha256: Vec<u8>,
+    pub attempts: i32,
+}
+
+/// What became of a log's result.
+pub enum Saved {
+    /// Saved, and the log is done.
+    Done,
+    /// The log can't give a flight here, for this reason: it fails.
+    Refused(String),
+    /// The claim was stale: nothing was saved, and the log is processed again.
+    Superseded,
 }
 
 pub async fn known_paths(db: &mut PgConnection) -> sqlx::Result<HashSet<String>> {
@@ -156,7 +172,7 @@ pub async fn next_pending(db: &mut PgConnection) -> sqlx::Result<Option<PendingL
              limit 1
              for update of r skip locked
          )
-         returning id, path, organisation_id",
+         returning id, path, organisation_id, sha256, attempts",
     )
     .fetch_optional(&mut *db)
     .await
@@ -169,14 +185,33 @@ pub async fn next_pending(db: &mut PgConnection) -> sqlx::Result<Option<PendingL
 /// chosen with the pilot if they fly for it, else the import's, else the
 /// controller's (user's decision, 2026-11-11), else the only group there is.
 /// Re-processing updates the flight in place, so its id, group and pilot stay
-/// the same. Returns whether the flight is new.
+/// the same. A flight seen for the first time is placed in a session in the
+/// same transaction, so a flight is either new and placed or neither;
+/// processing a log again never puts back a flight someone took out of its
+/// session.
 pub async fn save_result(
     db: &mut PgConnection,
-    raw_log_id: Uuid,
+    log: &PendingLog,
     flight: Option<&Flight>,
-) -> Result<bool> {
+    gap: SessionGap,
+) -> Result<Saved> {
+    let raw_log_id = log.id;
     let mut tx = db.begin().await?;
-    let new = match flight {
+    // First, and holding the row until the end: the claim must still be the
+    // log's, or nothing is saved.
+    let current = sqlx::query!(
+        "update raw_logs set status = 'done', last_error = null, processed_at = now()
+         where id = $1 and sha256 = $2 and attempts = $3 and status = 'pending'",
+        raw_log_id,
+        log.sha256,
+        log.attempts,
+    )
+    .execute(&mut *tx)
+    .await?;
+    if current.rows_affected() == 0 {
+        return Ok(Saved::Superseded);
+    }
+    match flight {
         Some(flight) => {
             let placed = sqlx::query!(
                 r#"with pilot as (
@@ -208,8 +243,12 @@ pub async fn save_result(
             )
             .fetch_one(&mut *tx)
             .await?;
+            // Not the log's content, but nothing to retry either: it fails,
+            // as docs/architecture.md says, until someone imports it with a group.
             let Some(group_id) = placed.group_id else {
-                anyhow::bail!("no group for this flight: the controller is unknown");
+                return Ok(Saved::Refused(
+                    "no group for this flight: the controller is unknown".to_owned(),
+                ));
             };
             if let Some(serial) = &flight.aircraft_serial {
                 sqlx::query!(
@@ -263,24 +302,18 @@ pub async fn save_result(
             .await?;
             areas::db::compute_flight(&mut tx, saved.id).await?;
             save_battery(&mut tx, saved.id, flight.battery.as_ref()).await?;
-            saved.new
+            if saved.new {
+                sessions::db::place_upload(&mut tx, raw_log_id, gap).await?;
+            }
         }
         None => {
             sqlx::query!("delete from flights where raw_log_id = $1", raw_log_id)
                 .execute(&mut *tx)
                 .await?;
-            false
         }
-    };
-    sqlx::query!(
-        "update raw_logs set status = 'done', last_error = null, processed_at = now()
-         where id = $1",
-        raw_log_id,
-    )
-    .execute(&mut *tx)
-    .await?;
+    }
     tx.commit().await?;
-    Ok(new)
+    Ok(Saved::Done)
 }
 
 /// Registers the flight's battery if it's new, and replaces what the flight
@@ -331,16 +364,24 @@ async fn save_battery(
     Ok(())
 }
 
-pub async fn mark_failed(db: &mut PgConnection, id: Uuid, error: &str) -> sqlx::Result<()> {
-    sqlx::query!(
-        "update raw_logs set status = 'failed', last_error = $2, processed_at = now()
-         where id = $1",
-        id,
+/// Marks a log failed, if the claim is still the log's (see `save_result`).
+/// False if it was stale: the log is processed again.
+pub async fn mark_failed(
+    db: &mut PgConnection,
+    log: &PendingLog,
+    error: &str,
+) -> sqlx::Result<bool> {
+    let marked = sqlx::query!(
+        "update raw_logs set status = 'failed', last_error = $4, processed_at = now()
+         where id = $1 and sha256 = $2 and attempts = $3 and status = 'pending'",
+        log.id,
+        log.sha256,
+        log.attempts,
         error,
     )
     .execute(&mut *db)
     .await?;
-    Ok(())
+    Ok(marked.rows_affected() == 1)
 }
 
 /// The body of the latest successful key request for a raw log.
@@ -530,8 +571,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(first, Stored::Added);
+        let gap = SessionGap(120);
         let log = next_pending(&mut db).await.unwrap().unwrap();
-        assert!(save_result(&mut db, log.id, Some(&flight())).await.unwrap());
+        let saved = save_result(&mut db, &log, Some(&flight()), gap)
+            .await
+            .unwrap();
+        assert!(matches!(saved, Saved::Done));
         assert_eq!(
             pilot_and_group(&mut db, log.id).await,
             (Some(pilot), Some(team))
@@ -543,18 +588,30 @@ mod tests {
         assert_eq!(second, Stored::Replaced);
         let again = next_pending(&mut db).await.unwrap().unwrap();
         assert_eq!(again.id, log.id, "the same log, to be processed again");
-        assert!(
-            !save_result(&mut db, log.id, Some(&flight())).await.unwrap(),
-            "the same flight, so it isn't placed in a session again"
-        );
-        assert!(has_content(&mut db, &[2; 32]).await.unwrap());
+        // A newer version arrives while that one is being processed: its
+        // result is stale, nothing is saved, and the log waits again.
+        save_upload(&mut db, &[3; 32], path, 30, Some(pilot), Some(team))
+            .await
+            .unwrap();
+        let stale = save_result(&mut db, &again, Some(&flight()), gap)
+            .await
+            .unwrap();
+        assert!(matches!(stale, Saved::Superseded));
+        assert!(!mark_failed(&mut db, &again, "Test").await.unwrap());
+        let latest = next_pending(&mut db).await.unwrap().unwrap();
+        assert_eq!(latest.sha256, vec![3; 32]);
+        let saved = save_result(&mut db, &latest, Some(&flight()), gap)
+            .await
+            .unwrap();
+        assert!(matches!(saved, Saved::Done));
+        assert!(has_content(&mut db, &[3; 32]).await.unwrap());
         assert!(!has_content(&mut db, &[1; 32]).await.unwrap());
-        let stored = stored_contents(&mut db, &[vec![1; 32], vec![2; 32]])
+        let stored = stored_contents(&mut db, &[vec![1; 32], vec![2; 32], vec![3; 32]])
             .await
             .unwrap();
         assert_eq!(
             stored,
-            HashSet::from([vec![2; 32]]),
+            HashSet::from([vec![3; 32]]),
             "only the latest version"
         );
     }
@@ -594,7 +651,9 @@ mod tests {
                 .await
                 .unwrap();
             let log = next_pending(&mut db).await.unwrap().unwrap();
-            save_result(&mut db, log.id, Some(&flight())).await.unwrap();
+            save_result(&mut db, &log, Some(&flight()), SessionGap(120))
+                .await
+                .unwrap();
             processed.push(pilot_and_group(&mut db, log.id).await);
         }
         assert!(
@@ -603,7 +662,9 @@ mod tests {
                 .unwrap()
         );
         let log = next_pending(&mut db).await.unwrap().unwrap();
-        save_result(&mut db, log.id, Some(&flight())).await.unwrap();
+        save_result(&mut db, &log, Some(&flight()), SessionGap(120))
+            .await
+            .unwrap();
         processed.push(pilot_and_group(&mut db, log.id).await);
         assert_eq!(
             processed,
@@ -614,5 +675,27 @@ mod tests {
                 (None, Some(other)),
             ]
         );
+
+        // Without a group, chosen or given, from an unknown controller, the
+        // log fails instead of being tried again and again.
+        sqlx::query(
+            "insert into raw_logs (sha256, path, size_bytes) values (sha256('test'), 'raw/test.txt', 0)",
+        )
+        .execute(&mut *db)
+        .await
+        .unwrap();
+        let log = next_pending(&mut db).await.unwrap().unwrap();
+        let unknown = Flight {
+            rc_serial: Some("TESTUNKNOWN".to_owned()),
+            ..flight()
+        };
+        let refused = save_result(&mut db, &log, Some(&unknown), SessionGap(120))
+            .await
+            .unwrap();
+        let Saved::Refused(reason) = refused else {
+            panic!("expected the log to be refused");
+        };
+        assert!(mark_failed(&mut db, &log, &reason).await.unwrap());
+        assert!(next_pending(&mut db).await.unwrap().is_none());
     }
 }

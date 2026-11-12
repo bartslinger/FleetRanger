@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update raw_logs set attempts = attempts + 1\n         where id = (\n             select r.id\n             from raw_logs r\n             join (select organisation_id, max(processed_at) as last_served\n                   from raw_logs group by organisation_id) s\n               on s.organisation_id = r.organisation_id\n             where r.status = 'pending'\n             order by s.last_served nulls first, r.attempts, r.received_at, r.id\n             limit 1\n             for update of r skip locked\n         )\n         returning id, path, organisation_id, sha256, attempts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "organisation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "organisation_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "raw_logs",
+            "name": "attempts"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "960b51df434842a8c76552e33804d50875bdcd6605985a690d1a184b5a7d990e"
+}

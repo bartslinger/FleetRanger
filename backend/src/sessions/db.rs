@@ -265,18 +265,22 @@ pub async fn neighbours(
     .await
 }
 
-/// Any constant, so that only one change to sessions (grouping, splitting,
-/// merging) runs at a time.
-const SESSIONS_LOCK: i64 = 0x5e55_1015;
+/// Any constant, so that only one change to an organisation's sessions
+/// (grouping, splitting, merging) runs at a time; other organisations'
+/// don't wait for it.
+const SESSIONS_LOCK: i32 = 0x5e55_1015;
 
-/// A transaction holding the sessions lock.
+/// A transaction holding the sessions lock of the connection's organisation.
 pub(crate) async fn locked(
     db: &mut PgConnection,
 ) -> sqlx::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
     let mut tx = db.begin().await?;
-    sqlx::query!("select pg_advisory_xact_lock($1)", SESSIONS_LOCK)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "select pg_advisory_xact_lock($1, hashtext(coalesce(current_setting('app.organisation_id', true), '')))",
+        SESSIONS_LOCK
+    )
+    .execute(&mut *tx)
+    .await?;
     Ok(tx)
 }
 

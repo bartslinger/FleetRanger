@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select pg_advisory_xact_lock($1)",
+  "query": "select pg_advisory_xact_lock($1, hashtext(coalesce(current_setting('app.organisation_id', true), '')))",
   "describe": {
     "columns": [
       {
@@ -12,12 +12,12 @@
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Int4"
       ]
     },
     "nullable": [
       null
     ]
   },
-  "hash": "570d39a796d40969ce8b5f8a1e2b6b63f04e5353805165e0b76db8583c393762"
+  "hash": "b8e5ed64eaedd3a64ed68704c6b8f4c338458fa333412a00e041cb71fae80bf7"
 }

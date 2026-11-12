@@ -29,17 +29,22 @@ pub async fn list(db: &mut PgConnection) -> sqlx::Result<Vec<Area>> {
     .await
 }
 
-// Saving areas and saving flights take a lock on `areas`, so that a flight is
-// never computed against areas that are about to change, and two areas being
-// saved at once can't be clipped without seeing each other. Saving areas
-// conflicts with itself and with saving flights; saving flights doesn't
-// conflict with itself.
+// Saving areas and saving flights take the organisation's areas lock, so that
+// a flight is never computed against areas that are about to change, and two
+// areas being saved at once can't be clipped without seeing each other.
+// Saving areas conflicts with itself and with saving flights; saving flights
+// doesn't conflict with itself; other organisations don't wait for it. An
+// advisory lock per organisation, keyed as the sessions lock is.
+const AREAS_LOCK: i32 = 0x0a2e_a500;
 
-/// Locks the areas for changing them, until the transaction ends.
+/// Locks the organisation's areas for changing them, until the transaction ends.
 pub async fn lock_for_change(tx: &mut PgConnection) -> sqlx::Result<()> {
-    sqlx::query!("lock table areas in share row exclusive mode")
-        .execute(tx)
-        .await?;
+    sqlx::query!(
+        "select pg_advisory_xact_lock($1, hashtext(coalesce(current_setting('app.organisation_id', true), '')))",
+        AREAS_LOCK
+    )
+    .execute(tx)
+    .await?;
     Ok(())
 }
 
@@ -149,9 +154,12 @@ async fn store(
 /// Computes a flight's figures per area, after it was saved in the same
 /// transaction.
 pub async fn compute_flight(tx: &mut PgConnection, flight_id: Uuid) -> sqlx::Result<()> {
-    sqlx::query!("lock table areas in share mode")
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "select pg_advisory_xact_lock_shared($1, hashtext(coalesce(current_setting('app.organisation_id', true), '')))",
+        AREAS_LOCK
+    )
+    .execute(&mut *tx)
+    .await?;
     let (ids, shapes) = shapes(tx).await?;
     let flights = sqlx::query_as!(
         TrackedFlight,
