@@ -34,6 +34,7 @@ Everyone is a user, with roles in groups (and Admin on the whole organisation) a
 - [x] Parse into flights: times, time in air, distance, track, drone/controller/battery serials
 - [ ] Re-processing of all logs after parser changes
 - [ ] Parse each log in a child process with memory and time limits (user, 2026-11-13; about half a day): a log that runs the parser out of memory or into a stack overflow then fails on its own, instead of taking down the backend and its API and being retried every 5 minutes
+- [ ] Stream uploads to disk while hashing them (user, 2026-11-13; a couple of hours): a log is now held in memory whole (up to 256 MB), so a few large uploads at once could run a small server out of memory
 
 ## Phase 3: sessions
 
