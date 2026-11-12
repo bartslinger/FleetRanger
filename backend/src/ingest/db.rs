@@ -133,7 +133,11 @@ pub async fn save_upload(
                status = 'pending',
                attempts = 0,
                last_error = null,
-               processed_at = null
+               processed_at = null,
+               -- Due at once, and free: a claim on the previous version
+               -- can't save its result anyway.
+               next_attempt_at = now(),
+               claimed_until = null
            -- xmax is set on a row that "on conflict" updated rather than inserted.
            returning (xmax <> 0) as "replaced!""#,
         sha256,
@@ -151,31 +155,139 @@ pub async fn save_upload(
     })
 }
 
-/// The next pending raw log of any organisation (with `System`), counting
-/// this as an attempt to process it. Organisations take turns (user's
-/// decision, 2026-11-12): the one whose last log was processed longest ago
-/// goes first, so a big import in one doesn't hold up another's uploads.
-/// Within an organisation, fresh logs come before ones tried before, then
-/// the oldest.
+/// How long a claim holds a log: far longer than processing one takes, so
+/// only a backend that died lets it run out, and then another takes the log.
+const LEASE_MINUTES: i32 = 5;
+
+/// Claims the next due raw log of any organisation (with `System`), counting
+/// this as an attempt to process it: a pending log whose time has come and
+/// that no backend holds. Organisations take turns (user's decision,
+/// 2026-11-12): the one claimed from longest ago goes first, so a big import
+/// in one doesn't hold up another's uploads. Within an organisation, fresh
+/// logs come before ones tried before, then the oldest.
 pub async fn next_pending(db: &mut PgConnection) -> sqlx::Result<Option<PendingLog>> {
     sqlx::query_as!(
         PendingLog,
-        "update raw_logs set attempts = attempts + 1
+        "update raw_logs
+         set attempts = attempts + 1, claimed_until = now() + make_interval(mins => $1)
          where id = (
              select r.id
              from raw_logs r
-             join (select organisation_id, max(processed_at) as last_served
+             join (select organisation_id, max(claimed_until) as last_claimed
                    from raw_logs group by organisation_id) s
                on s.organisation_id = r.organisation_id
-             where r.status = 'pending'
-             order by s.last_served nulls first, r.attempts, r.received_at, r.id
+             where r.status = 'pending' and r.next_attempt_at <= now()
+               and (r.claimed_until is null or r.claimed_until < now())
+             order by s.last_claimed nulls first, r.attempts, r.received_at, r.id
              limit 1
              for update of r skip locked
          )
          returning id, path, organisation_id, sha256, attempts",
+        LEASE_MINUTES,
     )
     .fetch_optional(&mut *db)
     .await
+}
+
+/// A log that hit an error that may pass (this log, later): it's tried again
+/// after `delay_s`, and other logs go on meanwhile. False if the claim was
+/// stale (see `save_result`).
+pub async fn retry_later(
+    db: &mut PgConnection,
+    log: &PendingLog,
+    delay_s: i32,
+    error: &str,
+) -> sqlx::Result<bool> {
+    let marked = sqlx::query!(
+        "update raw_logs
+         set next_attempt_at = now() + make_interval(secs => $4), last_error = $5,
+             claimed_until = now()
+         where id = $1 and sha256 = $2 and attempts = $3 and status = 'pending'",
+        log.id,
+        log.sha256,
+        log.attempts,
+        f64::from(delay_s),
+        error,
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(marked.rows_affected() == 1)
+}
+
+/// A log that needs DJI while DJI is down: it waits until `until`, and the
+/// attempt doesn't count, as it's not the log's doing. False if the claim was
+/// stale.
+pub async fn wait_for_dji(
+    db: &mut PgConnection,
+    log: &PendingLog,
+    until: DateTime<Utc>,
+    reason: &str,
+) -> sqlx::Result<bool> {
+    let marked = sqlx::query!(
+        "update raw_logs
+         set next_attempt_at = $4, attempts = attempts - 1, last_error = $5,
+             claimed_until = now()
+         where id = $1 and sha256 = $2 and attempts = $3 and status = 'pending'",
+        log.id,
+        log.sha256,
+        log.attempts,
+        until,
+        reason,
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(marked.rows_affected() == 1)
+}
+
+// DJI's key service as every backend sees it (the one row of `dji_api`), with
+// `System`: requests have no access to it.
+
+/// DJI's outage window and why, if it's still open.
+pub async fn dji_blocked(db: &mut PgConnection) -> sqlx::Result<Option<(DateTime<Utc>, String)>> {
+    let row = sqlx::query!(
+        r#"select blocked_until as "until!", coalesce(last_error, '') as "reason!"
+           from dji_api where blocked_until > now()"#
+    )
+    .fetch_optional(&mut *db)
+    .await?;
+    Ok(row.map(|row| (row.until, row.reason)))
+}
+
+/// Reserves the next request slot, one second after the previous one by any
+/// backend, start to start; the caller waits until it.
+pub async fn dji_slot(db: &mut PgConnection) -> sqlx::Result<DateTime<Utc>> {
+    sqlx::query_scalar!(
+        r#"update dji_api set next_request_at = greatest(next_request_at, now()) + interval '1 second'
+           returning next_request_at - interval '1 second' as "slot!""#
+    )
+    .fetch_one(&mut *db)
+    .await
+}
+
+/// DJI failed: no backend asks it for a while, one minute at first, doubling
+/// with each failure in a row up to 15. Returns when it may be asked again.
+pub async fn dji_failed(db: &mut PgConnection, reason: &str) -> sqlx::Result<DateTime<Utc>> {
+    sqlx::query_scalar!(
+        r#"update dji_api
+           set blocked_until = now() + least(interval '15 minutes',
+                                             interval '1 minute' * power(2, least(failures, 10))),
+               failures = failures + 1, last_error = $1
+           returning blocked_until as "until!""#,
+        reason,
+    )
+    .fetch_one(&mut *db)
+    .await
+}
+
+/// DJI answered: the outage, if any, is over.
+pub async fn dji_answered(db: &mut PgConnection) -> sqlx::Result<()> {
+    sqlx::query!(
+        "update dji_api set failures = 0, blocked_until = null, last_error = null
+         where failures > 0 or blocked_until is not null"
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(())
 }
 
 /// Saves the flight found in a raw log, or removes an earlier one if the log turned
@@ -200,7 +312,8 @@ pub async fn save_result(
     // First, and holding the row until the end: the claim must still be the
     // log's, or nothing is saved.
     let current = sqlx::query!(
-        "update raw_logs set status = 'done', last_error = null, processed_at = now()
+        "update raw_logs
+         set status = 'done', last_error = null, processed_at = now(), claimed_until = now()
          where id = $1 and sha256 = $2 and attempts = $3 and status = 'pending'",
         raw_log_id,
         log.sha256,
@@ -372,7 +485,8 @@ pub async fn mark_failed(
     error: &str,
 ) -> sqlx::Result<bool> {
     let marked = sqlx::query!(
-        "update raw_logs set status = 'failed', last_error = $4, processed_at = now()
+        "update raw_logs
+         set status = 'failed', last_error = $4, processed_at = now(), claimed_until = now()
          where id = $1 and sha256 = $2 and attempts = $3 and status = 'pending'",
         log.id,
         log.sha256,
@@ -487,6 +601,83 @@ mod tests {
 
     use super::*;
     use crate::ingest::flight::Metrics;
+
+    /// A claimed log is no one else's until its claim runs out, as when its
+    /// backend died; a log to be tried later waits, and others go on; a log
+    /// waiting for DJI doesn't use up an attempt.
+    #[sqlx::test]
+    async fn claims_hold_and_logs_wait_their_turn(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        for path in ["first", "second"] {
+            sqlx::query(
+                "insert into raw_logs (sha256, path, size_bytes, received_at)
+                 values (sha256($1::bytea), $1, 0,
+                         now() - case $1 when 'first' then interval '2 minutes' else interval '1 minute' end)",
+            )
+            .bind(path)
+            .execute(&mut *db)
+            .await
+            .unwrap();
+        }
+        let first = next_pending(&mut db).await.unwrap().unwrap();
+        assert_eq!(first.path, "first");
+        let second = next_pending(&mut db).await.unwrap().unwrap();
+        assert_eq!(second.path, "second", "the first is claimed");
+        assert!(next_pending(&mut db).await.unwrap().is_none());
+
+        // The first's backend died: its claim runs out, and it's taken again.
+        sqlx::query(
+            "update raw_logs set claimed_until = now() - interval '1 second' where id = $1",
+        )
+        .bind(first.id)
+        .execute(&mut *db)
+        .await
+        .unwrap();
+        let again = next_pending(&mut db).await.unwrap().unwrap();
+        assert_eq!((again.id, again.attempts), (first.id, 2));
+
+        // An error that may pass: it waits, and isn't due meanwhile.
+        assert!(retry_later(&mut db, &again, 60, "Test").await.unwrap());
+        assert!(next_pending(&mut db).await.unwrap().is_none());
+
+        // Waiting for DJI gives the attempt back.
+        let until = Utc::now() + chrono::Duration::minutes(1);
+        assert!(wait_for_dji(&mut db, &second, until, "Test").await.unwrap());
+        let attempts: i32 = sqlx::query_scalar("select attempts from raw_logs where id = $1")
+            .bind(second.id)
+            .fetch_one(&mut *db)
+            .await
+            .unwrap();
+        assert_eq!(attempts, 0);
+    }
+
+    /// DJI's request rate and outages are shared by every backend: slots a
+    /// second apart, an outage window doubling up to 15 minutes, cleared by
+    /// the first answer.
+    #[sqlx::test]
+    async fn dji_requests_are_spaced_and_paused_for_everyone(pool: sqlx::PgPool) {
+        let mut system = pool.acquire().await.unwrap();
+        let first = dji_slot(&mut system).await.unwrap();
+        let second = dji_slot(&mut system).await.unwrap();
+        assert_eq!(second - first, chrono::Duration::seconds(1));
+
+        assert!(dji_blocked(&mut system).await.unwrap().is_none());
+        let mut windows = Vec::new();
+        for _ in 0..6 {
+            let until = dji_failed(&mut system, "Test").await.unwrap();
+            windows.push((until - Utc::now()).num_seconds() + 1);
+        }
+        assert_eq!(windows, [60, 120, 240, 480, 900, 900]);
+        assert!(dji_blocked(&mut system).await.unwrap().is_some());
+        dji_answered(&mut system).await.unwrap();
+        assert!(dji_blocked(&mut system).await.unwrap().is_none());
+        let after = dji_failed(&mut system, "Test").await.unwrap();
+        assert_eq!(
+            (after - Utc::now()).num_seconds() + 1,
+            60,
+            "counting from 1 again"
+        );
+    }
 
     /// Organisations take turns: B's one upload comes right after A's first
     /// of many, not after all of them; within A, a log tried before goes

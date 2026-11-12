@@ -141,19 +141,23 @@ mod tests {
 
     use crate::testing;
 
-    /// Every table but the migrations' own has row-level security with a
-    /// policy for `fleetranger_app`, which owns nothing and can't bypass it:
-    /// a table added without one would show every organisation's rows.
+    /// Every table but the migrations' own has row-level security, with a
+    /// policy for `fleetranger_app` or, for install-wide tables such as
+    /// `dji_api`, no access for it at all; and it owns nothing and can't
+    /// bypass it. A table added without either would show every
+    /// organisation's rows.
     #[sqlx::test]
     async fn every_table_has_row_level_security(pool: PgPool) {
         let unguarded: Vec<String> = sqlx::query_scalar(
             "select c.relname::text from pg_class c
              where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
                and c.relname <> '_sqlx_migrations'
-               and not (c.relrowsecurity and exists (
-                   select 1 from pg_policies p
-                   where p.schemaname = 'public' and p.tablename = c.relname
-                     and 'fleetranger_app' = any(p.roles)))
+               and not (c.relrowsecurity and (
+                   exists (select 1 from pg_policies p
+                           where p.schemaname = 'public' and p.tablename = c.relname
+                             and 'fleetranger_app' = any(p.roles))
+                   or not has_table_privilege('fleetranger_app', c.oid,
+                                              'select, insert, update, delete')))
              order by 1",
         )
         .fetch_all(&pool)

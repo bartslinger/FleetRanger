@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update dji_api\n           set blocked_until = now() + least(interval '15 minutes',\n                                             interval '1 minute' * power(2, least(failures, 10))),\n               failures = failures + 1, last_error = $1\n           returning blocked_until as \"until!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "until!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "dji_api",
+            "name": "blocked_until"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0ee864ee01a106c25baad9a39b1f9b93e36b4f31ce9c9f0b6e53a7ebc8b741a6"
+}

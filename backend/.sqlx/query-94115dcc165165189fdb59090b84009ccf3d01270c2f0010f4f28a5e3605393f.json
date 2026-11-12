@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select blocked_until as \"until!\", coalesce(last_error, '') as \"reason!\"\n           from dji_api where blocked_until > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "until!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "dji_api",
+            "name": "blocked_until"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reason!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "94115dcc165165189fdb59090b84009ccf3d01270c2f0010f4f28a5e3605393f"
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update dji_api set next_request_at = greatest(next_request_at, now()) + interval '1 second'\n           returning next_request_at - interval '1 second' as \"slot!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "slot!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0cbfc50a7c36026449f28019a53499a5cdc5fbff75874d3e6b8289cfe4129edd"
+}

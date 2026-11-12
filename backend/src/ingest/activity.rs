@@ -95,12 +95,28 @@ impl Activity {
         self.changes.notify();
     }
 
+    /// Nothing due. A pause that hasn't run out stays: the logs it holds up
+    /// are still waiting.
     pub fn idle(&self) {
         let mut now = self.lock();
         *now = Snapshot {
             finished_batch_started_at: now.batch_started_at.or(now.finished_batch_started_at),
+            paused: now.paused.take().filter(|paused| paused.until > Utc::now()),
             ..Snapshot::default()
         };
+        self.changes.notify();
+    }
+
+    /// DJI is down until then: logs that need its keys wait. It concerns no
+    /// organisation in particular, so every organisation's admins see it.
+    pub fn dji_down(&self, reason: &str, until: DateTime<Utc>) {
+        let mut now = self.lock();
+        now.current = None;
+        now.paused = Some(Paused {
+            organisation_id: None,
+            reason: reason.to_owned(),
+            until,
+        });
         self.changes.notify();
     }
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update dji_api set failures = 0, blocked_until = null, last_error = null\n         where failures > 0 or blocked_until is not null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "6123cf6242fcdeb02916f9349c8e786f1dbbcae1890e9d8f78a0d91e85a920d3"
+}

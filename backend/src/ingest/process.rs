@@ -1,55 +1,53 @@
-//! Processes pending raw logs, one at a time: requests decryption keys from DJI
-//! when needed, decrypts and parses the log, and saves the flight in it.
+//! Processes pending raw logs, one at a time per backend: requests decryption
+//! keys from DJI when needed, decrypts and parses the log, and saves the
+//! flight in it. Several backends can run it at once: a log is claimed for a
+//! while (`db::next_pending`), its result counts only for that claim, and
+//! DJI's request rate and outages are shared through the database.
+//!
+//! An attempt at a log ends in one of four ways: done (a flight, or none);
+//! the log's fault (it fails); DJI's fault (it waits for DJI, without using
+//! up an attempt, and logs that don't need DJI go on); or an error that may
+//! pass, such as a failed save (this log, later: tried again after a growing
+//! delay, and failed after `MAX_ATTEMPTS`).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use dji_log_parser::DJILog;
 use dji_log_parser::frame::records_to_frames;
 use dji_log_parser::keychain::KeychainFeaturePoint;
 use dji_log_parser::record::Record;
 use dji_log_parser::record::smart_battery_group::SmartBatteryGroup;
 use sqlx::PgConnection;
-use sqlx::types::Uuid;
-use tokio::time::Instant;
 
 use super::activity::{Activity, Stage};
-use super::db::{self, Saved};
+use super::db::{self, PendingLog, Saved};
 use super::dji;
 use super::flight::{self, BatteryInfo, Flight, Serials};
 use crate::db::{System, Tenants};
 use crate::organisations;
 
-/// How long to wait before looking for new logs when none are pending.
+/// How long to wait before looking for new logs when none are due.
 const IDLE_PAUSE: Duration = Duration::from_secs(10);
-/// How long to wait after a problem that may go away, such as DJI being unreachable.
+/// How long to wait after a problem outside any log, such as the database
+/// being unreachable.
 const ERROR_PAUSE: Duration = Duration::from_secs(60);
-/// At most one request to DJI per this time, start to start, so that a large
-/// import doesn't flood their API. Work between requests (decrypting, saving)
-/// counts towards it.
-const DJI_REQUEST_INTERVAL: Duration = Duration::from_secs(1);
+/// After this many attempts that ended in an error that may pass, a log fails.
+const MAX_ATTEMPTS: i32 = 8;
 
-/// Spaces requests at least `interval` apart.
-struct RateLimit {
-    interval: Duration,
-    last: Option<Instant>,
-}
-
-impl RateLimit {
-    fn new(interval: Duration) -> Self {
-        Self {
-            interval,
-            last: None,
-        }
-    }
-
-    /// Waits until the next request may start.
-    async fn wait(&mut self) {
-        if let Some(last) = self.last {
-            tokio::time::sleep_until(last + self.interval).await;
-        }
-        self.last = Some(Instant::now());
+/// How long a log waits after its `attempts`th attempt ended in an error that
+/// may pass: 1 minute, 5, 30, 2 hours, then 6 hours; None once it has had
+/// `MAX_ATTEMPTS` and fails.
+fn retry_delay_s(attempts: i32) -> Option<i32> {
+    match attempts {
+        ..=1 => Some(60),
+        2 => Some(5 * 60),
+        3 => Some(30 * 60),
+        4 => Some(2 * 3600),
+        _ if attempts < MAX_ATTEMPTS => Some(6 * 3600),
+        _ => None,
     }
 }
 
@@ -59,9 +57,8 @@ const KNOWN_RECORD_TYPES: [u8; 24] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 19, 22, 24, 25, 33, 40, 49, 50, 56, 62,
 ];
 
-/// The result of processing one log: what it contains, or why it can't be processed.
-/// Problems that may go away are errors instead, and leave the log pending.
-type Processed = std::result::Result<Decoded, String>;
+/// What a log contains, or why it can't give a flight (the log's fault).
+type Processed = std::result::Result<Box<Decoded>, String>;
 
 struct Decoded {
     /// `None` if the aircraft never took off.
@@ -71,6 +68,17 @@ struct Decoded {
     dji_total_distance_m: f32,
 }
 
+/// How one attempt at a log ended, short of an error that may pass.
+enum Outcome {
+    /// Its flight, or none; or why it fails.
+    Processed(Processed),
+    /// It needs keys while DJI is down: it waits until then.
+    DjiDown {
+        until: DateTime<Utc>,
+        reason: String,
+    },
+}
+
 pub async fn run(
     system: System,
     tenants: Tenants,
@@ -78,7 +86,6 @@ pub async fn run(
     dji_app_key: Option<String>,
     activity: Activity,
 ) {
-    let mut dji_limit = RateLimit::new(DJI_REQUEST_INTERVAL);
     loop {
         let result = process_next(
             &system,
@@ -86,7 +93,6 @@ pub async fn run(
             &log_dir,
             dji_app_key.as_deref(),
             &activity,
-            &mut dji_limit,
         )
         .await;
         let pause = match result {
@@ -105,15 +111,16 @@ pub async fn run(
     }
 }
 
-/// Processes the oldest pending log, of any organisation, in its
-/// organisation. Returns false if there was none.
+/// Claims and processes the next due log, of any organisation, in its
+/// organisation. Returns false if there was none. An error means trouble
+/// outside the log, such as the database being unreachable; a log it held
+/// is taken again when its claim runs out.
 async fn process_next(
     system: &System,
     tenants: &Tenants,
     log_dir: &Path,
     dji_app_key: Option<&str>,
     activity: &Activity,
-    dji_limit: &mut RateLimit,
 ) -> Result<bool> {
     let Some(log) = db::next_pending(&mut *system.acquire().await?).await? else {
         return Ok(false);
@@ -122,14 +129,51 @@ async fn process_next(
     activity.start(log.organisation_id, &log.path);
 
     let path = super::organisation_dir(log_dir, log.organisation_id).join(&log.path);
-    let processed = process(db, log.id, &path, dji_app_key, activity, dji_limit)
-        .await
-        .with_context(|| format!("while processing {}", log.path))?;
-    activity.stage(Stage::Saving);
-    let failed = match processed {
-        Ok(decoded) => {
+    let attempt = async {
+        let outcome = process(db, system, &log, &path, dji_app_key, activity).await?;
+        activity.stage(Stage::Saving);
+        finish(db, &log, outcome, activity).await
+    }
+    .await;
+    if let Err(error) = attempt {
+        let error = format!("{error:#}");
+        let still_ours = match retry_delay_s(log.attempts) {
+            Some(delay_s) => {
+                tracing::warn!(path = log.path, error, delay_s, "log will be tried again");
+                db::retry_later(db, &log, delay_s, &error).await?
+            }
+            None => {
+                let reason = format!("gave up after {MAX_ATTEMPTS} attempts: {error}");
+                tracing::warn!(path = log.path, reason, "log failed to process");
+                db::mark_failed(db, &log, &reason).await?
+            }
+        };
+        if !still_ours {
+            superseded(&log);
+        }
+    }
+    Ok(true)
+}
+
+/// Saves what became of an attempt, if the claim is still the log's.
+async fn finish(
+    db: &mut PgConnection,
+    log: &PendingLog,
+    outcome: Outcome,
+    activity: &Activity,
+) -> Result<()> {
+    let failed = match outcome {
+        Outcome::DjiDown { until, reason } => {
+            // Install-wide, so every organisation's admins may see it.
+            activity.dji_down(&reason, until);
+            if !db::wait_for_dji(db, log, until, &reason).await? {
+                superseded(log);
+            }
+            return Ok(());
+        }
+        Outcome::Processed(Ok(decoded)) => {
             let gap = organisations::settings(db).await?.session_gap;
-            match db::save_result(db, &log, decoded.flight.as_ref(), gap).await? {
+            match db::save_result(db, log, decoded.flight.as_ref(), gap).await? {
                 Saved::Done => {
                     match &decoded.flight {
                         Some(flight) => tracing::info!(
@@ -142,96 +186,117 @@ async fn process_next(
                         ),
                         None => tracing::info!(path = log.path, "processed log: no takeoff"),
                     }
-                    None
+                    return Ok(());
                 }
-                Saved::Refused(reason) => Some(reason),
+                Saved::Refused(reason) => reason,
                 Saved::Superseded => {
-                    superseded(&log);
-                    None
+                    superseded(log);
+                    return Ok(());
                 }
             }
         }
-        Err(reason) => Some(reason),
+        Outcome::Processed(Err(reason)) => reason,
     };
-    if let Some(reason) = failed {
-        if db::mark_failed(db, &log, &reason).await? {
-            tracing::warn!(path = log.path, reason, "log failed to process");
-        } else {
-            superseded(&log);
-        }
+    if db::mark_failed(db, log, &failed).await? {
+        tracing::warn!(path = log.path, reason = failed, "log failed to process");
+    } else {
+        superseded(log);
     }
-    Ok(true)
+    Ok(())
 }
 
-/// A result that came too late: the log changed, or another worker took it.
-fn superseded(log: &db::PendingLog) {
+/// A result that came too late: the log changed, or another backend took it.
+fn superseded(log: &PendingLog) {
     tracing::info!(
         path = log.path,
         "log changed while processing: processed again"
     );
 }
 
+/// One attempt at a log. An error is one that may pass, such as the file
+/// not being readable just now or the parser crashing: the log is tried
+/// again later.
 async fn process(
     db: &mut PgConnection,
-    raw_log_id: Uuid,
+    system: &System,
+    raw_log: &PendingLog,
     path: &Path,
     dji_app_key: Option<&str>,
     activity: &Activity,
-    dji_limit: &mut RateLimit,
-) -> Result<Processed> {
-    let bytes = match tokio::fs::read(path).await {
-        Ok(bytes) => bytes,
-        Err(error) => return Ok(Err(format!("failed to read the file: {error}"))),
-    };
+) -> Result<Outcome> {
+    let bytes = tokio::fs::read(path)
+        .await
+        .with_context(|| format!("failed to read {}", raw_log.path))?;
     let log = match blocking(move || DJILog::from_bytes(bytes)).await? {
         Ok(log) => log,
-        Err(error) => return Ok(Err(format!("not a readable DJI log: {error}"))),
+        Err(error) => {
+            return Ok(Outcome::Processed(Err(format!(
+                "not a readable DJI log: {error}"
+            ))));
+        }
     };
 
     // Logs from format version 13 on are encrypted.
     let keychains = if log.version >= 13 {
-        match keychains(db, raw_log_id, &log, dji_app_key, activity, dji_limit).await? {
+        match keychains(db, system, raw_log, &log, dji_app_key, activity).await? {
             Ok(keychains) => Some(keychains),
-            Err(reason) => return Ok(Err(reason)),
+            Err(outcome) => return Ok(outcome),
         }
     } else {
         None
     };
 
     activity.stage(Stage::Decoding);
-    blocking(move || decode(&log, keychains)).await
+    Ok(Outcome::Processed(
+        blocking(move || decode(&log, keychains)).await?,
+    ))
 }
 
-/// The keychains for a log: the ones DJI returned before, or else new ones from DJI.
+/// The keychains for a log: the ones DJI returned before, or else new ones
+/// from DJI, at DJI's shared request rate and only while DJI isn't down.
 async fn keychains(
     db: &mut PgConnection,
-    raw_log_id: Uuid,
+    system: &System,
+    raw_log: &PendingLog,
     log: &DJILog,
     dji_app_key: Option<&str>,
     activity: &Activity,
-    dji_limit: &mut RateLimit,
-) -> Result<std::result::Result<Vec<Vec<KeychainFeaturePoint>>, String>> {
-    if let Some(body) = db::stored_key_response(db, raw_log_id).await?
+) -> Result<std::result::Result<Vec<Vec<KeychainFeaturePoint>>, Outcome>> {
+    if let Some(body) = db::stored_key_response(db, raw_log.id).await?
         && let Ok(keychains) = dji::keychains(&body)
     {
         return Ok(Ok(keychains));
     }
 
-    let Some(api_key) = dji_app_key else {
-        bail!("DJI_APP_KEY is not set, so encrypted logs can't be processed");
-    };
+    let fails = |reason: String| Err(Outcome::Processed(Err(reason)));
     let request = match log.keychains_request() {
         Ok(request) => request,
         Err(error) => {
-            return Ok(Err(format!(
+            return Ok(fails(format!(
                 "failed to read the log's key records: {error}"
             )));
         }
     };
     let request_body = serde_json::to_string(&request)?;
+    if let Some((until, reason)) = db::dji_blocked(&mut *system.acquire().await?).await? {
+        return Ok(Err(Outcome::DjiDown { until, reason }));
+    }
+    // Not DJI's doing, but the same for the log: it waits, and is tried
+    // again a while later.
+    let Some(api_key) = dji_app_key else {
+        let reason = "DJI_APP_KEY is not set, so encrypted logs can't be processed";
+        let until = db::dji_failed(&mut *system.acquire().await?, reason).await?;
+        return Ok(Err(Outcome::DjiDown {
+            until,
+            reason: reason.to_owned(),
+        }));
+    };
 
     activity.stage(Stage::RequestingKeys);
-    dji_limit.wait().await;
+    let slot = db::dji_slot(&mut *system.acquire().await?).await?;
+    if let Ok(wait) = (slot - Utc::now()).to_std() {
+        tokio::time::sleep(wait).await;
+    }
     let exchange = {
         let api_key = api_key.to_owned();
         let request_body = request_body.clone();
@@ -239,7 +304,7 @@ async fn keychains(
     };
     db::insert_key_request(
         db,
-        raw_log_id,
+        raw_log.id,
         &request_body,
         exchange.status.map(i32::from),
         exchange.body.as_deref(),
@@ -247,13 +312,26 @@ async fn keychains(
     )
     .await?;
 
-    match (exchange.status, exchange.body) {
-        (Some(200), Some(body)) => Ok(dji::keychains(&body).map_err(|error| format!("{error:#}"))),
-        (None, _) => bail!("DJI did not answer: {}", exchange.error.unwrap_or_default()),
+    let dji_down = match (exchange.status, &exchange.body) {
+        (None, _) => format!("DJI did not answer: {}", exchange.error.unwrap_or_default()),
         // A rejected app key, rate limiting or trouble at DJI: none of it is the log's fault.
-        (Some(status @ (401 | 403 | 429 | 500..)), _) => bail!("DJI answered {status}"),
-        (Some(status), _) => Ok(Err(format!("DJI answered {status}"))),
-    }
+        (Some(status @ (401 | 403 | 429 | 500..)), _) => format!("DJI answered {status}"),
+        (Some(200), Some(body)) => {
+            db::dji_answered(&mut *system.acquire().await?).await?;
+            return Ok(
+                dji::keychains(body).map_err(|error| Outcome::Processed(Err(format!("{error:#}"))))
+            );
+        }
+        (Some(status), _) => {
+            db::dji_answered(&mut *system.acquire().await?).await?;
+            return Ok(fails(format!("DJI answered {status}")));
+        }
+    };
+    let until = db::dji_failed(&mut *system.acquire().await?, &dji_down).await?;
+    Ok(Err(Outcome::DjiDown {
+        until,
+        reason: dji_down,
+    }))
 }
 
 fn decode(log: &DJILog, keychains: Option<Vec<Vec<KeychainFeaturePoint>>>) -> Processed {
@@ -289,15 +367,40 @@ fn decode(log: &DJILog, keychains: Option<Vec<Vec<KeychainFeaturePoint>>>) -> Pr
         })
         .unwrap_or_default();
     let frames = records_to_frames(records, log.details.clone());
-    Ok(Decoded {
+    Ok(Box::new(Decoded {
         flight: flight::derive(&frames, Serials::from_details(&log.details), battery_info),
         dji_total_time_s: log.details.total_time,
         dji_total_distance_m: log.details.total_distance,
-    })
+    }))
 }
 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T> {
     tokio::task::spawn_blocking(f)
         .await
         .context("processing task panicked")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_ATTEMPTS, retry_delay_s};
+
+    /// A log that keeps hitting errors waits longer each time, and fails
+    /// after its last attempt instead of being tried forever.
+    #[test]
+    fn retries_slow_down_and_end() {
+        let delays: Vec<_> = (1..=MAX_ATTEMPTS).map(retry_delay_s).collect();
+        assert_eq!(
+            delays,
+            [
+                Some(60),
+                Some(300),
+                Some(1800),
+                Some(7200),
+                Some(21600),
+                Some(21600),
+                Some(21600),
+                None
+            ]
+        );
+    }
 }

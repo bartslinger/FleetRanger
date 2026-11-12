@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update raw_logs\n         set next_attempt_at = now() + make_interval(secs => $4), last_error = $5,\n             claimed_until = now()\n         where id = $1 and sha256 = $2 and attempts = $3 and status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Int4",
+        "Float8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e9d67fb5e59828a96d9fc3041e663ad582b567d025140fa1b267351f73428da7"
+}
