@@ -79,9 +79,6 @@
 			format: (group) => allRoles(group.roles, group.app_roles, data.appRoles) || null
 		}
 	];
-	const organisationRolesMessage = $derived(
-		form && 'organisationRolesMessage' in form ? form.organisationRolesMessage : undefined
-	);
 
 	// Roles in groups, as on a group's page, from the user's side; each
 	// change applies at once, apart from the form (user's choice).
@@ -166,6 +163,18 @@
 					? 'You log in with this address.'
 					: 'To log in with the Google account for this address. Leave empty for no login.'}
 			/>
+			<CheckboxGroup
+				legend="FleetRanger roles"
+				name="role"
+				options={roleOptions}
+				value={shownRoles}
+				helper={single ? undefined : 'Other roles are given in groups.'}
+			/>
+			<!-- A disabled checkbox isn't posted; Admin stays. -->
+			{#if data.lastAdmin}<input type="hidden" name="role" value="admin" />{/if}
+			{#if single}
+				<AppRoleGroups appRoles={data.appRoles} value={inOnlyGroup?.app_roles ?? []} />
+			{/if}
 		</Modal>
 		{#if archived}
 			<form
@@ -258,34 +267,7 @@
 			</div>
 			<div>
 				<dt>{single ? 'Roles' : 'Admin'}</dt>
-				<dd class="with-action">
-					{rolesFact}
-					{#if may(data.account, 'users.manage', null)}
-						<Modal
-							title="Edit roles"
-							triggerIcon={Edit}
-							triggerLabel="Edit roles of {user.name}"
-							label={user.name}
-							submitLabel="Save"
-							action="?/organisationRoles"
-							error={organisationRolesMessage}
-							onsuccess={() => toast(`Roles of ${user.name} saved.`)}
-						>
-							<CheckboxGroup
-								legend="FleetRanger roles"
-								name="role"
-								options={roleOptions}
-								value={shownRoles}
-								helper={single ? undefined : 'Other roles are given in groups, below.'}
-							/>
-							<!-- A disabled checkbox isn't posted; Admin stays. -->
-							{#if data.lastAdmin}<input type="hidden" name="role" value="admin" />{/if}
-							{#if single}
-								<AppRoleGroups appRoles={data.appRoles} value={inOnlyGroup?.app_roles ?? []} />
-							{/if}
-						</Modal>
-					{/if}
-				</dd>
+				<dd>{rolesFact}</dd>
 			</div>
 		</dl>
 	</Column>
@@ -386,13 +368,6 @@
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-	}
-
-	/* A pencil after the value, as in a session's facts. */
-	.with-action {
-		display: flex;
-		align-items: center;
-		gap: var(--cds-spacing-03);
 	}
 
 	.section {

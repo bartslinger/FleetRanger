@@ -8,7 +8,7 @@ import {
 	type OfferedAppRole,
 	type User
 } from '#lib/server/backend.js';
-import { postedRoles, saveInOnlyGroup } from '#lib/server/userRoles.js';
+import { onlyGroup, postedRoles, saveInOnlyGroup } from '#lib/server/userRoles.js';
 
 export async function load({ fetch, params }) {
 	const [user, users, groups, appRoles] = await Promise.all([
@@ -31,34 +31,25 @@ export async function load({ fetch, params }) {
 }
 
 export const actions = {
-	/** Name and email; the API takes the roles on the organisation along, as they are. */
+	/** Name, email and Admin; while there is only one group, also the roles
+	 * in it. */
 	save: async ({ fetch, params, request }) => {
 		const form = await request.formData();
 		const user = await get<User>(fetch, `/api/users/${params.id}`);
+		const roles = postedRoles(form);
 		const body = {
 			name: String(form.get('name') ?? ''),
-			roles: user.roles,
+			roles: roles.organisation,
 			email: String(form.get('email') ?? '') || null
 		};
 		const result = await send<User>(fetch, 'PUT', `/api/users/${params.id}`, body);
 		if (!result.ok) return fail(result.status, { editMessage: result.message });
-		return { saved: true };
-	},
-	/** Admin on the organisation, and while there is only one group the
-	 * roles in it; name and email stay. */
-	organisationRoles: async ({ fetch, params, request }) => {
-		const form = await request.formData();
-		const user = await get<User>(fetch, `/api/users/${params.id}`);
-		const roles = postedRoles(form);
-		const groups = await get<Group[]>(fetch, '/api/groups');
-		if (groups.length === 1) {
-			const saved = await saveInOnlyGroup(fetch, groups[0], user, roles.group, roles.appRoles);
-			if (!saved.ok) return fail(saved.status, { organisationRolesMessage: saved.message });
+		const only = await onlyGroup(fetch);
+		if (only) {
+			const saved = await saveInOnlyGroup(fetch, only, user, roles.group, roles.appRoles);
+			if (!saved.ok) return fail(saved.status, { editMessage: saved.message });
 		}
-		const body = { name: user.name, roles: roles.organisation, email: user.email };
-		const result = await send<User>(fetch, 'PUT', `/api/users/${params.id}`, body);
-		if (!result.ok) return fail(result.status, { organisationRolesMessage: result.message });
-		return { organisationSaved: true };
+		return { saved: true };
 	},
 	/** Adds them to a group or changes their roles in it, as on the group's page. */
 	groupRoles: async ({ fetch, params, request }) => {
