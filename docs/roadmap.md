@@ -162,6 +162,7 @@ One install serving several organisations, for a hosted service where FleetRange
 
 - Figures recorded per session, right after flying (such as custom fields)
 - Sharing flights, also outside the organisation
+- A log that keeps hitting an error (such as DJI being unreachable) is tried again first after every 60-second pause, which holds up every organisation's processing: record when a log was last tried (a schema change) and pause per organisation (parked, user, 2026-11-12)
 - Invite links for accounts
 - Link media
 - Tooltips without JavaScript: the current ones let a fast-moving cursor select their text (user, 2026-11-11)

@@ -135,17 +135,26 @@ pub async fn save_upload(
     })
 }
 
-/// The oldest pending raw log of any organisation (with `System`), counting
-/// this as an attempt to process it.
+/// The next pending raw log of any organisation (with `System`), counting
+/// this as an attempt to process it. Organisations take turns (user's
+/// decision, 2026-11-12): the one whose last log was processed longest ago
+/// goes first, so a big import in one doesn't hold up another's uploads.
+/// Within an organisation, fresh logs come before ones tried before, then
+/// the oldest.
 pub async fn next_pending(db: &mut PgConnection) -> sqlx::Result<Option<PendingLog>> {
     sqlx::query_as!(
         PendingLog,
         "update raw_logs set attempts = attempts + 1
          where id = (
-             select id from raw_logs where status = 'pending'
-             order by received_at, id
+             select r.id
+             from raw_logs r
+             join (select organisation_id, max(processed_at) as last_served
+                   from raw_logs group by organisation_id) s
+               on s.organisation_id = r.organisation_id
+             where r.status = 'pending'
+             order by s.last_served nulls first, r.attempts, r.received_at, r.id
              limit 1
-             for update skip locked
+             for update of r skip locked
          )
          returning id, path, organisation_id",
     )
@@ -437,6 +446,46 @@ mod tests {
 
     use super::*;
     use crate::ingest::flight::Metrics;
+
+    /// Organisations take turns: B's one upload comes right after A's first
+    /// of many, not after all of them; within A, a log tried before goes
+    /// after the fresh ones.
+    #[sqlx::test]
+    async fn organisations_take_turns_in_the_queue(pool: sqlx::PgPool) {
+        let mut a = crate::testing::db(&pool).await;
+        let a_id = crate::testing::organisation(&mut a).await;
+        let b_id = crate::testing::second_organisation(&mut a, "Test Org B").await;
+        // A's three, oldest first, the oldest tried once before; then B's.
+        for (organisation, path, minutes_ago, attempts) in [
+            (a_id, "a-tried", 40, 1),
+            (a_id, "a-1", 30, 0),
+            (a_id, "a-2", 20, 0),
+            (b_id, "b-1", 10, 0),
+        ] {
+            sqlx::query(
+                "insert into raw_logs (organisation_id, sha256, path, size_bytes, received_at, attempts)
+                 values ($1, sha256($2::bytea), $2, 0, now() - make_interval(mins => $3), $4)",
+            )
+            .bind(organisation)
+            .bind(path)
+            .bind(minutes_ago)
+            .bind(attempts)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let mut system = pool.acquire().await.unwrap();
+        let mut order = Vec::new();
+        while let Some(log) = next_pending(&mut system).await.unwrap() {
+            sqlx::query("update raw_logs set status = 'done', processed_at = now() where id = $1")
+                .bind(log.id)
+                .execute(&mut *system)
+                .await
+                .unwrap();
+            order.push(log.path);
+        }
+        assert_eq!(order, ["a-1", "b-1", "a-2", "a-tried"]);
+    }
 
     fn flight() -> Flight {
         Flight {

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update raw_logs set attempts = attempts + 1\n         where id = (\n             select id from raw_logs where status = 'pending'\n             order by received_at, id\n             limit 1\n             for update skip locked\n         )\n         returning id, path, organisation_id",
+  "query": "update raw_logs set attempts = attempts + 1\n         where id = (\n             select r.id\n             from raw_logs r\n             join (select organisation_id, max(processed_at) as last_served\n                   from raw_logs group by organisation_id) s\n               on s.organisation_id = r.organisation_id\n             where r.status = 'pending'\n             order by s.last_served nulls first, r.attempts, r.received_at, r.id\n             limit 1\n             for update of r skip locked\n         )\n         returning id, path, organisation_id",
   "describe": {
     "columns": [
       {
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "bb71c1455e62ca8408938e451f6edc54e426f4aba5d1e0c761abfed31bd69ec5"
+  "hash": "f832593ae9977033d378302fd38abc8b28e15b07c3c404c6400a38acf907379d"
 }
