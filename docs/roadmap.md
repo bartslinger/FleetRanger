@@ -93,7 +93,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - [ ] After the release, UI fine-tuning (user, 2026-10-24) left from the Carbon review of the admin pages: Delete and Archive on phones, the "Show archived" toggle in other lists; the drone, controller and battery pages edit their own fields in a dialog from the page header, as Users and Groups do. From the review of the web app's groups: the phone batch bar cuts off its count ("2 flights sel…", while Carbon says the bar always shows it), and the carbon-expert's own suggestions (archive last in the flights' overflow menu after a divider, a select or a pencil for the group on the suggestion page)
 - [ ] After the release, controller app tuning (user, 2026-10-23), the carbon-expert's own suggestions: make the group on the pilot tile stand out more, the wide gutter in the lists
 - [x] Always a group (user's decisions, 2026-11-11; see "Groups and roles" in architecture.md): everything in a group, starting with "General"; only Admin on the whole organisation; groups out of sight while there is one; unsorted uploads to the controller's group; `import --group` with several groups (migration 0025). `/api/v1/me` lost `app_roles.organisation`
-- [ ] Always a group, before the release: MCP checked with groups required, and a test that migration 0025 keeps everyone's access
+- [ ] Always a group, at the deploy: compare the users' permissions before and after migration 0025, and fix any that went missing (user, 2026-11-12: no test)
 - [ ] Remove the unversioned controller endpoints (and android-v0.3.0's pilot list in `pairing::db`) once Equipment shows no controller with android-v0.3.0
 
 ## Public website (fleetranger.org)
