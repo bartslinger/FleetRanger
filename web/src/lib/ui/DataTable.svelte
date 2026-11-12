@@ -466,6 +466,14 @@
 		inset: 0;
 	}
 
+	/* Only the link opens the page; it fills the cell's height, so it's
+	   still a big enough target on a phone. */
+	.row-link.only {
+		display: inline-flex;
+		align-items: center;
+		height: 100%;
+	}
+
 	.row-link.only::after {
 		content: none;
 	}
