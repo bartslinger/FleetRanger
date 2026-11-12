@@ -1,6 +1,6 @@
 //! The processing status API, for admins, and log uploads from controllers.
 
-use crate::db::Db;
+use crate::db::{Db, Tenants};
 use axum::{
     Json, Router,
     body::Bytes,
@@ -96,10 +96,11 @@ struct Received {
 /// A log from a paired controller, put at its name on the controller: the
 /// file itself as the body, with headers `X-SHA256` (hex) and, if a pilot was
 /// chosen, `X-Pilot-Id` and `X-Group-Id`. 201 for a new log, 200 for a new
-/// version of one or a duplicate, so sending it again is harmless.
+/// version of one or a duplicate, so sending it again is harmless. It
+/// connects once the body is in, so slow uploads don't hold connections.
 async fn put_log(
     controller: Controller,
-    mut db: Db,
+    State(tenants): State<Tenants>,
     State(LogDir(log_dir)): State<LogDir>,
     State(changes): State<Changes>,
     Path(file_name): Path<String>,
@@ -111,6 +112,7 @@ async fn put_log(
         group_id: id_header(&headers, "x-group-id")?,
     };
     let sha256 = text_header(&headers, "x-sha256");
+    let mut db = tenants.connect(controller.organisation_id).await?;
     let result = upload::receive(
         &mut db,
         &organisation_dir(&log_dir, controller.organisation_id),
@@ -137,10 +139,10 @@ async fn put_log(
 /// their teams' ids, and its pilot list gives each group's id as the team's.
 /// The same checks as for later apps then decide whether the flight gets it.
 /// Anything that isn't an id counts as no choice, so an older app's upload
-/// never fails over it.
+/// never fails over it. It connects once the body is in, as `put_log`.
 async fn receive_v0(
     controller: Controller,
-    mut db: Db,
+    State(tenants): State<Tenants>,
     State(LogDir(log_dir)): State<LogDir>,
     State(changes): State<Changes>,
     headers: HeaderMap,
@@ -152,6 +154,7 @@ async fn receive_v0(
     };
     let file_name = text_header(&headers, "x-file-name");
     let sha256 = text_header(&headers, "x-sha256");
+    let mut db = tenants.connect(controller.organisation_id).await?;
     let result = upload::receive(
         &mut db,
         &organisation_dir(&log_dir, controller.organisation_id),

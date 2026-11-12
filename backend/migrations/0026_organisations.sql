@@ -182,8 +182,8 @@ alter table login_sessions
     add foreign key (organisation_id, user_id) references users (organisation_id, id);
 
 -- 7. Row-level security. Normal requests use the database account
--- fleetranger_app, which sees only the rows of the organisation set in its
--- transaction (app.organisation_id), and nothing at all without one. The
+-- fleetranger_app, which sees only the rows of the organisation set on its
+-- connection (app.organisation_id), and nothing at all without one. The
 -- account fleetranger, which created the tables, isn't restricted: the
 -- backend uses it only to apply database changes at startup and for the few
 -- jobs that look across organisations, such as finding which organisation a
