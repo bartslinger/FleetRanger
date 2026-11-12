@@ -131,7 +131,7 @@ struct Filters {
     from: Option<String>,
     /// The last day, included; without it, only `from`.
     to: Option<String>,
-    /// A group's id, or `none` for no group. For sessions, their own group.
+    /// A group's id. For sessions, their own group.
     #[serde(default)]
     group: Vec<String>,
     /// A pilot's id, or `none` for flights without a pilot.
@@ -612,14 +612,13 @@ async fn filter(api: &Api, filters: &Filters) -> Result<Filter, V1Error> {
             return Err(V1Error::Invalid("`to` needs `from`.".to_owned()));
         }
     };
-    let (group_ids, queue) = ids(&filters.group, "group", true)?;
+    let (group_ids, _) = ids(&filters.group, "group", false)?;
     let (pilot_ids, unknown_pilot) = ids(&filters.pilot, "pilot", true)?;
     let (area_ids, _) = ids(&filters.area, "area", false)?;
     Ok(Filter {
         from,
         to,
         group_ids,
-        queue,
         pilot_ids,
         unknown_pilot,
         area_ids,

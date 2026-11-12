@@ -531,7 +531,6 @@ impl FleetRanger {
             from,
             to,
             group_ids,
-            queue: false,
             pilot_ids,
             unknown_pilot,
             archived: false,

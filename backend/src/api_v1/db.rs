@@ -88,18 +88,18 @@ pub async fn flights(
              and ($5::text[] is null or f.rc_serial = any($5))
              and ($6::timestamptz is null or f.takeoff_at >= $6)
              and ($7::timestamptz is null or f.takeoff_at < $7)
-             and ($8::uuid[] is null or f.group_id = any($8) or ($9 and f.group_id is null))
-             and ($10::uuid[] is null or f.pilot_id = any($10) or ($11 and f.pilot_id is null))
-             and ($12::uuid[] is null or exists (select 1 from flight_areas fa
+             and ($8::uuid[] is null or f.group_id = any($8))
+             and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))
+             and ($11::uuid[] is null or exists (select 1 from flight_areas fa
                                                  where fa.flight_id = f.id
-                                                   and fa.area_id = any($12)))
-             and (($13::uuid[] is null and not $14)
-                  or f.session_id = any($13)
-                  or ($14 and f.session_id is null))
-             and ($15::timestamptz is null or (f.takeoff_at, f.id) < ($15, $16))
-             and ($18::uuid[] is null or f.id = any($18))
+                                                   and fa.area_id = any($11)))
+             and (($12::uuid[] is null and not $13)
+                  or f.session_id = any($12)
+                  or ($13 and f.session_id is null))
+             and ($14::timestamptz is null or (f.takeoff_at, f.id) < ($14, $15))
+             and ($17::uuid[] is null or f.id = any($17))
            order by f.takeoff_at desc, f.id desc
-           limit $17"#,
+           limit $16"#,
         scope.all,
         scope.user_id,
         &scope.group_ids,
@@ -108,7 +108,6 @@ pub async fn flights(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
@@ -187,17 +186,16 @@ pub async fn sessions(
                    and ($8::timestamptz is null or g.takeoff_at < $8)
                    and ($9::uuid[] is null
                         or g.session_id in (select id from sessions
-                                            where group_id = any($9)
-                                               or ($10 and group_id is null)))
-                   and ($11::uuid[] is null or g.pilot_id = any($11)
-                        or ($12 and g.pilot_id is null))
-                   and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                            where group_id = any($9)))
+                   and ($10::uuid[] is null or g.pilot_id = any($10)
+                        or ($11 and g.pilot_id is null))
+                   and ($12::uuid[] is null or exists (select 1 from flight_areas fa
                                                        where fa.flight_id = g.id
-                                                         and fa.area_id = any($13))))
+                                                         and fa.area_id = any($12))))
            group by f.session_id, s.group_id
-           having $14::timestamptz is null or (min(f.takeoff_at), f.session_id) < ($14, $15)
+           having $13::timestamptz is null or (min(f.takeoff_at), f.session_id) < ($13, $14)
            order by min(f.takeoff_at) desc, f.session_id desc
-           limit $16"#,
+           limit $15"#,
         scope.all,
         scope.user_id,
         &scope.group_ids,
@@ -207,7 +205,6 @@ pub async fn sessions(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),

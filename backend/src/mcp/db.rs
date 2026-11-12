@@ -83,16 +83,16 @@ pub async fn totals(
                   max(landed_at) as "last_landed_at!"
            from (
                select f.session_id, f.air_time_s, f.distance_m, f.takeoff_at, f.landed_at,
-                      case $11
+                      case $10
                           when 'group' then f.group_id::text
                           when 'pilot' then f.pilot_id::text
                           when 'drone' then f.aircraft_serial
                           when 'controller' then f.rc_serial
-                          when 'day' then to_char(f.takeoff_at at time zone $12, 'YYYY-MM-DD')
-                          when 'week' then to_char(f.takeoff_at at time zone $12, 'IYYY-"W"IW')
-                          when 'month' then to_char(f.takeoff_at at time zone $12, 'YYYY-MM')
+                          when 'day' then to_char(f.takeoff_at at time zone $11, 'YYYY-MM-DD')
+                          when 'week' then to_char(f.takeoff_at at time zone $11, 'IYYY-"W"IW')
+                          when 'month' then to_char(f.takeoff_at at time zone $11, 'YYYY-MM')
                       end as key,
-                      case $11
+                      case $10
                           when 'group' then (select g.name from groups g where g.id = f.group_id)
                           when 'pilot' then (select u.name from users u where u.id = f.pilot_id)
                           when 'drone' then (select a.name from aircraft a
@@ -104,16 +104,16 @@ pub async fn totals(
                where f.archived_at is null
                  and ($1
                       or f.pilot_id = $2
-                      or f.group_id = any($14))
+                      or f.group_id = any($13))
                  and ($3::text[] is null or f.aircraft_serial = any($3))
                  and ($4::text[] is null or f.rc_serial = any($4))
                  and ($5::timestamptz is null or f.takeoff_at >= $5)
                  and ($6::timestamptz is null or f.takeoff_at < $6)
-                 and ($7::uuid[] is null or f.group_id = any($7) or ($8 and f.group_id is null))
-                 and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))
-                 and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                 and ($7::uuid[] is null or f.group_id = any($7))
+                 and ($8::uuid[] is null or f.pilot_id = any($8) or ($9 and f.pilot_id is null))
+                 and ($12::uuid[] is null or exists (select 1 from flight_areas fa
                                                      where fa.flight_id = f.id
-                                                       and fa.area_id = any($13)))
+                                                       and fa.area_id = any($12)))
            ) grouped
            group by key, name
            order by lower(name) nulls last, key nulls last"#,
@@ -124,7 +124,6 @@ pub async fn totals(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         group_by.as_str(),
@@ -160,14 +159,14 @@ pub async fn area_totals(
            where f.archived_at is null
              and ($1
                   or f.pilot_id = $2
-                  or f.group_id = any($12))
+                  or f.group_id = any($11))
              and ($3::text[] is null or f.aircraft_serial = any($3))
              and ($4::text[] is null or f.rc_serial = any($4))
              and ($5::timestamptz is null or f.takeoff_at >= $5)
              and ($6::timestamptz is null or f.takeoff_at < $6)
-             and ($7::uuid[] is null or f.group_id = any($7) or ($8 and f.group_id is null))
-             and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))
-             and ($11::uuid[] is null or a.id = any($11))
+             and ($7::uuid[] is null or f.group_id = any($7))
+             and ($8::uuid[] is null or f.pilot_id = any($8) or ($9 and f.pilot_id is null))
+             and ($10::uuid[] is null or a.id = any($10))
            group by a.id, a.name
            order by lower(a.name), a.id"#,
         scope.all,
@@ -177,7 +176,6 @@ pub async fn area_totals(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),

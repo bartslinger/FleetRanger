@@ -323,7 +323,7 @@ pub fn filter(
                 .collect()
         })
     };
-    let (group_ids, queue) = id_list(group).map_err(|()| "group must be group ids or none")?;
+    let (group_ids, _) = id_list(group).map_err(|()| "group must be group ids")?;
     let (pilot_ids, unknown_pilot) =
         id_list(pilot).map_err(|()| "pilot must be user ids or none")?;
     let (area_ids, _) = id_list(area).map_err(|()| "area must be area ids")?;
@@ -334,7 +334,6 @@ pub fn filter(
         from,
         to,
         group_ids,
-        queue,
         pilot_ids,
         unknown_pilot,
         archived: false,

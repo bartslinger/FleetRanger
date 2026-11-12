@@ -77,7 +77,7 @@ pub async fn list(
                 jsonb_agg(jsonb_build_object('takeoff_at', f.takeoff_at, 'landed_at', f.landed_at,
                                              'air_time_s', f.air_time_s,
                                              'from', f.track->'coordinates'->0,
-                                             'track', case when $16 then f.track->'coordinates' end)
+                                             'track', case when $15 then f.track->'coordinates' end)
                           order by f.takeoff_at) as "flight_times!"
          from flights f
          join sessions s on s.id = f.session_id
@@ -86,7 +86,7 @@ pub async fn list(
          where f.session_id is not null
            and ($1
                 or f.pilot_id = $2
-                or f.group_id = any($17))
+                or f.group_id = any($16))
            and ($5::timestamptz is null
                 or f.session_id in (select session_id from flights
                                     where takeoff_at < $6 and landed_at > $5))
@@ -95,20 +95,19 @@ pub async fn list(
                where g.session_id is not null
                  and ($1
                       or g.pilot_id = $2
-                      or g.group_id = any($17))
+                      or g.group_id = any($16))
                  and ($7::text[] is null or g.aircraft_serial = any($7))
                  and ($8::text[] is null or g.rc_serial = any($8))
                  and ($9::timestamptz is null or g.takeoff_at >= $9)
                  and ($10::timestamptz is null or g.takeoff_at < $10)
                  and ($11::uuid[] is null
                       or g.session_id in (select id from sessions
-                                          where group_id = any($11)
-                                             or ($12 and group_id is null)))
-                 and ($13::uuid[] is null or g.pilot_id = any($13)
-                      or ($14 and g.pilot_id is null))
-                 and ($15::uuid[] is null or exists (select 1 from flight_areas fa
+                                          where group_id = any($11)))
+                 and ($12::uuid[] is null or g.pilot_id = any($12)
+                      or ($13 and g.pilot_id is null))
+                 and ($14::uuid[] is null or exists (select 1 from flight_areas fa
                                                      where fa.flight_id = g.id
-                                                       and fa.area_id = any($15))))
+                                                       and fa.area_id = any($14))))
          group by f.session_id, s.group_id, gr.name
          order by min(f.takeoff_at) desc, f.session_id
          limit $3 offset $4"#,
@@ -123,7 +122,6 @@ pub async fn list(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
@@ -146,7 +144,7 @@ pub async fn count(
            from flights
            where ($1
                   or pilot_id = $2
-                  or group_id = any($14))
+                  or group_id = any($13))
              and ($3::timestamptz is null
                   or session_id in (select session_id from flights
                                     where takeoff_at < $4 and landed_at > $3))
@@ -155,20 +153,19 @@ pub async fn count(
                  where g.session_id is not null
                    and ($1
                         or g.pilot_id = $2
-                        or g.group_id = any($14))
+                        or g.group_id = any($13))
                    and ($5::text[] is null or g.aircraft_serial = any($5))
                    and ($6::text[] is null or g.rc_serial = any($6))
                    and ($7::timestamptz is null or g.takeoff_at >= $7)
                    and ($8::timestamptz is null or g.takeoff_at < $8)
                    and ($9::uuid[] is null
                         or g.session_id in (select id from sessions
-                                            where group_id = any($9)
-                                               or ($10 and group_id is null)))
-                   and ($11::uuid[] is null or g.pilot_id = any($11)
-                        or ($12 and g.pilot_id is null))
-                   and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                            where group_id = any($9)))
+                   and ($10::uuid[] is null or g.pilot_id = any($10)
+                        or ($11 and g.pilot_id is null))
+                   and ($12::uuid[] is null or exists (select 1 from flight_areas fa
                                                        where fa.flight_id = g.id
-                                                         and fa.area_id = any($13))))"#,
+                                                         and fa.area_id = any($12))))"#,
         scope.all,
         scope.user_id,
         window.map(|w| w.from),
@@ -178,7 +175,6 @@ pub async fn count(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
@@ -215,26 +211,25 @@ pub async fn neighbours(
                where f.session_id is not null
                  and ($1
                       or f.pilot_id = $2
-                      or f.group_id = any($13))
+                      or f.group_id = any($12))
                  and f.session_id in (
                      select g.session_id from flights g
                      where g.session_id is not null
                        and ($1
                             or g.pilot_id = $2
-                            or g.group_id = any($13))
+                            or g.group_id = any($12))
                        and ($4::text[] is null or g.aircraft_serial = any($4))
                        and ($5::text[] is null or g.rc_serial = any($5))
                        and ($6::timestamptz is null or g.takeoff_at >= $6)
                        and ($7::timestamptz is null or g.takeoff_at < $7)
                        and ($8::uuid[] is null
                             or g.session_id in (select id from sessions
-                                                where group_id = any($8)
-                                                   or ($9 and group_id is null)))
-                       and ($10::uuid[] is null or g.pilot_id = any($10)
-                            or ($11 and g.pilot_id is null))
-                       and ($12::uuid[] is null or exists (select 1 from flight_areas fa
+                                                where group_id = any($8)))
+                       and ($9::uuid[] is null or g.pilot_id = any($9)
+                            or ($10 and g.pilot_id is null))
+                       and ($11::uuid[] is null or exists (select 1 from flight_areas fa
                                                            where fa.flight_id = g.id
-                                                             and fa.area_id = any($12))))
+                                                             and fa.area_id = any($11))))
                group by f.session_id
            ),
            placed as (
@@ -257,7 +252,6 @@ pub async fn neighbours(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
@@ -325,27 +319,25 @@ pub async fn groups_in(
            from sessions s
            left join groups g on g.id = s.group_id
            where s.group_id = any(coalesce($3::uuid[], '{}'))
-              or ($4 and s.group_id is null)
               or exists (
                   select 1 from flights f
                   where f.session_id = s.id
-                    and ($1 or f.pilot_id = $2 or f.group_id = any($12))
+                    and ($1 or f.pilot_id = $2 or f.group_id = any($11))
                     and f.archived_at is null
-                    and ($5::text[] is null or f.aircraft_serial = any($5))
-                    and ($6::text[] is null or f.rc_serial = any($6))
-                    and ($7::timestamptz is null or f.takeoff_at >= $7)
-                    and ($8::timestamptz is null or f.takeoff_at < $8)
-                    and ($9::uuid[] is null or f.pilot_id = any($9)
-                         or ($10 and f.pilot_id is null))
-                    and ($11::uuid[] is null or exists (select 1 from flight_areas fa
+                    and ($4::text[] is null or f.aircraft_serial = any($4))
+                    and ($5::text[] is null or f.rc_serial = any($5))
+                    and ($6::timestamptz is null or f.takeoff_at >= $6)
+                    and ($7::timestamptz is null or f.takeoff_at < $7)
+                    and ($8::uuid[] is null or f.pilot_id = any($8)
+                         or ($9 and f.pilot_id is null))
+                    and ($10::uuid[] is null or exists (select 1 from flight_areas fa
                                                         where fa.flight_id = f.id
-                                                          and fa.area_id = any($11))))
+                                                          and fa.area_id = any($10))))
            group by s.group_id, g.name
            order by lower(g.name) nulls last"#,
         scope.all,
         scope.user_id,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.aircraft_serials.as_deref(),
         filter.rc_serials.as_deref(),
         filter.from,

@@ -20,7 +20,7 @@ Read an organisation's sessions, flights and equipment, acting for a user throug
 
 ## Filters
 
-Repeat a filter for several values: values of one filter combine with *or*, different filters with *and*. `?pilot=none&pilot=…&group=…` means flights without a pilot or by that pilot, in that group. `none` stands for "no group", "no pilot" or "no session" where a filter allows it.
+Repeat a filter for several values: values of one filter combine with *or*, different filters with *and*. `?pilot=none&pilot=…&group=…` means flights without a pilot or by that pilot, in that group. `none` stands for "no pilot" or "no session" where a filter allows it.
 
 Filters decide which sessions are listed, by their flights: a session is listed when one of its flights passes them, and still shows the figures of all the flights the user sees in it.
 
