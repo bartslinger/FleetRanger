@@ -186,10 +186,15 @@ fn track(airborne: &[&Frame]) -> Value {
     json!({ "type": "LineString", "coordinates": points })
 }
 
-/// Whether the frame has a GPS position; without a fix the parser reports 0, 0.
+/// How near 0, 0 a position counts as none (about 11 m): without a fix the
+/// parser reports 0, 0, and older logs drift from there by a few
+/// ten-millionths of a degree until the fix comes.
+const NO_FIX_DEG: f64 = 0.000_1;
+
+/// Whether the frame has a GPS position.
 fn has_position(frame: &Frame) -> bool {
     let (lat, lon) = (frame.osd.latitude, frame.osd.longitude);
-    (lat != 0.0 || lon != 0.0) && lat.abs() <= 90.0 && lon.abs() <= 180.0
+    (lat.abs() >= NO_FIX_DEG || lon.abs() >= NO_FIX_DEG) && lat.abs() <= 90.0 && lon.abs() <= 180.0
 }
 
 fn haversine_m(a: &Frame, b: &Frame) -> f64 {
@@ -345,9 +350,18 @@ mod tests {
         let mut frames = flight(10);
         frames[20].osd.latitude = 0.0;
         frames[20].osd.longitude = 0.0;
+        // As older logs report before the fix: 0, 0 drifting a little.
+        frames[40].osd.latitude = -0.000_000_3;
+        frames[40].osd.longitude = 0.000_000_2;
         let with_gap = derive(&frames, Serials::default(), BatteryInfo::default()).unwrap();
         let without_gap = derive(&flight(10), Serials::default(), BatteryInfo::default()).unwrap();
         // No jump to 0, 0: the distance bridges the missing fix in a straight line.
         assert!((with_gap.distance_m - without_gap.distance_m).abs() < 0.01);
+        let track = with_gap.track["coordinates"].as_array().unwrap().clone();
+        assert!(
+            track
+                .iter()
+                .all(|point| point[0].as_f64() != Some(0.000_000_2))
+        );
     }
 }
