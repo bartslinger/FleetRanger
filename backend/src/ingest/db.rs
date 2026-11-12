@@ -498,17 +498,21 @@ pub async fn mark_failed(
     Ok(marked.rows_affected() == 1)
 }
 
-/// The body of the latest successful key request for a raw log.
+/// The body of the latest successful key request for a raw log, if it was
+/// this request: a new version of the log may ask for other keys.
 pub async fn stored_key_response(
     db: &mut PgConnection,
     raw_log_id: Uuid,
+    request_body: &str,
 ) -> sqlx::Result<Option<String>> {
     let body = sqlx::query_scalar!(
         "select response_body from dji_key_requests
-         where raw_log_id = $1 and response_status = 200 and response_body is not null
+         where raw_log_id = $1 and request_body = $2
+           and response_status = 200 and response_body is not null
          order by requested_at desc
          limit 1",
         raw_log_id,
+        request_body,
     )
     .fetch_optional(&mut *db)
     .await?;
@@ -649,6 +653,34 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(attempts, 0);
+    }
+
+    /// Keys DJI gave for a log are used again only for the same request: a
+    /// new version of the log may need other keys.
+    #[sqlx::test]
+    async fn stored_keys_only_for_the_same_request(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let raw_log: Uuid = sqlx::query_scalar(
+            "insert into raw_logs (sha256, path, size_bytes)
+             values (sha256('test'), 'test', 0) returning id",
+        )
+        .fetch_one(&mut *db)
+        .await
+        .unwrap();
+        insert_key_request(
+            &mut db,
+            raw_log,
+            "Test request",
+            Some(200),
+            Some("Test keys"),
+            None,
+        )
+        .await
+        .unwrap();
+        let stored = stored_key_response(&mut db, raw_log, "Test request").await;
+        assert_eq!(stored.unwrap().as_deref(), Some("Test keys"));
+        let other = stored_key_response(&mut db, raw_log, "Test other request").await;
+        assert_eq!(other.unwrap(), None);
     }
 
     /// DJI's request rate and outages are shared by every backend: slots a

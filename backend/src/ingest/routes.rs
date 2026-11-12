@@ -1,6 +1,6 @@
 //! The processing status API, for admins, and log uploads from controllers.
 
-use crate::db::{Db, Tenants};
+use crate::db::{Db, System, Tenants};
 use axum::{
     Json, Router,
     body::Bytes,
@@ -83,9 +83,12 @@ async fn missing(
 async fn status(
     actor: Actor,
     mut db: Db,
+    State(system): State<System>,
     State(activity): State<Activity>,
 ) -> ApiResult<Json<Status>> {
-    Ok(Json(service::status(&mut db, &actor, &activity).await?))
+    Ok(Json(
+        service::status(&mut db, &system, &actor, &activity).await?,
+    ))
 }
 
 #[derive(Serialize)]

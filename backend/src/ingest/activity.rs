@@ -32,13 +32,10 @@ pub struct Current {
     pub started_at: DateTime<Utc>,
 }
 
-/// Processing waits after a problem that may go away, such as DJI being unreachable.
+/// Processing waits after a problem that may go away, such as DJI being
+/// unreachable. Every organisation's admins see it: the reason names none.
 #[derive(Clone, Serialize)]
 pub struct Paused {
-    /// The organisation whose log it was processing, which the reason may
-    /// name; None for a pause before any log, which everyone may see.
-    #[serde(skip)]
-    pub organisation_id: Option<Uuid>,
     pub reason: String,
     pub until: DateTime<Utc>,
 }
@@ -95,38 +92,30 @@ impl Activity {
         self.changes.notify();
     }
 
-    /// Nothing due. A pause that hasn't run out stays: the logs it holds up
-    /// are still waiting.
+    /// Done with the current log, whatever became of it.
+    pub fn finished(&self) {
+        self.lock().current = None;
+        self.changes.notify();
+    }
+
+    /// Nothing due.
     pub fn idle(&self) {
         let mut now = self.lock();
         *now = Snapshot {
             finished_batch_started_at: now.batch_started_at.or(now.finished_batch_started_at),
-            paused: now.paused.take().filter(|paused| paused.until > Utc::now()),
             ..Snapshot::default()
         };
         self.changes.notify();
     }
 
-    /// DJI is down until then: logs that need its keys wait. It concerns no
-    /// organisation in particular, so every organisation's admins see it.
-    pub fn dji_down(&self, reason: &str, until: DateTime<Utc>) {
+    /// Trouble outside any log, such as the database being unreachable. The
+    /// details, which may name the servers, are only in the server log. A
+    /// pause keeps the batch: the logs it waits for are still pending.
+    pub fn pause(&self, pause: Duration) {
         let mut now = self.lock();
         now.current = None;
         now.paused = Some(Paused {
-            organisation_id: None,
-            reason: reason.to_owned(),
-            until,
-        });
-        self.changes.notify();
-    }
-
-    /// A pause keeps the batch: the logs it waits for are still pending.
-    pub fn pause(&self, reason: String, pause: Duration) {
-        let mut now = self.lock();
-        let organisation_id = now.current.take().map(|current| current.organisation_id);
-        now.paused = Some(Paused {
-            organisation_id,
-            reason,
+            reason: "A problem outside the logs; the server log has the details".to_owned(),
             until: Utc::now() + pause,
         });
         self.changes.notify();

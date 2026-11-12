@@ -17,14 +17,13 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use dji_log_parser::DJILog;
 use dji_log_parser::frame::records_to_frames;
-use dji_log_parser::keychain::KeychainFeaturePoint;
 use dji_log_parser::record::Record;
 use dji_log_parser::record::smart_battery_group::SmartBatteryGroup;
 use sqlx::PgConnection;
 
 use super::activity::{Activity, Stage};
 use super::db::{self, PendingLog, Saved};
-use super::dji;
+use super::dji::{self, Keychains, Reply};
 use super::flight::{self, BatteryInfo, Flight, Serials};
 use crate::db::{System, Tenants};
 use crate::organisations;
@@ -103,7 +102,7 @@ pub async fn run(
             }
             Err(error) => {
                 tracing::warn!("log processing paused: {error:#}");
-                activity.pause(format!("{error:#}"), ERROR_PAUSE);
+                activity.pause(ERROR_PAUSE);
                 ERROR_PAUSE
             }
         };
@@ -132,9 +131,10 @@ async fn process_next(
     let attempt = async {
         let outcome = process(db, system, &log, &path, dji_app_key, activity).await?;
         activity.stage(Stage::Saving);
-        finish(db, &log, outcome, activity).await
+        finish(db, &log, outcome).await
     }
     .await;
+    activity.finished();
     if let Err(error) = attempt {
         let error = format!("{error:#}");
         let still_ours = match retry_delay_s(log.attempts) {
@@ -156,16 +156,10 @@ async fn process_next(
 }
 
 /// Saves what became of an attempt, if the claim is still the log's.
-async fn finish(
-    db: &mut PgConnection,
-    log: &PendingLog,
-    outcome: Outcome,
-    activity: &Activity,
-) -> Result<()> {
+async fn finish(db: &mut PgConnection, log: &PendingLog, outcome: Outcome) -> Result<()> {
     let failed = match outcome {
+        // The status shows the outage from the database, to every organisation.
         Outcome::DjiDown { until, reason } => {
-            // Install-wide, so every organisation's admins may see it.
-            activity.dji_down(&reason, until);
             if !db::wait_for_dji(db, log, until, &reason).await? {
                 superseded(log);
             }
@@ -261,23 +255,23 @@ async fn keychains(
     log: &DJILog,
     dji_app_key: Option<&str>,
     activity: &Activity,
-) -> Result<std::result::Result<Vec<Vec<KeychainFeaturePoint>>, Outcome>> {
-    if let Some(body) = db::stored_key_response(db, raw_log.id).await?
-        && let Ok(keychains) = dji::keychains(&body)
+) -> Result<std::result::Result<Keychains, Outcome>> {
+    let request = match log.keychains_request() {
+        Ok(request) => request,
+        Err(error) => {
+            return Ok(Err(Outcome::Processed(Err(format!(
+                "failed to read the log's key records: {error}"
+            )))));
+        }
+    };
+    let request_body = serde_json::to_string(&request)?;
+    // Only for the same request: a new version of the log may need other keys.
+    if let Some(body) = db::stored_key_response(db, raw_log.id, &request_body).await?
+        && let Ok(Ok(keychains)) = dji::keychains(&body)
     {
         return Ok(Ok(keychains));
     }
 
-    let fails = |reason: String| Err(Outcome::Processed(Err(reason)));
-    let request = match log.keychains_request() {
-        Ok(request) => request,
-        Err(error) => {
-            return Ok(fails(format!(
-                "failed to read the log's key records: {error}"
-            )));
-        }
-    };
-    let request_body = serde_json::to_string(&request)?;
     if let Some((until, reason)) = db::dji_blocked(&mut *system.acquire().await?).await? {
         return Ok(Err(Outcome::DjiDown { until, reason }));
     }
@@ -312,20 +306,12 @@ async fn keychains(
     )
     .await?;
 
-    let dji_down = match (exchange.status, &exchange.body) {
-        (None, _) => format!("DJI did not answer: {}", exchange.error.unwrap_or_default()),
-        // A rejected app key, rate limiting or trouble at DJI: none of it is the log's fault.
-        (Some(status @ (401 | 403 | 429 | 500..)), _) => format!("DJI answered {status}"),
-        (Some(200), Some(body)) => {
+    let dji_down = match dji::reply(&exchange) {
+        Reply::Answered(answer) => {
             db::dji_answered(&mut *system.acquire().await?).await?;
-            return Ok(
-                dji::keychains(body).map_err(|error| Outcome::Processed(Err(format!("{error:#}"))))
-            );
+            return Ok(answer.map_err(|reason| Outcome::Processed(Err(reason))));
         }
-        (Some(status), _) => {
-            db::dji_answered(&mut *system.acquire().await?).await?;
-            return Ok(fails(format!("DJI answered {status}")));
-        }
+        Reply::Down(reason) => reason,
     };
     let until = db::dji_failed(&mut *system.acquire().await?, &dji_down).await?;
     Ok(Err(Outcome::DjiDown {
@@ -334,7 +320,7 @@ async fn keychains(
     }))
 }
 
-fn decode(log: &DJILog, keychains: Option<Vec<Vec<KeychainFeaturePoint>>>) -> Processed {
+fn decode(log: &DJILog, keychains: Option<Keychains>) -> Processed {
     let records = log
         .records(keychains)
         .map_err(|error| format!("failed to decode the log: {error}"))?;

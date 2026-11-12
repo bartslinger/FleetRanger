@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select response_body from dji_key_requests\n         where raw_log_id = $1 and response_status = 200 and response_body is not null\n         order by requested_at desc\n         limit 1",
+  "query": "select response_body from dji_key_requests\n         where raw_log_id = $1 and request_body = $2\n           and response_status = 200 and response_body is not null\n         order by requested_at desc\n         limit 1",
   "describe": {
     "columns": [
       {
@@ -17,12 +17,13 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
       true
     ]
   },
-  "hash": "717680576c90e47f77664f700a85cc0a80f35df8bd6f5383b8b3e1e12d2373c2"
+  "hash": "5850edf50f3aec4cf52c198b61323dbc57b0c5add73a6e98bc63c19e42d63fea"
 }

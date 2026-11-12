@@ -6,7 +6,7 @@
 //! before. A refresh now and then catches what nothing signals, such as logs
 //! imported from the command line.
 
-use crate::db::Tenants;
+use crate::db::{System, Tenants};
 use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -77,6 +77,7 @@ where
 struct Stream {
     /// Connects for each refresh: a stream stays open for hours.
     tenants: Tenants,
+    system: System,
     actor: Actor,
     activity: Activity,
     signal: watch::Receiver<Signal>,
@@ -89,6 +90,7 @@ struct Stream {
 async fn events(
     actor: Actor,
     State(tenants): State<Tenants>,
+    State(system): State<System>,
     State(activity): State<Activity>,
     State(Changes(changes)): State<Changes>,
 ) -> impl IntoResponse {
@@ -96,6 +98,7 @@ async fn events(
     signal.borrow_and_update();
     let state = Stream {
         tenants,
+        system,
         actor,
         activity,
         signal,
@@ -149,7 +152,7 @@ impl Stream {
         if self.actor.grants.may(Permission::LogsManage, None) {
             let status = async {
                 let mut db = self.tenants.connect(self.actor.organisation_id).await?;
-                ingest::status(&mut db, &self.actor, &self.activity).await
+                ingest::status(&mut db, &self.system, &self.actor, &self.activity).await
             };
             match status.await {
                 Ok(status) => queue(&mut self.queue, &mut self.processing, "processing", &status),
