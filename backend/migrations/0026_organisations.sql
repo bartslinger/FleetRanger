@@ -211,12 +211,19 @@ begin
         execute format('grant select, insert, update, delete on %I to fleetranger_app', t);
     end loop;
 end $$;
--- Apps: an organisation's own, and those that registered themselves.
+-- Apps: an organisation sees its own and those that registered themselves,
+-- and adds, changes and removes only its own.
 alter table oauth_clients enable row level security;
-create policy organisation on oauth_clients to fleetranger_app
+create policy visible on oauth_clients for select to fleetranger_app
     using (organisation_id is null
-           or organisation_id = current_setting('app.organisation_id')::uuid)
+           or organisation_id = current_setting('app.organisation_id')::uuid);
+create policy own_added on oauth_clients for insert to fleetranger_app
     with check (organisation_id = current_setting('app.organisation_id')::uuid);
+create policy own_changed on oauth_clients for update to fleetranger_app
+    using (organisation_id = current_setting('app.organisation_id')::uuid)
+    with check (organisation_id = current_setting('app.organisation_id')::uuid);
+create policy own_removed on oauth_clients for delete to fleetranger_app
+    using (organisation_id = current_setting('app.organisation_id')::uuid);
 grant select, insert, update, delete on oauth_clients to fleetranger_app;
 -- Settings: the organisation's own row, read and changed but not created or
 -- removed, which is the operator's work.
