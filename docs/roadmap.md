@@ -145,8 +145,8 @@ See "Apps" and "Public API" in [architecture.md](architecture.md).
 
 One install serving several organisations, for a hosted service where FleetRanger can be tried without a server (see "Deployment" in [architecture.md](architecture.md)). One branch, a commit per step:
 
-- [ ] Schema: organisations, an organisation on every row, row-level security, keys and uniqueness per organisation; existing data in one organisation (SQL to be approved first)
-- [ ] Backend: each request sets its organisation in its transaction; log processing per log; controller, API and MCP tokens carry their organisation
+- [x] Schema: organisations, an organisation on every row, row-level security, keys and uniqueness per organisation; existing data in one organisation (SQL to be approved first)
+- [x] Backend: each request uses a connection of its organisation (`Db`, as `fleetranger_app`); log processing per log; controller, API and MCP tokens carry their organisation
 - [ ] Command-line tool: create an organisation with its settings and first admin, change its settings; the settings leave the environment
 - [ ] Web app: an organisation switcher for logins in several organisations
 - [ ] Tests that no organisation reads or changes another's data, through the API and in the database
