@@ -68,7 +68,9 @@
 	let moveTo = $state('');
 	const moveError = $derived(form && 'moveError' in form ? form.moveError : undefined);
 	const deleteMessage = $derived(form && 'deleteMessage' in form ? form.deleteMessage : undefined);
-	const destination = $derived(data.others.find((other) => other.id === moveTo)?.name);
+	// Kept when chosen: by the toast, the form is reset and the page has
+	// moved on to the groups list.
+	let destination = $state('');
 
 	const members = $derived(group.member_list.length);
 	const pilots = $derived(
@@ -123,7 +125,13 @@
 						name="move_to"
 						placeholder="Choose a destination"
 						options={data.others.map((other) => ({ value: other.id, label: other.name }))}
-						bind:value={moveTo}
+						bind:value={
+							() => moveTo,
+							(value) => {
+								moveTo = value;
+								destination = data.others.find((other) => other.id === value)?.name ?? '';
+							}
+						}
 						error={moveError}
 						required
 					/>
