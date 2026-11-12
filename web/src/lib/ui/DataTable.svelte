@@ -62,6 +62,10 @@
 		/** Opens a row's page: the first cell becomes a link that covers the row;
 		 * undefined leaves that row without one. */
 		rowHref?: (row: T) => string | undefined;
+		/** The link covers only the first cell's text, not the row: for rows
+		 * whose buttons are clicked more than the page is opened (Carbon gives
+		 * every action its own target). */
+		linkOnly?: boolean;
 		/** Carbon's table toolbar: filters, then the primary action at the right. */
 		toolbar?: Snippet;
 		/** What the table shows, e.g. "37 flights", at the toolbar's left. */
@@ -108,6 +112,7 @@
 		defaultSort,
 		sortHref,
 		rowHref,
+		linkOnly = false,
 		toolbar,
 		summary,
 		selectable,
@@ -271,7 +276,7 @@
 				{@const state = rowState?.(row)}
 				{@const href = rowHref?.(row)}
 				<tr
-					class:linked={href}
+					class:linked={href && !linkOnly}
 					class:selected={chosen || key === currentRow}
 					aria-current={key === currentRow ? true : undefined}
 					class:stated={state}
@@ -306,7 +311,7 @@
 							{/if}
 							{#if index === 0 && href}
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built by the caller -->
-								<a class="row-link" {href}>{@render content(row, column)}</a>
+								<a class="row-link" class:only={linkOnly} {href}>{@render content(row, column)}</a>
 							{:else}
 								{@render content(row, column)}
 							{/if}
@@ -459,6 +464,27 @@
 		content: '';
 		position: absolute;
 		inset: 0;
+	}
+
+	/* Only the link opens the page; it fills the cell's height, so it's
+	   still a big enough target on a phone. */
+	.row-link.only {
+		display: inline-flex;
+		align-items: center;
+		height: 100%;
+	}
+
+	.row-link.only::after {
+		content: none;
+	}
+
+	.row-link.only:hover {
+		color: var(--cds-link-primary-hover);
+		text-decoration: underline;
+	}
+
+	.row-link.only:focus-visible {
+		outline: 2px solid var(--cds-focus);
 	}
 
 	tr.linked:hover .row-link {

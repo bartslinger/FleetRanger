@@ -6,9 +6,12 @@ import { KINDS } from '#lib/equipment.js';
 export async function load({ fetch, locals, params }) {
 	const item = await get<Equipment>(fetch, `${KINDS[params.kind].api}/${params.id}`);
 	// Renaming needs equipment.rename on its group, moving equipment.move on
-	// both groups: offered are the groups where the user may move it to.
+	// both groups: offered are the groups where the user may move it to, once
+	// there are several.
 	const rename = may(locals.account, 'equipment.rename', item.group_id);
-	const move = may(locals.account, 'equipment.move', item.group_id);
+	const move =
+		(locals.account?.several_groups ?? false) &&
+		may(locals.account, 'equipment.move', item.group_id);
 	const groups = move
 		? (await get<FlightChoices>(fetch, '/api/flights/choices')).groups.filter((group) =>
 				may(locals.account, 'equipment.move', group.id)
@@ -20,8 +23,7 @@ export async function load({ fetch, locals, params }) {
 		rename,
 		move,
 		groups,
-		// Into the organisation, out of every group.
-		toOrganisation: may(locals.account, 'equipment.move', null),
+		showsGroups: locals.account?.several_groups ?? false,
 		unpair: may(locals.account, 'controllers.manage', item.group_id)
 	};
 }
@@ -31,7 +33,7 @@ export const actions = {
 		const form = await request.formData();
 		const body = {
 			name: String(form.get('name') ?? '') || null,
-			group_id: String(form.get('group_id') ?? '') || null
+			group_id: String(form.get('group_id') ?? '')
 		};
 		const path = `${KINDS[params.kind].api}/${params.id}`;
 		const result = await send<Equipment>(fetch, 'PUT', path, body);

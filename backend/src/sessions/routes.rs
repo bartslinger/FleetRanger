@@ -90,18 +90,9 @@ struct Flights {
 #[derive(Deserialize)]
 struct NewSession {
     flight_ids: Vec<Uuid>,
-    /// The session's group, null for the organisation; left out, the
-    /// flights' group when they share one.
-    #[serde(default, deserialize_with = "given")]
-    group_id: Option<Option<Uuid>>,
-}
-
-/// A field that was given, even as null.
-fn given<'de, D>(deserializer: D) -> Result<Option<Option<Uuid>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    Option::deserialize(deserializer).map(Some)
+    /// The session's group; left out, the flights' group when they share
+    /// one.
+    group_id: Option<Uuid>,
 }
 
 async fn create(
@@ -115,8 +106,7 @@ async fn create(
 
 #[derive(Deserialize)]
 struct GroupChange {
-    /// None: the organisation.
-    group_id: Option<Uuid>,
+    group_id: Uuid,
     /// Moves the session's flights to the group as well.
     #[serde(default)]
     move_flights: bool,

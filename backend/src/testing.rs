@@ -41,7 +41,7 @@ pub async fn actor(db: &PgPool, user_id: Uuid) -> Actor {
     }
 }
 
-/// A user with these roles on the whole organisation.
+/// A user with these roles on the whole organisation: Admin, or none.
 pub async fn user(db: &PgPool, name: &str, roles: &[&str]) -> Uuid {
     let id = sqlx::query_scalar("insert into users (name) values ($1) returning id")
         .bind(name)
@@ -60,4 +60,29 @@ pub async fn user(db: &PgPool, name: &str, roles: &[&str]) -> Uuid {
 /// The flights a user sees, from their stored roles.
 pub async fn scope(db: &PgPool, user: Uuid) -> FlightScope {
     FlightScope::new(user, &crate::auth::grants(db, user).await.unwrap())
+}
+
+/// The group migration 0025 adds to every install, where items go when a
+/// test doesn't care about their group.
+pub async fn general(db: &PgPool) -> Uuid {
+    sqlx::query_scalar("select id from groups where name = 'General'")
+        .fetch_one(db)
+        .await
+        .unwrap()
+}
+
+/// A user with these roles in a group, such as Viewer, Pilot or Editor.
+pub async fn member(db: &PgPool, name: &str, group: Uuid, roles: &[&str]) -> Uuid {
+    let id = user(db, name, &[]).await;
+    sqlx::query(
+        "insert into group_members (group_id, user_id, role)
+         select $2, $1, unnest($3::text[])",
+    )
+    .bind(id)
+    .bind(group)
+    .bind(roles)
+    .execute(db)
+    .await
+    .unwrap();
+    id
 }

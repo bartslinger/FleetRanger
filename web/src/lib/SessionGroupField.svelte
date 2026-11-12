@@ -1,6 +1,6 @@
 <!--
 	@component
-	A new session's group, posted as `group_id` (an id, or "organisation"):
+	A new session's group, posted as `group_id`:
 	a select when there is a choice, preselected with the flights' group,
 	otherwise the one possible group, without a field (user's decision).
 -->

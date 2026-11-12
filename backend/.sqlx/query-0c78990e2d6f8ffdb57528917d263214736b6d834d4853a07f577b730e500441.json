@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into aircraft (serial, group_id) values ($1, $2)\n                     on conflict (serial) do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0c78990e2d6f8ffdb57528917d263214736b6d834d4853a07f577b730e500441"
+}

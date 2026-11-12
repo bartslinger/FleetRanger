@@ -9,7 +9,6 @@
 -->
 <script lang="ts" module>
 	import { dayMonth } from '#lib/format.js';
-	import { ORGANISATION } from '#lib/groups.js';
 	import type { Device, Devices } from '#lib/server/backend.js';
 
 	export interface Filters {
@@ -86,9 +85,7 @@
 	}
 
 	function groupName(devices: Devices, id: string) {
-		return id === 'none'
-			? ORGANISATION
-			: (devices.groups.find((group) => group.id === id)?.name ?? 'Unknown group');
+		return devices.groups.find((group) => group.id === id)?.name ?? 'Unknown group';
 	}
 
 	function pilotName(devices: Devices, id: string) {
@@ -165,10 +162,7 @@
 		}))
 	);
 	const groupOptions = $derived(
-		// What has no group is in the organisation, the top group: first.
-		[...devices.groups]
-			.sort((a, b) => Number(a.id !== null) - Number(b.id !== null))
-			.map((group) => ({ value: group.id ?? 'none', label: group.name ?? ORGANISATION }))
+		devices.groups.map((group) => ({ value: group.id, label: group.name }))
 	);
 	const areaOptions = $derived(devices.areas.map((area) => ({ value: area.id, label: area.name })));
 </script>

@@ -456,7 +456,7 @@ mod tests {
     /// it is refused, not left out.
     #[sqlx::test]
     async fn scopes_cover_lower_levels_and_guard_expansions(db: PgPool) {
-        let user = crate::testing::user(&db, "A", &["viewer"]).await;
+        let user = crate::testing::user(&db, "A", &[]).await;
         let caller = Caller {
             actor: crate::testing::actor(&db, user).await,
             scopes: vec!["sessions:read".to_owned()],

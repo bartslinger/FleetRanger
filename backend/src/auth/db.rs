@@ -149,3 +149,10 @@ pub async fn revoke_session(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Op
     .fetch_optional(db)
     .await
 }
+
+/// Whether there is more than one group.
+pub async fn several_groups(db: &PgPool) -> sqlx::Result<bool> {
+    sqlx::query_scalar!(r#"select count(*) > 1 as "several!" from groups"#)
+        .fetch_one(db)
+        .await
+}

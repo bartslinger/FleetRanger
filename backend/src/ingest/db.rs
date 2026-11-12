@@ -23,21 +23,31 @@ pub async fn known_paths(db: &PgPool) -> sqlx::Result<HashSet<String>> {
     Ok(paths.into_iter().collect())
 }
 
-/// Registers a raw log as pending. Returns false if a log with the same content
+/// Every group, by name.
+pub async fn groups(db: &PgPool) -> sqlx::Result<Vec<(Uuid, String)>> {
+    let rows = sqlx::query!("select id, name from groups order by name")
+        .fetch_all(db)
+        .await?;
+    Ok(rows.into_iter().map(|row| (row.id, row.name)).collect())
+}
+
+/// Registers a raw log as pending, for a group. Returns false if a log with the same content
 /// (or path) is already registered.
 pub async fn insert_raw_log(
     db: &PgPool,
     sha256: &[u8],
     path: &str,
     size_bytes: i64,
+    group_id: Uuid,
 ) -> sqlx::Result<bool> {
     let inserted = sqlx::query_scalar!(
-        "insert into raw_logs (sha256, path, size_bytes) values ($1, $2, $3)
+        "insert into raw_logs (sha256, path, size_bytes, group_id) values ($1, $2, $3, $4)
          on conflict do nothing
          returning id",
         sha256,
         path,
         size_bytes,
+        group_id,
     )
     .fetch_optional(db)
     .await?;
@@ -139,60 +149,74 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
 
 /// Saves the flight found in a raw log, or removes an earlier one if the log turned
 /// out to have none, and marks the log done. Unknown drone and controller serials
-/// are registered. A new flight gets the pilot chosen on the controller, if they
-/// are still active and fly somewhere, and the group chosen with them if they
-/// fly for it; any other flight goes to the organisation's queue.
+/// are registered in the flight's group. A new flight gets the pilot chosen on the
+/// controller, if they are still active and fly somewhere, and a group: the one
+/// chosen with the pilot if they fly for it, else the import's, else the
+/// controller's (user's decision, 2026-11-11), else the only group there is.
 /// Re-processing updates the flight in place, so its id, group and pilot stay
 /// the same. Returns whether the flight is new.
 pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<bool> {
     let mut tx = db.begin().await?;
     let new = match flight {
         Some(flight) => {
+            let placed = sqlx::query!(
+                r#"with pilot as (
+                       select u.id from raw_logs l
+                       join users u on u.id = l.pilot_id and u.archived_at is null
+                       where l.id = $1
+                         and exists (select 1 from group_members m
+                                     where m.user_id = u.id and m.role = any($3))
+                   ),
+                   chosen as (
+                       select l.group_id from raw_logs l, pilot p
+                       where l.id = $1
+                         and exists (select 1 from group_members m
+                                     where m.user_id = p.id and m.group_id = l.group_id
+                                       and m.role = any($3))
+                   )
+                   select (select id from pilot) as pilot_id,
+                          coalesce(
+                              (select group_id from flights where raw_log_id = $1),
+                              (select group_id from chosen),
+                              -- An import has no pilot, and its group is given.
+                              (select group_id from raw_logs where id = $1 and pilot_id is null),
+                              (select group_id from remote_controllers where serial = $2),
+                              (select (array_agg(id))[1] from groups having count(*) = 1)
+                          ) as group_id"#,
+                raw_log_id,
+                flight.rc_serial,
+                &policy::roles_granting(Permission::FlightsFlyFor),
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            let Some(group_id) = placed.group_id else {
+                anyhow::bail!("no group for this flight: the controller is unknown");
+            };
             if let Some(serial) = &flight.aircraft_serial {
                 sqlx::query!(
-                    "insert into aircraft (serial) values ($1) on conflict (serial) do nothing",
+                    "insert into aircraft (serial, group_id) values ($1, $2)
+                     on conflict (serial) do nothing",
                     serial,
+                    group_id,
                 )
                 .execute(&mut *tx)
                 .await?;
             }
             if let Some(serial) = &flight.rc_serial {
                 sqlx::query!(
-                    "insert into remote_controllers (serial) values ($1)
+                    "insert into remote_controllers (serial, group_id) values ($1, $2)
                      on conflict (serial) do nothing",
                     serial,
+                    group_id,
                 )
                 .execute(&mut *tx)
                 .await?;
             }
             let saved = sqlx::query!(
-                // The flight's group is only ever the one chosen with the pilot on
-                // the controller, where the pilot holds flights.fly_for (on the
-                // group or the organisation); the controller's and drone's groups
-                // play no part (user's decisions, 2026-10-23).
-                "with pilot as (
-                     select u.id from raw_logs l
-                     join users u on u.id = l.pilot_id and u.archived_at is null
-                     where l.id = $1
-                       and (exists (select 1 from group_members m
-                                    where m.user_id = u.id and m.role = any($10))
-                            or exists (select 1 from organisation_roles r
-                                       where r.user_id = u.id and r.role = any($10)))
-                 ),
-                 chosen as (
-                     select l.group_id from raw_logs l, pilot p
-                     where l.id = $1
-                       and (exists (select 1 from group_members m
-                                    where m.user_id = p.id and m.group_id = l.group_id
-                                      and m.role = any($10))
-                            or exists (select 1 from organisation_roles r
-                                       where r.user_id = p.id and r.role = any($10)))
-                 )
-                 insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
+                "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m,
                                       aircraft_serial, rc_serial, track, metrics,
                                       pilot_id, group_id)
-                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-                         (select id from pilot), (select group_id from chosen))
+                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                  on conflict (raw_log_id) do update set
                      takeoff_at = excluded.takeoff_at,
                      landed_at = excluded.landed_at,
@@ -213,7 +237,8 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
                 flight.rc_serial,
                 flight.track,
                 serde_json::to_value(&flight.metrics)?,
-                &policy::roles_granting(Permission::FlightsFlyFor),
+                placed.pilot_id,
+                group_id,
             )
             .fetch_one(&mut *tx)
             .await?;
@@ -470,9 +495,10 @@ mod tests {
 
     /// A pilot in two groups: the flight belongs to the group chosen with them
     /// on the controller; without one, or with a group they don't fly for, it
-    /// goes to the queue, whatever the controller's group.
+    /// goes to the controller's group. An import's flight goes to the group
+    /// it was imported for, whatever the controller's.
     #[sqlx::test]
-    async fn the_flights_group_is_only_the_one_chosen_on_the_controller(db: PgPool) {
+    async fn the_flights_group_is_chosen_else_the_controllers(db: PgPool) {
         use crate::testing::group;
         let (north, south, base, other) = (
             group(&db, "North").await,
@@ -504,12 +530,21 @@ mod tests {
             save_result(&db, log.id, Some(&flight())).await.unwrap();
             processed.push(pilot_and_group(&db, log.id).await);
         }
+        assert!(
+            insert_raw_log(&db, &[9; 32], "old/test.txt", 10, other)
+                .await
+                .unwrap()
+        );
+        let log = next_pending(&db).await.unwrap().unwrap();
+        save_result(&db, log.id, Some(&flight())).await.unwrap();
+        processed.push(pilot_and_group(&db, log.id).await);
         assert_eq!(
             processed,
             [
                 (Some(pilot), Some(south)),
-                (Some(pilot), None),
-                (Some(pilot), None)
+                (Some(pilot), Some(base)),
+                (Some(pilot), Some(base)),
+                (None, Some(other)),
             ]
         );
     }

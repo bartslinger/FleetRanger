@@ -8,10 +8,10 @@ use crate::{
     policy::{self, Permission},
 };
 
-/// What is entered for a drone or controller; all optional.
+/// What is entered for a drone or controller.
 pub struct EquipmentInput {
     pub name: Option<String>,
-    pub group_id: Option<Uuid>,
+    pub group_id: Uuid,
 }
 
 /// The equipment the actor sees: with `equipment.read` on its group, or
@@ -51,9 +51,7 @@ pub async fn update(
         input.group_id,
         name != item.name.as_deref(),
     )?;
-    if let Some(group_id) = input.group_id
-        && !db::group_exists(db, group_id).await?
-    {
+    if input.group_id != item.group_id && !db::group_exists(db, input.group_id).await? {
         return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
     if !db::update(db, kind, id, name, input.group_id).await? {

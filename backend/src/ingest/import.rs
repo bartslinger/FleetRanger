@@ -1,15 +1,19 @@
 //! Registers raw logs that are already in the flight log directory, such as logs
-//! copied there before FleetRanger existed. Files stay where they are.
+//! copied there before FleetRanger existed. Files stay where they are. Their
+//! flights go to the group given, which is needed only when there is more
+//! than one (user's decision, 2026-11-11): nothing falls back to a default.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use super::db;
 
-pub async fn run(db: &PgPool, log_dir: &Path) -> Result<()> {
+pub async fn run(db: &PgPool, log_dir: &Path, group: Option<&str>) -> Result<()> {
+    let group_id = choose_group(&db::groups(db).await?, group)?;
     let mut paths = Vec::new();
     collect_logs(log_dir, &mut paths)
         .with_context(|| format!("failed to scan {}", log_dir.display()))?;
@@ -27,7 +31,7 @@ pub async fn run(db: &PgPool, log_dir: &Path) -> Result<()> {
             .await
             .with_context(|| format!("failed to read {}", path.display()))?;
         let sha256 = Sha256::digest(&bytes);
-        if db::insert_raw_log(db, &sha256, &relative, bytes.len() as i64).await? {
+        if db::insert_raw_log(db, &sha256, &relative, bytes.len() as i64, group_id).await? {
             added += 1;
         } else {
             duplicates += 1;
@@ -37,6 +41,18 @@ pub async fn run(db: &PgPool, log_dir: &Path) -> Result<()> {
 
     tracing::info!(added, duplicates, "import finished");
     Ok(())
+}
+
+/// The group named, or the only one when none is named.
+fn choose_group(groups: &[(Uuid, String)], name: Option<&str>) -> Result<Uuid> {
+    match (name, groups) {
+        (Some(name), _) => match groups.iter().find(|(_, group)| group == name) {
+            Some((id, _)) => Ok(*id),
+            None => bail!("there is no group named {name:?}"),
+        },
+        (None, [(id, _)]) => Ok(*id),
+        (None, _) => bail!("there are several groups; choose one with --group <name>"),
+    }
 }
 
 /// Collects every `.txt` file below `dir`.

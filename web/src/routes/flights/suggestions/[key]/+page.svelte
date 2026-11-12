@@ -16,7 +16,7 @@
 	import { resolve } from '$app/paths';
 	import { dateTime, day, distance, duration, timeSpan } from '#lib/format.js';
 	import { may } from '#lib/permissions.js';
-	import { sessionGroupChoice } from '#lib/groups.js';
+	import { sessionGroupChoice, showsGroups } from '#lib/groups.js';
 	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import SessionFacts, { summary } from '#lib/SessionFacts.svelte';
 	import Button from '#lib/ui/Button.svelte';
@@ -284,6 +284,7 @@
 			flights={shown}
 			timeZone={data.timeZone}
 			groupField={groupChoice.options.length > 1 ? groupSelect : undefined}
+			showGroup={showsGroups(data.account)}
 		>
 			{#snippet pilotAction()}
 				{#if canSetPilots && chosen.length > 0}

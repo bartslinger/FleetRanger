@@ -155,16 +155,15 @@ async fn all(
 struct Open {
     flights: Vec<FlightSummary>,
     landed_at: DateTime<Utc>,
-    group_id: Option<Uuid>,
+    group_id: Uuid,
 }
 
 /// Groups flights given in takeoff order into suggestions. A flight joins a
 /// suggestion when it took off less than `gap` after its last landing and is
-/// in its group (user's decisions, 2026-10-19). Flights without a group are a
-/// group of their own: they're often another group's, still to be sorted
-/// out. Pilots don't keep flights apart: a session can have several, and the
-/// list's filters (e.g. a group's drones) leave out others flying at the same
-/// time. So two groups flying the same evening make two suggestions.
+/// in its group (user's decisions, 2026-10-19). Pilots don't keep flights
+/// apart: a session can have several, and the list's filters (e.g. a group's
+/// drones) leave out others flying at the same time. So two groups flying the
+/// same evening make two suggestions.
 fn group(flights: Vec<FlightSummary>, gap: Duration) -> Vec<Vec<FlightSummary>> {
     let mut groups: Vec<Open> = Vec::new();
     for flight in flights {
@@ -190,7 +189,7 @@ fn group(flights: Vec<FlightSummary>, gap: Duration) -> Vec<Vec<FlightSummary>> 
 mod tests {
     use super::*;
 
-    fn flight(minute: i64, group: Option<Uuid>, pilot: Option<Uuid>) -> FlightSummary {
+    fn flight(minute: i64, group: Uuid, pilot: Option<Uuid>) -> FlightSummary {
         let takeoff_at = DateTime::UNIX_EPOCH + Duration::minutes(minute);
         FlightSummary {
             id: Uuid::from_u128(minute.unsigned_abs().into()),
@@ -205,7 +204,7 @@ mod tests {
             pilot_id: pilot,
             pilot_name: None,
             group_id: group,
-            group_name: None,
+            group_name: String::new(),
             session_id: None,
             archived_at: None,
         }
@@ -223,20 +222,19 @@ mod tests {
             .collect()
     }
 
-    /// Two groups flying the same evening stay apart, and so do flights
-    /// without a group; pilots, known or not, don't; and a long break starts
-    /// a new suggestion.
+    /// Two groups flying the same evening stay apart; pilots, known or not,
+    /// don't; and a long break starts a new suggestion.
     #[test]
     fn groups_and_breaks_keep_suggestions_apart() {
-        let (north, south) = (Some(Uuid::from_u128(1)), Some(Uuid::from_u128(2)));
+        let (north, south, east) = (Uuid::from_u128(1), Uuid::from_u128(2), Uuid::from_u128(5));
         let (anna, ben) = (Some(Uuid::from_u128(3)), Some(Uuid::from_u128(4)));
         let flights = vec![
             flight(0, north, anna),
             flight(10, south, None),
-            flight(30, None, anna),
+            flight(30, east, anna),
             flight(40, south, None),
             flight(45, north, None),
-            flight(50, None, None),
+            flight(50, east, None),
             flight(60, north, ben),
             // 20 minutes in the air, then more than two hours later.
             flight(60 + 20 + 121, north, anna),

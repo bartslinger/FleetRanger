@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with pilot as (\n                       select u.id from raw_logs l\n                       join users u on u.id = l.pilot_id and u.archived_at is null\n                       where l.id = $1\n                         and exists (select 1 from group_members m\n                                     where m.user_id = u.id and m.role = any($3))\n                   ),\n                   chosen as (\n                       select l.group_id from raw_logs l, pilot p\n                       where l.id = $1\n                         and exists (select 1 from group_members m\n                                     where m.user_id = p.id and m.group_id = l.group_id\n                                       and m.role = any($3))\n                   )\n                   select (select id from pilot) as pilot_id,\n                          coalesce(\n                              (select group_id from flights where raw_log_id = $1),\n                              (select group_id from chosen),\n                              -- An import has no pilot, and its group is given.\n                              (select group_id from raw_logs where id = $1 and pilot_id is null),\n                              (select group_id from remote_controllers where serial = $2),\n                              (select (array_agg(id))[1] from groups having count(*) = 1)\n                          ) as group_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pilot_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "group_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "fafe2c5cb48c85b6c481dd51cf6667209ee1595cd84b37c8a92623f9b2926ecb"
+}

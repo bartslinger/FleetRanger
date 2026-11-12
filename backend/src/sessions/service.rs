@@ -87,13 +87,13 @@ pub async fn neighbours(
 /// Puts these flights into a new session, and returns it. They leave the
 /// sessions they were in.
 ///
-/// - `group`: the session's group, None for the organisation; if not given,
-///   the flights' group when they share one, else the organisation.
+/// - `group`: the session's group; if not given, the flights' group when
+///   they share one.
 pub async fn create(
     db: &PgPool,
     actor: &Actor,
     flight_ids: &[Uuid],
-    group: Option<Option<Uuid>>,
+    group: Option<Uuid>,
 ) -> ApiResult<Uuid> {
     let flight_ids = seen(db, actor, flight_ids).await?;
     let group = match group {
@@ -103,15 +103,18 @@ pub async fn create(
                 .await?
                 .ok_or(ApiError::NotFound)?;
             let first = flight_groups[0];
-            first.filter(|_| flight_groups.iter().all(|group| *group == first))
+            if flight_groups.iter().any(|group| *group != first) {
+                return Err(ApiError::Invalid(
+                    "These flights are in several groups. Choose the session's group.".to_owned(),
+                ));
+            }
+            first
         }
     };
     let mut changed = db::groups_left(db, &flight_ids).await?;
     changed.push(group);
     policy::change_sessions(&actor.grants, &changed)?;
-    if let Some(group) = group
-        && !flights::db::group_exists(db, group).await?
-    {
+    if !flights::db::group_exists(db, group).await? {
         return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
     not_archived(db, &flight_ids).await?;
@@ -260,13 +263,12 @@ pub async fn split(db: &PgPool, actor: &Actor, flight_ids: &[Uuid]) -> ApiResult
         .ok_or_else(stranded)
 }
 
-/// Moves a session to a group, or to the organisation with None, and with
-/// `with_flights` its flights as well.
+/// Moves a session to a group, and with `with_flights` its flights as well.
 pub async fn set_group(
     db: &PgPool,
     actor: &Actor,
     id: Uuid,
-    group: Option<Uuid>,
+    group: Uuid,
     with_flights: bool,
 ) -> ApiResult<()> {
     // Refused before not found, so this doesn't tell whether sessions exist.
@@ -284,9 +286,7 @@ pub async fn set_group(
         None
     };
     policy::move_session(&actor.grants, from, group, flight_groups.as_deref())?;
-    if let Some(group) = group
-        && !flights::db::group_exists(db, group).await?
-    {
+    if !flights::db::group_exists(db, group).await? {
         return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
     }
     if !db::set_group(db, id, group, with_flights).await? {
@@ -338,8 +338,8 @@ mod tests {
 
     /// A change needs `sessions.edit` on every session that changes: an
     /// editor of North can't take a flight out of South's session, also not
-    /// a North flight; a session made by hand gets the flights' group, or
-    /// the organisation when they have several.
+    /// a North flight; a session made by hand gets the flights' group, and
+    /// when they have several one must be chosen.
     #[sqlx::test]
     async fn changes_need_every_session_that_changes(db: PgPool) {
         let north = testing::group(&db, "North").await;
@@ -366,27 +366,28 @@ mod tests {
                 .ok()
                 .expect("a session")
         };
-        let south_session = made(&admin, &[ours], Some(Some(south))).await;
+        let south_session = made(&admin, &[ours], Some(south)).await;
         // Leaving South's session, joining a new North one.
         let refused = create(&db, &editor, &[ours], None).await;
         assert!(matches!(refused, Err(ApiError::Conflict(_))));
         assert!(remove(&db, &editor, &[ours]).await.is_err());
 
         let own = made(&editor, &[also_ours], None).await;
-        assert_eq!(
-            db::groups_of(&db, &[own]).await.unwrap(),
-            Some(vec![Some(north)])
-        );
+        assert_eq!(db::groups_of(&db, &[own]).await.unwrap(), Some(vec![north]));
         assert!(
             add(&db, &editor, south_session, &[also_ours])
                 .await
                 .is_err()
         );
 
-        let joint = made(&admin, &[ours, theirs], None).await;
+        assert!(matches!(
+            create(&db, &admin, &[ours, theirs], None).await,
+            Err(ApiError::Invalid(_))
+        ));
+        let joint = made(&admin, &[ours, theirs], Some(south)).await;
         assert_eq!(
             db::groups_of(&db, &[joint]).await.unwrap(),
-            Some(vec![None])
+            Some(vec![south])
         );
     }
 
@@ -396,7 +397,7 @@ mod tests {
     #[sqlx::test]
     async fn comments_keep_their_session(db: PgPool) {
         let north = testing::group(&db, "North").await;
-        let editor = testing::user(&db, "A", &["editor"]).await;
+        let editor = testing::member(&db, "A", north, &["editor"]).await;
         let editor = testing::actor(&db, editor).await;
         let (a, b, c) = (
             flight(&db, north).await,
@@ -444,11 +445,11 @@ mod tests {
     #[sqlx::test]
     async fn only_authors_change_comments(db: PgPool) {
         let north = testing::group(&db, "North").await;
-        let author = testing::user(&db, "A", &["editor"]).await;
+        let author = testing::member(&db, "A", north, &["editor"]).await;
         let author = testing::actor(&db, author).await;
-        let other = testing::user(&db, "B", &["editor"]).await;
+        let other = testing::member(&db, "B", north, &["editor"]).await;
         let other = testing::actor(&db, other).await;
-        let viewer = testing::user(&db, "C", &["viewer"]).await;
+        let viewer = testing::member(&db, "C", north, &["viewer"]).await;
         let viewer = testing::actor(&db, viewer).await;
         let session = create(&db, &author, &[flight(&db, north).await], None)
             .await

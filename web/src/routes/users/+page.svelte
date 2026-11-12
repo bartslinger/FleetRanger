@@ -1,9 +1,15 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import Edit from '@carbon/icons/es/edit/16.js';
 	import AppRoleGroups from '#lib/AppRoleGroups.svelte';
-	import { allRoles, ORGANISATION_ROLES, ROLE_HELP, ROLE_LABELS } from '#lib/roles.js';
+	import {
+		allRoles,
+		ORGANISATION_ROLES,
+		rolesAcrossGroups,
+		ROLE_HELP,
+		ROLE_LABELS
+	} from '#lib/roles.js';
+	import type { GroupRole, OrganisationRole } from '#lib/server/backend.js';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -20,26 +26,29 @@
 
 	type Row = (typeof data.users)[number];
 
-	// The groups by name only; their roles are on the user's page. A long
-	// list is cut short so a row stays one line (carbon-expert's suggestion).
-	function groupNames(user: Row): string | null {
-		const names = user.groups.map((group) => group.name);
-		if (names.length <= 3) return names.join(', ') || null;
-		return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+	// While the organisation has only one group, nothing shows it: a user's
+	// roles there and Admin are one set of roles (user's decision, 2026-11-11).
+	const single = $derived(data.onlyGroup !== null);
+	const inOnlyGroup = (user: Row) => user.groups.find((group) => group.id === data.onlyGroup);
+	/** The roles held, Admin and those in the only group. */
+	const shownRoles = (user: Row): OrganisationRole[] => [
+		...((inOnlyGroup(user)?.roles ?? []) as GroupRole[]),
+		...user.roles
+	];
+
+	// With several groups: Admin, then each role with where it's held.
+	function roleSummary(user: Row): string | null {
+		if (single) {
+			return allRoles(shownRoles(user), inOnlyGroup(user)?.app_roles ?? [], data.appRoles) || null;
+		}
+		return rolesAcrossGroups(user.roles.includes('admin'), user.groups, data.appRoles) || null;
 	}
 
-	// As a group's members (the organisation is the top group, user's
-	// decision): name, roles, then the rest; the status column only while
-	// archived users are shown.
+	// Name, roles, then the rest; the status column only while archived
+	// users are shown.
 	const columns: TableColumn<Row>[] = $derived([
 		{ key: 'name', header: 'Name' },
-		{
-			key: 'roles',
-			header: 'Roles',
-			wrap: true,
-			format: (user) => allRoles(user.roles, user.app_roles, data.appRoles) || null
-		},
-		{ key: 'groups', header: 'Groups', wrap: true, format: groupNames },
+		{ key: 'roles', header: 'Roles', wrap: true, format: roleSummary },
 		{ key: 'email', header: 'Login', wideOnly: true },
 		...(data.archived
 			? [
@@ -52,28 +61,14 @@
 			: [])
 	]);
 
-	const roleOptions = ORGANISATION_ROLES.map((role) => ({
-		value: role,
-		label: ROLE_LABELS[role],
-		helper: ROLE_HELP[role]
-	}));
-
-	// The last active admin keeps Admin, as on the user's page.
-	const admins = $derived(
-		data.users.filter((user) => user.archived_at === null && user.roles.includes('admin'))
+	// With several groups only Admin is given here; the rest in the groups.
+	const roleOptions = $derived(
+		(single ? ORGANISATION_ROLES : (['admin'] as const)).map((role) => ({
+			value: role,
+			label: ROLE_LABELS[role],
+			helper: ROLE_HELP[role]
+		}))
 	);
-	const lastAdmin = (user: Row) => admins.length === 1 && admins[0].id === user.id;
-	const rolesOf = (user: Row) =>
-		roleOptions.map((option) =>
-			option.value === 'admin' && lastAdmin(user)
-				? {
-						...option,
-						helper: 'You are the only admin. Make another user an admin first.',
-						disabled: true
-					}
-				: option
-		);
-	const rolesMessage = $derived(form && 'rolesMessage' in form ? form.rolesMessage : undefined);
 
 	function showArchived(show: boolean) {
 		goto(resolve(show ? '/users?archived' : '/users'), {
@@ -133,42 +128,18 @@
 						name="email"
 						type="email"
 						autocomplete="off"
-						helper="To log in with the Google account for this address. Leave empty for a pilot who doesn't use the website."
+						helper="To log in with the Google account for this address. Leave empty for no login."
 					/>
 					<CheckboxGroup
 						legend="FleetRanger roles"
 						name="role"
 						options={roleOptions}
 						value={[]}
-						helper="On the whole organisation. None for someone who only has roles in groups; add them to groups on their page."
+						helper={single
+							? undefined
+							: 'Other roles are given in groups, on their page once created.'}
 					/>
-					<AppRoleGroups appRoles={data.appRoles} value={[]} />
-				</Modal>
-			{/snippet}
-			{#snippet rowAction(user)}
-				<!-- As a group's members' Edit roles; archiving stays on the user's page. -->
-				<Modal
-					title="Edit roles"
-					triggerIcon={Edit}
-					triggerSize="md"
-					triggerLabel="Edit roles of {user.name}"
-					label="{user.name} in the organisation"
-					submitLabel="Save"
-					action="?/roles"
-					error={rolesMessage}
-					onsuccess={() => toast(`Roles of ${user.name} saved.`)}
-				>
-					<input type="hidden" name="user_id" value={user.id} />
-					<CheckboxGroup
-						legend="FleetRanger roles"
-						name="role"
-						options={rolesOf(user)}
-						value={user.roles}
-						helper="None for someone who only has roles in groups."
-					/>
-					<!-- A disabled checkbox isn't posted; Admin stays. -->
-					{#if lastAdmin(user)}<input type="hidden" name="role" value="admin" />{/if}
-					<AppRoleGroups appRoles={data.appRoles} value={user.app_roles} />
+					{#if single}<AppRoleGroups appRoles={data.appRoles} value={[]} />{/if}
 				</Modal>
 			{/snippet}
 		</DataTable>

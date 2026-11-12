@@ -65,15 +65,12 @@
 			.join(', ')
 			.replace(/, ([^,]*)$/, ' and $1')
 	);
-	const ORGANISATION = 'organisation';
 	let moveTo = $state('');
 	const moveError = $derived(form && 'moveError' in form ? form.moveError : undefined);
 	const deleteMessage = $derived(form && 'deleteMessage' in form ? form.deleteMessage : undefined);
-	const destination = $derived(
-		moveTo === ORGANISATION
-			? 'the organisation'
-			: data.others.find((other) => other.id === moveTo)?.name
-	);
+	// Kept when chosen: by the toast, the form is reset and the page has
+	// moved on to the groups list.
+	let destination = $state('');
 
 	const members = $derived(group.member_list.length);
 	const pilots = $derived(
@@ -100,47 +97,52 @@
 		>
 			<TextInput label="Name" name="name" value={group.name} required autocomplete="off" />
 		</Modal>
-		<!-- One action; the dialog asks where everything goes when the group
-		     isn't empty (carbon-expert's advice). -->
-		<Modal
-			title="Delete group"
-			label={group.name}
-			triggerKind="danger-tertiary"
-			submitLabel="Delete group"
-			danger
-			action="?/delete"
-			error={deleteMessage}
-			onsuccess={() =>
-				toast(
-					holds
-						? `Group ${group.name} deleted. Its contents are now in ${destination}.`
-						: `Group ${group.name} deleted.`
-				)}
-		>
-			{#if holds}
-				<p>
-					{group.name} holds {holds}. Choose where to move them. Then the group is deleted, and its
-					members lose their roles in it. The group and its memberships can’t be restored.
-				</p>
-				<Select
-					label="Move contents to"
-					name="move_to"
-					placeholder="Choose a destination"
-					options={[
-						{ value: ORGANISATION, label: 'Organisation' },
-						...data.others.map((other) => ({ value: other.id, label: other.name }))
-					]}
-					bind:value={moveTo}
-					error={moveError}
-					required
-				/>
-			{:else}
-				<p>
-					{group.name} holds no flights, sessions, drones or controllers. Its members lose their roles
-					in it. This can’t be undone.
-				</p>
-			{/if}
-		</Modal>
+		<!-- The last group stays: everything is in a group. One action; the dialog
+		     asks where everything goes when the group isn't empty (carbon-expert's
+		     advice). -->
+		{#if data.others.length > 0}
+			<Modal
+				title="Delete group"
+				label={group.name}
+				triggerKind="danger-tertiary"
+				submitLabel="Delete group"
+				danger
+				action="?/delete"
+				error={deleteMessage}
+				onsuccess={() =>
+					toast(
+						holds
+							? `Group ${group.name} deleted. Its contents are now in ${destination}.`
+							: `Group ${group.name} deleted.`
+					)}
+			>
+				{#if holds}
+					<p>
+						{group.name} holds {holds}. Its members lose their roles in it. This can’t be undone.
+					</p>
+					<Select
+						label="Move contents to"
+						name="move_to"
+						placeholder="Choose a destination"
+						options={data.others.map((other) => ({ value: other.id, label: other.name }))}
+						bind:value={
+							() => moveTo,
+							(value) => {
+								moveTo = value;
+								destination = data.others.find((other) => other.id === value)?.name ?? '';
+							}
+						}
+						error={moveError}
+						required
+					/>
+				{:else}
+					<p>
+						{group.name} holds no flights, sessions, drones or controllers. Its members lose their roles
+						in it. This can’t be undone.
+					</p>
+				{/if}
+			</Modal>
+		{/if}
 	{/snippet}
 </PageHeader>
 
@@ -180,6 +182,7 @@
 				rows={group.member_list}
 				rowKey={(member) => member.user_id}
 				rowHref={(member) => resolve('/users/[id]', { id: member.user_id })}
+				linkOnly
 				{summary}
 			>
 				{#snippet toolbar()}
@@ -234,7 +237,10 @@
 				{/snippet}
 			</DataTable>
 			{#if data.candidates.length === 0}
-				<p class="note">Every user is a member already. New users are created on the Users page.</p>
+				<p class="note">
+					Every user is a member already. New users are created on the
+					<a href={resolve('/users')}>Users page</a>.
+				</p>
 			{/if}
 		{/if}
 	</Column>

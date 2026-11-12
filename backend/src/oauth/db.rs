@@ -308,7 +308,7 @@ pub struct AppRole {
     pub key: String,
     /// What admins see.
     pub name: String,
-    /// How many active users hold it, on a group or the organisation.
+    /// How many active users hold it, in any group.
     pub holders: i64,
 }
 
@@ -326,13 +326,9 @@ pub async fn trusted_apps(db: &PgPool) -> sqlx::Result<Vec<TrustedApp>> {
                   coalesce((select jsonb_agg(jsonb_build_object(
                                 'id', r.id, 'key', r.key, 'name', r.name,
                                 'holders', (select count(distinct h.user_id)
-                                            from (select user_id from group_app_roles
-                                                  where app_role_id = r.id
-                                                  union all
-                                                  select user_id from organisation_app_roles
-                                                  where app_role_id = r.id) h
+                                            from group_app_roles h
                                             join users u on u.id = h.user_id
-                                            where u.archived_at is null))
+                                            where h.app_role_id = r.id and u.archived_at is null))
                                 order by lower(r.name), r.id)
                             from app_roles r where r.client_id = c.id),
                            '[]') as "roles!: Json<Vec<AppRole>>",
@@ -462,10 +458,9 @@ pub async fn end_impersonation(db: &PgPool, admin: Uuid) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// A user's roles of one app: on the organisation, and per group.
+/// A user's roles of one app, per group.
 #[derive(Default)]
 pub struct HeldAppRoles {
-    pub organisation: Vec<String>,
     pub groups: Vec<(Uuid, Vec<String>)>,
 }
 
@@ -474,16 +469,6 @@ pub async fn held_app_roles(
     client_id: Uuid,
     user_id: Uuid,
 ) -> sqlx::Result<HeldAppRoles> {
-    let organisation = sqlx::query_scalar!(
-        "select r.key from organisation_app_roles o
-         join app_roles r on r.id = o.app_role_id
-         where r.client_id = $1 and o.user_id = $2
-         order by r.key",
-        client_id,
-        user_id,
-    )
-    .fetch_all(db)
-    .await?;
     let groups = sqlx::query!(
         r#"select g.group_id, array_agg(r.key order by r.key) as "keys!"
            from group_app_roles g
@@ -499,10 +484,7 @@ pub async fn held_app_roles(
     .into_iter()
     .map(|row| (row.group_id, row.keys))
     .collect();
-    Ok(HeldAppRoles {
-        organisation,
-        groups,
-    })
+    Ok(HeldAppRoles { groups })
 }
 
 /// An app role to offer in the roles dialogs, with its app.

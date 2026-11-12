@@ -38,7 +38,7 @@ where
 #[derive(Deserialize)]
 struct Body {
     name: Option<String>,
-    group_id: Option<Uuid>,
+    group_id: Uuid,
 }
 
 impl From<Body> for EquipmentInput {

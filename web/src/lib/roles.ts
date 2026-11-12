@@ -10,19 +10,20 @@ export const ROLE_LABELS: Record<OrganisationRole, string> = {
 	admin: 'Admin'
 };
 
-/** What each role allows on the whole organisation, for helper text. */
+/** What each role allows, for helper text: Admin on the whole organisation,
+ * the others while it has only one group. Short on purpose (user's wish). */
 export const ROLE_HELP: Record<OrganisationRole, string> = {
-	viewer: 'Sees all flights, sessions and equipment.',
-	pilot: 'Flies for every group.',
-	editor: 'Sees and organises all flights and sessions.',
-	admin: 'Manages users, groups and equipment. Doesn’t fly.'
+	viewer: 'Sees all flights.',
+	pilot: 'Flies.',
+	editor: 'Organises flights and sessions.',
+	admin: 'Manages everything.'
 };
 
 /** What each role allows in a group. */
 export const GROUP_ROLE_HELP: Record<GroupRole, string> = {
-	viewer: 'Sees the group’s flights, sessions and equipment.',
+	viewer: 'Sees the group’s flights.',
 	pilot: 'Flies for the group.',
-	editor: 'Sees and organises the group’s flights and sessions.'
+	editor: 'Organises the group’s flights and sessions.'
 };
 
 export const GROUP_ROLES: GroupRole[] = ['viewer', 'pilot', 'editor'];
@@ -44,18 +45,54 @@ export function byApp(appRoles: OfferedAppRole[]) {
 	return apps;
 }
 
-/** FleetRanger's roles and then each app's, for a cell:
- * "Pilot, Editor · Reports: Report viewer" (carbon-expert's advice). */
+/** FleetRanger's roles and then the apps', by name only, for a cell:
+ * "Pilot, Editor, Report creator" (user's wish, 2026-11-11). */
 export function allRoles(
 	roles: OrganisationRole[],
 	appRoleIds: string[],
 	appRoles: OfferedAppRole[]
 ): string {
-	const held = appRoles.filter((role) => appRoleIds.includes(role.id));
+	return roleNames(roles, appRoleIds, appRoles).join(', ');
+}
+
+function roleNames(
+	roles: OrganisationRole[],
+	appRoleIds: string[],
+	appRoles: OfferedAppRole[]
+): string[] {
 	return [
-		roleList(roles),
-		...byApp(held).map((app) => `${app.name}: ${app.roles.map((role) => role.name).join(', ')}`)
-	]
-		.filter(Boolean)
-		.join(' · ');
+		...roles.map((role) => ROLE_LABELS[role]),
+		...appRoles.filter((role) => appRoleIds.includes(role.id)).map((role) => role.name)
+	];
+}
+
+/**
+ * A user's roles over several groups, per role: "Admin; Pilot, Editor in 4
+ * groups; Viewer in South". Roles held in the same groups go together.
+ */
+export function rolesAcrossGroups(
+	admin: boolean,
+	groups: { name: string; roles: OrganisationRole[]; app_roles: string[] }[],
+	appRoles: OfferedAppRole[]
+): string {
+	// Each role's groups, in the order roles are listed.
+	const where = new Map<string, string[]>();
+	for (const group of groups) {
+		for (const name of roleNames(group.roles, group.app_roles, appRoles)) {
+			where.set(name, [...(where.get(name) ?? []), group.name]);
+		}
+	}
+	// Roles with the same groups share one "in …".
+	const together = new Map<string, string[]>();
+	for (const [name, held] of where) {
+		const place = held.length === 1 ? held[0] : `${held.length} groups`;
+		const key = `${held.join('\n')}`;
+		const entry = together.get(key);
+		if (entry) entry.push(name);
+		else together.set(key, [place, name]);
+	}
+	return [
+		...(admin ? ['Admin'] : []),
+		...[...together.values()].map(([place, ...names]) => `${names.join(', ')} in ${place}`)
+	].join('; ');
 }

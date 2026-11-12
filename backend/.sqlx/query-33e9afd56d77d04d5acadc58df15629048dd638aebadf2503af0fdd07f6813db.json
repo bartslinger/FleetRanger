@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id\n           from flights\n           where ($1\n                  or pilot_id = $2\n                  or group_id = any($13))\n             and ($3::text[] is null or aircraft_serial = any($3))\n             and ($4::text[] is null or rc_serial = any($4))\n             and ($5::bool is null or (session_id is not null) = $5)\n             and ($6::timestamptz is null or takeoff_at >= $6)\n             and ($7::timestamptz is null or takeoff_at < $7)\n             and ($8::uuid[] is null or group_id = any($8))\n             and ($9::uuid[] is null or pilot_id = any($9) or ($10 and pilot_id is null))\n             and (archived_at is not null) = $11\n             and ($12::uuid[] is null or exists (select 1 from flight_areas fa\n                                                 where fa.flight_id = flights.id\n                                                   and fa.area_id = any($12)))\n           order by takeoff_at, id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "TextArray",
+        "TextArray",
+        "Bool",
+        "Timestamptz",
+        "Timestamptz",
+        "UuidArray",
+        "UuidArray",
+        "Bool",
+        "Bool",
+        "UuidArray",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "33e9afd56d77d04d5acadc58df15629048dd638aebadf2503af0fdd07f6813db"
+}

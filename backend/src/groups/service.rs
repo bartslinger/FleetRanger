@@ -91,24 +91,15 @@ pub async fn remove_member(
 }
 
 /// Deletes an empty group, or with `move_to` moves everything in it to
-/// another group or, with `Some(None)`, to the organisation first. Moving
-/// needs the move permissions on both sides, as moving each item would.
-pub async fn delete(
-    db: &PgPool,
-    actor: &Actor,
-    id: Uuid,
-    move_to: Option<Option<Uuid>>,
-) -> ApiResult<()> {
+/// another group first. Moving needs the move permissions on both sides, as
+/// moving each item would. The last group stays: everything is in a group.
+pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid, move_to: Option<Uuid>) -> ApiResult<()> {
     policy::require(actor, Permission::GroupsManage, Some(id))?;
     if let Some(target) = move_to {
-        if target == Some(id) {
-            return Err(ApiError::Invalid(
-                "Choose another group or the organisation.".to_owned(),
-            ));
+        if target == id {
+            return Err(ApiError::Invalid("Choose another group.".to_owned()));
         }
-        if let Some(target) = target
-            && !db::exists(db, target).await?
-        {
+        if !db::exists(db, target).await? {
             return Err(ApiError::Invalid("Choose an existing group.".to_owned()));
         }
         for permission in [
@@ -116,7 +107,7 @@ pub async fn delete(
             Permission::SessionsMove,
             Permission::EquipmentMove,
         ] {
-            if !actor.grants.may_on_all(permission, &[Some(id), target]) {
+            if !actor.grants.may_in_all(permission, &[id, target]) {
                 return Err(ApiError::Forbidden);
             }
         }
@@ -124,6 +115,9 @@ pub async fn delete(
     match db::delete(db, id, move_to).await? {
         Deleted::Done => Ok(()),
         Deleted::NotFound => Err(ApiError::NotFound),
+        Deleted::LastGroup => Err(ApiError::Conflict(
+            "This is the only group, so it can't be deleted.".to_owned(),
+        )),
         Deleted::NotEmpty => Err(ApiError::Conflict(
             "This group still holds flights, sessions or equipment. Move them first.".to_owned(),
         )),
@@ -187,14 +181,16 @@ mod tests {
     }
 
     /// Only an empty group is deleted, unless everything moves along, which
-    /// needs the move permissions on both groups.
+    /// needs the move permissions on both groups; the last group stays.
     #[sqlx::test]
     async fn a_group_is_deleted_empty_or_with_everything_moved(db: PgPool) {
         let admin = testing::actor(&db, testing::user(&db, "A", &["admin"]).await).await;
-        let editor = testing::user(&db, "B", &["editor"]).await;
-        let editor = testing::actor(&db, editor).await;
         let north = testing::group(&db, "North").await;
         let south = testing::group(&db, "South").await;
+        let editor = testing::user(&db, "B", &[]).await;
+        testing::join(&db, editor, north).await;
+        testing::join(&db, editor, south).await;
+        let editor = testing::actor(&db, editor).await;
         sqlx::query("insert into aircraft (serial, group_id) values ('TESTDRONE', $1)")
             .bind(north)
             .execute(&db)
@@ -206,16 +202,23 @@ mod tests {
             Err(ApiError::Conflict(_))
         ));
         assert!(matches!(
-            delete(&db, &editor, north, Some(Some(south))).await,
+            delete(&db, &editor, north, Some(south)).await,
             Err(ApiError::Forbidden)
         ));
-        assert!(delete(&db, &admin, north, Some(Some(south))).await.is_ok());
-        let drone: Option<Uuid> =
+        assert!(delete(&db, &admin, north, Some(south)).await.is_ok());
+        let drone: Uuid =
             sqlx::query_scalar("select group_id from aircraft where serial = 'TESTDRONE'")
                 .fetch_one(&db)
                 .await
                 .unwrap();
-        assert_eq!(drone, Some(south));
+        assert_eq!(drone, south);
         assert!(!db::exists(&db, north).await.unwrap());
+
+        let general = testing::general(&db).await;
+        assert!(delete(&db, &admin, general, None).await.is_ok());
+        assert!(matches!(
+            delete(&db, &admin, south, None).await,
+            Err(ApiError::Conflict(_))
+        ));
     }
 }

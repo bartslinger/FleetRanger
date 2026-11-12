@@ -30,7 +30,7 @@ export const actions = {
 		const flight = await get<FlightDetail>(fetch, `/api/flights/${params.id}`);
 		return { pilotName: flight.pilot_name };
 	},
-	/** Moves the flight to a group or the queue, as the logbook's batch action does. */
+	/** Moves the flight to another group, as the logbook's batch action does. */
 	setGroup: async ({ fetch, params, request }) => {
 		const form = await request.formData();
 		const groupId = String(form.get('group_id') ?? '') || null;

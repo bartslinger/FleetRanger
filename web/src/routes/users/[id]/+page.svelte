@@ -5,7 +5,6 @@
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
 	import AppRoleGroups from '#lib/AppRoleGroups.svelte';
-	import { ORGANISATION } from '#lib/groups.js';
 	import { may } from '#lib/permissions.js';
 	import {
 		GROUP_ROLE_HELP,
@@ -15,7 +14,7 @@
 		ROLE_LABELS,
 		allRoles
 	} from '#lib/roles.js';
-	import type { OrganisationRole } from '#lib/server/backend.js';
+	import type { GroupRole, OrganisationRole } from '#lib/server/backend.js';
 	import Button from '#lib/ui/Button.svelte';
 	import CheckboxGroup from '#lib/ui/CheckboxGroup.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -23,6 +22,7 @@
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
+	import OverflowMenu, { type OverflowItem } from '#lib/ui/OverflowMenu.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
@@ -42,8 +42,16 @@
 	// changes once someone else is an admin (carbon-expert's advice, from
 	// Carbon's disabled states), with the reason where it applies. Only an
 	// admin sees this page, so the last admin only ever sees their own.
+	// While there is only one group, its roles are given here with Admin and
+	// no groups are shown (user's decision, 2026-11-11); otherwise only Admin.
+	const single = $derived(data.onlyGroup !== null);
+	const inOnlyGroup = $derived(user.groups.find((group) => group.id === data.onlyGroup));
+	const shownRoles: OrganisationRole[] = $derived([
+		...((inOnlyGroup?.roles ?? []) as GroupRole[]),
+		...user.roles
+	]);
 	const roleOptions = $derived(
-		ORGANISATION_ROLES.map((role) => ({
+		(single ? ORGANISATION_ROLES : (['admin'] as const)).map((role) => ({
 			value: role,
 			label: ROLE_LABELS[role],
 			helper:
@@ -53,20 +61,15 @@
 			disabled: role === 'admin' && data.lastAdmin
 		}))
 	);
+	const rolesFact = $derived(
+		single
+			? allRoles(shownRoles, inOnlyGroup?.app_roles ?? [], data.appRoles) || 'None'
+			: user.roles.includes('admin')
+				? 'Yes'
+				: 'No'
+	);
 
-	// The organisation first, as the top group (user's decision); everyone is
-	// in it, so it has no Remove. No roles there: the table's "—" for empty cells.
-	interface Membership {
-		id: string;
-		name: string;
-		roles: OrganisationRole[];
-		app_roles: string[];
-	}
-	const ORGANISATION_ROW = 'organisation';
-	const memberships: Membership[] = $derived([
-		{ id: ORGANISATION_ROW, name: ORGANISATION, roles: user.roles, app_roles: user.app_roles },
-		...user.groups
-	]);
+	type Membership = (typeof user.groups)[number];
 	const groupColumns: TableColumn<Membership>[] = [
 		{ key: 'name', header: 'Group' },
 		{
@@ -76,9 +79,6 @@
 			format: (group) => allRoles(group.roles, group.app_roles, data.appRoles) || null
 		}
 	];
-	const organisationRolesMessage = $derived(
-		form && 'organisationRolesMessage' in form ? form.organisationRolesMessage : undefined
-	);
 
 	// Roles in groups, as on a group's page, from the user's side; each
 	// change applies at once, apart from the form (user's choice).
@@ -93,6 +93,21 @@
 		form && 'groupRolesMessage' in form ? form.groupRolesMessage : undefined
 	);
 	const leaveMessage = $derived(form && 'leaveMessage' in form ? form.leaveMessage : undefined);
+	let menuTrigger: HTMLElement | null = $state(null);
+	let impersonateForm: HTMLFormElement | undefined = $state();
+	let archiveOpen = $state(false);
+	let deleteOpen = $state(false);
+	const menuItems: OverflowItem[] = $derived([
+		...(!self && !archived
+			? [
+					{ label: 'Impersonate user', onselect: () => impersonateForm?.requestSubmit() },
+					{ label: 'Archive user', onselect: () => (archiveOpen = true) }
+				]
+			: []),
+		...(!self && user.flights === 0
+			? [{ label: 'Delete user', danger: true, onselect: () => (deleteOpen = true) }]
+			: [])
+	]);
 	let addedTo = $state('');
 	const addedName = $derived(data.otherGroups.find((group) => group.id === addedTo)?.name);
 </script>
@@ -146,18 +161,21 @@
 				autocomplete="off"
 				helper={self
 					? 'You log in with this address.'
-					: 'To log in with the Google account for this address. Empty: no login.'}
+					: 'To log in with the Google account for this address. Leave empty for no login.'}
 			/>
+			<CheckboxGroup
+				legend="FleetRanger roles"
+				name="role"
+				options={roleOptions}
+				value={shownRoles}
+				helper={single ? undefined : 'Other roles are given in groups.'}
+			/>
+			<!-- A disabled checkbox isn't posted; Admin stays. -->
+			{#if data.lastAdmin}<input type="hidden" name="role" value="admin" />{/if}
+			{#if single}
+				<AppRoleGroups appRoles={data.appRoles} value={inOnlyGroup?.app_roles ?? []} />
+			{/if}
 		</Modal>
-		{#if !self && !archived}
-			<!-- Every page then shows what they see, until Stop impersonating in the
-			     banner. A plain post: the backend sets the cookie and opens the
-			     start page. -->
-			<form method="POST" action="/auth/impersonate">
-				<input type="hidden" name="user" value={user.id} />
-				<Button type="submit" kind="tertiary">Impersonate user</Button>
-			</form>
-		{/if}
 		{#if archived}
 			<form
 				method="POST"
@@ -170,10 +188,30 @@
 			>
 				<Button type="submit" kind="tertiary">Restore user</Button>
 			</form>
-		{:else if !self}
+		{/if}
+		<!-- Edit user is the main action; the rest in an overflow menu, so the
+		     header doesn't stack four buttons on a phone. -->
+		{#if menuItems.length > 0}
+			<OverflowMenu
+				variant="row"
+				label="More actions for {user.name}"
+				tooltip="More actions"
+				bind:trigger={menuTrigger}
+				items={menuItems}
+			/>
+		{/if}
+		{#if !self && !archived}
+			<!-- Every page then shows what they see, until Stop impersonating in the
+			     banner. A plain post: the backend sets the cookie and opens the
+			     start page. -->
+			<form method="POST" action="/auth/impersonate" bind:this={impersonateForm} hidden>
+				<input type="hidden" name="user" value={user.id} />
+			</form>
 			<Modal
 				title="Archive user"
-				triggerKind="tertiary"
+				trigger={false}
+				bind:open={archiveOpen}
+				returnFocus={() => menuTrigger ?? undefined}
 				submitLabel="Archive user"
 				action="?/archive"
 				error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
@@ -188,7 +226,9 @@
 		{#if !self && user.flights === 0}
 			<Modal
 				title="Delete user"
-				triggerKind="danger-tertiary"
+				trigger={false}
+				bind:open={deleteOpen}
+				returnFocus={() => menuTrigger ?? undefined}
 				submitLabel="Delete user"
 				danger
 				action="?/delete"
@@ -225,105 +265,87 @@
 					{user.last_login_at ? dateTime(user.last_login_at, data.timeZone) : 'Never'}
 				</dd>
 			</div>
+			<div>
+				<dt>{single ? 'Roles' : 'Admin'}</dt>
+				<dd>{rolesFact}</dd>
+			</div>
 		</dl>
 	</Column>
-	<Column narrow>
-		<h2 class="section">Groups</h2>
-		<DataTable
-			label="Groups"
-			columns={groupColumns}
-			rows={memberships}
-			rowKey={(group) => group.id}
-			rowHref={(group) =>
-				group.id === ORGANISATION_ROW ? undefined : resolve('/groups/[id]', { id: group.id })}
-			summary={user.groups.length === 0
-				? 'In no group'
-				: `In ${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
-		>
-			{#snippet toolbar()}
-				<!-- Disabled, not hidden, when they're in every group: that changes
+	{#if !single}
+		<Column narrow>
+			<h2 class="section">Groups</h2>
+			<DataTable
+				label="Groups"
+				columns={groupColumns}
+				rows={user.groups}
+				rowKey={(group) => group.id}
+				rowHref={(group) => resolve('/groups/[id]', { id: group.id })}
+				linkOnly
+				summary={user.groups.length === 0
+					? 'In no group'
+					: `In ${user.groups.length} ${user.groups.length === 1 ? 'group' : 'groups'}`}
+			>
+				{#snippet toolbar()}
+					<!-- Disabled, not hidden, when they're in every group: that changes
 					     with a new group (Carbon's disabled states), as on a group's page. -->
-				{#if addable.length > 0}
-					{@render addToGroup()}
-				{:else}
-					<Button disabled>Add to group</Button>
-				{/if}
-			{/snippet}
-			{#snippet rowAction(group)}
-				{#if group.id === ORGANISATION_ROW}
-					{#if may(data.account, 'users.manage', null)}
+					{#if addable.length > 0}
+						{@render addToGroup()}
+					{:else}
+						<Button disabled>Add to group</Button>
+					{/if}
+				{/snippet}
+				{#snippet rowAction(group)}
+					{#if manages(group.id)}
 						<span class="actions">
 							<Modal
 								title="Edit roles"
 								triggerIcon={Edit}
 								triggerSize="md"
-								triggerLabel="Edit roles in the organisation"
-								label="{user.name} in the organisation"
+								triggerLabel="Edit roles in {group.name}"
+								label="{user.name} in {group.name}"
 								submitLabel="Save"
-								action="?/organisationRoles"
-								error={organisationRolesMessage}
-								onsuccess={() => toast(`Roles in the organisation saved.`)}
+								action="?/groupRoles"
+								error={groupRolesMessage}
+								onsuccess={() => toast(`Roles in ${group.name} saved.`)}
 							>
+								<input type="hidden" name="group_id" value={group.id} />
 								<CheckboxGroup
 									legend="FleetRanger roles"
 									name="role"
-									options={roleOptions}
-									value={user.roles}
-									helper="None for someone who only has roles in groups."
+									options={groupRoleOptions}
+									value={group.roles}
 								/>
-								<!-- A disabled checkbox isn't posted; Admin stays. -->
-								{#if data.lastAdmin}<input type="hidden" name="role" value="admin" />{/if}
-								<AppRoleGroups appRoles={data.appRoles} value={user.app_roles} />
+								<AppRoleGroups appRoles={data.appRoles} value={group.app_roles} />
 							</Modal>
-							<!-- No Remove: everyone is in the organisation. The slot keeps the
-								     pencils in line (carbon-expert's suggestion). -->
-							<span class="slot" aria-hidden="true"></span>
+							<Modal
+								title="Remove from group"
+								label={user.name}
+								triggerIcon={SubtractAlt}
+								triggerSize="md"
+								triggerLabel="Remove {user.name} from {group.name}"
+								submitLabel="Remove from group"
+								action="?/leaveGroup"
+								error={leaveMessage}
+								onsuccess={() => toast(`${user.name} removed from ${group.name}.`)}
+							>
+								<input type="hidden" name="group_id" value={group.id} />
+								<p>
+									{user.name} loses their roles in {group.name}. Their flights stay as they are. You
+									can add them again later.
+								</p>
+							</Modal>
 						</span>
 					{/if}
-				{:else if manages(group.id)}
-					<span class="actions">
-						<Modal
-							title="Edit roles"
-							triggerIcon={Edit}
-							triggerSize="md"
-							triggerLabel="Edit roles in {group.name}"
-							label="{user.name} in {group.name}"
-							submitLabel="Save"
-							action="?/groupRoles"
-							error={groupRolesMessage}
-							onsuccess={() => toast(`Roles in ${group.name} saved.`)}
-						>
-							<input type="hidden" name="group_id" value={group.id} />
-							<CheckboxGroup
-								legend="FleetRanger roles"
-								name="role"
-								options={groupRoleOptions}
-								value={group.roles}
-							/>
-							<AppRoleGroups appRoles={data.appRoles} value={group.app_roles} />
-						</Modal>
-						<Modal
-							title="Remove from group"
-							label={user.name}
-							triggerIcon={SubtractAlt}
-							triggerSize="md"
-							triggerLabel="Remove {user.name} from {group.name}"
-							submitLabel="Remove from group"
-							action="?/leaveGroup"
-							error={leaveMessage}
-							onsuccess={() => toast(`${user.name} removed from ${group.name}.`)}
-						>
-							<input type="hidden" name="group_id" value={group.id} />
-							<p>
-								{user.name} loses their roles in {group.name}. Their flights stay as they are. You
-								can add them again later.
-							</p>
-						</Modal>
-					</span>
-				{/if}
-			{/snippet}
-		</DataTable>
-	</Column>
+				{/snippet}
+			</DataTable>
+			{#if data.otherGroups.length === 0}
+				<p class="note">
+					{user.name} is in every group already. New groups are created on the
+					<a href={resolve('/groups')}>Groups page</a>.
+				</p>
+			{/if}
+		</Column>
+	{/if}
 </Grid>
 
 <style>
@@ -366,15 +388,11 @@
 		margin-bottom: var(--cds-spacing-07);
 	}
 
-	/* As wide as a md icon button. */
-	.slot {
-		inline-size: var(--cds-spacing-08);
-	}
-
-	/* As the md icon buttons, which grow on phones (IconButton.svelte). */
-	@media (max-width: 41.99rem) {
-		.slot {
-			inline-size: var(--cds-spacing-09);
-		}
+	.note {
+		margin: var(--cds-spacing-05) 0 0;
+		padding-inline: var(--cds-spacing-05);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
 	}
 </style>

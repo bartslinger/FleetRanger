@@ -24,9 +24,9 @@ pub struct Equipment {
     pub id: Uuid,
     pub serial: String,
     pub name: Option<String>,
-    /// Its group, which decides who changes it; None for the organisation.
-    pub group_id: Option<Uuid>,
-    pub group_name: Option<String>,
+    /// Its group, which decides who changes it.
+    pub group_id: Uuid,
+    pub group_name: String,
     /// Over all its flights that aren't archived.
     pub flights: i64,
     pub air_time_s: i64,
@@ -77,7 +77,7 @@ pub async fn list(
                        order by aircraft_serial, takeoff_at desc, id desc
                    )
                    select e.id, e.serial, e.name, e.group_id,
-                          g.name as "group_name?",
+                          g.name as group_name,
                           coalesce(s.flights, 0) as "flights!",
                           coalesce(s.air_time_s, 0) as "air_time_s!",
                           s.last_flight_at as "last_flight_at?",
@@ -88,7 +88,7 @@ pub async fn list(
                           null::timestamptz as "synced_at?",
                           null::text as "app_version?"
                    from aircraft e
-                   left join groups g on g.id = e.group_id
+                   join groups g on g.id = e.group_id
                    left join flown s on s.serial = e.serial
                    left join last l on l.serial = e.serial
                    left join users p on p.id = l.pilot_id
@@ -127,7 +127,7 @@ pub async fn list(
                        order by rc_serial, takeoff_at desc, id desc
                    )
                    select e.id, e.serial, e.name, e.group_id,
-                          g.name as "group_name?",
+                          g.name as group_name,
                           coalesce(s.flights, 0) as "flights!",
                           coalesce(s.air_time_s, 0) as "air_time_s!",
                           s.last_flight_at as "last_flight_at?",
@@ -137,7 +137,7 @@ pub async fn list(
                           e.token_sha256 is not null as "paired?",
                           e.synced_at, e.app_version
                    from remote_controllers e
-                   left join groups g on g.id = e.group_id
+                   join groups g on g.id = e.group_id
                    left join flown s on s.serial = e.serial
                    left join last l on l.serial = e.serial
                    left join users p on p.id = l.pilot_id
@@ -167,7 +167,7 @@ pub async fn update(
     kind: Kind,
     id: Uuid,
     name: Option<&str>,
-    group_id: Option<Uuid>,
+    group_id: Uuid,
 ) -> sqlx::Result<bool> {
     let result = match kind {
         Kind::Aircraft => {

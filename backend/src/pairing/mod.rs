@@ -22,7 +22,7 @@ pub struct Controller {
     pub id: Uuid,
     pub serial: String,
     /// Its group; its pilots come first.
-    pub group_id: Option<Uuid>,
+    pub group_id: Uuid,
 }
 
 impl<S> FromRequestParts<S> for Controller

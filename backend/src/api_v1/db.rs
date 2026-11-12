@@ -36,7 +36,7 @@ pub struct FlightRow {
     pub distance_m: f64,
     pub max_height_m: Option<f64>,
     pub pilot_id: Option<Uuid>,
-    pub group_id: Option<Uuid>,
+    pub group_id: Uuid,
     pub session_id: Option<Uuid>,
     pub drone_id: Option<Uuid>,
     pub controller_id: Option<Uuid>,
@@ -88,18 +88,18 @@ pub async fn flights(
              and ($5::text[] is null or f.rc_serial = any($5))
              and ($6::timestamptz is null or f.takeoff_at >= $6)
              and ($7::timestamptz is null or f.takeoff_at < $7)
-             and ($8::uuid[] is null or f.group_id = any($8) or ($9 and f.group_id is null))
-             and ($10::uuid[] is null or f.pilot_id = any($10) or ($11 and f.pilot_id is null))
-             and ($12::uuid[] is null or exists (select 1 from flight_areas fa
+             and ($8::uuid[] is null or f.group_id = any($8))
+             and ($9::uuid[] is null or f.pilot_id = any($9) or ($10 and f.pilot_id is null))
+             and ($11::uuid[] is null or exists (select 1 from flight_areas fa
                                                  where fa.flight_id = f.id
-                                                   and fa.area_id = any($12)))
-             and (($13::uuid[] is null and not $14)
-                  or f.session_id = any($13)
-                  or ($14 and f.session_id is null))
-             and ($15::timestamptz is null or (f.takeoff_at, f.id) < ($15, $16))
-             and ($18::uuid[] is null or f.id = any($18))
+                                                   and fa.area_id = any($11)))
+             and (($12::uuid[] is null and not $13)
+                  or f.session_id = any($12)
+                  or ($13 and f.session_id is null))
+             and ($14::timestamptz is null or (f.takeoff_at, f.id) < ($14, $15))
+             and ($17::uuid[] is null or f.id = any($17))
            order by f.takeoff_at desc, f.id desc
-           limit $17"#,
+           limit $16"#,
         scope.all,
         scope.user_id,
         &scope.group_ids,
@@ -108,7 +108,6 @@ pub async fn flights(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
@@ -125,7 +124,7 @@ pub async fn flights(
 
 pub struct SessionRow {
     pub id: Uuid,
-    pub group_id: Option<Uuid>,
+    pub group_id: Uuid,
     pub first_takeoff_at: DateTime<Utc>,
     pub last_landed_at: DateTime<Utc>,
     pub flight_count: i64,
@@ -187,17 +186,16 @@ pub async fn sessions(
                    and ($8::timestamptz is null or g.takeoff_at < $8)
                    and ($9::uuid[] is null
                         or g.session_id in (select id from sessions
-                                            where group_id = any($9)
-                                               or ($10 and group_id is null)))
-                   and ($11::uuid[] is null or g.pilot_id = any($11)
-                        or ($12 and g.pilot_id is null))
-                   and ($13::uuid[] is null or exists (select 1 from flight_areas fa
+                                            where group_id = any($9)))
+                   and ($10::uuid[] is null or g.pilot_id = any($10)
+                        or ($11 and g.pilot_id is null))
+                   and ($12::uuid[] is null or exists (select 1 from flight_areas fa
                                                        where fa.flight_id = g.id
-                                                         and fa.area_id = any($13))))
+                                                         and fa.area_id = any($12))))
            group by f.session_id, s.group_id
-           having $14::timestamptz is null or (min(f.takeoff_at), f.session_id) < ($14, $15)
+           having $13::timestamptz is null or (min(f.takeoff_at), f.session_id) < ($13, $14)
            order by min(f.takeoff_at) desc, f.session_id desc
-           limit $16"#,
+           limit $15"#,
         scope.all,
         scope.user_id,
         &scope.group_ids,
@@ -207,7 +205,6 @@ pub async fn sessions(
         filter.from,
         filter.to,
         filter.group_ids.as_deref(),
-        filter.queue,
         filter.pilot_ids.as_deref(),
         filter.unknown_pilot,
         filter.area_ids.as_deref(),
@@ -257,7 +254,7 @@ pub struct DeviceRow {
     pub id: Uuid,
     pub name: Option<String>,
     pub serial: String,
-    pub group_id: Option<Uuid>,
+    pub group_id: Uuid,
 }
 
 pub struct BatteryRow {
@@ -343,11 +340,10 @@ pub async fn controller_serials(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<S
 
 /// The groups where the user is a member, by a role of FleetRanger's or of
 /// any app, or that a flight they see belongs to; all of them with
-/// `flights.read` or one of the calling app's roles on the organisation.
+/// `flights.read`.
 pub async fn groups(
     db: &PgPool,
     scope: &FlightScope,
-    client_id: Option<Uuid>,
     after: Option<Uuid>,
     limit: i64,
 ) -> sqlx::Result<Vec<Named>> {
@@ -355,9 +351,6 @@ pub async fn groups(
         Named,
         "select g.id, g.name from groups g
          where ($1
-                or exists (select 1 from organisation_app_roles o
-                           join app_roles r on r.id = o.app_role_id
-                           where o.user_id = $2 and r.client_id = $6)
                 or exists (select 1 from group_members m
                            where m.group_id = g.id and m.user_id = $2)
                 or exists (select 1 from group_app_roles a
@@ -373,7 +366,6 @@ pub async fn groups(
         &scope.group_ids,
         after,
         limit,
-        client_id,
     )
     .fetch_all(db)
     .await
@@ -423,8 +415,10 @@ mod tests {
         .unwrap();
         let takeoff: DateTime<Utc> = takeoff.parse().unwrap();
         sqlx::query_scalar(
-            "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m, track)
-             values ($1, $2, $2, 60, 100, '{}') returning id",
+            "insert into flights (raw_log_id, takeoff_at, landed_at, air_time_s, distance_m, track,
+                                  group_id)
+             select $1, $2, $2, 60, 100, '{}', id from groups where name = 'General'
+             returning id",
         )
         .bind(raw_log)
         .bind(takeoff)
@@ -488,7 +482,7 @@ mod tests {
         let south = crate::testing::group(&db, "South").await;
         let member = crate::testing::user(&db, "Test Member", &[]).await;
         crate::testing::join(&db, member, north).await;
-        let session: Uuid = sqlx::query_scalar("insert into sessions default values returning id")
+        let session: Uuid = sqlx::query_scalar("insert into sessions (group_id) select id from groups where name = 'General' returning id")
             .fetch_one(&db)
             .await
             .unwrap();
@@ -544,9 +538,8 @@ mod tests {
         assert_eq!(sessions[0].air_time_s, 60);
     }
 
-    /// An app sees only its own roles, and someone holding one of them on
-    /// the organisation sees every group's name; another app's role makes
-    /// them a member of that group only.
+    /// An app sees only its own roles, and holding one makes someone a
+    /// member of that group only, for that app.
     #[sqlx::test]
     async fn apps_see_their_own_roles(db: PgPool) {
         let reader = crate::testing::user(&db, "Test reader", &[]).await;
@@ -567,43 +560,34 @@ mod tests {
         };
         let (reports, viewer) = role("Test reports", "report_viewer").await;
         let (other, planner) = role("Test other", "planner").await;
-        sqlx::query("insert into organisation_app_roles (user_id, app_role_id) values ($1, $2)")
+        for (group, app_role) in [(south, viewer), (north, planner)] {
+            sqlx::query(
+                "insert into group_app_roles (group_id, user_id, app_role_id) values ($1, $2, $3)",
+            )
+            .bind(group)
             .bind(reader)
-            .bind(viewer)
+            .bind(app_role)
             .execute(&db)
             .await
             .unwrap();
-        sqlx::query(
-            "insert into group_app_roles (group_id, user_id, app_role_id) values ($1, $2, $3)",
-        )
-        .bind(north)
-        .bind(reader)
-        .bind(planner)
-        .execute(&db)
-        .await
-        .unwrap();
+        }
 
         let held = crate::oauth::held_app_roles(&db, reports, reader)
             .await
             .unwrap();
-        assert_eq!(held.organisation, ["report_viewer"]);
-        assert!(held.groups.is_empty());
+        assert_eq!(held.groups, [(south, vec!["report_viewer".to_owned()])]);
         let held = crate::oauth::held_app_roles(&db, other, reader)
             .await
             .unwrap();
-        assert!(held.organisation.is_empty());
         assert_eq!(held.groups, [(north, vec!["planner".to_owned()])]);
 
         let scope = crate::testing::scope(&db, reader).await;
-        let listed = async |client: Uuid| -> Vec<Uuid> {
-            groups(&db, &scope, Some(client), None, 10)
-                .await
-                .unwrap()
-                .into_iter()
-                .map(|group| group.id)
-                .collect()
-        };
-        assert_eq!(listed(reports).await, [north, south]);
-        assert_eq!(listed(other).await, [north]);
+        let listed: Vec<Uuid> = groups(&db, &scope, None, 10)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|group| group.id)
+            .collect();
+        assert_eq!(listed, [north, south]);
     }
 }

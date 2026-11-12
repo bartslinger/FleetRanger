@@ -52,8 +52,8 @@ where
 
 #[derive(Deserialize)]
 struct Create {
-    /// The group the controller joins; none for the organisation.
-    group: Option<Uuid>,
+    /// The group the controller joins.
+    group: Uuid,
     /// How long the code stays valid.
     hours: i64,
 }
@@ -96,7 +96,7 @@ struct Pair {
 
 #[derive(Serialize)]
 struct PairedV1 {
-    /// None for the organisation.
+    /// None if the group was deleted meanwhile.
     group: Option<GroupChoice>,
 }
 
