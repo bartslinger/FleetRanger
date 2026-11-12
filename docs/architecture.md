@@ -4,7 +4,15 @@ The decisions made so far, each with a short reason. Open questions are listed i
 
 ## Deployment
 
-- **One install per organisation.** Flight data is sensitive, so each organisation runs its own server. Several installs may share one DJI app key.
+- **One install serves one or more organisations** (user's decision, 2026-10-22, replacing one install per organisation). A self-hosted install has one organisation and works as before; the same code serves both. Several installs may share one DJI app key, and an install has one.
+- **A hosted service, so FleetRanger can be tried without running a server** (user's decision, 2026-11-12). It holds customers' flight data, so it is run as a processor under GDPR: hosted in the EU, with a processing agreement and a list of sub-processors. Limits (users, time) are left for later. It starts as **early access**: the operator creates organisations by hand with the command-line tool, for people from the early-access list; self-service sign-up may follow.
+- **No organisation in the paths** (user's decision, 2026-10-22): a login can belong to users in several organisations, and its login session holds the current one, with a switcher. Subdomains per organisation can come later without changing routes.
+- **Login on the hosted service is Google only, for now** (user's decision, 2026-11-12); Microsoft accounts can follow.
+- **Settings per organisation** (time zone, session gap, the MCP switch) are set by the operator with the command-line tool, when creating an organisation and later (user's decision, 2026-11-12); they replace the environment variables. A settings page may come with self-service sign-up.
+- **One database, an organisation on every row, with row-level security**, as proposed in October (`docs/multi-tenancy.md`, not committed) and taken as the basis by the user on 2026-11-12. PostgreSQL itself keeps organisations apart, and each request sets its organisation in its transaction.
+- **Pairing stays as it is:** a pairing code belongs to the organisation of the user who created it, and so does the controller paired with it.
+- **Raw logs on S3, optionally** (user's decision, 2026-11-12): an environment variable switches from files on disk to an S3-compatible store; without it, logs stay on disk. Built after multi-tenancy.
+- **Several backend instances behind a load balancer, eventually**, so updates run without interruption (user's wish, 2026-11-12). State lives in PostgreSQL or shared storage, never in one process; background work is safe on every instance (the processing queue claims logs with `SKIP LOCKED`); a migration keeps the previous release working, so columns are removed or renamed a release later. Today two instances on one server, sharing the log volume, would work; several servers need S3.
 - **Docker Compose** with three containers: `backend` (Rust), `web` (SvelteKit), `postgres`. TLS and certificates are handled by nginx on the host, which proxies to containers bound to `127.0.0.1`.
 - **Images are built on a developer machine** and loaded onto the server. Servers can be small, and compiling Rust on them is impractical. Images target x86_64 and are cross-compiled rather than emulated.
 - **Images ship without a registry.** `deploy/ship-image.sh` builds the backend and web images and loads them on the server over SSH.

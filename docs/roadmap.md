@@ -8,7 +8,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replaced teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replaced the three fixed roles; see "Groups and roles" in [architecture.md](architecture.md) and the packages below. Teams, the fixed roles and holders are dropped (migration 0020); released as v0.7.0 and android-v0.4.0 on 2026-10-24, with fine-tuning after the release (user, 2026-10-24). Groups replace teams in the code, every access check asks for a permission on the groups tables, a flight's pilot and group are independent, uploads without a chosen group go to the queue, a session's own group decides who changes it, only flights without a session are archived, equipment is also seen through its flights with figures over all of them, pairing puts a controller in a group the creator chooses, holders are gone from the app, and the admin pages manage groups, their members' roles and roles on the whole organisation. The web app says "group" everywhere and shows what the user's permissions allow: sessions get a group chosen by their maker and can be moved with or without their flights, pilot lists put the group's own pilots first; MCP has the user's own access. The controller app has moved over (package 8): each pilot once, then the group they fly for, with "Other group"; it talks to a versioned controller API (`/api/controller/v1`, user's decision), while android-v0.3.0 keeps working, its uploads taking the group (team) chosen with the pilot, and it stays in landscape. Serving several organisations from one install follows after.
 
-**Now:** getting the first app to production: deploying v0.11.0 (the API, trusted apps and app roles at once) and backups; an app's navigation item waits (user, 2026-10-26: the first change to FleetRanger's UI from an outside app, not yet sure if and how). Controller notes are parked.
+**Now:** **several organisations per install**, for a hosted early-access service (user, 2026-11-12; see "Multi-tenancy" below). Unreleased on main: sessions in the period of their first takeoff only, and positions near 0, 0 counting as no GPS fix (17 flights from 2023 to process again after deploying). An app's navigation item waits (user, 2026-10-26: the first change to FleetRanger's UI from an outside app, not yet sure if and how). Controller notes are parked.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -140,6 +140,17 @@ See "Apps" and "Public API" in [architecture.md](architecture.md).
 - [ ] Permissions brought in line with the API's scopes, with a summary level for people
 - [ ] Example answers in the API's reference
 - [x] Area boundaries for apps (2026-10-26): `areas:read` and `expand=geometry` on `/areas`, which lists all areas
+
+## Multi-tenancy
+
+One install serving several organisations, for a hosted service where FleetRanger can be tried without a server (see "Deployment" in [architecture.md](architecture.md)). One branch, a commit per step:
+
+- [ ] Schema: organisations, an organisation on every row, row-level security, keys and uniqueness per organisation; existing data in one organisation (SQL to be approved first)
+- [ ] Backend: each request sets its organisation in its transaction; log processing per log; controller, API and MCP tokens carry their organisation
+- [ ] Command-line tool: create an organisation with its settings and first admin, change its settings; the settings leave the environment
+- [ ] Web app: an organisation switcher for logins in several organisations
+- [ ] Tests that no organisation reads or changes another's data, through the API and in the database
+- [ ] Afterwards: raw logs on S3, optionally
 
 ## Before production use
 
