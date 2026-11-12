@@ -10,6 +10,7 @@ mod types;
 
 use std::{collections::BTreeSet, sync::Arc};
 
+use crate::db::{RequestOrganisation, System, Tenants};
 use axum::{
     Json, Router,
     extract::{FromRequestParts, Request, State},
@@ -20,7 +21,6 @@ use axum::{
 };
 use base64::Engine;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use sqlx::PgPool;
 use utoipa::{
     Modify, OpenApi,
     openapi::security::{AuthorizationCode, Flow, OAuth2, Scopes, SecurityScheme},
@@ -42,11 +42,22 @@ pub fn resource(issuer: &str) -> String {
 /// What the API's handlers need.
 #[derive(Clone)]
 pub struct Api {
-    pub db: PgPool,
-    pub time_zone: Arc<str>,
-    pub organisation_name: Option<Arc<str>>,
+    pub system: System,
+    pub tenants: Tenants,
     /// This install's `/api/v1`, e.g. `https://fleet.example.org/api/v1`.
     pub resource: Arc<str>,
+}
+
+impl axum::extract::FromRef<Api> for System {
+    fn from_ref(api: &Api) -> Self {
+        api.system.clone()
+    }
+}
+
+impl axum::extract::FromRef<Api> for Tenants {
+    fn from_ref(api: &Api) -> Self {
+        api.tenants.clone()
+    }
 }
 
 /// The user a request acts for, the scopes their token carries, and the app
@@ -159,7 +170,7 @@ where
 /// builds also accept a login session, with every scope, for trying it out.
 async fn authenticate(State(api): State<Api>, request: Request, next: Next) -> Response {
     let (mut parts, body) = request.into_parts();
-    let bearer = match oauth::bearer(&api.db, &parts, &api.resource, None).await {
+    let bearer = match oauth::bearer(&api.system, &api.tenants, &parts, &api.resource, None).await {
         Ok(bearer) => bearer,
         Err(error) => return V1Error::from(error).into_response(),
     };
@@ -181,7 +192,7 @@ async fn authenticate(State(api): State<Api>, request: Request, next: Next) -> R
     let caller = match caller {
         Err(V1Error::Unauthorized(error)) => {
             use axum::extract::FromRequestParts;
-            Actor::from_request_parts(&mut parts, &api.db)
+            Actor::from_request_parts(&mut parts, &api)
                 .await
                 .map(|actor| Caller {
                     actor,
@@ -194,6 +205,9 @@ async fn authenticate(State(api): State<Api>, request: Request, next: Next) -> R
     };
     match caller {
         Ok(caller) => {
+            parts
+                .extensions
+                .insert(RequestOrganisation(caller.actor.organisation_id));
             parts.extensions.insert(caller);
             next.run(Request::from_parts(parts, body)).await
         }
@@ -455,10 +469,11 @@ mod tests {
     /// expansion that reaches another resource or level needs that scope:
     /// it is refused, not left out.
     #[sqlx::test]
-    async fn scopes_cover_lower_levels_and_guard_expansions(db: PgPool) {
-        let user = crate::testing::user(&db, "A", &[]).await;
+    async fn scopes_cover_lower_levels_and_guard_expansions(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let user = crate::testing::user(&mut db, "A", &[]).await;
         let caller = Caller {
-            actor: crate::testing::actor(&db, user).await,
+            actor: crate::testing::actor(&mut db, user).await,
             scopes: vec!["sessions:read".to_owned()],
             client_id: None,
         };

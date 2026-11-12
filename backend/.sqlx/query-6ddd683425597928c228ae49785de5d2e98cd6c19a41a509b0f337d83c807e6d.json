@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update login_sessions s\n         set last_seen_at = now(), expires_at = now() + make_interval(days => $2)\n         from users u, logins l\n         where s.token_sha256 = $1 and u.id = s.user_id and l.user_id = s.user_id\n           and s.revoked_at is null and s.expires_at > now() and u.archived_at is null\n         returning s.id, s.user_id, l.email, u.name",
+  "query": "update login_sessions s\n         set last_seen_at = now(), expires_at = now() + make_interval(days => $2)\n         from users u, logins l\n         where s.token_sha256 = $1 and u.id = s.user_id and l.user_id = s.user_id\n           and s.revoked_at is null and s.expires_at > now() and u.archived_at is null\n         returning s.id, s.user_id, s.organisation_id, l.email, u.name",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "organisation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "organisation_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "email",
         "type_info": "Text",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "name",
         "type_info": "Text",
         "origin": {
@@ -58,8 +69,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "f87861e791bd2a383b0b2f5562f73d1db584f66e964fa788fe198727fe7c8d51"
+  "hash": "6ddd683425597928c228ae49785de5d2e98cd6c19a41a509b0f337d83c807e6d"
 }

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::{PgConnection, PgPool, types::Json};
+use sqlx::Connection as _;
+use sqlx::{PgConnection, types::Json};
 use uuid::Uuid;
 
 #[derive(Serialize)]
@@ -44,7 +45,11 @@ pub enum Refused {
 }
 
 /// Users by name, the archived ones only if asked for; `id` narrows it to one.
-pub async fn list(db: &PgPool, archived: bool, id: Option<Uuid>) -> sqlx::Result<Vec<User>> {
+pub async fn list(
+    db: &mut PgConnection,
+    archived: bool,
+    id: Option<Uuid>,
+) -> sqlx::Result<Vec<User>> {
     sqlx::query_as!(
         User,
         r#"select u.id, u.name,
@@ -79,11 +84,11 @@ pub async fn list(db: &PgPool, archived: bool, id: Option<Uuid>) -> sqlx::Result
         archived || id.is_some(),
         id,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
-pub async fn insert(db: &PgPool, fields: &UserFields<'_>) -> sqlx::Result<Uuid> {
+pub async fn insert(db: &mut PgConnection, fields: &UserFields<'_>) -> sqlx::Result<Uuid> {
     let mut tx = db.begin().await?;
     let id = sqlx::query_scalar!(
         "insert into users (name) values ($1) returning id",
@@ -98,7 +103,7 @@ pub async fn insert(db: &PgPool, fields: &UserFields<'_>) -> sqlx::Result<Uuid> 
 }
 
 pub async fn update(
-    db: &PgPool,
+    db: &mut PgConnection,
     id: Uuid,
     fields: &UserFields<'_>,
 ) -> sqlx::Result<Result<(), Refused>> {
@@ -131,7 +136,7 @@ async fn lock_active_admins(db: &mut PgConnection) -> sqlx::Result<Vec<Uuid>> {
          order by r.user_id
          for update of r, u",
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -150,7 +155,7 @@ async fn set_roles(db: &mut PgConnection, id: Uuid, roles: &[String]) -> sqlx::R
         id,
         roles,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
@@ -199,7 +204,7 @@ async fn revoke_sessions(db: &mut PgConnection, id: Uuid) -> sqlx::Result<()> {
         .execute(&mut *db)
         .await?;
     sqlx::query!("delete from oauth_codes where user_id = $1", id)
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     Ok(())
 }
@@ -207,7 +212,7 @@ async fn revoke_sessions(db: &mut PgConnection, id: Uuid) -> sqlx::Result<()> {
 /// Archives a user, which also ends their login sessions, or restores them.
 /// The last active admin isn't archived.
 pub async fn set_archived(
-    db: &PgPool,
+    db: &mut PgConnection,
     id: Uuid,
     archived: bool,
 ) -> sqlx::Result<Result<(), Refused>> {
@@ -240,7 +245,7 @@ pub async fn set_archived(
 /// login sessions. False if there is no such user or they have either. The
 /// user's row is locked first, so a flight or comment can't get this user in
 /// between: its foreign key check waits for the lock.
-pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+pub async fn delete(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
     let deletable = sqlx::query_scalar!(
         r#"select not exists(select 1 from flights where pilot_id = $1)
@@ -269,20 +274,20 @@ pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
 }
 
 /// For the `add-user` command: the user with a login for this email, if any.
-pub async fn find_by_email(db: &PgPool, email: &str) -> sqlx::Result<Option<Uuid>> {
+pub async fn find_by_email(db: &mut PgConnection, email: &str) -> sqlx::Result<Option<Uuid>> {
     sqlx::query_scalar!("select user_id from logins where email = $1", email)
-        .fetch_optional(db)
+        .fetch_optional(&mut *db)
         .await
 }
 
 /// Admin on the whole organisation.
-pub async fn make_admin(db: &PgPool, id: Uuid) -> sqlx::Result<()> {
+pub async fn make_admin(db: &mut PgConnection, id: Uuid) -> sqlx::Result<()> {
     sqlx::query!(
         "insert into organisation_roles (user_id, role) values ($1, 'admin')
          on conflict do nothing",
         id,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }

@@ -1,14 +1,14 @@
 //! Flight API. Each account sees only the flights the policy allows.
 
+use crate::db::Db;
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, Query, State},
+    extract::{FromRef, Path, Query},
     http::StatusCode,
     routing::{get, post},
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::db::{Filter, FlightDetail, FlightSummary, Neighbours, Sort, SortKey};
@@ -16,10 +16,7 @@ use super::service;
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    sessions::{
-        SessionGap,
-        suggest::{self, Suggestion},
-    },
+    sessions::suggest::{self, Suggestion},
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -28,8 +25,8 @@ const MAX_PAGE_SIZE: u32 = 100;
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
-    SessionGap: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
 {
     Router::new()
         .route("/api/flights", get(list))
@@ -78,14 +75,10 @@ struct ShownFlight {
     session_takeoff_at: Option<DateTime<Utc>>,
 }
 
-async fn show(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<ShownFlight>> {
-    let flight = service::get(&db, &actor, id).await?;
+async fn show(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<Json<ShownFlight>> {
+    let flight = service::get(&mut db, &actor, id).await?;
     let session_takeoff_at = match flight.session_id {
-        Some(session) => service::session_takeoff(&db, &actor, session).await?,
+        Some(session) => service::session_takeoff(&mut db, &actor, session).await?,
         None => None,
     };
     Ok(Json(ShownFlight {
@@ -94,8 +87,8 @@ async fn show(
     }))
 }
 
-async fn choices(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<service::Choices>> {
-    Ok(Json(service::choices(&db, &actor).await?))
+async fn choices(actor: Actor, mut db: Db) -> ApiResult<Json<service::Choices>> {
+    Ok(Json(service::choices(&mut db, &actor).await?))
 }
 
 #[derive(Serialize)]
@@ -105,14 +98,10 @@ struct Ids {
 
 /// The ids of all flights that pass the list's filters (same query as
 /// `list`), for a batch action on all of them.
-async fn ids(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Query(query): Query<ListQuery>,
-) -> ApiResult<Json<Ids>> {
+async fn ids(actor: Actor, mut db: Db, Query(query): Query<ListQuery>) -> ApiResult<Json<Ids>> {
     let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
     Ok(Json(Ids {
-        ids: service::ids(&db, &actor, &filter).await?,
+        ids: service::ids(&mut db, &actor, &filter).await?,
     }))
 }
 
@@ -120,28 +109,28 @@ async fn ids(
 /// other filters (same query as `list`).
 async fn devices(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<service::Devices>> {
     let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
-    Ok(Json(service::devices(&db, &actor, &filter).await?))
+    Ok(Json(service::devices(&mut db, &actor, &filter).await?))
 }
 
 async fn set_pilot(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Json(change): Json<PilotChange>,
 ) -> ApiResult<Json<Changed>> {
-    let changed = service::set_pilot(&db, &actor, &change.flight_ids, change.pilot_id).await?;
+    let changed = service::set_pilot(&mut db, &actor, &change.flight_ids, change.pilot_id).await?;
     Ok(Json(Changed { changed }))
 }
 
 async fn set_group(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Json(change): Json<GroupChange>,
 ) -> ApiResult<Json<Changed>> {
-    let changed = service::set_group(&db, &actor, &change.flight_ids, change.group_id).await?;
+    let changed = service::set_group(&mut db, &actor, &change.flight_ids, change.group_id).await?;
     Ok(Json(Changed { changed }))
 }
 
@@ -150,21 +139,13 @@ struct Archive {
     flight_ids: Vec<Uuid>,
 }
 
-async fn archive(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Json(batch): Json<Archive>,
-) -> ApiResult<Json<Changed>> {
-    let changed = service::archive(&db, &actor, &batch.flight_ids).await?;
+async fn archive(actor: Actor, mut db: Db, Json(batch): Json<Archive>) -> ApiResult<Json<Changed>> {
+    let changed = service::archive(&mut db, &actor, &batch.flight_ids).await?;
     Ok(Json(Changed { changed }))
 }
 
-async fn restore(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Json(batch): Json<Batch>,
-) -> ApiResult<Json<Changed>> {
-    let changed = service::restore(&db, &actor, &batch.flight_ids).await?;
+async fn restore(actor: Actor, mut db: Db, Json(batch): Json<Batch>) -> ApiResult<Json<Changed>> {
+    let changed = service::restore(&mut db, &actor, &batch.flight_ids).await?;
     Ok(Json(Changed { changed }))
 }
 
@@ -209,7 +190,7 @@ struct FlightPage {
 
 async fn list(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<FlightPage>, (StatusCode, String)> {
     let page = query.page.unwrap_or(1).max(1);
@@ -221,7 +202,7 @@ async fn list(
     }
     let (filter, sort) = filter_and_sort(&query).map_err(bad_request)?;
     let offset = i64::from(page - 1) * i64::from(size);
-    match service::list(&db, &actor, &filter, &sort, i64::from(size), offset).await {
+    match service::list(&mut db, &actor, &filter, &sort, i64::from(size), offset).await {
         Ok((flights, total)) => Ok(Json(FlightPage { flights, total })),
         Err(error) => {
             tracing::error!(%error, "listing flights");
@@ -241,8 +222,7 @@ struct SuggestionPage {
 /// newest first. The page and size count suggestions.
 async fn suggestions(
     actor: Actor,
-    State(db): State<PgPool>,
-    State(gap): State<SessionGap>,
+    mut db: Db,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<SuggestionPage>> {
     let page = query.page.unwrap_or(1).max(1);
@@ -254,8 +234,9 @@ async fn suggestions(
     }
     let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
     let offset = (page as usize - 1) * size as usize;
+    let gap = crate::organisations::settings(&mut db).await?.session_gap;
     let (suggestions, total) =
-        suggest::list(&db, &actor, filter, gap, size as usize, offset).await?;
+        suggest::list(&mut db, &actor, filter, gap, size as usize, offset).await?;
     Ok(Json(SuggestionPage { suggestions, total }))
 }
 
@@ -264,13 +245,13 @@ async fn suggestions(
 /// the flight is in none.
 async fn suggestion(
     actor: Actor,
-    State(db): State<PgPool>,
-    State(gap): State<SessionGap>,
+    mut db: Db,
     Path(key): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<suggest::SuggestionPage>> {
     let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
-    suggest::get(&db, &actor, filter, gap, key)
+    let gap = crate::organisations::settings(&mut db).await?.session_gap;
+    suggest::get(&mut db, &actor, filter, gap, key)
         .await?
         .map(Json)
         .ok_or(ApiError::NotFound)
@@ -364,18 +345,18 @@ fn id_list(value: &Option<String>) -> Result<(Option<Vec<Uuid>>, bool), ()> {
 /// `view=suggestions`, its place in its suggested session instead.
 async fn neighbours(
     actor: Actor,
-    State(db): State<PgPool>,
-    State(gap): State<SessionGap>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<Neighbours>> {
     let (filter, sort) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
     if filter.in_session == Some(false) && query.view.as_deref() == Some("suggestions") {
-        let place = suggest::neighbours(&db, &actor, filter, gap, id).await?;
+        let gap = crate::organisations::settings(&mut db).await?.session_gap;
+        let place = suggest::neighbours(&mut db, &actor, filter, gap, id).await?;
         return place.map(Json).ok_or(ApiError::NotFound);
     }
     Ok(Json(
-        service::neighbours(&db, &actor, &filter, &sort, id).await?,
+        service::neighbours(&mut db, &actor, &filter, &sort, id).await?,
     ))
 }
 

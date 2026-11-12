@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::{flights::db::Filter, policy::FlightScope};
@@ -57,7 +57,7 @@ pub struct AreaRow {
 /// given), newest first: a page after `after`, or all with `limit` None.
 /// Archived flights aren't listed.
 pub async fn flights(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
     session: InSession<'_>,
@@ -118,7 +118,7 @@ pub async fn flights(
         limit,
         ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -144,7 +144,7 @@ pub struct SessionRow {
 /// newest first by first takeoff: a page after `after`, or all with `limit`
 /// None.
 pub async fn sessions(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
     ids: Option<&[Uuid]>,
@@ -212,7 +212,7 @@ pub async fn sessions(
         after.map(|after| after.id),
         limit,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -226,7 +226,10 @@ pub struct CommentRow {
 }
 
 /// The comments of these sessions, oldest first.
-pub async fn comments(db: &PgPool, session_ids: &[Uuid]) -> sqlx::Result<Vec<CommentRow>> {
+pub async fn comments(
+    db: &mut PgConnection,
+    session_ids: &[Uuid],
+) -> sqlx::Result<Vec<CommentRow>> {
     sqlx::query_as!(
         CommentRow,
         "select id, session_id, author_id, body, created_at, edited_at
@@ -235,7 +238,7 @@ pub async fn comments(db: &PgPool, session_ids: &[Uuid]) -> sqlx::Result<Vec<Com
          order by created_at, id",
         session_ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -266,72 +269,75 @@ pub struct BatteryRow {
 // What comes with a session or flight, looked up by id for `expand`. The
 // session or flight was checked already: these show whatever it refers to.
 
-pub async fn groups_by_id(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<Named>> {
+pub async fn groups_by_id(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<Named>> {
     sqlx::query_as!(Named, "select id, name from groups where id = any($1)", ids)
-        .fetch_all(db)
+        .fetch_all(&mut *db)
         .await
 }
 
-pub async fn areas_by_id(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<Named>> {
+pub async fn areas_by_id(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<Named>> {
     sqlx::query_as!(Named, "select id, name from areas where id = any($1)", ids)
-        .fetch_all(db)
+        .fetch_all(&mut *db)
         .await
 }
 
-pub async fn people_by_id(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<Person>> {
+pub async fn people_by_id(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<Person>> {
     sqlx::query_as!(
         Person,
         r#"select id, name, archived_at is not null as "archived!"
            from users where id = any($1)"#,
         ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
-pub async fn drones_by_id(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<DeviceRow>> {
+pub async fn drones_by_id(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<DeviceRow>> {
     sqlx::query_as!(
         DeviceRow,
         "select id, name, serial, group_id from aircraft where id = any($1)",
         ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
-pub async fn controllers_by_id(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<DeviceRow>> {
+pub async fn controllers_by_id(
+    db: &mut PgConnection,
+    ids: &[Uuid],
+) -> sqlx::Result<Vec<DeviceRow>> {
     sqlx::query_as!(
         DeviceRow,
         "select id, name, serial, group_id from remote_controllers where id = any($1)",
         ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
-pub async fn batteries_by_id(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<BatteryRow>> {
+pub async fn batteries_by_id(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<BatteryRow>> {
     sqlx::query_as!(
         BatteryRow,
         "select id, name, serial from batteries where id = any($1)",
         ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// The serials of these drones, for the flights' filter, which is by serial.
-pub async fn drone_serials(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<String>> {
+pub async fn drone_serials(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<String>> {
     sqlx::query_scalar!("select serial from aircraft where id = any($1)", ids)
-        .fetch_all(db)
+        .fetch_all(&mut *db)
         .await
 }
 
-pub async fn controller_serials(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<String>> {
+pub async fn controller_serials(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<String>> {
     sqlx::query_scalar!(
         "select serial from remote_controllers where id = any($1)",
         ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -342,7 +348,7 @@ pub async fn controller_serials(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<S
 /// any app, or that a flight they see belongs to; all of them with
 /// `flights.read`.
 pub async fn groups(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     after: Option<Uuid>,
     limit: i64,
@@ -367,7 +373,7 @@ pub async fn groups(
         after,
         limit,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -380,7 +386,7 @@ pub struct ListedArea {
 /// All the organisation's areas (user's decision, 2026-10-26: every user sees
 /// them, as on the web app's maps), with their boundaries when asked.
 pub async fn areas(
-    db: &PgPool,
+    db: &mut PgConnection,
     geometry: bool,
     after: Option<Uuid>,
     limit: i64,
@@ -395,7 +401,7 @@ pub async fn areas(
         after,
         limit,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -404,13 +410,13 @@ mod tests {
     use super::*;
 
     /// Adds a flight taking off at `takeoff` (UTC).
-    async fn flight(db: &PgPool, takeoff: &str) -> Uuid {
+    async fn flight(db: &mut PgConnection, takeoff: &str) -> Uuid {
         let raw_log: Uuid = sqlx::query_scalar(
             "insert into raw_logs (sha256, path, size_bytes)
              values (sha256(gen_random_uuid()::text::bytea), gen_random_uuid()::text, 0)
              returning id",
         )
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
         .unwrap();
         let takeoff: DateTime<Utc> = takeoff.parse().unwrap();
@@ -422,7 +428,7 @@ mod tests {
         )
         .bind(raw_log)
         .bind(takeoff)
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
         .unwrap()
     }
@@ -430,7 +436,8 @@ mod tests {
     /// Pages follow on from each other without gaps or repeats, also through
     /// flights that took off at the same moment, newest first.
     #[sqlx::test]
-    async fn pages_list_every_flight_once(db: PgPool) {
+    async fn pages_list_every_flight_once(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
         let mut expected = Vec::new();
         for takeoff in [
             "2026-10-01T10:00:00Z",
@@ -439,16 +446,16 @@ mod tests {
             "2026-10-02T10:00:00Z",
             "2026-10-03T10:00:00Z",
         ] {
-            expected.push(flight(&db, takeoff).await);
+            expected.push(flight(&mut db, takeoff).await);
         }
-        let admin = crate::testing::user(&db, "Admin", &["admin"]).await;
-        let scope = crate::testing::scope(&db, admin).await;
+        let admin = crate::testing::user(&mut db, "Admin", &["admin"]).await;
+        let scope = crate::testing::scope(&mut db, admin).await;
 
         let mut seen = Vec::new();
         let mut after = None;
         loop {
             let page = flights(
-                &db,
+                &mut db,
                 &scope,
                 &Filter::default(),
                 InSession::default(),
@@ -477,18 +484,19 @@ mod tests {
     /// flights only, and a session shared with South's flights lists and
     /// counts only North's.
     #[sqlx::test]
-    async fn an_app_sees_only_its_users_flights(db: PgPool) {
-        let north = crate::testing::group(&db, "North").await;
-        let south = crate::testing::group(&db, "South").await;
-        let member = crate::testing::user(&db, "Test Member", &[]).await;
-        crate::testing::join(&db, member, north).await;
+    async fn an_app_sees_only_its_users_flights(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let north = crate::testing::group(&mut db, "North").await;
+        let south = crate::testing::group(&mut db, "South").await;
+        let member = crate::testing::user(&mut db, "Test Member", &[]).await;
+        crate::testing::join(&mut db, member, north).await;
         let session: Uuid = sqlx::query_scalar("insert into sessions (group_id) select id from groups where name = 'General' returning id")
-            .fetch_one(&db)
+            .fetch_one(&mut *db)
             .await
             .unwrap();
-        let ours = flight(&db, "2026-10-01T10:00:00Z").await;
-        let theirs = flight(&db, "2026-10-01T11:00:00Z").await;
-        let elsewhere = flight(&db, "2026-10-02T10:00:00Z").await;
+        let ours = flight(&mut db, "2026-10-01T10:00:00Z").await;
+        let theirs = flight(&mut db, "2026-10-01T11:00:00Z").await;
+        let elsewhere = flight(&mut db, "2026-10-02T10:00:00Z").await;
         for (id, group, in_session) in [
             (ours, north, true),
             (theirs, south, true),
@@ -499,14 +507,14 @@ mod tests {
                 .bind(group)
                 .bind(in_session)
                 .bind(session)
-                .execute(&db)
+                .execute(&mut *db)
                 .await
                 .unwrap();
         }
-        let scope = crate::testing::scope(&db, member).await;
+        let scope = crate::testing::scope(&mut db, member).await;
 
         let seen = flights(
-            &db,
+            &mut db,
             &scope,
             &Filter::default(),
             InSession::default(),
@@ -518,7 +526,7 @@ mod tests {
         .unwrap();
         assert_eq!(seen.iter().map(|f| f.id).collect::<Vec<_>>(), vec![ours]);
         let fetched = flights(
-            &db,
+            &mut db,
             &scope,
             &Filter::default(),
             InSession::default(),
@@ -530,7 +538,7 @@ mod tests {
         .unwrap();
         assert!(fetched.is_empty());
 
-        let sessions = sessions(&db, &scope, &Filter::default(), None, None, None)
+        let sessions = sessions(&mut db, &scope, &Filter::default(), None, None, None)
             .await
             .unwrap();
         assert_eq!(sessions.len(), 1);
@@ -541,20 +549,22 @@ mod tests {
     /// An app sees only its own roles, and holding one makes someone a
     /// member of that group only, for that app.
     #[sqlx::test]
-    async fn apps_see_their_own_roles(db: PgPool) {
-        let reader = crate::testing::user(&db, "Test reader", &[]).await;
-        let north = crate::testing::group(&db, "Test North").await;
-        let south = crate::testing::group(&db, "Test South").await;
-        let role = async |app: &str, key: &str| -> (Uuid, Uuid) {
+    async fn apps_see_their_own_roles(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let reader = crate::testing::user(&mut db, "Test reader", &[]).await;
+        let north = crate::testing::group(&mut db, "Test North").await;
+        let south = crate::testing::group(&mut db, "Test South").await;
+        let mut role = async |app: &str, key: &str| -> (Uuid, Uuid) {
             sqlx::query_as(
-                "with c as (insert into oauth_clients (name, redirect_uris, trusted)
-                            values ($1, '{}', true) returning id)
+                "with c as (insert into oauth_clients (organisation_id, name, redirect_uris)
+                            values (current_setting('app.organisation_id')::uuid, $1, '{}')
+                            returning id)
                  insert into app_roles (client_id, key, name)
                  select id, $2, $2 from c returning client_id, id",
             )
             .bind(app)
             .bind(key)
-            .fetch_one(&db)
+            .fetch_one(&mut *db)
             .await
             .unwrap()
         };
@@ -567,22 +577,22 @@ mod tests {
             .bind(group)
             .bind(reader)
             .bind(app_role)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
         }
 
-        let held = crate::oauth::held_app_roles(&db, reports, reader)
+        let held = crate::oauth::held_app_roles(&mut db, reports, reader)
             .await
             .unwrap();
         assert_eq!(held.groups, [(south, vec!["report_viewer".to_owned()])]);
-        let held = crate::oauth::held_app_roles(&db, other, reader)
+        let held = crate::oauth::held_app_roles(&mut db, other, reader)
             .await
             .unwrap();
         assert_eq!(held.groups, [(north, vec!["planner".to_owned()])]);
 
-        let scope = crate::testing::scope(&db, reader).await;
-        let listed: Vec<Uuid> = groups(&db, &scope, None, 10)
+        let scope = crate::testing::scope(&mut db, reader).await;
+        let listed: Vec<Uuid> = groups(&mut db, &scope, None, 10)
             .await
             .unwrap()
             .into_iter()

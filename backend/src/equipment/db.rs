@@ -8,7 +8,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::policy::{FlightScope, Scope};
@@ -52,7 +52,7 @@ pub struct Equipment {
 /// - `read`: where they hold `equipment.read`.
 /// - `flights`: the flights they see.
 pub async fn list(
-    db: &PgPool,
+    db: &mut PgConnection,
     kind: Kind,
     read: &Scope,
     flights: &FlightScope,
@@ -106,7 +106,7 @@ pub async fn list(
                 flights.user_id,
                 &flights.group_ids,
             )
-            .fetch_all(db)
+            .fetch_all(&mut *db)
             .await
         }
         Kind::RemoteController => {
@@ -155,7 +155,7 @@ pub async fn list(
                 flights.user_id,
                 &flights.group_ids,
             )
-            .fetch_all(db)
+            .fetch_all(&mut *db)
             .await
         }
     }
@@ -163,7 +163,7 @@ pub async fn list(
 
 /// Sets the name and the group. False if there is no such item.
 pub async fn update(
-    db: &PgPool,
+    db: &mut PgConnection,
     kind: Kind,
     id: Uuid,
     name: Option<&str>,
@@ -177,7 +177,7 @@ pub async fn update(
                 name,
                 group_id,
             )
-            .execute(db)
+            .execute(&mut *db)
             .await?
         }
         Kind::RemoteController => {
@@ -187,19 +187,19 @@ pub async fn update(
                 name,
                 group_id,
             )
-            .execute(db)
+            .execute(&mut *db)
             .await?
         }
     };
     Ok(result.rows_affected() == 1)
 }
 
-pub async fn group_exists(db: &PgPool, group_id: Uuid) -> sqlx::Result<bool> {
+pub async fn group_exists(db: &mut PgConnection, group_id: Uuid) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
         r#"select exists(select 1 from groups where id = $1) as "exists!""#,
         group_id,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
@@ -208,12 +208,12 @@ mod tests {
     use super::*;
     use crate::{policy::Permission, testing};
 
-    async fn id(db: &PgPool, sql: &'static str) -> Uuid {
-        sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
+    async fn id(db: &mut PgConnection, sql: &'static str) -> Uuid {
+        sqlx::query_scalar(sql).fetch_one(&mut *db).await.unwrap()
     }
 
     /// A flight of the drone for a group, by a pilot, taking off `hours` ago.
-    async fn flight(db: &PgPool, serial: &str, group: Uuid, pilot: Uuid, hours: i32) {
+    async fn flight(db: &mut PgConnection, serial: &str, group: Uuid, pilot: Uuid, hours: i32) {
         let raw_log = id(
             db,
             "insert into raw_logs (sha256, path, size_bytes)
@@ -231,7 +231,7 @@ mod tests {
         .bind(serial)
         .bind(group)
         .bind(pilot)
-        .execute(db)
+        .execute(&mut *db)
         .await
         .unwrap();
     }
@@ -240,37 +240,41 @@ mod tests {
     /// they see one of its flights; its figures count all its flights, also
     /// the other group's.
     #[sqlx::test]
-    async fn equipment_is_seen_through_flights_with_all_its_figures(db: PgPool) {
-        let north = testing::group(&db, "North").await;
-        let south = testing::group(&db, "South").await;
-        let me = id(&db, "insert into users (name) values ('A') returning id").await;
-        let other = id(&db, "insert into users (name) values ('B') returning id").await;
-        testing::join(&db, me, north).await;
-        testing::join(&db, other, south).await;
+    async fn equipment_is_seen_through_flights_with_all_its_figures(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let north = testing::group(&mut db, "North").await;
+        let south = testing::group(&mut db, "South").await;
+        let me = id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let other = id(
+            &mut db,
+            "insert into users (name) values ('B') returning id",
+        )
+        .await;
+        testing::join(&mut db, me, north).await;
+        testing::join(&mut db, other, south).await;
         sqlx::query(
             "insert into aircraft (serial, group_id)
              values ('TESTOWN', $1), ('TESTSHARED', $2), ('TESTTHEIRS', $2)",
         )
         .bind(north)
         .bind(south)
-        .execute(&db)
+        .execute(&mut *db)
         .await
         .unwrap();
-        flight(&db, "TESTSHARED", north, me, 3).await;
-        flight(&db, "TESTSHARED", south, other, 1).await;
-        flight(&db, "TESTTHEIRS", south, other, 1).await;
+        flight(&mut db, "TESTSHARED", north, me, 3).await;
+        flight(&mut db, "TESTSHARED", south, other, 1).await;
+        flight(&mut db, "TESTTHEIRS", south, other, 1).await;
 
-        let grants = crate::auth::grants(&db, me).await.unwrap();
+        let grants = crate::auth::grants(&mut db, me).await.unwrap();
         let read = grants.scope(Permission::EquipmentRead);
-        let seen = list(
-            &db,
-            Kind::Aircraft,
-            &read,
-            &testing::scope(&db, me).await,
-            None,
-        )
-        .await
-        .unwrap();
+        let flights_scope = testing::scope(&mut db, me).await;
+        let seen = list(&mut db, Kind::Aircraft, &read, &flights_scope, None)
+            .await
+            .unwrap();
         let serials: Vec<&str> = seen.iter().map(|item| item.serial.as_str()).collect();
         assert_eq!(serials, ["TESTOWN", "TESTSHARED"]);
         let shared = &seen[1];

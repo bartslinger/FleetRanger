@@ -33,6 +33,7 @@ Run the backend, rebuilding and restarting on every change:
 ```
 cd backend
 DATABASE_URL=postgres://fleetranger:fleetranger@127.0.0.1/fleetranger \
+DATABASE_APP_URL=postgres://fleetranger_app:fleetranger_app@127.0.0.1/fleetranger \
 FLEETRANGER_BIND=127.0.0.1:8080 \
   watchexec -r -w src -w migrations -- cargo run --locked
 ```
@@ -45,7 +46,7 @@ Logging in needs a Google OAuth client (type "Web application") with the redirec
 cargo run --locked -- add-user --admin you@example.org "Your Name"
 ```
 
-Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default). The backend processes pending logs in the background. Encrypted logs need a DJI app key in `DJI_APP_KEY`; keep it and the OIDC settings in `backend/.env` (ignored by git) and load it with `set -a; . ./.env; set +a` before starting the backend. To register logs that are already in that directory, run the backend with the `import` command:
+Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default), each organisation's in a directory named by its id. The backend processes pending logs in the background. Encrypted logs need a DJI app key in `DJI_APP_KEY`; keep it and the OIDC settings in `backend/.env` (ignored by git) and load it with `set -a; . ./.env; set +a` before starting the backend. To register logs that are already in that directory, run the backend with the `import` command:
 
 ```
 FLEETRANGER_LOG_DIR=~/fleetranger-testlogs cargo run --locked -- import

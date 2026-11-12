@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::{PgConnection, PgPool};
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::geometry::{self, Shape};
@@ -25,7 +25,7 @@ pub async fn list(db: &mut PgConnection) -> sqlx::Result<Vec<Area>> {
         Area,
         "select id, name, boundary from areas order by lower(name), id"
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -62,9 +62,9 @@ pub async fn reshape(tx: &mut PgConnection, id: Uuid, boundary: &Value) -> sqlx:
 }
 
 /// False if there is no such area.
-pub async fn rename(db: &PgPool, id: Uuid, name: &str) -> sqlx::Result<bool> {
+pub async fn rename(db: &mut PgConnection, id: Uuid, name: &str) -> sqlx::Result<bool> {
     let result = sqlx::query!("update areas set name = $2 where id = $1", id, name)
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     Ok(result.rows_affected() == 1)
 }

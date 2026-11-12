@@ -1,5 +1,6 @@
 //! The processing status API, for admins, and log uploads from controllers.
 
+use crate::db::{Db, Tenants};
 use axum::{
     Json, Router,
     body::Bytes,
@@ -9,14 +10,13 @@ use axum::{
     routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::LogDir;
 use super::activity::Activity;
 use super::db::Stored;
 use super::service::{self, Status};
 use super::upload;
+use super::{LogDir, organisation_dir};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -30,7 +30,8 @@ const MAX_LOG_BYTES: usize = 256 * 1024 * 1024;
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
     Activity: FromRef<S>,
     LogDir: FromRef<S>,
     Changes: FromRef<S>,
@@ -71,20 +72,20 @@ struct Missing {
 /// when another install's logs were moved here) isn't sent again.
 async fn missing(
     _controller: Controller,
-    State(db): State<PgPool>,
+    mut db: Db,
     Json(hashes): Json<Hashes>,
 ) -> ApiResult<Json<Missing>> {
     Ok(Json(Missing {
-        missing: upload::missing(&db, hashes.sha256).await?,
+        missing: upload::missing(&mut db, hashes.sha256).await?,
     }))
 }
 
 async fn status(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     State(activity): State<Activity>,
 ) -> ApiResult<Json<Status>> {
-    Ok(Json(service::status(&db, &actor, &activity).await?))
+    Ok(Json(service::status(&mut db, &actor, &activity).await?))
 }
 
 #[derive(Serialize)]
@@ -95,10 +96,11 @@ struct Received {
 /// A log from a paired controller, put at its name on the controller: the
 /// file itself as the body, with headers `X-SHA256` (hex) and, if a pilot was
 /// chosen, `X-Pilot-Id` and `X-Group-Id`. 201 for a new log, 200 for a new
-/// version of one or a duplicate, so sending it again is harmless.
+/// version of one or a duplicate, so sending it again is harmless. It
+/// connects once the body is in, so slow uploads don't hold connections.
 async fn put_log(
     controller: Controller,
-    State(db): State<PgPool>,
+    State(tenants): State<Tenants>,
     State(LogDir(log_dir)): State<LogDir>,
     State(changes): State<Changes>,
     Path(file_name): Path<String>,
@@ -110,9 +112,10 @@ async fn put_log(
         group_id: id_header(&headers, "x-group-id")?,
     };
     let sha256 = text_header(&headers, "x-sha256");
+    let mut db = tenants.connect(controller.organisation_id).await?;
     let result = upload::receive(
-        &db,
-        &log_dir,
+        &mut db,
+        &organisation_dir(&log_dir, controller.organisation_id),
         &controller,
         &file_name,
         sha256,
@@ -136,10 +139,10 @@ async fn put_log(
 /// their teams' ids, and its pilot list gives each group's id as the team's.
 /// The same checks as for later apps then decide whether the flight gets it.
 /// Anything that isn't an id counts as no choice, so an older app's upload
-/// never fails over it.
+/// never fails over it. It connects once the body is in, as `put_log`.
 async fn receive_v0(
     controller: Controller,
-    State(db): State<PgPool>,
+    State(tenants): State<Tenants>,
     State(LogDir(log_dir)): State<LogDir>,
     State(changes): State<Changes>,
     headers: HeaderMap,
@@ -151,8 +154,17 @@ async fn receive_v0(
     };
     let file_name = text_header(&headers, "x-file-name");
     let sha256 = text_header(&headers, "x-sha256");
-    let result =
-        upload::receive(&db, &log_dir, &controller, file_name, sha256, chosen, &body).await?;
+    let mut db = tenants.connect(controller.organisation_id).await?;
+    let result = upload::receive(
+        &mut db,
+        &organisation_dir(&log_dir, controller.organisation_id),
+        &controller,
+        file_name,
+        sha256,
+        chosen,
+        &body,
+    )
+    .await?;
     let status = match result {
         Stored::Duplicate => StatusCode::OK,
         Stored::Added | Stored::Replaced => {

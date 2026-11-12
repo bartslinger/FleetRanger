@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select r.id, r.name, c.id as app_id, c.name as app\n         from app_roles r\n         join oauth_clients c on c.id = r.client_id\n         where c.trusted\n         order by lower(c.name), c.id, lower(r.name), r.id",
+  "query": "select id, name, redirect_uris, organisation_id is not null as \"trusted!\"\n           from oauth_clients where id = $1",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "app_roles",
+            "table": "oauth_clients",
             "name": "id"
           }
         }
@@ -20,43 +20,40 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "app_roles",
+            "table": "oauth_clients",
             "name": "name"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "app_id",
-        "type_info": "Uuid",
+        "name": "redirect_uris",
+        "type_info": "TextArray",
         "origin": {
           "Table": {
             "table": "oauth_clients",
-            "name": "id"
+            "name": "redirect_uris"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "app",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "oauth_clients",
-            "name": "name"
-          }
-        }
+        "name": "trusted!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
       false,
       false,
-      false
+      null
     ]
   },
-  "hash": "307755a1caa16019d1c8ecd44e120cd4d99850960b7b6a99a8a2e348ecd3a272"
+  "hash": "c0558265552c3b58ba5132c3ed99255af87ed61084d9afe844fc1da656cd5bc7"
 }

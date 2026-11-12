@@ -2,13 +2,13 @@
 //! the flights; who changes what is the policy's decision
 //! (`change_equipment`).
 
+use crate::db::Db;
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, State},
+    extract::{FromRef, Path},
     routing::get,
 };
 use serde::Deserialize;
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
@@ -20,7 +20,8 @@ use crate::{auth::Actor, error::ApiResult};
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
 {
     Router::new()
         .route("/api/aircraft", get(list_aircraft))
@@ -50,57 +51,56 @@ impl From<Body> for EquipmentInput {
     }
 }
 
-async fn list_aircraft(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<Equipment>>> {
-    Ok(Json(service::list(&db, &actor, Kind::Aircraft).await?))
+async fn list_aircraft(actor: Actor, mut db: Db) -> ApiResult<Json<Vec<Equipment>>> {
+    Ok(Json(service::list(&mut db, &actor, Kind::Aircraft).await?))
 }
 
 async fn show_aircraft(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Equipment>> {
-    Ok(Json(service::get(&db, &actor, Kind::Aircraft, id).await?))
+    Ok(Json(
+        service::get(&mut db, &actor, Kind::Aircraft, id).await?,
+    ))
 }
 
 async fn update_aircraft(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(body): Json<Body>,
 ) -> ApiResult<Json<Equipment>> {
     let input = body.into();
     Ok(Json(
-        service::update(&db, &actor, Kind::Aircraft, id, &input).await?,
+        service::update(&mut db, &actor, Kind::Aircraft, id, &input).await?,
     ))
 }
 
-async fn list_controllers(
-    actor: Actor,
-    State(db): State<PgPool>,
-) -> ApiResult<Json<Vec<Equipment>>> {
+async fn list_controllers(actor: Actor, mut db: Db) -> ApiResult<Json<Vec<Equipment>>> {
     Ok(Json(
-        service::list(&db, &actor, Kind::RemoteController).await?,
+        service::list(&mut db, &actor, Kind::RemoteController).await?,
     ))
 }
 
 async fn show_controller(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Equipment>> {
     Ok(Json(
-        service::get(&db, &actor, Kind::RemoteController, id).await?,
+        service::get(&mut db, &actor, Kind::RemoteController, id).await?,
     ))
 }
 
 async fn update_controller(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(body): Json<Body>,
 ) -> ApiResult<Json<Equipment>> {
     let input = body.into();
     Ok(Json(
-        service::update(&db, &actor, Kind::RemoteController, id, &input).await?,
+        service::update(&mut db, &actor, Kind::RemoteController, id, &input).await?,
     ))
 }

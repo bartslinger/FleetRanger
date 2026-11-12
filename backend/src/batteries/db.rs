@@ -6,7 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::policy::FlightScope;
@@ -50,7 +50,7 @@ pub struct BatteryFlight {
 /// The batteries with a flight in the scope, by name or else serial; `id`
 /// narrows it to one.
 pub async fn list(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     id: Option<Uuid>,
 ) -> sqlx::Result<Vec<Battery>> {
@@ -93,13 +93,13 @@ pub async fn list(
         id,
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// A battery's flights in the scope, newest first.
 pub async fn flights(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     id: Uuid,
 ) -> sqlx::Result<Vec<BatteryFlight>> {
@@ -123,7 +123,7 @@ pub async fn flights(
         id,
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -137,7 +137,10 @@ pub struct CapacityReading {
 
 /// The full charge capacity at each of a battery's flights that reported it,
 /// oldest first.
-pub async fn capacity_readings(db: &PgPool, id: Uuid) -> sqlx::Result<Vec<CapacityReading>> {
+pub async fn capacity_readings(
+    db: &mut PgConnection,
+    id: Uuid,
+) -> sqlx::Result<Vec<CapacityReading>> {
     sqlx::query_as!(
         CapacityReading,
         r#"select f.takeoff_at, fb.full_capacity_mah as "full_capacity_mah!"
@@ -148,14 +151,14 @@ pub async fn capacity_readings(db: &PgPool, id: Uuid) -> sqlx::Result<Vec<Capaci
            order by f.takeoff_at, f.id"#,
         id,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// Returns false if there is no such battery.
-pub async fn rename(db: &PgPool, id: Uuid, name: Option<&str>) -> sqlx::Result<bool> {
+pub async fn rename(db: &mut PgConnection, id: Uuid, name: Option<&str>) -> sqlx::Result<bool> {
     let result = sqlx::query!("update batteries set name = $2 where id = $1", id, name)
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     Ok(result.rows_affected() == 1)
 }
@@ -164,12 +167,18 @@ pub async fn rename(db: &PgPool, id: Uuid, name: Option<&str>) -> sqlx::Result<b
 mod tests {
     use super::*;
 
-    async fn id(db: &PgPool, sql: &'static str) -> Uuid {
-        sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
+    async fn id(db: &mut PgConnection, sql: &'static str) -> Uuid {
+        sqlx::query_scalar(sql).fetch_one(&mut *db).await.unwrap()
     }
 
     /// A flight of the group with the battery, taking off `hours` ago.
-    async fn flight(db: &PgPool, group: Uuid, battery: Uuid, hours: i32, cycles: i32) -> Uuid {
+    async fn flight(
+        db: &mut PgConnection,
+        group: Uuid,
+        battery: Uuid,
+        hours: i32,
+        cycles: i32,
+    ) -> Uuid {
         let raw_log = id(
             db,
             "insert into raw_logs (sha256, path, size_bytes)
@@ -186,7 +195,7 @@ mod tests {
         .bind(raw_log)
         .bind(hours)
         .bind(group)
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
         .unwrap();
         sqlx::query(
@@ -196,7 +205,7 @@ mod tests {
         .bind(flight)
         .bind(battery)
         .bind(cycles)
-        .execute(db)
+        .execute(&mut *db)
         .await
         .unwrap();
         flight
@@ -205,47 +214,57 @@ mod tests {
     /// A member sees a battery through their group's flights only, with only
     /// those flights, but its figures over all its flights.
     #[sqlx::test]
-    async fn members_see_batteries_through_their_groups_flights(db: PgPool) {
-        let north = crate::testing::group(&db, "North").await;
-        let south = crate::testing::group(&db, "South").await;
-        let me = id(&db, "insert into users (name) values ('A') returning id").await;
-        crate::testing::join(&db, me, north).await;
+    async fn members_see_batteries_through_their_groups_flights(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let north = crate::testing::group(&mut db, "North").await;
+        let south = crate::testing::group(&mut db, "South").await;
+        let me = id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        crate::testing::join(&mut db, me, north).await;
         let shared = id(
-            &db,
+            &mut db,
             "insert into batteries (serial) values ('TESTB1') returning id",
         )
         .await;
         let theirs = id(
-            &db,
+            &mut db,
             "insert into batteries (serial) values ('TESTB2') returning id",
         )
         .await;
-        let ours = flight(&db, north, shared, 3, 10).await;
-        flight(&db, south, shared, 1, 11).await;
-        flight(&db, south, theirs, 1, 5).await;
+        let ours = flight(&mut db, north, shared, 3, 10).await;
+        flight(&mut db, south, shared, 1, 11).await;
+        flight(&mut db, south, theirs, 1, 5).await;
 
-        let member = crate::testing::scope(&db, me).await;
-        let seen = list(&db, &member, None).await.unwrap();
+        let member = crate::testing::scope(&mut db, me).await;
+        let seen = list(&mut db, &member, None).await.unwrap();
         assert_eq!(seen.len(), 1);
         assert_eq!(
             (seen[0].id, seen[0].flights, seen[0].cycles),
             (shared, 2, Some(11))
         );
-        let flights: Vec<Uuid> = flights(&db, &member, shared)
+        let flights: Vec<Uuid> = flights(&mut db, &member, shared)
             .await
             .unwrap()
             .into_iter()
             .map(|flight| flight.flight_id)
             .collect();
         assert_eq!(flights, [ours]);
-        assert!(list(&db, &member, Some(theirs)).await.unwrap().is_empty());
+        assert!(
+            list(&mut db, &member, Some(theirs))
+                .await
+                .unwrap()
+                .is_empty()
+        );
 
         let admin = FlightScope {
             all: true,
             user_id: me,
             group_ids: Vec::new(),
         };
-        let all = list(&db, &admin, Some(shared)).await.unwrap();
+        let all = list(&mut db, &admin, Some(shared)).await.unwrap();
         assert_eq!((all[0].flights, all[0].cycles), (2, Some(11)));
     }
 }

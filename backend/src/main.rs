@@ -3,6 +3,7 @@ mod areas;
 mod auth;
 mod batteries;
 mod config;
+mod db;
 mod download;
 mod equipment;
 mod error;
@@ -13,6 +14,7 @@ mod health;
 mod ingest;
 mod mcp;
 mod oauth;
+mod organisations;
 mod pairing;
 mod policy;
 mod sessions;
@@ -25,9 +27,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use axum::{Router, extract::FromRef, middleware, routing::get};
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
@@ -39,7 +40,6 @@ use crate::events::Changes;
 use crate::ingest::LogDir;
 use crate::ingest::activity::Activity;
 use crate::oauth::OAuth;
-use crate::sessions::SessionGap;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -55,39 +55,42 @@ async fn main() -> Result<()> {
     let config = Config::from_env()?;
 
     // A short acquire timeout makes health checks fail fast when the database is down.
-    let db = PgPoolOptions::new()
+    let system = PgPoolOptions::new()
         .acquire_timeout(Duration::from_secs(3))
         .connect(&config.database_url)
         .await
         .context("failed to connect to the database")?;
     sqlx::migrate!()
-        .run(&db)
+        .run(&system)
         .await
         .context("failed to run database migrations")?;
+    db::allow_app_login(&system, &config.database_app_url).await?;
+    let tenants = db::Tenants::open(
+        PgPoolOptions::new()
+            .acquire_timeout(Duration::from_secs(3))
+            .max_connections(20),
+        &config.database_app_url,
+    )
+    .await
+    .context("failed to connect to the database as fleetranger_app")?;
+    let system = db::System(system);
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
-        [] | ["serve"] => serve(&config, db).await,
-        ["import"] => ingest::import::run(&db, &config.log_dir, None).await,
-        ["import", "--group", group] => {
-            ingest::import::run(&db, &config.log_dir, Some(group)).await
-        }
-        ["add-user", email, name] => users::add(&db, email, name, false).await,
-        ["add-user", "--admin", email, name] => users::add(&db, email, name, true).await,
-        _ => bail!(
-            "unknown command {args:?}; expected serve, import [--group <name>] or add-user [--admin] <email> <name>"
-        ),
+        [] | ["serve"] => serve(&config, system, tenants).await,
+        _ => organisations::cli::run(&args, &system, &tenants, &config.log_dir).await,
     }
 }
 
 /// What request handlers can extract with `State`.
 #[derive(Clone)]
 struct AppState {
-    db: PgPool,
+    system: db::System,
+    tenants: db::Tenants,
     auth: Arc<Auth>,
     activity: Activity,
     changes: Changes,
-    session_gap: SessionGap,
+    apps: oauth::AppsOn,
     log_dir: LogDir,
     android_apk: AndroidApk,
     oauth: OAuth,
@@ -117,9 +120,9 @@ impl FromRef<AppState> for LogDir {
     }
 }
 
-impl FromRef<AppState> for SessionGap {
+impl FromRef<AppState> for oauth::AppsOn {
     fn from_ref(state: &AppState) -> Self {
-        state.session_gap
+        state.apps
     }
 }
 
@@ -129,9 +132,15 @@ impl FromRef<AppState> for Activity {
     }
 }
 
-impl FromRef<AppState> for PgPool {
+impl FromRef<AppState> for db::System {
     fn from_ref(state: &AppState) -> Self {
-        state.db.clone()
+        state.system.clone()
+    }
+}
+
+impl FromRef<AppState> for db::Tenants {
+    fn from_ref(state: &AppState) -> Self {
+        state.tenants.clone()
     }
 }
 
@@ -141,16 +150,15 @@ impl FromRef<AppState> for Arc<Auth> {
     }
 }
 
-async fn serve(config: &Config, db: PgPool) -> Result<()> {
-    let session_gap = SessionGap(config.session_gap_minutes);
+async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Result<()> {
     let changes = Changes::default();
     let activity = Activity::new(changes.clone());
     tokio::spawn(ingest::process::run(
-        db.clone(),
+        system.clone(),
+        tenants.clone(),
         config.log_dir.clone(),
         config.dji_app_key.clone(),
         activity.clone(),
-        session_gap,
     ));
 
     let provider = match &config.oidc {
@@ -161,7 +169,10 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         }
     };
     let issuer = config.public_url.as_str().trim_end_matches('/').to_owned();
-    // The resources OAuth issues tokens for: /mcp and /api/v1, when they're on.
+    // The resources OAuth issues tokens for: /mcp and /api/v1, when the
+    // install has them on (FLEETRANGER_MCP, FLEETRANGER_API); each
+    // organisation then switches MCP on for itself (user's decision,
+    // 2026-11-12). OAuth runs only with one of them.
     let mut resources = Vec::new();
     if config.mcp {
         resources.push(oauth::Resource {
@@ -175,17 +186,20 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
             scopes: oauth::API_SCOPES,
         });
     }
-    let oauth_on = !resources.is_empty();
     auth::set_https(config.public_url.scheme() == "https");
     let state = AppState {
-        db,
+        system,
+        tenants,
         auth: Arc::new(Auth {
             public_url: config.public_url.clone(),
             provider,
         }),
         activity,
         changes: changes.clone(),
-        session_gap,
+        apps: oauth::AppsOn {
+            mcp: config.mcp,
+            api: config.api,
+        },
         log_dir: LogDir(config.log_dir.clone()),
         android_apk: AndroidApk {
             path: config.android_apk.clone(),
@@ -197,21 +211,14 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         },
     };
 
-    // Off unless the install switches them on (FLEETRANGER_MCP,
-    // FLEETRANGER_API), and OAuth with them. Both answer in the time zone.
-    if config.mcp || config.api {
-        mcp::db::today(&state.db, &config.time_zone)
-            .await
-            .with_context(|| format!("TIME_ZONE {} is not a known time zone", config.time_zone))?;
-    }
     let mut apps = Router::new();
     if config.mcp {
         let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
         hosts.extend(config.public_url.host_str().map(str::to_owned));
         tracing::info!("MCP server on at /mcp");
         apps = apps.merge(mcp::router(
-            state.db.clone(),
-            config.time_zone.clone(),
+            state.system.clone(),
+            state.tenants.clone(),
             &issuer,
             hosts,
         ));
@@ -219,14 +226,13 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
     if config.api {
         tracing::info!("public API on at /api/v1");
         apps = apps.merge(api_v1::router(api_v1::Api {
-            db: state.db.clone(),
-            time_zone: config.time_zone.clone().into(),
-            organisation_name: config.organisation_name.clone().map(Into::into),
+            system: state.system.clone(),
+            tenants: state.tenants.clone(),
             resource: api_v1::resource(&issuer).into(),
         }));
     }
-    if oauth_on {
-        tokio::spawn(oauth::clean_up_hourly(state.db.clone()));
+    if config.mcp || config.api {
+        tokio::spawn(oauth::clean_up_hourly(state.system.clone()));
         apps = apps.merge(oauth::routes::router());
     }
 

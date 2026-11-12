@@ -8,8 +8,13 @@ use openidconnect::url::Url;
 pub struct Config {
     /// Address the HTTP server listens on (`FLEETRANGER_BIND`).
     pub bind: SocketAddr,
-    /// PostgreSQL connection string (`DATABASE_URL`).
+    /// PostgreSQL connection string (`DATABASE_URL`), as the account that
+    /// created the tables: for database changes and work across organisations.
     pub database_url: String,
+    /// The same database as `fleetranger_app`, which row-level security
+    /// limits to one organisation (`DATABASE_APP_URL`), for requests. Its
+    /// password is set from here on every start.
+    pub database_app_url: String,
     /// Directory holding the raw flight logs (`FLEETRANGER_LOG_DIR`).
     pub log_dir: PathBuf,
     /// DJI app key for requesting log decryption keys (`DJI_APP_KEY`). Logs from
@@ -24,21 +29,12 @@ pub struct Config {
     /// The controller app the download page offers (`FLEETRANGER_ANDROID_APK`,
     /// `/data/android/FleetRanger.apk` by default); without it the page says so.
     pub android_apk: PathBuf,
-    /// The longest break within a session, in minutes
-    /// (`FLEETRANGER_SESSION_GAP_MINUTES`, 120 by default).
-    pub session_gap_minutes: i32,
-    /// The organisation's time zone (`TIME_ZONE`, UTC by default), e.g.
-    /// `Europe/Amsterdam`: days in MCP requests are days there.
-    pub time_zone: String,
-    /// Whether AI assistants can query the install over MCP
-    /// (`FLEETRANGER_MCP=on`); off by default.
+    /// Whether the install offers MCP at `/mcp` (`FLEETRANGER_MCP=on`); off
+    /// by default. Each organisation then switches it on for itself.
     pub mcp: bool,
     /// Whether apps can use the public API at `/api/v1`
     /// (`FLEETRANGER_API=on`); off by default.
     pub api: bool,
-    /// The organisation's name, for apps (`FLEETRANGER_ORGANISATION_NAME`),
-    /// until organisations have settings of their own.
-    pub organisation_name: Option<String>,
 }
 
 pub struct OidcConfig {
@@ -57,6 +53,8 @@ impl Config {
             .parse()
             .context("FLEETRANGER_BIND is not a valid socket address")?;
         let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL is not set")?;
+        let database_app_url =
+            std::env::var("DATABASE_APP_URL").context("DATABASE_APP_URL is not set")?;
         let log_dir = std::env::var("FLEETRANGER_LOG_DIR")
             .unwrap_or_else(|_| "/data/flightlogs".to_owned())
             .into();
@@ -78,31 +76,20 @@ impl Config {
             }),
             None => None,
         };
-        let session_gap_minutes =
-            match non_empty_var("FLEETRANGER_SESSION_GAP_MINUTES") {
-                Some(value) => value.parse().ok().filter(|minutes| *minutes > 0).context(
-                    "FLEETRANGER_SESSION_GAP_MINUTES is not a positive number of minutes",
-                )?,
-                None => 120,
-            };
-        let time_zone = non_empty_var("TIME_ZONE").unwrap_or_else(|| "UTC".to_owned());
         let mcp = switch("FLEETRANGER_MCP")?;
         let api = switch("FLEETRANGER_API")?;
-        let organisation_name = non_empty_var("FLEETRANGER_ORGANISATION_NAME");
 
         Ok(Self {
             bind,
             database_url,
+            database_app_url,
             log_dir,
             dji_app_key,
             public_url,
             oidc,
             android_apk,
-            session_gap_minutes,
-            time_zone,
             mcp,
             api,
-            organisation_name,
         })
     }
 }

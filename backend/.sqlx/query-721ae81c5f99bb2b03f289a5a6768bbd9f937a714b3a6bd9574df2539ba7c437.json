@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select o.id, o.name, s.time_zone, s.session_gap_minutes, s.mcp\n         from organisations o join organisation_settings s on s.organisation_id = o.id\n         where $1::uuid is null or o.id = $1\n         order by o.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "organisations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "organisations",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "time_zone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "organisation_settings",
+            "name": "time_zone"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "session_gap_minutes",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "organisation_settings",
+            "name": "session_gap_minutes"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "mcp",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "organisation_settings",
+            "name": "mcp"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "721ae81c5f99bb2b03f289a5a6768bbd9f937a714b3a6bd9574df2539ba7c437"
+}

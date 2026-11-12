@@ -1,13 +1,13 @@
 //! Group API, for whoever manages groups.
 
+use crate::db::Db;
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, Query, State},
+    extract::{FromRef, Path, Query},
     http::StatusCode,
     routing::{get, put},
 };
 use serde::Deserialize;
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
@@ -22,7 +22,8 @@ use crate::{
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
 {
     Router::new()
         .route("/api/groups", get(list).post(create))
@@ -52,38 +53,36 @@ struct DeleteQuery {
     move_to: Option<String>,
 }
 
-async fn list(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<Group>>> {
-    Ok(Json(service::list(&db, &actor).await?))
+async fn list(actor: Actor, mut db: Db) -> ApiResult<Json<Vec<Group>>> {
+    Ok(Json(service::list(&mut db, &actor).await?))
 }
 
-async fn show(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<GroupDetail>> {
-    Ok(Json(service::get(&db, &actor, id).await?))
+async fn show(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<Json<GroupDetail>> {
+    Ok(Json(service::get(&mut db, &actor, id).await?))
 }
 
 async fn create(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Json(input): Json<GroupInput>,
 ) -> ApiResult<Json<GroupDetail>> {
-    Ok(Json(service::create(&db, &actor, &input.name).await?))
+    Ok(Json(service::create(&mut db, &actor, &input.name).await?))
 }
 
 async fn rename(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(input): Json<GroupInput>,
 ) -> ApiResult<Json<GroupDetail>> {
-    Ok(Json(service::rename(&db, &actor, id, &input.name).await?))
+    Ok(Json(
+        service::rename(&mut db, &actor, id, &input.name).await?,
+    ))
 }
 
 async fn remove(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Query(query): Query<DeleteQuery>,
 ) -> ApiResult<StatusCode> {
@@ -95,27 +94,27 @@ async fn remove(
                 .map_err(|_| ApiError::Invalid("move_to must be a group id".to_owned()))?,
         ),
     };
-    service::delete(&db, &actor, id, move_to).await?;
+    service::delete(&mut db, &actor, id, move_to).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn set_roles(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path((id, user_id)): Path<(Uuid, Uuid)>,
     Json(input): Json<RolesInput>,
 ) -> ApiResult<Json<Vec<Member>>> {
     Ok(Json(
-        service::set_roles(&db, &actor, id, user_id, &input.roles, &input.app_roles).await?,
+        service::set_roles(&mut db, &actor, id, user_id, &input.roles, &input.app_roles).await?,
     ))
 }
 
 async fn remove_member(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path((id, user_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<Vec<Member>>> {
     Ok(Json(
-        service::remove_member(&db, &actor, id, user_id).await?,
+        service::remove_member(&mut db, &actor, id, user_id).await?,
     ))
 }

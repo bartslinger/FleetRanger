@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::Connection as _;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{self, Area};
@@ -13,9 +14,8 @@ use crate::{
 
 /// Every user sees all areas: they belong to the organisation, and seeing an
 /// area shows none of its flights.
-pub async fn list(db: &PgPool, _actor: &Actor) -> ApiResult<Vec<Area>> {
-    let mut conn = db.acquire().await?;
-    Ok(db::list(&mut conn).await?)
+pub async fn list(db: &mut PgConnection, _actor: &Actor) -> ApiResult<Vec<Area>> {
+    Ok(db::list(db).await?)
 }
 
 /// The areas a drawing became, and the areas it overlapped and was clipped
@@ -39,7 +39,7 @@ pub enum Drawing<'a> {
 /// Creates an area, or changes the shape of one, clipped where it overlaps
 /// the others, and recomputes every flight's figures per area.
 pub async fn save(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     drawing: Drawing<'_>,
     boundary: &Value,
@@ -100,7 +100,7 @@ pub async fn save(
 }
 
 /// Renames an area; its shape and figures stay as they are.
-pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResult<()> {
+pub async fn rename(db: &mut PgConnection, actor: &Actor, id: Uuid, name: &str) -> ApiResult<()> {
     policy::require(actor, Permission::AreasManage, None)?;
     let name = error::name(name)?;
     if !db::rename(db, id, &name).await? {
@@ -110,7 +110,7 @@ pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResu
 }
 
 /// Deletes an area and recomputes every flight's figures per area.
-pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
+pub async fn delete(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<()> {
     policy::require(actor, Permission::AreasManage, None)?;
     let mut tx = db.begin().await?;
     db::lock_for_change(&mut tx).await?;
@@ -131,6 +131,8 @@ mod tests {
     fn admin() -> Actor {
         Actor {
             user_id: Uuid::nil(),
+            // Areas take theirs from the connection.
+            organisation_id: Uuid::nil(),
             grants: Grants::from_stored([(None, "admin".to_owned())]).unwrap(),
             login_session_id: Uuid::nil(),
             ip: [127, 0, 0, 1].into(),
@@ -147,10 +149,11 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn a_drawing_split_by_another_area_becomes_separate_areas(db: PgPool) {
+    async fn a_drawing_split_by_another_area_becomes_separate_areas(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
         // A narrow strip from north to south, then an area drawn across it.
         save(
-            &db,
+            &mut db,
             &admin(),
             Drawing::New("Test Road"),
             &rectangle(0.004, 0.006, 0.0, 0.01),
@@ -159,7 +162,7 @@ mod tests {
         .ok()
         .unwrap();
         let saved = save(
-            &db,
+            &mut db,
             &admin(),
             Drawing::New("Test Block"),
             &rectangle(0.0, 0.01, 0.002, 0.008),
@@ -177,7 +180,6 @@ mod tests {
                 .all(|area| area.boundary["type"] == "Polygon")
         );
         assert_eq!(saved.clipped_by, ["Test Road"]);
-        let mut conn = db.acquire().await.unwrap();
-        assert_eq!(db::list(&mut conn).await.unwrap().len(), 3);
+        assert_eq!(db::list(&mut db).await.unwrap().len(), 3);
     }
 }

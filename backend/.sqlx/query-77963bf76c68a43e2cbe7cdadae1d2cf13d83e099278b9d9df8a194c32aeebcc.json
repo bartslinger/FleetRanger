@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into groups (organisation_id, name) values ($1, 'General')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "77963bf76c68a43e2cbe7cdadae1d2cf13d83e099278b9d9df8a194c32aeebcc"
+}

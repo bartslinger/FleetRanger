@@ -20,6 +20,8 @@ futures-util = { version = "0.3.34", default-features = false }
 # Areas: clipping polygons against each other and finding the track points inside them.
 geo = { version = "0.33.1", default-features = false }
 openidconnect = { version = "4.0.1", default-features = false, features = ["ureq"] }
+# The fleetranger_app password in DATABASE_APP_URL; already in the tree through url.
+percent-encoding = "2.3.2"
 # The MCP server for AI assistants (the protocol's official Rust SDK).
 rmcp = { version = "3.6.0", features = ["transport-streamable-http-server"] }
 serde = { version = "1.0.229", features = ["derive"] }

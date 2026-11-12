@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update login_sessions s set user_id = l.user_id, organisation_id = l.organisation_id\n         from logins mine, logins l, users u, organisations o\n         where s.id = $1 and mine.user_id = s.user_id\n           and l.oidc_subject = mine.oidc_subject and l.organisation_id = $2\n           and u.id = l.user_id and u.archived_at is null\n           and o.id = l.organisation_id and o.archived_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bf0e10177b5bcfee465678cbc6b5117a434a7974b310312e0b8e4645dc4d51c6"
+}

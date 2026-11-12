@@ -1,6 +1,7 @@
 //! Logging in and out. The web app sends the browser to `/auth/login`; the
 //! provider sends it back to `/auth/callback`.
 
+use crate::db::{Db, System, Tenants};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -17,7 +18,7 @@ use axum_extra::extract::cookie::{Cookie, SameSite};
 use cookie::time::Duration;
 use openidconnect::CsrfToken;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{self, LoginUser};
@@ -26,15 +27,18 @@ use super::{
     Actor, Auth, SESSION_IDLE_DAYS, client_ip, impersonation_cookie, login_cookie, session_cookie,
     token_hash,
 };
+use crate::oauth::AppsOn;
 use crate::oauth::OAuth;
 use crate::policy::{Grants, Permission};
 
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
     Arc<Auth>: FromRef<S>,
     OAuth: FromRef<S>,
+    AppsOn: FromRef<S>,
 {
     Router::new()
         .route("/auth/login", get(login))
@@ -42,6 +46,7 @@ where
         .route("/auth/logout", post(logout))
         .route("/auth/impersonate", post(impersonate))
         .route("/auth/impersonate/stop", post(stop_impersonating))
+        .route("/auth/organisation", post(switch_organisation))
         .route("/api/me", get(me))
 }
 
@@ -100,7 +105,7 @@ struct CallbackQuery {
 
 async fn callback(
     State(auth): State<Arc<Auth>>,
-    State(db): State<PgPool>,
+    State(system): State<System>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     jar: CookieJar,
     headers: HeaderMap,
@@ -150,9 +155,25 @@ async fn callback(
         }
     };
 
-    let user = db::login_user(&db, &identity.subject, identity.verified_email.as_deref()).await;
-    let user_id = match user {
-        Ok(LoginUser::Allowed(id)) => id,
+    // Before an organisation is known, so across organisations.
+    let mut system = match system.acquire().await {
+        Ok(connection) => connection,
+        Err(error) => {
+            tracing::error!(%error, "connecting for a login");
+            return (jar, Redirect::to("/login?error=failed")).into_response();
+        }
+    };
+    let user = db::login_user(
+        &mut system,
+        &identity.subject,
+        identity.verified_email.as_deref(),
+    )
+    .await;
+    let (user_id, organisation_id) = match user {
+        Ok(LoginUser::Allowed {
+            user_id,
+            organisation_id,
+        }) => (user_id, organisation_id),
         Ok(LoginUser::Refused) => {
             tracing::info!(email = identity.verified_email, "login refused: no login");
             return (jar, Redirect::to("/login?error=no-access")).into_response();
@@ -168,8 +189,9 @@ async fn callback(
         .get(header::USER_AGENT)
         .and_then(|value| value.to_str().ok());
     let created = db::create_session(
-        &db,
+        &mut system,
         user_id,
+        organisation_id,
         &token_hash(&token),
         SESSION_IDLE_DAYS,
         client_ip(&headers, peer),
@@ -193,13 +215,26 @@ async fn callback(
 
 async fn logout(
     State(auth): State<Arc<Auth>>,
-    State(db): State<PgPool>,
+    State(system): State<System>,
+    State(tenants): State<Tenants>,
     jar: CookieJar,
 ) -> Response {
     if let Some(cookie) = jar.get(session_cookie()) {
-        match db::revoke_session(&db, &token_hash(cookie.value())).await {
-            Ok(Some(user)) => {
-                if let Err(status) = end_impersonation(&db, user).await {
+        // Also an expired session, whose request has no organisation.
+        let revoked = async {
+            let mut system = system.acquire().await?;
+            db::revoke_session(&mut system, &token_hash(cookie.value())).await
+        };
+        match revoked.await {
+            Ok(Some((user, organisation))) => {
+                let mut db = match tenants.connect(organisation).await {
+                    Ok(db) => db,
+                    Err(error) => {
+                        tracing::error!(%error, "connecting to log out");
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                };
+                if let Err(status) = end_impersonation(&mut db, user).await {
                     return status.into_response();
                 }
             }
@@ -226,7 +261,7 @@ struct ImpersonateForm {
 /// they stop or log out.
 async fn impersonate(
     State(auth): State<Arc<Auth>>,
-    State(db): State<PgPool>,
+    mut db: Db,
     actor: Actor,
     jar: CookieJar,
     Form(form): Form<ImpersonateForm>,
@@ -241,10 +276,10 @@ async fn impersonate(
         return (StatusCode::BAD_REQUEST, "that is you").into_response();
     }
     // Apps connected as the previous user stay with that impersonation.
-    if let Err(status) = end_impersonation(&db, admin).await {
+    if let Err(status) = end_impersonation(&mut db, admin).await {
         return status.into_response();
     }
-    match db::impersonated_user(&db, form.user).await {
+    match db::impersonated_user(&mut db, form.user).await {
         Ok(Some(_)) => {}
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(error) => {
@@ -263,14 +298,14 @@ async fn impersonate(
 /// Back to the admin themselves, on the page of the user they impersonated.
 async fn stop_impersonating(
     State(auth): State<Arc<Auth>>,
-    State(db): State<PgPool>,
+    mut db: Db,
     actor: Actor,
     jar: CookieJar,
 ) -> Response {
     let admin = actor
         .impersonated_by
         .map_or(actor.user_id, |admin| admin.user_id);
-    if let Err(status) = end_impersonation(&db, admin).await {
+    if let Err(status) = end_impersonation(&mut db, admin).await {
         return status.into_response();
     }
     let back = match jar.get(impersonation_cookie()) {
@@ -284,9 +319,50 @@ async fn stop_impersonating(
     (jar, Redirect::to(&back)).into_response()
 }
 
+#[derive(Deserialize)]
+struct OrganisationForm {
+    organisation: Uuid,
+}
+
+/// The login session moves to the person's user in another of their
+/// organisations, for every tab. An impersonation ends with it, as the
+/// impersonated user is in the organisation left. The app starts again at
+/// its home page, as nothing on the page shown was in the other one.
+async fn switch_organisation(
+    State(auth): State<Arc<Auth>>,
+    State(system): State<System>,
+    mut db: Db,
+    actor: Actor,
+    jar: CookieJar,
+    Form(form): Form<OrganisationForm>,
+) -> Response {
+    // Across organisations: the person's user in the other one.
+    let switched = async {
+        let mut system = system.acquire().await?;
+        db::switch_organisation(&mut system, actor.login_session_id, form.organisation).await
+    };
+    match switched.await {
+        Ok(true) => {}
+        Ok(false) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            tracing::error!(%error, "switching organisation");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+    // Only once switched: `db` is still the organisation left, where the
+    // impersonation's app connections are.
+    if let Some(admin) = &actor.impersonated_by
+        && let Err(status) = end_impersonation(&mut db, admin.user_id).await
+    {
+        return status.into_response();
+    }
+    let jar = jar.remove(removal(&auth, impersonation_cookie()));
+    (jar, Redirect::to("/")).into_response()
+}
+
 /// Takes back the apps an admin connected while impersonating someone
 /// ("Impersonation in apps" in docs/architecture.md).
-async fn end_impersonation(db: &PgPool, admin: Uuid) -> Result<(), StatusCode> {
+async fn end_impersonation(db: &mut PgConnection, admin: Uuid) -> Result<(), StatusCode> {
     crate::oauth::end_impersonation(db, admin)
         .await
         .map_err(|error| {
@@ -309,6 +385,11 @@ struct Me {
     apps: bool,
     /// The admin impersonating this user, for the web app's banner.
     impersonated_by: Option<ImpersonatedBy>,
+    /// The organisation's: the web app shows every day and time in it.
+    time_zone: String,
+    /// The organisations the person can switch between, the current one
+    /// marked; one for most people.
+    organisations: Vec<db::OrganisationChoice>,
     /// Whether the organisation has more than one group: until then the web
     /// app shows no groups (user's decision, 2026-11-11).
     several_groups: bool,
@@ -347,11 +428,20 @@ impl From<&Grants> for Permissions {
 /// The logged-in user, or 401.
 async fn me(
     actor: Actor,
-    State(oauth): State<OAuth>,
-    State(db): State<PgPool>,
+    State(apps): State<AppsOn>,
+    State(system): State<System>,
+    mut db: Db,
 ) -> Result<Json<Me>, StatusCode> {
-    let several_groups = db::several_groups(&db).await.map_err(|error| {
-        tracing::error!(%error, "counting groups");
+    let read = async {
+        let several_groups = db::several_groups(&mut db).await?;
+        let settings = crate::organisations::settings(&mut db).await?;
+        // The person's other organisations are looked up across them.
+        let organisations =
+            db::organisations_of(&mut *system.acquire().await?, actor.login_session_id).await?;
+        Ok::<_, sqlx::Error>((several_groups, settings, organisations))
+    };
+    let (several_groups, settings, organisations) = read.await.map_err(|error| {
+        tracing::error!(%error, "reading the user's organisation");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     Ok(Json(Me {
@@ -359,7 +449,9 @@ async fn me(
         permissions: Permissions::from(&actor.grants),
         email: actor.email,
         name: actor.name,
-        apps: !oauth.resources.is_empty(),
+        apps: (apps.mcp && settings.mcp) || apps.api,
+        time_zone: settings.time_zone,
+        organisations,
         impersonated_by: actor.impersonated_by.map(|admin| ImpersonatedBy {
             id: admin.user_id,
             name: admin.name,

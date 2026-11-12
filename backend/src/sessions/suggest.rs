@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::SessionGap;
@@ -30,7 +30,7 @@ pub struct Suggestion {
 /// actor may see and that pass the filter, newest first, and how many there
 /// are in all.
 pub async fn list(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     filter: Filter,
     gap: SessionGap,
@@ -72,7 +72,7 @@ pub struct SuggestionPage {
 /// is found by any of its flights, as it may have changed since the link was
 /// made.
 pub async fn get(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     filter: Filter,
     gap: SessionGap,
@@ -107,7 +107,7 @@ pub async fn get(
 /// A flight's place in its suggestion, for stepping through that suggestion's
 /// flights in takeoff order; None if the flight isn't in one.
 pub async fn neighbours(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     filter: Filter,
     gap: SessionGap,
@@ -136,7 +136,7 @@ pub async fn neighbours(
 /// Every suggestion for the flights without a session that the actor may see
 /// and that pass the filter, oldest first.
 async fn all(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     mut filter: Filter,
     gap: SessionGap,

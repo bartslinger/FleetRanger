@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select o.name, s.time_zone, s.session_gap_minutes, s.mcp\n         from organisations o join organisation_settings s on s.organisation_id = o.id\n         -- Row-level security shows only this one; tests connect without it.\n         where o.id = current_setting('app.organisation_id', true)::uuid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "organisations",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "time_zone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "organisation_settings",
+            "name": "time_zone"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "session_gap_minutes",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "organisation_settings",
+            "name": "session_gap_minutes"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "mcp",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "organisation_settings",
+            "name": "mcp"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bb60db4b9891983b5c96e6ebd5821870a99586c453e82feaf7e8893b4191ebb1"
+}

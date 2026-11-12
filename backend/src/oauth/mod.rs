@@ -18,10 +18,11 @@ use axum::{
 };
 use base64::Engine;
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::auth::{Actor, Impersonator};
+use crate::db::{System, Tenants};
 
 /// What an assistant can be allowed to do over MCP.
 pub const MCP_SCOPES: &[&str] = &["flights:read"];
@@ -45,6 +46,14 @@ const CODE_SECONDS: f64 = 60.0;
 const ACCESS_SECONDS: f64 = 3600.0;
 /// A connection ends after this many days without use, like a login session.
 const IDLE_DAYS: i32 = 30;
+
+/// What the install offers apps (`FLEETRANGER_MCP`, `FLEETRANGER_API`), so
+/// the web app offers connected apps only where they can connect.
+#[derive(Clone, Copy)]
+pub struct AppsOn {
+    pub mcp: bool,
+    pub api: bool,
+}
 
 /// The install as an authorization server: its own address (the issuer) and
 /// the resources it issues tokens for.
@@ -87,9 +96,11 @@ pub enum Bearer {
 }
 
 /// Checks the request's access token against this resource and, if given,
-/// scope.
+/// scope. The token says which organisation the request is in, so it is
+/// looked up across organisations.
 pub async fn bearer(
-    db: &PgPool,
+    system: &System,
+    tenants: &Tenants,
     parts: &Parts,
     resource: &str,
     scope: Option<&str>,
@@ -102,7 +113,7 @@ pub async fn bearer(
     else {
         return Ok(Bearer::Missing);
     };
-    let Some(access) = db::use_access(db, &sha256(token)).await? else {
+    let Some(access) = db::use_access(&mut *system.acquire().await?, &sha256(token)).await? else {
         return Ok(Bearer::Invalid);
     };
     if access.resource != resource {
@@ -118,9 +129,11 @@ pub async fn bearer(
     let Some(peer) = peer else {
         return Ok(Bearer::Invalid);
     };
+    let mut db = tenants.connect(access.organisation_id).await?;
     let actor = Actor {
         user_id: access.user_id,
-        grants: crate::auth::grants(db, access.user_id).await?,
+        organisation_id: access.organisation_id,
+        grants: crate::auth::grants(&mut db, access.user_id).await?,
         // The audit log will name the connection here rather than a login session.
         login_session_id: access.grant_id,
         ip: crate::auth::client_ip(&parts.headers, peer),
@@ -140,17 +153,22 @@ pub async fn bearer(
 
 /// Ends the app connections an admin made while impersonating someone: at
 /// Stop impersonating, switching to someone else, and logging out.
-pub async fn end_impersonation(db: &PgPool, admin: Uuid) -> sqlx::Result<()> {
+pub async fn end_impersonation(db: &mut PgConnection, admin: Uuid) -> sqlx::Result<()> {
     db::end_impersonation(db, admin).await
 }
 
 /// Removes expired codes, idle connections and apps that were never
 /// connected, every hour while the server runs.
-pub async fn clean_up_hourly(db: PgPool) {
+pub async fn clean_up_hourly(system: System) {
     let mut hourly = tokio::time::interval(std::time::Duration::from_secs(3600));
     loop {
         hourly.tick().await;
-        if let Err(error) = db::clean_up(&db, IDLE_DAYS).await {
+        let cleaned = async {
+            // Every organisation's at once.
+            let mut system = system.acquire().await?;
+            db::clean_up(&mut system, IDLE_DAYS).await
+        };
+        if let Err(error) = cleaned.await {
             tracing::error!(%error, "cleaning up OAuth data");
         }
     }

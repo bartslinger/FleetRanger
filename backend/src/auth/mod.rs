@@ -16,11 +16,12 @@ use axum::{
 use axum_extra::extract::CookieJar;
 use openidconnect::url::Url;
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 pub use oidc::Provider;
 
+use crate::db::{Db, RequestOrganisation, System, Tenants};
 use crate::policy::{Grants, Permission};
 
 /// Whether the install is reached over HTTPS, set once at startup.
@@ -85,9 +86,12 @@ impl Auth {
 #[derive(Clone)]
 pub struct Actor {
     pub user_id: Uuid,
+    /// The organisation the request is in: the user's.
+    pub organisation_id: Uuid,
     /// Their roles, read once per request; every access decision asks these.
     pub grants: Grants,
-    #[expect(dead_code, reason = "read by the audit log, which comes next")]
+    /// The login session, or an app's connection; switching organisation
+    /// moves the session.
     pub login_session_id: Uuid,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
     pub ip: IpAddr,
@@ -108,11 +112,16 @@ pub struct Impersonator {
 impl<S> FromRequestParts<S> for Actor
 where
     S: Send + Sync,
-    PgPool: FromRef<S>,
+    System: FromRef<S>,
+    Tenants: FromRef<S>,
 {
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // Found once per request, also for the request's `Db`.
+        if let Some(actor) = parts.extensions.get::<Actor>() {
+            return Ok(actor.clone());
+        }
         let jar = CookieJar::from_headers(&parts.headers);
         let token = match jar.get(session_cookie()) {
             Some(cookie) => cookie.value(),
@@ -124,41 +133,83 @@ where
             .copied()
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
         let ip = client_ip(&parts.headers, peer);
-        let db = PgPool::from_ref(state);
-        let session = db::use_session(&db, &token_hash(token), SESSION_IDLE_DAYS)
-            .await
-            .map_err(|error| {
-                tracing::error!(%error, "looking up a login session");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
-            .ok_or(StatusCode::UNAUTHORIZED)?;
-        let grants = grants(&db, session.user_id).await.map_err(|error| {
-            tracing::error!(%error, "reading a user's roles");
+        // The session says which organisation the request is in, so it is
+        // looked up before one is known.
+        let session = async {
+            let mut system = System::from_ref(state).acquire().await?;
+            db::use_session(&mut system, &token_hash(token), SESSION_IDLE_DAYS).await
+        }
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "looking up a login session");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+        let actor = async {
+            let mut db = Tenants::from_ref(state)
+                .connect(session.organisation_id)
+                .await?;
+            let actor = Actor {
+                user_id: session.user_id,
+                organisation_id: session.organisation_id,
+                grants: grants(&mut db, session.user_id).await?,
+                login_session_id: session.id,
+                ip,
+                email: Some(session.email),
+                name: session.name,
+                impersonated_by: None,
+            };
+            // Only a browser sends the cookie, which counts only while the one
+            // logged in may manage users; otherwise they simply see their own view.
+            let impersonated = jar
+                .get(impersonation_cookie())
+                .and_then(|cookie| Uuid::parse_str(cookie.value()).ok());
+            match impersonated {
+                Some(user_id) if may_impersonate(&actor, user_id) => {
+                    impersonate(&mut db, actor, user_id).await
+                }
+                _ => Ok(actor),
+            }
+        }
+        .await
+        .map_err(|error: sqlx::Error| {
+            tracing::error!(%error, "reading who is making a request");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-        let actor = Actor {
-            user_id: session.user_id,
-            grants,
-            login_session_id: session.id,
-            ip,
-            email: Some(session.email),
-            name: session.name,
-            impersonated_by: None,
-        };
-        // Only a browser sends the cookie, which counts only while the one
-        // logged in may manage users; otherwise they simply see their own view.
-        let impersonated = jar
-            .get(impersonation_cookie())
-            .and_then(|cookie| Uuid::parse_str(cookie.value()).ok());
-        match impersonated {
-            Some(user_id) if may_impersonate(&actor, user_id) => {
-                impersonate(&db, actor, user_id).await.map_err(|error| {
-                    tracing::error!(%error, "impersonating another user");
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })
+        parts
+            .extensions
+            .insert(RequestOrganisation(actor.organisation_id));
+        parts.extensions.insert(actor.clone());
+        Ok(actor)
+    }
+}
+
+/// The request's connection, limited to its organisation (see `crate::db`):
+/// the one its caller authenticated for, or else the logged-in user's.
+impl<S> FromRequestParts<S> for Db
+where
+    S: Send + Sync,
+    System: FromRef<S>,
+    Tenants: FromRef<S>,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let organisation = match parts.extensions.get::<RequestOrganisation>() {
+            Some(RequestOrganisation(organisation)) => *organisation,
+            None => {
+                Actor::from_request_parts(parts, state)
+                    .await?
+                    .organisation_id
             }
-            _ => Ok(actor),
-        }
+        };
+        Tenants::from_ref(state)
+            .connect(organisation)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "connecting for a request");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })
     }
 }
 
@@ -169,7 +220,7 @@ fn may_impersonate(admin: &Actor, user_id: Uuid) -> bool {
 
 /// The admin as the user they impersonate, or still themselves if that user is
 /// archived or gone.
-async fn impersonate(db: &PgPool, admin: Actor, user_id: Uuid) -> sqlx::Result<Actor> {
+async fn impersonate(db: &mut PgConnection, admin: Actor, user_id: Uuid) -> sqlx::Result<Actor> {
     let Some(user) = db::impersonated_user(db, user_id).await? else {
         return Ok(admin);
     };
@@ -213,7 +264,7 @@ fn token_hash(token: &str) -> Vec<u8> {
 /// server), which connect from the internal network, it is the last address in
 /// `X-Forwarded-For`, which they append. Otherwise it is the connecting peer.
 /// A user's roles on groups and the whole organisation.
-pub async fn grants(db: &PgPool, user_id: Uuid) -> sqlx::Result<Grants> {
+pub async fn grants(db: &mut PgConnection, user_id: Uuid) -> sqlx::Result<Grants> {
     Grants::from_stored(db::roles(db, user_id).await?).ok_or_else(|| {
         sqlx::Error::Decode(format!("unknown role stored for user {user_id}").into())
     })
@@ -264,24 +315,24 @@ pub async fn same_origin(
 
 #[cfg(test)]
 mod tests {
-    use sqlx::PgPool;
 
     use super::{impersonate, may_impersonate};
     use crate::testing;
 
     #[sqlx::test]
-    async fn only_admins_impersonate_someone_else_with_that_users_roles(db: PgPool) {
-        let admin = testing::user(&db, "Test Admin", &["admin"]).await;
-        let pilot =
-            testing::member(&db, "Test Pilot", testing::general(&db).await, &["pilot"]).await;
-        let as_admin = testing::actor(&db, admin).await;
-        let as_pilot = testing::actor(&db, pilot).await;
+    async fn only_admins_impersonate_someone_else_with_that_users_roles(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let admin = testing::user(&mut db, "Test Admin", &["admin"]).await;
+        let general = testing::general(&mut db).await;
+        let pilot = testing::member(&mut db, "Test Pilot", general, &["pilot"]).await;
+        let as_admin = testing::actor(&mut db, admin).await;
+        let as_pilot = testing::actor(&mut db, pilot).await;
 
         assert!(may_impersonate(&as_admin, pilot));
         assert!(!may_impersonate(&as_admin, admin));
         assert!(!may_impersonate(&as_pilot, admin));
 
-        let impersonating = impersonate(&db, as_admin.clone(), pilot).await.unwrap();
+        let impersonating = impersonate(&mut db, as_admin.clone(), pilot).await.unwrap();
         assert_eq!(impersonating.user_id, pilot);
         assert!(
             !impersonating
@@ -296,10 +347,10 @@ mod tests {
         // An archived user can't be impersonated: the admin stays themselves.
         sqlx::query("update users set archived_at = now() where id = $1")
             .bind(pilot)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
-        let impersonating = impersonate(&db, as_admin, pilot).await.unwrap();
+        let impersonating = impersonate(&mut db, as_admin, pilot).await.unwrap();
         assert_eq!(impersonating.user_id, admin);
         assert!(impersonating.impersonated_by.is_none());
     }

@@ -34,17 +34,17 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://fleetranger:${POSTGRES_PASSWORD}@postgres/fleetranger
+      # Requests connect as fleetranger_app, which row-level security limits
+      # to one organisation; the backend sets this password on every start.
+      DATABASE_APP_URL: postgres://fleetranger_app:${POSTGRES_APP_PASSWORD:?}@postgres/fleetranger
       RUST_LOG: ${RUST_LOG:-info}
       FLEETRANGER_PUBLIC_URL: ${FLEETRANGER_PUBLIC_URL:?}
       DJI_APP_KEY: ${DJI_APP_KEY:-}
       OIDC_ISSUER: ${OIDC_ISSUER:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      FLEETRANGER_SESSION_GAP_MINUTES: ${FLEETRANGER_SESSION_GAP_MINUTES:-}
-      TIME_ZONE: ${TIME_ZONE:-UTC}
       FLEETRANGER_MCP: ${FLEETRANGER_MCP:-}
       FLEETRANGER_API: ${FLEETRANGER_API:-}
-      FLEETRANGER_ORGANISATION_NAME: ${FLEETRANGER_ORGANISATION_NAME:-}
     # The owner of the flight log directory, so uploads and the logs copied
     # there before share one owner (the image's default is uid 65532).
     user: ${FLEETRANGER_UID:-65532}:${FLEETRANGER_GID:-65532}
@@ -74,7 +74,6 @@ services:
       # backend for its records.
       ADDRESS_HEADER: X-Forwarded-For
       XFF_DEPTH: 1
-      TIME_ZONE: ${TIME_ZONE:-UTC}
       MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
     ports:
       - 127.0.0.1:3000:3000

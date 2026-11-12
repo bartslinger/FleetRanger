@@ -397,6 +397,16 @@ export interface Account {
 	/** Whether the organisation has more than one group; until then no
 	 * groups are shown. */
 	several_groups: boolean;
+	/** The organisation's time zone; every day and time is shown in it. */
+	time_zone: string;
+	/** The organisations the user can switch between, the current one
+	 * marked; one for most people. */
+	organisations: { id: string; name: string; current: boolean }[];
+}
+
+/** The time zone of the request's organisation (UTC before logging in). */
+export function timeZone(locals: App.Locals): string {
+	return locals.account?.time_zone ?? 'UTC';
 }
 
 /** An app asking to connect, from `POST /api/oauth/request`. */

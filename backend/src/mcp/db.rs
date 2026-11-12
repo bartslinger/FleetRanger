@@ -1,7 +1,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::{
@@ -66,7 +66,7 @@ impl GroupBy {
 /// The totals of the flights in the scope that pass the filter, per row:
 /// named rows by name, periods in order.
 pub async fn totals(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
     group_by: GroupBy,
@@ -131,7 +131,7 @@ pub async fn totals(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -140,7 +140,7 @@ pub async fn totals(
 /// with only their time and distance there. Time outside all areas isn't
 /// listed.
 pub async fn area_totals(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
 ) -> sqlx::Result<Vec<Totals>> {
@@ -181,13 +181,13 @@ pub async fn area_totals(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// The instant a day starts in the time zone.
 pub async fn start_of_day(
-    db: &PgPool,
+    db: &mut PgConnection,
     day: NaiveDate,
     time_zone: &str,
 ) -> sqlx::Result<DateTime<Utc>> {
@@ -196,7 +196,7 @@ pub async fn start_of_day(
         day,
         time_zone,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
@@ -209,7 +209,7 @@ pub struct OwnGroup {
 
 /// The groups the user flies for as a member, by name; none for someone who
 /// doesn't fly in a group.
-pub async fn own_groups(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<OwnGroup>> {
+pub async fn own_groups(db: &mut PgConnection, user_id: Uuid) -> sqlx::Result<Vec<OwnGroup>> {
     sqlx::query_as!(
         OwnGroup,
         "select g.id, g.name from groups g
@@ -219,17 +219,17 @@ pub async fn own_groups(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<OwnGroup
         user_id,
         &policy::roles_granting(Permission::FlightsFlyFor),
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// Today in the time zone; fails for a time zone Postgres doesn't know.
-pub async fn today(db: &PgPool, time_zone: &str) -> sqlx::Result<NaiveDate> {
+pub async fn today(db: &mut PgConnection, time_zone: &str) -> sqlx::Result<NaiveDate> {
     sqlx::query_scalar!(
         r#"select (now() at time zone $1)::date as "today!""#,
         time_zone
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
@@ -237,12 +237,12 @@ pub async fn today(db: &PgPool, time_zone: &str) -> sqlx::Result<NaiveDate> {
 mod tests {
     use super::*;
 
-    async fn insert_id(db: &PgPool, sql: &'static str) -> Uuid {
-        sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
+    async fn insert_id(db: &mut PgConnection, sql: &'static str) -> Uuid {
+        sqlx::query_scalar(sql).fetch_one(&mut *db).await.unwrap()
     }
 
     /// Adds a flight of this group taking off at `takeoff` (UTC), archived or not.
-    async fn flight(db: &PgPool, group: Uuid, takeoff: &str, archived: bool) {
+    async fn flight(db: &mut PgConnection, group: Uuid, takeoff: &str, archived: bool) {
         let raw_log = insert_id(
             db,
             "insert into raw_logs (sha256, path, size_bytes)
@@ -260,7 +260,7 @@ mod tests {
         .bind(takeoff)
         .bind(group)
         .bind(archived)
-        .execute(db)
+        .execute(&mut *db)
         .await
         .unwrap();
     }
@@ -269,19 +269,24 @@ mod tests {
     /// September is in October in Amsterdam (UTC+2 in summer). Archived flights and
     /// flights of another group don't count for a member.
     #[sqlx::test]
-    async fn totals_per_month_in_the_time_zone(db: PgPool) {
-        let north = crate::testing::group(&db, "North").await;
-        let south = crate::testing::group(&db, "South").await;
-        let member = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        crate::testing::join(&db, member, north).await;
-        flight(&db, north, "2026-09-30T12:00:00Z", false).await;
-        flight(&db, north, "2026-09-30T23:30:00Z", false).await;
-        flight(&db, north, "2026-09-30T12:00:00Z", true).await;
-        flight(&db, south, "2026-09-30T12:00:00Z", false).await;
+    async fn totals_per_month_in_the_time_zone(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let north = crate::testing::group(&mut db, "North").await;
+        let south = crate::testing::group(&mut db, "South").await;
+        let member = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        crate::testing::join(&mut db, member, north).await;
+        flight(&mut db, north, "2026-09-30T12:00:00Z", false).await;
+        flight(&mut db, north, "2026-09-30T23:30:00Z", false).await;
+        flight(&mut db, north, "2026-09-30T12:00:00Z", true).await;
+        flight(&mut db, south, "2026-09-30T12:00:00Z", false).await;
 
-        let scope = crate::testing::scope(&db, member).await;
+        let scope = crate::testing::scope(&mut db, member).await;
         let months = totals(
-            &db,
+            &mut db,
             &scope,
             &Filter::default(),
             GroupBy::Month,

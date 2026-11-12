@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into raw_logs (sha256, path, size_bytes, pilot_id, group_id)\n           values ($1, $2, $3, (select id from users where id = $4),\n                   (select id from groups where id = $5))\n           on conflict (organisation_id, path) do update set\n               sha256 = excluded.sha256,\n               size_bytes = excluded.size_bytes,\n               pilot_id = excluded.pilot_id,\n               group_id = excluded.group_id,\n               received_at = now(),\n               status = 'pending',\n               attempts = 0,\n               last_error = null,\n               processed_at = null\n           -- xmax is set on a row that \"on conflict\" updated rather than inserted.\n           returning (xmax <> 0) as \"replaced!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "replaced!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7727811c5916894549427a9ccc0de853b928c64eda73cbaabab182e62f495546"
+}

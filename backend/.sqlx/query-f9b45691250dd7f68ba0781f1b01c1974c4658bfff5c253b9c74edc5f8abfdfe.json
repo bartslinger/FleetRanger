@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update organisation_settings\n         set time_zone = coalesce($2, time_zone),\n             session_gap_minutes = coalesce($3, session_gap_minutes),\n             mcp = coalesce($4, mcp)\n         where organisation_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9b45691250dd7f68ba0781f1b01c1974c4658bfff5c253b9c74edc5f8abfdfe"
+}

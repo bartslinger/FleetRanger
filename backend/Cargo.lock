@@ -832,6 +832,7 @@ dependencies = [
  "futures-util",
  "geo",
  "openidconnect",
+ "percent-encoding",
  "rmcp",
  "serde",
  "serde_json",
