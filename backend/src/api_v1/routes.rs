@@ -114,11 +114,12 @@ async fn me(mut db: Db, Extension(caller): Extension<Caller>) -> Result<Json<Me>
     responses((status = 200, body = Organisation), (status = 401, body = Error)),
     security(("oauth" = []))
 )]
-async fn organisation(State(api): State<Api>) -> Json<Organisation> {
-    Json(Organisation {
-        name: api.organisation_name.as_deref().map(str::to_owned),
-        time_zone: api.time_zone.to_string(),
-    })
+async fn organisation(mut db: Db) -> Result<Json<Organisation>, V1Error> {
+    let settings = crate::organisations::settings(&mut db).await?;
+    Ok(Json(Organisation {
+        name: Some(settings.name),
+        time_zone: settings.time_zone,
+    }))
 }
 
 /// The filters sessions and flights share. Repeat one for several values,
@@ -228,7 +229,7 @@ async fn list_sessions(
 ) -> Result<Json<Page<Session>>, V1Error> {
     caller.require("sessions:list")?;
     let expand = Expand::parse(expansion.expand.as_deref(), SESSION_EXPANSIONS, &caller)?;
-    let filter = filter(&mut db, &api, &filters).await?;
+    let filter = filter(&mut db, &filters).await?;
     let limit = limit(paging.limit)?;
     let after = decode::<TimeCursor>(paging.cursor.as_deref())?;
     let scope = policy::flight_scope(&caller.actor);
@@ -313,7 +314,7 @@ async fn list_flights(
 ) -> Result<Json<Page<Flight>>, V1Error> {
     caller.require("flights:list")?;
     let expand = Expand::parse(expansion.expand.as_deref(), FLIGHT_EXPANSIONS, &caller)?;
-    let mut filter = filter(&mut db, &api, &filters).await?;
+    let mut filter = filter(&mut db, &filters).await?;
     let (drones, _) = ids(&flight_filters.drone, "drone", false)?;
     let (controllers, _) = ids(&flight_filters.controller, "controller", false)?;
     if let Some(drones) = drones {
@@ -596,7 +597,7 @@ fn next<T>(rows: &mut Vec<T>, limit: i64, cursor: impl Fn(&T) -> String) -> Opti
 
 /// The flights' filter: days in the organisation's time zone, ids with
 /// `none` for "without one".
-async fn filter(db: &mut PgConnection, api: &Api, filters: &Filters) -> Result<Filter, V1Error> {
+async fn filter(db: &mut PgConnection, filters: &Filters) -> Result<Filter, V1Error> {
     let day = |value: &str| {
         NaiveDate::parse_from_str(value, "%Y-%m-%d")
             .map_err(|_| V1Error::Invalid(format!("`{value}` isn’t a day; give it as YYYY-MM-DD.")))
@@ -612,9 +613,10 @@ async fn filter(db: &mut PgConnection, api: &Api, filters: &Filters) -> Result<F
             if last < first {
                 return Err(V1Error::Invalid("`to` is before `from`.".to_owned()));
             }
-            let start = mcp::db::start_of_day(&mut *db, first, &api.time_zone).await?;
-            let end = mcp::db::start_of_day(&mut *db, last + chrono::Days::new(1), &api.time_zone)
-                .await?;
+            let time_zone = crate::organisations::settings(db).await?.time_zone;
+            let start = mcp::db::start_of_day(&mut *db, first, &time_zone).await?;
+            let end =
+                mcp::db::start_of_day(&mut *db, last + chrono::Days::new(1), &time_zone).await?;
             (Some(start), Some(end))
         }
         (None, Some(_)) => {

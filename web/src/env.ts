@@ -13,14 +13,5 @@ export const variables = defineEnvVars({
 			}
 			return value ?? '';
 		}
-	},
-	TIME_ZONE: {
-		description: "The organisation's time zone; all times are shown in it.",
-		schema: (value) => {
-			const zone = value || 'UTC';
-			// Throws a RangeError for unknown zones.
-			new Intl.DateTimeFormat('en', { timeZone: zone });
-			return zone;
-		}
 	}
 });

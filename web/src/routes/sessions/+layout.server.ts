@@ -1,6 +1,11 @@
-import { TIME_ZONE } from '$app/env/private';
 import { isHttpError } from '@sveltejs/kit';
-import { get, type Area, type Session, type SessionNeighbours } from '#lib/server/backend.js';
+import {
+	get,
+	timeZone,
+	type Area,
+	type Session,
+	type SessionNeighbours
+} from '#lib/server/backend.js';
 import { apiFilters, parse } from './list.js';
 
 /**
@@ -10,13 +15,13 @@ import { apiFilters, parse } from './list.js';
  * page's load, which reads only the list's own parameters: opening,
  * stepping through or closing a session loads only this, not the list again.
  */
-export async function load({ fetch, url }) {
+export async function load({ fetch, locals, url }) {
 	const id = url.searchParams.get('session');
 	if (!id) return { openSession: null, areas: [] as Area[], neighbours: null };
 	// Stepping goes on into the weeks or months around (user's decision,
 	// 2026-10-21) with the list's other filters, so without its days.
-	const state = parse(url.searchParams, TIME_ZONE);
-	const filters = apiFilters({ ...state, from: null, to: null }, TIME_ZONE);
+	const state = parse(url.searchParams, timeZone(locals));
+	const filters = apiFilters({ ...state, from: null, to: null }, timeZone(locals));
 	const [openSession, areas, neighbours] = await Promise.all([
 		get<Session>(fetch, `/api/sessions/${id}`),
 		get<Area[]>(fetch, '/api/areas'),

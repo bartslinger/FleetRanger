@@ -1,10 +1,10 @@
-import { TIME_ZONE } from '$app/env/private';
 import { parsePilot } from '#lib/pilots.js';
 import { sessionGroup } from '#lib/groups.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
 	send,
+	timeZone,
 	type Devices,
 	type FlightChoices,
 	type FlightPage,
@@ -12,9 +12,9 @@ import {
 } from '#lib/server/backend.js';
 import { apiQuery, parse, query } from './logbook.js';
 
-export async function load({ fetch, url }) {
+export async function load({ fetch, locals, url }) {
 	const state = parse(url.searchParams);
-	const api = apiQuery(state, TIME_ZONE);
+	const api = apiQuery(state, timeZone(locals));
 	// The suggestions page through suggestions; the list's first page still
 	// counts the flights.
 	const listApi = new URLSearchParams(api);
@@ -44,12 +44,13 @@ export async function load({ fetch, url }) {
 async function flightIds(
 	fetch: typeof globalThis.fetch,
 	url: URL,
-	form: FormData
+	form: FormData,
+	zone: string
 ): Promise<{ ids: string[] } | { message: string }> {
 	if (form.get('all') !== 'true') return { ids: form.getAll('flight_id').map(String) };
 	const { ids } = await get<{ ids: string[] }>(
 		fetch,
-		`/api/flights/ids?${apiQuery(parse(url.searchParams), TIME_ZONE)}`
+		`/api/flights/ids?${apiQuery(parse(url.searchParams), zone)}`
 	);
 	const expected = Number(form.get('expected'));
 	if (ids.length !== expected) {
@@ -61,18 +62,18 @@ async function flightIds(
 }
 
 export const actions = {
-	setPilot: async ({ fetch, request, url }) => {
+	setPilot: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form);
+		const flights = await flightIds(fetch, url, form, timeZone(locals));
 		if ('message' in flights) return fail(409, { pilotMessage: flights.message });
 		const body = { flight_ids: flights.ids, ...parsePilot(String(form.get('pilot') ?? '')) };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
 		if (!result.ok) return fail(result.status, { pilotMessage: result.message });
 		return { changed: result.data.changed };
 	},
-	setGroup: async ({ fetch, request, url }) => {
+	setGroup: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form);
+		const flights = await flightIds(fetch, url, form, timeZone(locals));
 		if ('message' in flights) return fail(409, { groupMessage: flights.message });
 		const body = {
 			flight_ids: flights.ids,
@@ -82,9 +83,9 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { groupMessage: result.message });
 		return { changed: result.data.changed };
 	},
-	newSession: async ({ fetch, request, url }) => {
+	newSession: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form);
+		const flights = await flightIds(fetch, url, form, timeZone(locals));
 		if ('message' in flights) return fail(409, { newSessionMessage: flights.message });
 		const group = sessionGroup(form);
 		if (!group) return fail(400, { newSessionMessage: 'Choose a group for the session.' });
@@ -93,38 +94,38 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { newSessionMessage: result.message });
 		return { session: result.data.id };
 	},
-	removeFromSession: async ({ fetch, request, url }) => {
+	removeFromSession: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form);
+		const flights = await flightIds(fetch, url, form, timeZone(locals));
 		if ('message' in flights) return fail(409, { removeMessage: flights.message });
 		const body = { flight_ids: flights.ids };
 		const result = await send<{ removed: number }>(fetch, 'POST', '/api/sessions/remove', body);
 		if (!result.ok) return fail(result.status, { removeMessage: result.message });
 		return { removed: result.data.removed };
 	},
-	archive: async ({ fetch, request, url }) => {
+	archive: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form);
+		const flights = await flightIds(fetch, url, form, timeZone(locals));
 		if ('message' in flights) return fail(409, { archiveMessage: flights.message });
 		const body = { flight_ids: flights.ids };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/archive', body);
 		if (!result.ok) return fail(result.status, { archiveMessage: result.message });
 		return { changed: result.data.changed };
 	},
-	restore: async ({ fetch, request, url }) => {
+	restore: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form);
+		const flights = await flightIds(fetch, url, form, timeZone(locals));
 		if ('message' in flights) return fail(409, { restoreMessage: flights.message });
 		const body = { flight_ids: flights.ids };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/restore', body);
 		if (!result.ok) return fail(result.status, { restoreMessage: result.message });
 		return { changed: result.data.changed };
 	},
-	addToSession: async ({ fetch, request, url }) => {
+	addToSession: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
 		const session = String(form.get('session_id') ?? '');
 		if (!session) return fail(400, { addMessage: 'Choose a session.' });
-		const flights = await flightIds(fetch, url, form);
+		const flights = await flightIds(fetch, url, form, timeZone(locals));
 		if ('message' in flights) return fail(409, { addMessage: flights.message });
 		const body = { flight_ids: flights.ids };
 		const path = `/api/sessions/${encodeURIComponent(session)}/flights`;

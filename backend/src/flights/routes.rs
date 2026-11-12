@@ -3,7 +3,7 @@
 use crate::db::Db;
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, Query, State},
+    extract::{FromRef, Path, Query},
     http::StatusCode,
     routing::{get, post},
 };
@@ -16,10 +16,7 @@ use super::service;
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
-    sessions::{
-        SessionGap,
-        suggest::{self, Suggestion},
-    },
+    sessions::suggest::{self, Suggestion},
 };
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
@@ -30,7 +27,6 @@ where
     S: Clone + Send + Sync + 'static,
     crate::db::System: FromRef<S>,
     crate::db::Tenants: FromRef<S>,
-    SessionGap: FromRef<S>,
 {
     Router::new()
         .route("/api/flights", get(list))
@@ -227,7 +223,6 @@ struct SuggestionPage {
 async fn suggestions(
     actor: Actor,
     mut db: Db,
-    State(gap): State<SessionGap>,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<SuggestionPage>> {
     let page = query.page.unwrap_or(1).max(1);
@@ -239,6 +234,7 @@ async fn suggestions(
     }
     let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
     let offset = (page as usize - 1) * size as usize;
+    let gap = crate::organisations::settings(&mut db).await?.session_gap;
     let (suggestions, total) =
         suggest::list(&mut db, &actor, filter, gap, size as usize, offset).await?;
     Ok(Json(SuggestionPage { suggestions, total }))
@@ -250,11 +246,11 @@ async fn suggestions(
 async fn suggestion(
     actor: Actor,
     mut db: Db,
-    State(gap): State<SessionGap>,
     Path(key): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<suggest::SuggestionPage>> {
     let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
+    let gap = crate::organisations::settings(&mut db).await?.session_gap;
     suggest::get(&mut db, &actor, filter, gap, key)
         .await?
         .map(Json)
@@ -350,12 +346,12 @@ fn id_list(value: &Option<String>) -> Result<(Option<Vec<Uuid>>, bool), ()> {
 async fn neighbours(
     actor: Actor,
     mut db: Db,
-    State(gap): State<SessionGap>,
     Path(id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<Neighbours>> {
     let (filter, sort) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
     if filter.in_session == Some(false) && query.view.as_deref() == Some("suggestions") {
+        let gap = crate::organisations::settings(&mut db).await?.session_gap;
         let place = suggest::neighbours(&mut db, &actor, filter, gap, id).await?;
         return place.map(Json).ok_or(ApiError::NotFound);
     }

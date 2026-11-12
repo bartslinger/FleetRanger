@@ -1,9 +1,10 @@
-import { MAPBOX_ACCESS_TOKEN, TIME_ZONE } from '$app/env/private';
+import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
 	remove,
 	send,
+	timeZone,
 	type Devices,
 	type FlightChoices,
 	type SessionPage
@@ -11,9 +12,9 @@ import {
 import { parsePilot } from '#lib/pilots.js';
 import { listFilters, parse, PERIOD_SIZE, query } from './list.js';
 
-export async function load({ fetch, url }) {
-	const state = parse(url.searchParams, TIME_ZONE);
-	const filters = listFilters(state, TIME_ZONE);
+export async function load({ fetch, locals, url }) {
+	const state = parse(url.searchParams, timeZone(locals));
+	const filters = listFilters(state, timeZone(locals));
 	const api = new URLSearchParams(filters);
 	// The cards show their whole period on one page.
 	const cards = state.view === 'cards';

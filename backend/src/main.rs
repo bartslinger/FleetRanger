@@ -14,6 +14,7 @@ mod health;
 mod ingest;
 mod mcp;
 mod oauth;
+mod organisations;
 mod pairing;
 mod policy;
 mod sessions;
@@ -26,7 +27,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use axum::{Router, extract::FromRef, middleware, routing::get};
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
@@ -39,7 +40,6 @@ use crate::events::Changes;
 use crate::ingest::LogDir;
 use crate::ingest::activity::Activity;
 use crate::oauth::OAuth;
-use crate::sessions::SessionGap;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -78,26 +78,7 @@ async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [] | ["serve"] => serve(&config, system, tenants).await,
-        // Until the command-line tool names the organisation: the only one.
-        ["import"] => {
-            let mut db = only_organisation(&system, &tenants).await?;
-            ingest::import::run(&mut db, &config.log_dir, None).await
-        }
-        ["import", "--group", group] => {
-            let mut db = only_organisation(&system, &tenants).await?;
-            ingest::import::run(&mut db, &config.log_dir, Some(group)).await
-        }
-        ["add-user", email, name] => {
-            let mut db = only_organisation(&system, &tenants).await?;
-            users::add(&mut db, email, name, false).await
-        }
-        ["add-user", "--admin", email, name] => {
-            let mut db = only_organisation(&system, &tenants).await?;
-            users::add(&mut db, email, name, true).await
-        }
-        _ => bail!(
-            "unknown command {args:?}; expected serve, import [--group <name>] or add-user [--admin] <email> <name>"
-        ),
+        _ => organisations::cli::run(&args, &system, &tenants, &config.log_dir).await,
     }
 }
 
@@ -109,7 +90,7 @@ struct AppState {
     auth: Arc<Auth>,
     activity: Activity,
     changes: Changes,
-    session_gap: SessionGap,
+    api: api_v1::PublicApi,
     log_dir: LogDir,
     android_apk: AndroidApk,
     oauth: OAuth,
@@ -139,9 +120,9 @@ impl FromRef<AppState> for LogDir {
     }
 }
 
-impl FromRef<AppState> for SessionGap {
+impl FromRef<AppState> for api_v1::PublicApi {
     fn from_ref(state: &AppState) -> Self {
-        state.session_gap
+        state.api
     }
 }
 
@@ -169,20 +150,7 @@ impl FromRef<AppState> for Arc<Auth> {
     }
 }
 
-/// A connection in the install's only organisation, for the command-line
-/// commands until they name one.
-async fn only_organisation(system: &db::System, tenants: &db::Tenants) -> Result<db::Db> {
-    let organisations: Vec<uuid::Uuid> = sqlx::query_scalar("select id from organisations")
-        .fetch_all(&**system)
-        .await?;
-    let [organisation] = organisations[..] else {
-        bail!("the install has several organisations; this command can't choose one yet");
-    };
-    Ok(tenants.connect(organisation).await?)
-}
-
 async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Result<()> {
-    let session_gap = SessionGap(config.session_gap_minutes);
     let changes = Changes::default();
     let activity = Activity::new(changes.clone());
     tokio::spawn(ingest::process::run(
@@ -191,7 +159,6 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
         config.log_dir.clone(),
         config.dji_app_key.clone(),
         activity.clone(),
-        session_gap,
     ));
 
     let provider = match &config.oidc {
@@ -202,21 +169,18 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
         }
     };
     let issuer = config.public_url.as_str().trim_end_matches('/').to_owned();
-    // The resources OAuth issues tokens for: /mcp and /api/v1, when they're on.
-    let mut resources = Vec::new();
-    if config.mcp {
-        resources.push(oauth::Resource {
-            url: mcp::resource(&issuer),
-            scopes: oauth::MCP_SCOPES,
-        });
-    }
+    // The resources OAuth issues tokens for: /mcp, which each organisation
+    // switches on for itself, and /api/v1 when the install has it on.
+    let mut resources = vec![oauth::Resource {
+        url: mcp::resource(&issuer),
+        scopes: oauth::MCP_SCOPES,
+    }];
     if config.api {
         resources.push(oauth::Resource {
             url: api_v1::resource(&issuer),
             scopes: oauth::API_SCOPES,
         });
     }
-    let oauth_on = !resources.is_empty();
     auth::set_https(config.public_url.scheme() == "https");
     let state = AppState {
         system,
@@ -227,7 +191,7 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
         }),
         activity,
         changes: changes.clone(),
-        session_gap,
+        api: api_v1::PublicApi(config.api),
         log_dir: LogDir(config.log_dir.clone()),
         android_apk: AndroidApk {
             path: config.android_apk.clone(),
@@ -239,40 +203,24 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
         },
     };
 
-    // Off unless the install switches them on (FLEETRANGER_MCP,
-    // FLEETRANGER_API), and OAuth with them. Both answer in the time zone.
-    if config.mcp || config.api {
-        mcp::db::today(&mut *state.system.acquire().await?, &config.time_zone)
-            .await
-            .with_context(|| format!("TIME_ZONE {} is not a known time zone", config.time_zone))?;
-    }
-    let mut apps = Router::new();
-    if config.mcp {
-        let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
-        hosts.extend(config.public_url.host_str().map(str::to_owned));
-        tracing::info!("MCP server on at /mcp");
-        apps = apps.merge(mcp::router(
-            state.system.clone(),
-            state.tenants.clone(),
-            config.time_zone.clone(),
-            &issuer,
-            hosts,
-        ));
-    }
+    let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
+    hosts.extend(config.public_url.host_str().map(str::to_owned));
+    let mut apps = Router::new().merge(mcp::router(
+        state.system.clone(),
+        state.tenants.clone(),
+        &issuer,
+        hosts,
+    ));
     if config.api {
         tracing::info!("public API on at /api/v1");
         apps = apps.merge(api_v1::router(api_v1::Api {
             system: state.system.clone(),
             tenants: state.tenants.clone(),
-            time_zone: config.time_zone.clone().into(),
-            organisation_name: config.organisation_name.clone().map(Into::into),
             resource: api_v1::resource(&issuer).into(),
         }));
     }
-    if oauth_on {
-        tokio::spawn(oauth::clean_up_hourly(state.system.clone()));
-        apps = apps.merge(oauth::routes::router());
-    }
+    tokio::spawn(oauth::clean_up_hourly(state.system.clone()));
+    apps = apps.merge(oauth::routes::router());
 
     let app = Router::new()
         .route("/healthz", get(health::check))

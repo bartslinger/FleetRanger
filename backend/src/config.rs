@@ -29,21 +29,9 @@ pub struct Config {
     /// The controller app the download page offers (`FLEETRANGER_ANDROID_APK`,
     /// `/data/android/FleetRanger.apk` by default); without it the page says so.
     pub android_apk: PathBuf,
-    /// The longest break within a session, in minutes
-    /// (`FLEETRANGER_SESSION_GAP_MINUTES`, 120 by default).
-    pub session_gap_minutes: i32,
-    /// The organisation's time zone (`TIME_ZONE`, UTC by default), e.g.
-    /// `Europe/Amsterdam`: days in MCP requests are days there.
-    pub time_zone: String,
-    /// Whether AI assistants can query the install over MCP
-    /// (`FLEETRANGER_MCP=on`); off by default.
-    pub mcp: bool,
     /// Whether apps can use the public API at `/api/v1`
     /// (`FLEETRANGER_API=on`); off by default.
     pub api: bool,
-    /// The organisation's name, for apps (`FLEETRANGER_ORGANISATION_NAME`),
-    /// until organisations have settings of their own.
-    pub organisation_name: Option<String>,
 }
 
 pub struct OidcConfig {
@@ -85,17 +73,7 @@ impl Config {
             }),
             None => None,
         };
-        let session_gap_minutes =
-            match non_empty_var("FLEETRANGER_SESSION_GAP_MINUTES") {
-                Some(value) => value.parse().ok().filter(|minutes| *minutes > 0).context(
-                    "FLEETRANGER_SESSION_GAP_MINUTES is not a positive number of minutes",
-                )?,
-                None => 120,
-            };
-        let time_zone = non_empty_var("TIME_ZONE").unwrap_or_else(|| "UTC".to_owned());
-        let mcp = switch("FLEETRANGER_MCP")?;
         let api = switch("FLEETRANGER_API")?;
-        let organisation_name = non_empty_var("FLEETRANGER_ORGANISATION_NAME");
 
         Ok(Self {
             bind,
@@ -106,11 +84,7 @@ impl Config {
             public_url,
             oidc,
             android_apk,
-            session_gap_minutes,
-            time_zone,
-            mcp,
             api,
-            organisation_name,
         })
     }
 }

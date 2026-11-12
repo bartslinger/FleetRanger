@@ -1,18 +1,24 @@
-import { MAPBOX_ACCESS_TOKEN, TIME_ZONE } from '$app/env/private';
+import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
 import { sessionGroup } from '#lib/groups.js';
 import { parsePilot } from '#lib/pilots.js';
-import { get, send, type FlightChoices, type SuggestionDetail } from '#lib/server/backend.js';
+import {
+	get,
+	send,
+	timeZone,
+	type FlightChoices,
+	type SuggestionDetail
+} from '#lib/server/backend.js';
 import { apiQuery, parse, query } from '../../logbook.js';
 
 // The page's query is the suggestions list's, so its filters decide the
 // suggestions and their order; `created` names a session just made.
-export async function load({ fetch, params, url }) {
+export async function load({ fetch, locals, params, url }) {
 	const state = parse(url.searchParams);
 	const [suggestion, choices] = await Promise.all([
 		get<SuggestionDetail>(
 			fetch,
-			`/api/flights/suggestions/${params.key}?${apiQuery(state, TIME_ZONE)}`
+			`/api/flights/suggestions/${params.key}?${apiQuery(state, timeZone(locals))}`
 		),
 		get<FlightChoices>(fetch, '/api/flights/choices')
 	]);

@@ -30,6 +30,7 @@ use serde_json::Value;
 use sqlx::PgConnection;
 
 use crate::db::{Db, System, Tenants};
+use crate::organisations;
 use uuid::Uuid;
 
 use self::db::GroupBy;
@@ -82,13 +83,7 @@ pub fn resource(issuer: &str) -> String {
 /// `/mcp`, for apps with an access token for it from `issuer` (the install's
 /// address). `hosts` are the names the server is reached by, which the
 /// transport checks against DNS rebinding.
-pub fn router<S>(
-    system: System,
-    tenants: Tenants,
-    time_zone: String,
-    issuer: &str,
-    hosts: Vec<String>,
-) -> Router<S>
+pub fn router<S>(system: System, tenants: Tenants, issuer: &str, hosts: Vec<String>) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
@@ -96,10 +91,9 @@ where
         .with_legacy_session_mode(false)
         .with_json_response(true)
         .with_allowed_hosts(hosts);
-    let time_zone: Arc<str> = time_zone.into();
     let tools_tenants = tenants.clone();
     let service = StreamableHttpService::new(
-        move || Ok(FleetRanger::new(tools_tenants.clone(), time_zone.clone())),
+        move || Ok(FleetRanger::new(tools_tenants.clone())),
         Arc::new(NeverSessionManager::default()),
         config,
     );
@@ -159,6 +153,25 @@ async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) ->
         Ok(actor) => actor,
         Err((status, error)) => return challenge(&gate.metadata, status, error),
     };
+    // Each organisation switches MCP on for itself.
+    let switched_on = async {
+        let mut db = gate.tenants.connect(actor.organisation_id).await?;
+        Ok::<_, sqlx::Error>(organisations::settings(&mut db).await?.mcp)
+    };
+    match switched_on.await {
+        Ok(true) => {}
+        Ok(false) => {
+            return (
+                StatusCode::FORBIDDEN,
+                "AI assistants are switched off for this organisation.",
+            )
+                .into_response();
+        }
+        Err(error) => {
+            tracing::error!(%error, "reading whether MCP is on");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
     let mut request = Request::from_parts(parts, body);
     request.extensions_mut().insert(actor);
     next.run(request).await
@@ -183,7 +196,6 @@ fn challenge(metadata: &str, status: StatusCode, error: Option<&str>) -> Respons
 #[derive(Clone)]
 struct FleetRanger {
     tenants: Tenants,
-    time_zone: Arc<str>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -347,10 +359,9 @@ impl From<FlightDetail> for FlightFacts {
 
 #[tool_router]
 impl FleetRanger {
-    fn new(tenants: Tenants, time_zone: Arc<str>) -> Self {
+    fn new(tenants: Tenants) -> Self {
         Self {
             tenants,
-            time_zone,
             tool_router: Self::tool_router(),
         }
     }
@@ -362,20 +373,18 @@ impl FleetRanger {
         &self,
         Extension(parts): Extension<Parts>,
     ) -> Result<CallToolResult, McpError> {
-        let mut db = self.connect(&parts).await?;
+        let (mut db, time_zone) = self.connect(&parts).await?;
         let actor = actor(&parts)?;
         let scope = policy::flight_scope(actor);
         let filter = Filter::default();
-        let today = db::today(&mut db, &self.time_zone)
-            .await
-            .map_err(internal)?;
+        let today = db::today(&mut db, &time_zone).await.map_err(internal)?;
         let directory = serde_json::json!({
             "you": {
                 "id": actor.user_id,
                 "name": actor.name,
                 "groups": db::own_groups(&mut db, actor.user_id).await.map_err(internal)?,
             },
-            "time_zone": &*self.time_zone,
+            "time_zone": &*time_zone,
             "today": today,
             "groups": flights::db::groups_in(&mut db, &scope, &filter).await.map_err(internal)?,
             "pilots": flights::db::pilots_in(&mut db, &scope, &filter).await.map_err(internal)?,
@@ -394,12 +403,12 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<TotalsParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut db = self.connect(&parts).await?;
+        let (mut db, time_zone) = self.connect(&parts).await?;
         let scope = policy::flight_scope(actor(&parts)?);
-        let filter = self.filter(&mut db, &params.filters).await?;
+        let filter = self.filter(&mut db, &time_zone, &params.filters).await?;
         let totals = match params.group_by.unwrap_or(GroupBy::None) {
             GroupBy::Area => db::area_totals(&mut db, &scope, &filter).await,
-            group_by => db::totals(&mut db, &scope, &filter, group_by, &self.time_zone).await,
+            group_by => db::totals(&mut db, &scope, &filter, group_by, &time_zone).await,
         };
         json(totals.map_err(internal)?)
     }
@@ -412,9 +421,9 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<ListParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut db = self.connect(&parts).await?;
+        let (mut db, time_zone) = self.connect(&parts).await?;
         let actor = actor(&parts)?;
-        let filter = self.filter(&mut db, &params.filters).await?;
+        let filter = self.filter(&mut db, &time_zone, &params.filters).await?;
         let (limit, offset) = page(params.page, params.size)?;
         let (mut sessions, total) =
             sessions::service::list(&mut db, actor, &filter, None, limit, offset, false)
@@ -437,7 +446,7 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<IdParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut db = self.connect(&parts).await?;
+        let (mut db, _) = self.connect(&parts).await?;
         let session = sessions::service::get(&mut db, actor(&parts)?, uuid(&params.id)?)
             .await
             .map_err(api)?;
@@ -471,9 +480,9 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<FlightListParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut db = self.connect(&parts).await?;
+        let (mut db, time_zone) = self.connect(&parts).await?;
         let actor = actor(&parts)?;
-        let mut filter = self.filter(&mut db, &params.filters).await?;
+        let mut filter = self.filter(&mut db, &time_zone, &params.filters).await?;
         if params.without_pilot == Some(true) {
             filter.pilot_ids = Some(Vec::new());
             filter.unknown_pilot = true;
@@ -504,7 +513,7 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<IdParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut db = self.connect(&parts).await?;
+        let (mut db, _) = self.connect(&parts).await?;
         let flight = flights::service::get(&mut db, actor(&parts)?, uuid(&params.id)?)
             .await
             .map_err(api)?;
@@ -518,7 +527,7 @@ impl FleetRanger {
         &self,
         Extension(parts): Extension<Parts>,
     ) -> Result<CallToolResult, McpError> {
-        let mut db = self.connect(&parts).await?;
+        let (mut db, _) = self.connect(&parts).await?;
         let actor = actor(&parts)?;
         let drones = equipment::service::list(&mut db, actor, Kind::Aircraft)
             .await
@@ -531,18 +540,30 @@ impl FleetRanger {
 }
 
 impl FleetRanger {
-    /// A connection in the organisation of the user the tool acts for.
-    async fn connect(&self, parts: &Parts) -> Result<Db, McpError> {
+    /// A connection in the organisation of the user the tool acts for, and
+    /// its time zone.
+    async fn connect(&self, parts: &Parts) -> Result<(Db, String), McpError> {
         let actor = actor(parts)?;
-        self.tenants
+        let mut db = self
+            .tenants
             .connect(actor.organisation_id)
             .await
-            .map_err(internal)
+            .map_err(internal)?;
+        let time_zone = organisations::settings(&mut db)
+            .await
+            .map_err(internal)?
+            .time_zone;
+        Ok((db, time_zone))
     }
 
     /// The flights' filter from the tools' filters; days in the
     /// organisation's time zone.
-    async fn filter(&self, db: &mut PgConnection, filters: &Filters) -> Result<Filter, McpError> {
+    async fn filter(
+        &self,
+        db: &mut PgConnection,
+        time_zone: &str,
+        filters: &Filters,
+    ) -> Result<Filter, McpError> {
         let day = |value: &str| {
             NaiveDate::parse_from_str(value, "%Y-%m-%d")
                 .map_err(|_| invalid(format!("{value} isn't a day as YYYY-MM-DD")))
@@ -558,10 +579,10 @@ impl FleetRanger {
                 if last < first {
                     return Err(invalid("to is before from".to_owned()));
                 }
-                let start = db::start_of_day(db, first, &self.time_zone)
+                let start = db::start_of_day(db, first, time_zone)
                     .await
                     .map_err(internal)?;
-                let end = db::start_of_day(db, last + chrono::Days::new(1), &self.time_zone)
+                let end = db::start_of_day(db, last + chrono::Days::new(1), time_zone)
                     .await
                     .map_err(internal)?;
                 (Some(start), Some(end))

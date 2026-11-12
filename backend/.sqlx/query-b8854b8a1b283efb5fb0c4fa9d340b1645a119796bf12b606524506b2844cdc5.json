@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into organisation_settings (organisation_id, time_zone, session_gap_minutes, mcp)\n         values ($1, coalesce($2, 'UTC'), coalesce($3, 120), coalesce($4, false))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b8854b8a1b283efb5fb0c4fa9d340b1645a119796bf12b606524506b2844cdc5"
+}

@@ -18,7 +18,8 @@ use super::activity::{Activity, Stage};
 use super::flight::{self, BatteryInfo, Flight, Serials};
 use super::{db, dji};
 use crate::db::{System, Tenants};
-use crate::sessions::{self, SessionGap};
+use crate::organisations;
+use crate::sessions;
 
 /// How long to wait before looking for new logs when none are pending.
 const IDLE_PAUSE: Duration = Duration::from_secs(10);
@@ -76,7 +77,6 @@ pub async fn run(
     log_dir: PathBuf,
     dji_app_key: Option<String>,
     activity: Activity,
-    session_gap: SessionGap,
 ) {
     let mut dji_limit = RateLimit::new(DJI_REQUEST_INTERVAL);
     loop {
@@ -87,7 +87,6 @@ pub async fn run(
             dji_app_key.as_deref(),
             &activity,
             &mut dji_limit,
-            session_gap,
         )
         .await;
         let pause = match result {
@@ -115,7 +114,6 @@ async fn process_next(
     dji_app_key: Option<&str>,
     activity: &Activity,
     dji_limit: &mut RateLimit,
-    session_gap: SessionGap,
 ) -> Result<bool> {
     let Some(log) = db::next_pending(&mut *system.acquire().await?).await? else {
         return Ok(false);
@@ -133,7 +131,8 @@ async fn process_next(
             // Only a flight seen for the first time: processing a log again
             // must not put a flight back that someone took out of its session.
             if db::save_result(db, log.id, decoded.flight.as_ref()).await? {
-                sessions::db::place_upload(db, log.id, session_gap).await?;
+                let gap = organisations::settings(db).await?.session_gap;
+                sessions::db::place_upload(db, log.id, gap).await?;
             }
             match &decoded.flight {
                 Some(flight) => tracing::info!(

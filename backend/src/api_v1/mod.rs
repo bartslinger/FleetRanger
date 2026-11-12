@@ -39,13 +39,16 @@ pub fn resource(issuer: &str) -> String {
     format!("{issuer}/api/v1")
 }
 
+/// Whether the install has the API on (`FLEETRANGER_API`), so the web app
+/// offers connected apps.
+#[derive(Clone, Copy)]
+pub struct PublicApi(pub bool);
+
 /// What the API's handlers need.
 #[derive(Clone)]
 pub struct Api {
     pub system: System,
     pub tenants: Tenants,
-    pub time_zone: Arc<str>,
-    pub organisation_name: Option<Arc<str>>,
     /// This install's `/api/v1`, e.g. `https://fleet.example.org/api/v1`.
     pub resource: Arc<str>,
 }

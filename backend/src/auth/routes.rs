@@ -27,6 +27,7 @@ use super::{
     Actor, Auth, SESSION_IDLE_DAYS, client_ip, impersonation_cookie, login_cookie, session_cookie,
     token_hash,
 };
+use crate::api_v1::PublicApi;
 use crate::oauth::OAuth;
 use crate::policy::{Grants, Permission};
 
@@ -37,6 +38,7 @@ where
     crate::db::Tenants: FromRef<S>,
     Arc<Auth>: FromRef<S>,
     OAuth: FromRef<S>,
+    PublicApi: FromRef<S>,
 {
     Router::new()
         .route("/auth/login", get(login))
@@ -341,6 +343,8 @@ struct Me {
     apps: bool,
     /// The admin impersonating this user, for the web app's banner.
     impersonated_by: Option<ImpersonatedBy>,
+    /// The organisation's: the web app shows every day and time in it.
+    time_zone: String,
     /// Whether the organisation has more than one group: until then the web
     /// app shows no groups (user's decision, 2026-11-11).
     several_groups: bool,
@@ -377,9 +381,18 @@ impl From<&Grants> for Permissions {
 }
 
 /// The logged-in user, or 401.
-async fn me(actor: Actor, State(oauth): State<OAuth>, mut db: Db) -> Result<Json<Me>, StatusCode> {
-    let several_groups = db::several_groups(&mut db).await.map_err(|error| {
-        tracing::error!(%error, "counting groups");
+async fn me(
+    actor: Actor,
+    State(PublicApi(api)): State<PublicApi>,
+    mut db: Db,
+) -> Result<Json<Me>, StatusCode> {
+    let read = async {
+        let several_groups = db::several_groups(&mut db).await?;
+        let settings = crate::organisations::settings(&mut db).await?;
+        Ok::<_, sqlx::Error>((several_groups, settings))
+    };
+    let (several_groups, settings) = read.await.map_err(|error| {
+        tracing::error!(%error, "reading the user's organisation");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     Ok(Json(Me {
@@ -387,7 +400,8 @@ async fn me(actor: Actor, State(oauth): State<OAuth>, mut db: Db) -> Result<Json
         permissions: Permissions::from(&actor.grants),
         email: actor.email,
         name: actor.name,
-        apps: !oauth.resources.is_empty(),
+        apps: settings.mcp || api,
+        time_zone: settings.time_zone,
         impersonated_by: actor.impersonated_by.map(|admin| ImpersonatedBy {
             id: admin.user_id,
             name: admin.name,
