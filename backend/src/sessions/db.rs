@@ -98,8 +98,6 @@ pub async fn list(
                       or g.group_id = any($16))
                  and ($7::text[] is null or g.aircraft_serial = any($7))
                  and ($8::text[] is null or g.rc_serial = any($8))
-                 and ($9::timestamptz is null or g.takeoff_at >= $9)
-                 and ($10::timestamptz is null or g.takeoff_at < $10)
                  and ($11::uuid[] is null
                       or g.session_id in (select id from sessions
                                           where group_id = any($11)))
@@ -109,6 +107,8 @@ pub async fn list(
                                                      where fa.flight_id = g.id
                                                        and fa.area_id = any($14))))
          group by f.session_id, s.group_id, gr.name
+         having ($9::timestamptz is null or min(f.takeoff_at) >= $9)
+            and ($10::timestamptz is null or min(f.takeoff_at) < $10)
          order by min(f.takeoff_at) desc, f.session_id
          limit $3 offset $4"#,
         scope.all,
@@ -140,7 +140,8 @@ pub async fn count(
     window: Option<Window>,
 ) -> sqlx::Result<i64> {
     sqlx::query_scalar!(
-        r#"select count(distinct session_id) as "count!"
+        r#"select count(*) as "count!" from (
+           select session_id
            from flights
            where ($1
                   or pilot_id = $2
@@ -156,8 +157,6 @@ pub async fn count(
                         or g.group_id = any($13))
                    and ($5::text[] is null or g.aircraft_serial = any($5))
                    and ($6::text[] is null or g.rc_serial = any($6))
-                   and ($7::timestamptz is null or g.takeoff_at >= $7)
-                   and ($8::timestamptz is null or g.takeoff_at < $8)
                    and ($9::uuid[] is null
                         or g.session_id in (select id from sessions
                                             where group_id = any($9)))
@@ -165,7 +164,11 @@ pub async fn count(
                         or ($11 and g.pilot_id is null))
                    and ($12::uuid[] is null or exists (select 1 from flight_areas fa
                                                        where fa.flight_id = g.id
-                                                         and fa.area_id = any($12))))"#,
+                                                         and fa.area_id = any($12))))
+           group by session_id
+           having ($7::timestamptz is null or min(takeoff_at) >= $7)
+              and ($8::timestamptz is null or min(takeoff_at) < $8)
+        ) listed"#,
         scope.all,
         scope.user_id,
         window.map(|w| w.from),
@@ -220,8 +223,6 @@ pub async fn neighbours(
                             or g.group_id = any($12))
                        and ($4::text[] is null or g.aircraft_serial = any($4))
                        and ($5::text[] is null or g.rc_serial = any($5))
-                       and ($6::timestamptz is null or g.takeoff_at >= $6)
-                       and ($7::timestamptz is null or g.takeoff_at < $7)
                        and ($8::uuid[] is null
                             or g.session_id in (select id from sessions
                                                 where group_id = any($8)))
@@ -231,6 +232,8 @@ pub async fn neighbours(
                                                            where fa.flight_id = g.id
                                                              and fa.area_id = any($11))))
                group by f.session_id
+               having ($6::timestamptz is null or min(f.takeoff_at) >= $6)
+                  and ($7::timestamptz is null or min(f.takeoff_at) < $7)
            ),
            placed as (
                select id,
@@ -326,13 +329,18 @@ pub async fn groups_in(
                     and f.archived_at is null
                     and ($4::text[] is null or f.aircraft_serial = any($4))
                     and ($5::text[] is null or f.rc_serial = any($5))
-                    and ($6::timestamptz is null or f.takeoff_at >= $6)
-                    and ($7::timestamptz is null or f.takeoff_at < $7)
                     and ($8::uuid[] is null or f.pilot_id = any($8)
                          or ($9 and f.pilot_id is null))
                     and ($10::uuid[] is null or exists (select 1 from flight_areas fa
                                                         where fa.flight_id = f.id
                                                           and fa.area_id = any($10))))
+                 -- In the period of its first visible takeoff, as listed.
+                 and ($6::timestamptz is null and $7::timestamptz is null
+                      or (select min(h.takeoff_at) >= coalesce($6, '-infinity')
+                                 and min(h.takeoff_at) < coalesce($7, 'infinity')
+                          from flights h
+                          where h.session_id = s.id
+                            and ($1 or h.pilot_id = $2 or h.group_id = any($11))))
            group by s.group_id, g.name
            order by lower(g.name) nulls last"#,
         scope.all,
@@ -916,6 +924,44 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].flights, 2);
         assert_eq!(count(&db, &everything, &drone("B"), None).await.unwrap(), 0);
+    }
+
+    /// A session across the end of a period is in the period of its first
+    /// takeoff only, not in both (user's decision, 2026-11-12).
+    #[sqlx::test]
+    async fn sessions_are_in_the_period_they_start(db: PgPool) {
+        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
+        let first = upload(&db, a, "08:00", "08:20", "21:30").await;
+        let second = upload(&db, a, "09:30", "09:50", "21:30").await;
+        assert_eq!(session_of(&db, first).await, session_of(&db, second).await);
+        let everything = FlightScope {
+            all: true,
+            user_id: a,
+            group_ids: Vec::new(),
+        };
+        // Periods that change over at 09:00, between the two flights.
+        let change: DateTime<Utc> = "2026-10-12T09:00:00Z".parse().unwrap();
+        let before = Filter {
+            to: Some(change),
+            ..Filter::default()
+        };
+        let after = Filter {
+            from: Some(change),
+            ..Filter::default()
+        };
+        let listed = list(&db, &everything, &before, None, 10, 0, false)
+            .await
+            .unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].flights, 2);
+        assert_eq!(count(&db, &everything, &before, None).await.unwrap(), 1);
+        assert!(
+            list(&db, &everything, &after, None, 10, 0, false)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(count(&db, &everything, &after, None).await.unwrap(), 0);
     }
 
     /// Stepping through sessions follows the list: newest first, and only
