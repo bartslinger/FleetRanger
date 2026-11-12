@@ -177,3 +177,81 @@ pub async fn several_groups(db: &mut PgConnection) -> sqlx::Result<bool> {
         .fetch_one(&mut *db)
         .await
 }
+
+#[cfg(test)]
+mod tests {
+    use sqlx::PgPool;
+    use uuid::Uuid;
+
+    use super::{LoginUser, create_session, login_user};
+    use crate::testing;
+
+    const EMAIL: &str = "test-person@example.org";
+
+    /// Someone in two organisations has a login in each: their first
+    /// sign-in ties both to their Google account, they sign in to the
+    /// organisation used last, and another account with the same email
+    /// takes over neither.
+    #[sqlx::test]
+    async fn one_account_signs_in_to_the_organisation_used_last(pool: PgPool) {
+        let mut a = testing::db(&pool).await;
+        let a_id = testing::organisation(&mut a).await;
+        let in_a = testing::user(&mut a, "Test Person", &[]).await;
+        let b_id = testing::second_organisation(&mut a, "Test Org B").await;
+        let in_b: Uuid = sqlx::query_scalar(
+            "insert into users (organisation_id, name) values ($1, 'Test Person') returning id",
+        )
+        .bind(b_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        for (organisation, user) in [(a_id, in_a), (b_id, in_b)] {
+            sqlx::query("insert into logins (organisation_id, user_id, email) values ($1, $2, $3)")
+                .bind(organisation)
+                .bind(user)
+                .bind(EMAIL)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+
+        // Signing in comes before an organisation is known.
+        let mut system = pool.acquire().await.unwrap();
+        let signed_in = |found: LoginUser| match found {
+            LoginUser::Allowed {
+                user_id,
+                organisation_id,
+            } => Some((user_id, organisation_id)),
+            LoginUser::Refused => None,
+        };
+        let first = login_user(&mut system, "test-subject", Some("Test-Person@example.org"))
+            .await
+            .unwrap();
+        assert!(signed_in(first).is_some());
+        let tied: i64 =
+            sqlx::query_scalar("select count(*) from logins where oidc_subject = 'test-subject'")
+                .fetch_one(&mut *system)
+                .await
+                .unwrap();
+        assert_eq!(tied, 2, "both organisations' logins");
+
+        create_session(
+            &mut system,
+            in_b,
+            b_id,
+            &[1; 32],
+            30,
+            [127, 0, 0, 1].into(),
+            None,
+        )
+        .await
+        .unwrap();
+        let again = login_user(&mut system, "test-subject", None).await.unwrap();
+        assert_eq!(signed_in(again), Some((in_b, b_id)));
+
+        let other = login_user(&mut system, "other-subject", Some(EMAIL))
+            .await
+            .unwrap();
+        assert_eq!(signed_in(other), None);
+    }
+}

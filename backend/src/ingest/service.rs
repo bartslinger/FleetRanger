@@ -75,3 +75,61 @@ pub async fn status(
         latest: db::latest_processed(db, since, LATEST).await?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use sqlx::PgPool;
+    use uuid::Uuid;
+
+    use super::status;
+    use crate::{events::Changes, ingest::activity::Activity, testing};
+
+    /// The log being processed names a controller and a file, so only the
+    /// admins of its own organisation see it, also while another
+    /// organisation has logs waiting.
+    #[sqlx::test]
+    async fn only_its_organisation_sees_the_log_being_processed(pool: PgPool) {
+        let mut a = testing::db(&pool).await;
+        let a_id = testing::organisation(&mut a).await;
+        let admin_a = testing::user(&mut a, "Test Admin A", &["admin"]).await;
+        let b_id = testing::second_organisation(&mut a, "Test Org B").await;
+        let admin_b: Uuid = sqlx::query_scalar(
+            "insert into users (organisation_id, name) values ($1, 'Test Admin B') returning id",
+        )
+        .bind(b_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "insert into organisation_roles (organisation_id, user_id, role) values ($1, $2, 'admin')",
+        )
+        .bind(b_id)
+        .bind(admin_b)
+        .execute(&pool)
+        .await
+        .unwrap();
+        // A log waiting in each.
+        for organisation in [a_id, b_id] {
+            sqlx::query(
+                "insert into raw_logs (organisation_id, sha256, path, size_bytes)
+                 values ($1, sha256(gen_random_uuid()::text::bytea), 'raw/TESTRC/FlightRecord/test.txt', 0)",
+            )
+            .bind(organisation)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let activity = Activity::new(Changes::default());
+        activity.start(a_id, "raw/TESTRC/FlightRecord/test.txt");
+        let mut as_a = testing::restricted(&pool, Some(a_id)).await;
+        let actor_a = testing::actor(&mut as_a, admin_a).await;
+        let seen_by_a = status(&mut as_a, &actor_a, &activity).await.ok().unwrap();
+        assert!(seen_by_a.current.is_some());
+        let mut as_b = testing::restricted(&pool, Some(b_id)).await;
+        let actor_b = testing::actor(&mut as_b, admin_b).await;
+        let seen_by_b = status(&mut as_b, &actor_b, &activity).await.ok().unwrap();
+        assert_eq!(seen_by_b.pending, 1, "B's own waiting log");
+        assert!(seen_by_b.current.is_none());
+    }
+}

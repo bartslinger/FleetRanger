@@ -149,7 +149,7 @@ One install serving several organisations, for a hosted service where FleetRange
 - [x] Backend: each request uses a connection of its organisation (`Db`, as `fleetranger_app`); log processing per log; controller, API and MCP tokens carry their organisation
 - [x] Command-line tool: create an organisation with its settings and first admin, change its settings; the settings leave the environment
 - [ ] Web app: an organisation switcher for logins in several organisations
-- [ ] Tests that no organisation reads or changes another's data, through the API and in the database
+- [x] Tests that no organisation reads or changes another's data, in the database (every table, as `fleetranger_app`), at sign-in and in the processing status
 - [ ] Afterwards: raw logs on S3, optionally
 
 ## Before production use

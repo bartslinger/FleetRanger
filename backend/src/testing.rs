@@ -115,3 +115,39 @@ pub async fn organisation(db: &mut PgConnection) -> Uuid {
         .await
         .unwrap()
 }
+
+/// A second organisation, made as `add-organisation` makes one: its
+/// settings and its group "General".
+pub async fn second_organisation(db: &mut PgConnection, name: &str) -> Uuid {
+    let id: Uuid = sqlx::query_scalar("insert into organisations (name) values ($1) returning id")
+        .bind(name)
+        .fetch_one(&mut *db)
+        .await
+        .unwrap();
+    for sql in [
+        "insert into organisation_settings (organisation_id) values ($1)",
+        "insert into groups (organisation_id, name) values ($1, 'General')",
+    ] {
+        sqlx::query(sql).bind(id).execute(&mut *db).await.unwrap();
+    }
+    id
+}
+
+/// A connection that acts as `fleetranger_app`, as requests do, so
+/// row-level security applies, in this organisation or, with None, in none.
+/// (Tests can't log in as it; the account that created the tables may
+/// take its role.)
+pub async fn restricted(
+    pool: &PgPool,
+    organisation: Option<Uuid>,
+) -> sqlx::pool::PoolConnection<sqlx::Postgres> {
+    let mut connection = pool.acquire().await.unwrap();
+    sqlx::query("set role fleetranger_app")
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    crate::db::set_organisation(&mut connection, organisation)
+        .await
+        .unwrap();
+    connection
+}
