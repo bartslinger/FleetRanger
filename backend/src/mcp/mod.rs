@@ -164,8 +164,7 @@ struct Filters {
     from: Option<String>,
     /// The last day, included; without it, only `from`.
     to: Option<String>,
-    /// Group ids from `directory`; "none" for flights in no group (the
-    /// organisation's queue).
+    /// Group ids from `directory`.
     groups: Option<Vec<String>>,
     /// Pilots' ids from `directory`; "none" for flights without a pilot.
     pilots: Option<Vec<String>>,
@@ -228,8 +227,8 @@ struct FlightFacts {
     distance_m: f64,
     pilot_id: Option<Uuid>,
     pilot_name: Option<String>,
-    group_id: Option<Uuid>,
-    group_name: Option<String>,
+    group_id: Uuid,
+    group_name: String,
     drone_serial: Option<String>,
     drone_name: Option<String>,
     controller_serial: Option<String>,
@@ -522,9 +521,9 @@ impl FleetRanger {
             }
             (None, Some(_)) => return Err(invalid("to needs from".to_owned())),
         };
-        let (group_ids, queue) = ids(filters.groups.as_deref(), "groups")?;
-        let (pilot_ids, unknown_pilot) = ids(filters.pilots.as_deref(), "pilots")?;
-        let (area_ids, _) = ids(filters.areas.as_deref(), "areas")?;
+        let (group_ids, _) = ids(filters.groups.as_deref(), "groups", false)?;
+        let (pilot_ids, unknown_pilot) = ids(filters.pilots.as_deref(), "pilots", true)?;
+        let (area_ids, _) = ids(filters.areas.as_deref(), "areas", false)?;
         Ok(Filter {
             aircraft_serials: filters.drones.clone(),
             rc_serials: filters.controllers.clone(),
@@ -532,7 +531,7 @@ impl FleetRanger {
             from,
             to,
             group_ids,
-            queue,
+            queue: false,
             pilot_ids,
             unknown_pilot,
             archived: false,
@@ -563,18 +562,24 @@ fn actor(parts: &Parts) -> Result<&Actor, McpError> {
         .ok_or_else(|| McpError::internal_error("no user", None))
 }
 
-/// Ids, and whether "none" was among them; nothing if not given.
-fn ids(values: Option<&[String]>, name: &str) -> Result<(Option<Vec<Uuid>>, bool), McpError> {
+/// Ids, and whether "none" was among them where `none` allows it; nothing
+/// if not given.
+fn ids(
+    values: Option<&[String]>,
+    name: &str,
+    allow_none: bool,
+) -> Result<(Option<Vec<Uuid>>, bool), McpError> {
     let Some(values) = values else {
         return Ok((None, false));
     };
     let mut ids = Vec::new();
     let mut none = false;
     for value in values {
-        if value == "none" {
+        if allow_none && value == "none" {
             none = true;
         } else {
-            ids.push(uuid(value).map_err(|_| invalid(format!("{name} must be ids or none")))?);
+            let expected = if allow_none { "ids or none" } else { "ids" };
+            ids.push(uuid(value).map_err(|_| invalid(format!("{name} must be {expected}")))?);
         }
     }
     Ok((Some(ids), none))

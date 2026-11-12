@@ -23,9 +23,8 @@ pub struct FlightSummary {
     pub rc_name: Option<String>,
     pub pilot_id: Option<Uuid>,
     pub pilot_name: Option<String>,
-    /// Always given.
-    pub group_id: Option<Uuid>,
-    pub group_name: Option<String>,
+    pub group_id: Uuid,
+    pub group_name: String,
     /// None: in no session.
     pub session_id: Option<Uuid>,
     pub archived_at: Option<DateTime<Utc>>,
@@ -127,7 +126,7 @@ pub async fn list(
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
                 group_id,
-                (select g.name from groups g where g.id = flights.group_id) as "group_name?",
+                (select g.name from groups g where g.id = flights.group_id) as "group_name!",
                 session_id,
                 archived_at
          from flights
@@ -203,9 +202,8 @@ pub struct FlightDetail {
     pub rc_name: Option<String>,
     pub pilot_id: Option<Uuid>,
     pub pilot_name: Option<String>,
-    /// Always given.
-    pub group_id: Option<Uuid>,
-    pub group_name: Option<String>,
+    pub group_id: Uuid,
+    pub group_name: String,
     /// None: in no session.
     pub session_id: Option<Uuid>,
     /// GeoJSON LineString: [longitude, latitude, height above takeoff].
@@ -242,7 +240,7 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
                 group_id,
-                (select g.name from groups g where g.id = flights.group_id) as "group_name?",
+                (select g.name from groups g where g.id = flights.group_id) as "group_name!",
                 session_id,
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
@@ -312,7 +310,7 @@ pub async fn of_session(
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
                 group_id,
-                (select g.name from groups g where g.id = flights.group_id) as "group_name?",
+                (select g.name from groups g where g.id = flights.group_id) as "group_name!",
                 session_id,
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
@@ -360,7 +358,7 @@ pub async fn details(
                 (select r.name from remote_controllers r where r.serial = flights.rc_serial) as "rc_name?",
                 pilot_id, (select u.name from users u where u.id = flights.pilot_id) as "pilot_name?",
                 group_id,
-                (select g.name from groups g where g.id = flights.group_id) as "group_name?",
+                (select g.name from groups g where g.id = flights.group_id) as "group_name!",
                 session_id,
                 track, metrics,
                 (select a.id from aircraft a where a.serial = flights.aircraft_serial) as "aircraft_id?",
