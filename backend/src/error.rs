@@ -25,6 +25,12 @@ impl From<sqlx::Error> for ApiError {
     }
 }
 
+impl From<anyhow::Error> for ApiError {
+    fn from(error: anyhow::Error) -> Self {
+        Self::Internal(error)
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         match self {

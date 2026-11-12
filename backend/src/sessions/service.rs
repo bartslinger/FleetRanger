@@ -102,7 +102,7 @@ pub async fn create(
             let flight_groups = flights::db::groups_of(db, &flight_ids)
                 .await?
                 .ok_or(ApiError::NotFound)?;
-            let first = flight_groups[0];
+            let first = *flight_groups.first().ok_or(ApiError::NotFound)?;
             if flight_groups.iter().any(|group| *group != first) {
                 return Err(ApiError::Invalid(
                     "These flights are in several groups. Choose the session's group.".to_owned(),
@@ -263,7 +263,8 @@ pub async fn split(db: &mut PgConnection, actor: &Actor, flight_ids: &[Uuid]) ->
             "Leave at least one flight in the session.".to_owned(),
         ));
     }
-    db::split(db, &flight_ids, groups[0])
+    let group = *groups.first().ok_or(ApiError::NotFound)?;
+    db::split(db, &flight_ids, group)
         .await?
         .ok_or_else(stranded)
 }
@@ -280,7 +281,10 @@ pub async fn set_group(
     if !actor.grants.anywhere(Permission::SessionsMove) {
         return Err(ApiError::Forbidden);
     }
-    let from = db::groups_of(db, &[id]).await?.ok_or(ApiError::NotFound)?[0];
+    let from = db::groups_of(db, &[id])
+        .await?
+        .and_then(|groups| groups.first().copied())
+        .ok_or(ApiError::NotFound)?;
     let flight_groups = if with_flights {
         Some(
             db::flight_groups(db, &[id])

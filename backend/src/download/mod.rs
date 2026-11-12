@@ -89,7 +89,7 @@ async fn available(State(apk): State<AndroidApk>) -> Json<Available> {
         let version = std::fs::read(apk.path.with_extension("json"))
             .ok()
             .and_then(|json| serde_json::from_slice::<serde_json::Value>(&json).ok())
-            .and_then(|json| json["elements"].get(0).cloned());
+            .and_then(|json| json.get("elements")?.get(0).cloned());
         Some(Apk {
             size_bytes: metadata.len(),
             version_code: version.as_ref().and_then(|v| v["versionCode"].as_i64()),

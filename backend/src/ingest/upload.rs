@@ -110,14 +110,14 @@ fn is_log_name(name: &str) -> bool {
 /// Writes next to the destination first and then renames, so the processing
 /// loop never reads a half-written file.
 async fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let dir = path.parent().expect("a log path has a directory");
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(std::io::Error::other(format!(
+            "not a path to a log file: {}",
+            path.display()
+        )));
+    };
     tokio::fs::create_dir_all(dir).await?;
-    let part = dir.join(format!(
-        ".{}.part",
-        path.file_name()
-            .expect("a log path has a file name")
-            .to_string_lossy()
-    ));
+    let part = dir.join(format!(".{}.part", name.to_string_lossy()));
     tokio::fs::write(&part, bytes).await?;
     tokio::fs::rename(&part, path).await
 }

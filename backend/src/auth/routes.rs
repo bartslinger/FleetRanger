@@ -3,6 +3,8 @@
 
 use crate::db::{Db, System, Tenants};
 use std::collections::BTreeMap;
+
+use anyhow::Context;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -67,7 +69,7 @@ async fn login(
     let begun = {
         let auth = auth.clone();
         tokio::task::spawn_blocking(move || {
-            let provider = auth.provider.as_ref().expect("checked above");
+            let provider = auth.provider.as_ref().context("login is not configured")?;
             provider.begin(return_to)
         })
         .await
@@ -138,7 +140,7 @@ async fn callback(
     let finished = {
         let auth = auth.clone();
         tokio::task::spawn_blocking(move || {
-            let provider = auth.provider.as_ref().expect("checked above");
+            let provider = auth.provider.as_ref().context("login is not configured")?;
             provider.finish(pending, &state, code)
         })
         .await

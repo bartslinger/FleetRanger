@@ -34,30 +34,24 @@ pub async fn run(
     let args = Args::parse(rest)?;
     match command.as_str() {
         "organisations" => {
-            args.expect(0, &[])?;
+            let [] = args.expect(&[])?;
             list(system, None).await
         }
         "add-organisation" => {
-            let [name] = args.expect(1, &["time-zone", "session-gap", "mcp"])?[..] else {
-                unreachable!()
-            };
+            let [name] = args.expect(&["time-zone", "session-gap", "mcp"])?;
             add(system, name, &args).await
         }
         "set-organisation" => {
-            let [id] = args.expect(1, &["name", "time-zone", "session-gap", "mcp"])?[..] else {
-                unreachable!()
-            };
+            let [id] = args.expect(&["name", "time-zone", "session-gap", "mcp"])?;
             set(system, parse_id(id)?, &args).await
         }
         "add-user" => {
-            let [email, name] = args.expect(2, &["organisation", "admin"])?[..] else {
-                unreachable!()
-            };
+            let [email, name] = args.expect(&["organisation", "admin"])?;
             let mut db = organisation(system, tenants, &args).await?;
             crate::users::add(&mut db, email, name, args.flag("admin")).await
         }
         "import" => {
-            args.expect(0, &["organisation", "group"])?;
+            let [] = args.expect(&["organisation", "group"])?;
             let mut db = organisation(system, tenants, &args).await?;
             crate::ingest::import::run(&mut db, log_dir, args.value("group")).await
         }
@@ -96,17 +90,15 @@ impl<'a> Args<'a> {
     }
 
     /// The words, if there are this many and only these options.
-    fn expect(&self, words: usize, options: &[&str]) -> Result<&[&'a str]> {
-        if self.words.len() != words {
-            bail!(
-                "expected {words} arguments, got {}\n{USAGE}",
-                self.words.len()
-            );
-        }
+    /// The `N` arguments, if there are exactly that many and only these options.
+    fn expect<const N: usize>(&self, options: &[&str]) -> Result<[&'a str; N]> {
+        let Ok(words) = <[&'a str; N]>::try_from(self.words.as_slice()) else {
+            bail!("expected {N} arguments, got {}\n{USAGE}", self.words.len());
+        };
         if let Some(unknown) = self.options.keys().find(|name| !options.contains(name)) {
             bail!("unknown option --{unknown}\n{USAGE}");
         }
-        Ok(&self.words)
+        Ok(words)
     }
 
     fn value(&self, name: &str) -> Option<&'a str> {

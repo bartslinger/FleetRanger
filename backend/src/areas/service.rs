@@ -71,9 +71,10 @@ pub async fn save(
                 .to_owned(),
         )
     })?;
-    let clipped_by = geometry::overlapping(&drawn, &shapes)
-        .into_iter()
-        .map(|i| others[i].0.clone())
+    let clipped_by = others
+        .iter()
+        .filter(|(_, other)| geometry::overlaps(&drawn, other))
+        .map(|(name, _)| name.clone())
         .collect();
 
     let mut areas = Vec::new();

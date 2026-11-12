@@ -75,17 +75,13 @@ pub fn clip(area: &MultiPolygon, others: &[MultiPolygon]) -> Option<Vec<Polygon>
     (!pieces.is_empty()).then(|| pieces.into_iter().map(|(_, piece)| piece).collect())
 }
 
-/// The indexes of the others that an area overlaps, so it would be clipped by them.
-pub fn overlapping(area: &MultiPolygon, others: &[MultiPolygon]) -> Vec<usize> {
-    (0..others.len())
-        .filter(|&i| {
-            area.intersects(&others[i])
-                && area
-                    .intersection(&others[i])
-                    .chamberlain_duquette_unsigned_area()
-                    >= SLIVER_M2
-        })
-        .collect()
+/// Whether an area overlaps another, so it would be clipped by it.
+pub fn overlaps(area: &MultiPolygon, other: &MultiPolygon) -> bool {
+    area.intersects(other)
+        && area
+            .intersection(other)
+            .chamberlain_duquette_unsigned_area()
+            >= SLIVER_M2
 }
 
 /// A flight's time and distance in one area.
@@ -133,27 +129,39 @@ pub fn shares(track: &[Point], areas: &[Shape], air_time_s: i32, distance_m: f64
         .collect();
 
     // The last bucket is outside all areas.
-    let outside = areas.len();
+    let bucket = |area: Option<usize>| area.unwrap_or(areas.len());
     let mut points = vec![0usize; areas.len() + 1];
     let mut lengths = vec![0.0; areas.len() + 1];
-    for (i, area) in area_of.iter().enumerate() {
-        points[area.unwrap_or(outside)] += 1;
-        if let Some(next) = track.get(i + 1) {
-            let half = Haversine.distance(track[i], *next) / 2.0;
-            lengths[area.unwrap_or(outside)] += half;
-            lengths[area_of[i + 1].unwrap_or(outside)] += half;
+    for &area in &area_of {
+        if let Some(count) = points.get_mut(bucket(area)) {
+            *count += 1;
+        }
+    }
+    let steps = track.iter().zip(track.iter().skip(1));
+    let step_areas = area_of.iter().zip(area_of.iter().skip(1));
+    for ((&from, &to), (&from_area, &to_area)) in steps.zip(step_areas) {
+        let half = Haversine.distance(from, to) / 2.0;
+        for area in [from_area, to_area] {
+            if let Some(length) = lengths.get_mut(bucket(area)) {
+                *length += half;
+            }
         }
     }
 
     let times = apportion(air_time_s.max(0), &points);
     let length: f64 = lengths.iter().sum();
-    (0..areas.len())
-        .filter(|&area| points[area] > 0)
-        .map(|area| Share {
+    points
+        .iter()
+        .zip(&times)
+        .zip(&lengths)
+        .take(areas.len())
+        .enumerate()
+        .filter(|(_, ((count, _), _))| **count > 0)
+        .map(|(area, ((_, &air_time_s), &area_length))| Share {
             area,
-            air_time_s: times[area],
+            air_time_s,
             distance_m: if length > 0.0 {
-                distance_m * lengths[area] / length
+                distance_m * area_length / length
             } else {
                 0.0
             },
@@ -171,14 +179,18 @@ fn apportion(total: i32, counts: &[usize]) -> Vec<i32> {
         .map(|&count| f64::from(total) * count as f64 / sum as f64)
         .collect();
     let mut whole: Vec<i32> = exact.iter().map(|share| share.floor() as i32).collect();
-    let mut by_remainder: Vec<usize> = (0..counts.len()).collect();
-    by_remainder.sort_by(|&a, &b| {
-        let remainder = |i: usize| exact[i] - f64::from(whole[i]);
-        remainder(b).total_cmp(&remainder(a))
-    });
+    let mut by_remainder: Vec<(usize, f64)> = exact
+        .iter()
+        .zip(&whole)
+        .map(|(&exact, &whole)| exact - f64::from(whole))
+        .enumerate()
+        .collect();
+    by_remainder.sort_by(|a, b| b.1.total_cmp(&a.1));
     let left = total - whole.iter().sum::<i32>();
-    for &i in by_remainder.iter().take(left.max(0) as usize) {
-        whole[i] += 1;
+    for &(i, _) in by_remainder.iter().take(left.max(0) as usize) {
+        if let Some(share) = whole.get_mut(i) {
+            *share += 1;
+        }
     }
     whole
 }

@@ -219,12 +219,17 @@ fn normalize(code: &str) -> String {
 fn random_code() -> String {
     // Version 4 UUIDs come from the operating system's secure random source;
     // bytes 6 and 8 hold the version and variant, so they're skipped.
-    let bytes = Uuid::new_v4().into_bytes();
-    [0, 1, 2, 3, 4, 5, 7, 9][..CODE_LENGTH]
+    let [b0, b1, b2, b3, b4, b5, _, b7, _, b9, ..] = Uuid::new_v4().into_bytes();
+    [b0, b1, b2, b3, b4, b5, b7, b9]
         .iter()
-        .map(|&i| CODE_ALPHABET[usize::from(bytes[i] % 32)] as char)
+        .take(CODE_LENGTH)
+        .filter_map(|&byte| CODE_ALPHABET.get(usize::from(byte % 32)))
+        .map(|&c| char::from(c))
         .collect()
 }
+
+// The eight random bytes above make one code.
+const _: () = assert!(CODE_LENGTH == 8);
 
 #[cfg(test)]
 mod tests {

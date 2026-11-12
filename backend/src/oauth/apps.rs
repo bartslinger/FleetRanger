@@ -78,11 +78,10 @@ impl AppInput {
                 "{uri} isn’t a valid return address. Use the full address, {hint}."
             )));
         }
-        if let Some((_, uri)) = uris
-            .iter()
-            .enumerate()
-            .find(|(index, uri)| uris[..*index].contains(uri))
-        {
+        if let Some((_, uri)) = uris.iter().enumerate().find(|(index, uri)| {
+            uris.get(..*index)
+                .is_some_and(|before| before.contains(uri))
+        }) {
             return Err(ApiError::Invalid(format!(
                 "{uri} is there twice. Enter each return address once."
             )));
@@ -98,7 +97,7 @@ impl AppInput {
             return Err(ApiError::Invalid("Enter no more than 50 roles.".to_owned()));
         }
         for (index, role) in roles.iter().enumerate() {
-            let before = &roles[..index];
+            let before = roles.get(..index).unwrap_or_default();
             if before.iter().any(|other| other.key == role.key) {
                 return Err(ApiError::Invalid(format!(
                     "{} is there twice. Give each role its own key.",

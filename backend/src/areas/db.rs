@@ -111,7 +111,8 @@ async fn store(
     flights: Vec<TrackedFlight>,
     ids: &[Uuid],
     shapes: Arc<[Shape]>,
-) -> sqlx::Result<()> {
+) -> anyhow::Result<()> {
+    use anyhow::Context;
     let all: Vec<Uuid> = flights.iter().map(|flight| flight.id).collect();
     // Finding the shares is CPU work: on Tokio's blocking threads, so the
     // workers keep serving other requests meanwhile.
@@ -126,12 +127,15 @@ async fn store(
         shares
     })
     .await
-    .expect("computing area shares panicked");
+    .context("computing area shares failed")?;
     let (mut flight_ids, mut area_ids, mut times, mut distances) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for (flight_id, share) in shares {
+        let area_id = ids
+            .get(share.area)
+            .context("an area share for an area that isn't listed")?;
         flight_ids.push(flight_id);
-        area_ids.push(ids[share.area]);
+        area_ids.push(*area_id);
         times.push(share.air_time_s);
         distances.push(share.distance_m);
     }
@@ -153,7 +157,7 @@ async fn store(
 
 /// Computes a flight's figures per area, after it was saved in the same
 /// transaction.
-pub async fn compute_flight(tx: &mut PgConnection, flight_id: Uuid) -> sqlx::Result<()> {
+pub async fn compute_flight(tx: &mut PgConnection, flight_id: Uuid) -> anyhow::Result<()> {
     sqlx::query!(
         "select pg_advisory_xact_lock_shared($1, hashtext(coalesce(current_setting('app.organisation_id', true), '')))",
         AREAS_LOCK
@@ -174,7 +178,7 @@ pub async fn compute_flight(tx: &mut PgConnection, flight_id: Uuid) -> sqlx::Res
 /// Recomputes every flight's figures per area, archived flights included,
 /// after the areas changed (user's decision, 2026-10-21). Needs
 /// [`lock_for_change`].
-pub async fn recompute_all(tx: &mut PgConnection) -> sqlx::Result<()> {
+pub async fn recompute_all(tx: &mut PgConnection) -> anyhow::Result<()> {
     let (ids, shapes) = shapes(tx).await?;
     let mut after = Uuid::nil();
     loop {

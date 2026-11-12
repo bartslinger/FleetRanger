@@ -44,9 +44,9 @@ pub async fn list(
         .into_iter()
         .skip(offset)
         .take(limit)
-        .map(|flights| Suggestion {
-            key: flights[0].id,
-            flights,
+        .filter_map(|flights| {
+            let key = flights.first()?.id;
+            Some(Suggestion { key, flights })
         })
         .collect();
     Ok((page, total))
@@ -80,22 +80,27 @@ pub async fn get(
 ) -> sqlx::Result<Option<SuggestionPage>> {
     let mut groups = all(db, actor, filter, gap).await?;
     groups.reverse();
-    let Some(index) = groups
+    let Some((index, found)) = groups
         .iter()
-        .position(|flights| flights.iter().any(|flight| flight.id == key))
+        .enumerate()
+        .find(|(_, flights)| flights.iter().any(|flight| flight.id == key))
     else {
         return Ok(None);
     };
     let key_at = |index: Option<usize>| {
         index
             .and_then(|index| groups.get(index))
-            .map(|flights| flights[0].id)
+            .and_then(|flights| flights.first())
+            .map(|flight| flight.id)
     };
-    let ids: Vec<Uuid> = groups[index].iter().map(|flight| flight.id).collect();
+    let ids: Vec<Uuid> = found.iter().map(|flight| flight.id).collect();
+    let Some(&first) = ids.first() else {
+        return Ok(None);
+    };
     let mut flights = flights::details(db, &policy::flight_scope(actor), &ids).await?;
     link_equipment(actor, &mut flights);
     Ok(Some(SuggestionPage {
-        key: ids[0],
+        key: first,
         flights,
         previous: key_at(index.checked_sub(1)),
         next: key_at(Some(index + 1)),
@@ -114,16 +119,12 @@ pub async fn neighbours(
     id: Uuid,
 ) -> sqlx::Result<Option<Neighbours>> {
     let groups = all(db, actor, filter, gap).await?;
-    let Some(flights) = groups
-        .into_iter()
-        .find(|flights| flights.iter().any(|flight| flight.id == id))
-    else {
+    let Some((flights, index)) = groups.into_iter().find_map(|flights| {
+        let index = flights.iter().position(|flight| flight.id == id)?;
+        Some((flights, index))
+    }) else {
         return Ok(None);
     };
-    let index = flights
-        .iter()
-        .position(|flight| flight.id == id)
-        .expect("the flight is in its suggestion");
     let id_at = |index: Option<usize>| index.and_then(|index| flights.get(index)).map(|f| f.id);
     Ok(Some(Neighbours {
         previous: id_at(index.checked_sub(1)),

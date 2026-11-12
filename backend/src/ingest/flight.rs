@@ -82,8 +82,7 @@ pub fn derive(frames: &[Frame], serials: Serials, battery_info: BatteryInfo) -> 
     // Time and distance between consecutive frames in the air. Gaps in the recording
     // count (the aircraft was flying on both sides); time on the ground doesn't.
     let mut air_time = TimeDelta::zero();
-    for pair in frames.windows(2) {
-        let (a, b) = (&pair[0], &pair[1]);
+    for (a, b) in frames.iter().zip(frames.iter().skip(1)) {
         if !a.osd.is_on_ground && !b.osd.is_on_ground {
             air_time += (b.custom.date_time - a.custom.date_time).max(TimeDelta::zero());
         }

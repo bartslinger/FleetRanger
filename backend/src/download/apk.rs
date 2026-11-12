@@ -63,18 +63,25 @@ pub fn with_server(apk: &[u8], server: &str) -> Result<Vec<u8>> {
     let size = (body.len() + 24) as u64;
 
     let mut out = Vec::with_capacity(apk.len() + body.len());
-    out.extend_from_slice(&apk[..block_start]);
+    out.extend_from_slice(part(apk, ..block_start)?);
     out.extend_from_slice(&size.to_le_bytes());
     out.extend_from_slice(&body);
     out.extend_from_slice(&size.to_le_bytes());
     out.extend_from_slice(MAGIC);
     let new_cd_offset = out.len();
-    out.extend_from_slice(&apk[cd_offset..]);
+    out.extend_from_slice(part(apk, cd_offset..)?);
     // The end of central directory record points at the moved directory.
     let eocd_out = eocd - cd_offset + new_cd_offset;
     let offset = u32::try_from(new_cd_offset).context("the APK is too large")?;
-    out[eocd_out + 16..eocd_out + 20].copy_from_slice(&offset.to_le_bytes());
+    out.get_mut(eocd_out + 16..eocd_out + 20)
+        .context("past the end of the APK")?
+        .copy_from_slice(&offset.to_le_bytes());
     Ok(out)
+}
+
+/// These bytes of the APK, or an error if it is shorter.
+fn part<R: std::slice::SliceIndex<[u8], Output = [u8]>>(apk: &[u8], range: R) -> Result<&[u8]> {
+    apk.get(range).context("past the end of the APK")
 }
 
 /// The end of central directory record: the last one, as the comment after
@@ -100,12 +107,13 @@ type Pairs<'a> = Vec<(u32, &'a [u8])>;
 fn signing_block(apk: &[u8], cd_offset: usize) -> Result<(usize, Pairs<'_>)> {
     ensure!(cd_offset >= 32, "no APK Signing Block");
     ensure!(
-        &apk[cd_offset - 16..cd_offset] == MAGIC,
+        part(apk, cd_offset - 16..cd_offset)? == MAGIC,
         "no APK Signing Block: not signed with v2 or later"
     );
     let size = read_u64(apk, cd_offset - 24)? as usize;
-    let start = cd_offset
-        .checked_sub(size + 8)
+    let start = size
+        .checked_add(8)
+        .and_then(|block| cd_offset.checked_sub(block))
         .context("the APK Signing Block is larger than the file")?;
     ensure!(
         read_u64(apk, start)? as usize == size,
@@ -117,13 +125,13 @@ fn signing_block(apk: &[u8], cd_offset: usize) -> Result<(usize, Pairs<'_>)> {
     let end = cd_offset - 24;
     while at < end {
         let length = read_u64(apk, at)? as usize;
-        ensure!(
-            length >= 4 && at + 8 + length <= end,
-            "a broken pair in the APK Signing Block"
-        );
+        let next = (at + 8)
+            .checked_add(length)
+            .filter(|&next| length >= 4 && next <= end)
+            .context("a broken pair in the APK Signing Block")?;
         let id = read_u32(apk, at + 8)?;
-        pairs.push((id, &apk[at + 12..at + 8 + length]));
-        at += 8 + length;
+        pairs.push((id, part(apk, at + 12..next)?));
+        at = next;
     }
     Ok((start, pairs))
 }

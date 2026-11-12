@@ -37,3 +37,14 @@ utoipa-axum = "0.3.0"
 # 2.x rather than 3.x: dji-log-parser already depends on it.
 ureq = "2.12.1"
 uuid = { version = "1.28.0", features = ["serde", "v4"] }
+
+# Code outside tests never panics: it returns errors instead (user, from the
+# start). clippy.toml lets tests unwrap.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
