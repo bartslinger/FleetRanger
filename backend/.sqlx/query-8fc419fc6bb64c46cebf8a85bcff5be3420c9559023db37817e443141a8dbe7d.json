@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update logins set oidc_subject = $1\n             where email = lower($2) and oidc_subject is null\n               and organisation_id not in (select organisation_id from logins\n                                           where oidc_subject = $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8fc419fc6bb64c46cebf8a85bcff5be3420c9559023db37817e443141a8dbe7d"
+}

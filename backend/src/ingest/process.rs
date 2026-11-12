@@ -10,13 +10,14 @@ use dji_log_parser::frame::records_to_frames;
 use dji_log_parser::keychain::KeychainFeaturePoint;
 use dji_log_parser::record::Record;
 use dji_log_parser::record::smart_battery_group::SmartBatteryGroup;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use sqlx::types::Uuid;
 use tokio::time::Instant;
 
 use super::activity::{Activity, Stage};
 use super::flight::{self, BatteryInfo, Flight, Serials};
 use super::{db, dji};
+use crate::db::{System, Tenants};
 use crate::sessions::{self, SessionGap};
 
 /// How long to wait before looking for new logs when none are pending.
@@ -70,7 +71,8 @@ struct Decoded {
 }
 
 pub async fn run(
-    db: PgPool,
+    system: System,
+    tenants: Tenants,
     log_dir: PathBuf,
     dji_app_key: Option<String>,
     activity: Activity,
@@ -79,7 +81,8 @@ pub async fn run(
     let mut dji_limit = RateLimit::new(DJI_REQUEST_INTERVAL);
     loop {
         let result = process_next(
-            &db,
+            &system,
+            &tenants,
             &log_dir,
             dji_app_key.as_deref(),
             &activity,
@@ -103,21 +106,24 @@ pub async fn run(
     }
 }
 
-/// Processes the oldest pending log. Returns false if there was none.
+/// Processes the oldest pending log, of any organisation, in its
+/// organisation. Returns false if there was none.
 async fn process_next(
-    db: &PgPool,
+    system: &System,
+    tenants: &Tenants,
     log_dir: &Path,
     dji_app_key: Option<&str>,
     activity: &Activity,
     dji_limit: &mut RateLimit,
     session_gap: SessionGap,
 ) -> Result<bool> {
-    let Some(log) = db::next_pending(db).await? else {
+    let Some(log) = db::next_pending(&mut *system.acquire().await?).await? else {
         return Ok(false);
     };
-    activity.start(&log.path);
+    let db = &mut tenants.connect(log.organisation_id).await?;
+    activity.start(log.organisation_id, &log.path);
 
-    let path = log_dir.join(&log.path);
+    let path = super::organisation_dir(log_dir, log.organisation_id).join(&log.path);
     let processed = process(db, log.id, &path, dji_app_key, activity, dji_limit)
         .await
         .with_context(|| format!("while processing {}", log.path))?;
@@ -150,7 +156,7 @@ async fn process_next(
 }
 
 async fn process(
-    db: &PgPool,
+    db: &mut PgConnection,
     raw_log_id: Uuid,
     path: &Path,
     dji_app_key: Option<&str>,
@@ -182,7 +188,7 @@ async fn process(
 
 /// The keychains for a log: the ones DJI returned before, or else new ones from DJI.
 async fn keychains(
-    db: &PgPool,
+    db: &mut PgConnection,
     raw_log_id: Uuid,
     log: &DJILog,
     dji_app_key: Option<&str>,

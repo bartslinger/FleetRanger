@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use uuid::Uuid;
 
 use crate::events::Changes;
 
@@ -22,6 +23,9 @@ pub enum Stage {
 
 #[derive(Clone, Serialize)]
 pub struct Current {
+    /// Whose log it is: only that organisation sees it.
+    #[serde(skip)]
+    pub organisation_id: Uuid,
     /// Relative to the flight log directory.
     pub path: String,
     pub stage: Stage,
@@ -31,6 +35,10 @@ pub struct Current {
 /// Processing waits after a problem that may go away, such as DJI being unreachable.
 #[derive(Clone, Serialize)]
 pub struct Paused {
+    /// The organisation whose log it was processing, which the reason may
+    /// name; None for a pause before any log, which everyone may see.
+    #[serde(skip)]
+    pub organisation_id: Option<Uuid>,
     pub reason: String,
     pub until: DateTime<Utc>,
 }
@@ -67,10 +75,11 @@ impl Activity {
         self.lock().clone()
     }
 
-    pub fn start(&self, path: &str) {
+    pub fn start(&self, organisation_id: Uuid, path: &str) {
         let mut now = self.lock();
         now.batch_started_at.get_or_insert_with(Utc::now);
         now.current = Some(Current {
+            organisation_id,
             path: path.to_owned(),
             stage: Stage::Reading,
             started_at: Utc::now(),
@@ -98,8 +107,9 @@ impl Activity {
     /// A pause keeps the batch: the logs it waits for are still pending.
     pub fn pause(&self, reason: String, pause: Duration) {
         let mut now = self.lock();
-        now.current = None;
+        let organisation_id = now.current.take().map(|current| current.organisation_id);
         now.paused = Some(Paused {
+            organisation_id,
             reason,
             until: Utc::now() + pause,
         });

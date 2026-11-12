@@ -1,6 +1,6 @@
 use chrono::Utc;
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 
 use super::activity::{Activity, Current, Paused};
 use super::db::{self, Processed};
@@ -29,7 +29,11 @@ pub struct Status {
     pub latest: Vec<Processed>,
 }
 
-pub async fn status(db: &PgPool, actor: &Actor, activity: &Activity) -> ApiResult<Status> {
+pub async fn status(
+    db: &mut PgConnection,
+    actor: &Actor,
+    activity: &Activity,
+) -> ApiResult<Status> {
     policy::require(actor, Permission::LogsManage, None)?;
     let now = activity.snapshot();
     let empty = |pending| Status {
@@ -53,8 +57,21 @@ pub async fn status(db: &PgPool, actor: &Actor, activity: &Activity) -> ApiResul
         processed: counts.processed,
         failed: counts.failed,
         // A finished batch: the last log may still show as current for a moment.
-        current: now.current.filter(|_| counts.pending > 0),
-        paused: now.paused.filter(|_| counts.pending > 0),
+        // The log being processed, and why processing paused, only for the
+        // organisation whose log it is: its path names a controller and a
+        // flight. The counts are the organisation's own.
+        current: now
+            .current
+            .filter(|current| current.organisation_id == actor.organisation_id)
+            .filter(|_| counts.pending > 0),
+        paused: now
+            .paused
+            .filter(|paused| {
+                paused
+                    .organisation_id
+                    .is_none_or(|id| id == actor.organisation_id)
+            })
+            .filter(|_| counts.pending > 0),
         latest: db::latest_processed(db, since, LATEST).await?,
     })
 }

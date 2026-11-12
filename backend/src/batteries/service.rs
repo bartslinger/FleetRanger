@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{self, Battery, BatteryFlight, CapacityReading};
@@ -18,13 +18,13 @@ pub struct BatteryDetail {
     pub capacity_readings: Vec<CapacityReading>,
 }
 
-pub async fn list(db: &PgPool, actor: &Actor) -> ApiResult<Vec<Battery>> {
+pub async fn list(db: &mut PgConnection, actor: &Actor) -> ApiResult<Vec<Battery>> {
     Ok(db::list(db, &policy::flight_scope(actor), None).await?)
 }
 
 /// One without a flight the actor sees is not found, so its existence isn't
 /// revealed.
-pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<BatteryDetail> {
+pub async fn get(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<BatteryDetail> {
     let scope = policy::flight_scope(actor);
     let battery = db::list(db, &scope, Some(id))
         .await?
@@ -42,7 +42,7 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<BatteryDetai
 /// A battery has no group, so naming it needs `batteries.rename` on the
 /// organisation.
 pub async fn rename(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     id: Uuid,
     name: Option<&str>,

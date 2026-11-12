@@ -3,6 +3,7 @@ mod areas;
 mod auth;
 mod batteries;
 mod config;
+mod db;
 mod download;
 mod equipment;
 mod error;
@@ -27,7 +28,6 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use axum::{Router, extract::FromRef, middleware, routing::get};
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
@@ -55,25 +55,46 @@ async fn main() -> Result<()> {
     let config = Config::from_env()?;
 
     // A short acquire timeout makes health checks fail fast when the database is down.
-    let db = PgPoolOptions::new()
+    let system = PgPoolOptions::new()
         .acquire_timeout(Duration::from_secs(3))
         .connect(&config.database_url)
         .await
         .context("failed to connect to the database")?;
     sqlx::migrate!()
-        .run(&db)
+        .run(&system)
         .await
         .context("failed to run database migrations")?;
+    db::allow_app_login(&system, &config.database_app_url).await?;
+    let tenants = db::Tenants::open(
+        PgPoolOptions::new()
+            .acquire_timeout(Duration::from_secs(3))
+            .max_connections(20),
+        &config.database_app_url,
+    )
+    .await
+    .context("failed to connect to the database as fleetranger_app")?;
+    let system = db::System(system);
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
-        [] | ["serve"] => serve(&config, db).await,
-        ["import"] => ingest::import::run(&db, &config.log_dir, None).await,
-        ["import", "--group", group] => {
-            ingest::import::run(&db, &config.log_dir, Some(group)).await
+        [] | ["serve"] => serve(&config, system, tenants).await,
+        // Until the command-line tool names the organisation: the only one.
+        ["import"] => {
+            let mut db = only_organisation(&system, &tenants).await?;
+            ingest::import::run(&mut db, &config.log_dir, None).await
         }
-        ["add-user", email, name] => users::add(&db, email, name, false).await,
-        ["add-user", "--admin", email, name] => users::add(&db, email, name, true).await,
+        ["import", "--group", group] => {
+            let mut db = only_organisation(&system, &tenants).await?;
+            ingest::import::run(&mut db, &config.log_dir, Some(group)).await
+        }
+        ["add-user", email, name] => {
+            let mut db = only_organisation(&system, &tenants).await?;
+            users::add(&mut db, email, name, false).await
+        }
+        ["add-user", "--admin", email, name] => {
+            let mut db = only_organisation(&system, &tenants).await?;
+            users::add(&mut db, email, name, true).await
+        }
         _ => bail!(
             "unknown command {args:?}; expected serve, import [--group <name>] or add-user [--admin] <email> <name>"
         ),
@@ -83,7 +104,8 @@ async fn main() -> Result<()> {
 /// What request handlers can extract with `State`.
 #[derive(Clone)]
 struct AppState {
-    db: PgPool,
+    system: db::System,
+    tenants: db::Tenants,
     auth: Arc<Auth>,
     activity: Activity,
     changes: Changes,
@@ -129,9 +151,15 @@ impl FromRef<AppState> for Activity {
     }
 }
 
-impl FromRef<AppState> for PgPool {
+impl FromRef<AppState> for db::System {
     fn from_ref(state: &AppState) -> Self {
-        state.db.clone()
+        state.system.clone()
+    }
+}
+
+impl FromRef<AppState> for db::Tenants {
+    fn from_ref(state: &AppState) -> Self {
+        state.tenants.clone()
     }
 }
 
@@ -141,12 +169,25 @@ impl FromRef<AppState> for Arc<Auth> {
     }
 }
 
-async fn serve(config: &Config, db: PgPool) -> Result<()> {
+/// A connection in the install's only organisation, for the command-line
+/// commands until they name one.
+async fn only_organisation(system: &db::System, tenants: &db::Tenants) -> Result<db::Db> {
+    let organisations: Vec<uuid::Uuid> = sqlx::query_scalar("select id from organisations")
+        .fetch_all(&**system)
+        .await?;
+    let [organisation] = organisations[..] else {
+        bail!("the install has several organisations; this command can't choose one yet");
+    };
+    Ok(tenants.connect(organisation).await?)
+}
+
+async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Result<()> {
     let session_gap = SessionGap(config.session_gap_minutes);
     let changes = Changes::default();
     let activity = Activity::new(changes.clone());
     tokio::spawn(ingest::process::run(
-        db.clone(),
+        system.clone(),
+        tenants.clone(),
         config.log_dir.clone(),
         config.dji_app_key.clone(),
         activity.clone(),
@@ -178,7 +219,8 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
     let oauth_on = !resources.is_empty();
     auth::set_https(config.public_url.scheme() == "https");
     let state = AppState {
-        db,
+        system,
+        tenants,
         auth: Arc::new(Auth {
             public_url: config.public_url.clone(),
             provider,
@@ -200,7 +242,7 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
     // Off unless the install switches them on (FLEETRANGER_MCP,
     // FLEETRANGER_API), and OAuth with them. Both answer in the time zone.
     if config.mcp || config.api {
-        mcp::db::today(&state.db, &config.time_zone)
+        mcp::db::today(&mut *state.system.acquire().await?, &config.time_zone)
             .await
             .with_context(|| format!("TIME_ZONE {} is not a known time zone", config.time_zone))?;
     }
@@ -210,7 +252,8 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
         hosts.extend(config.public_url.host_str().map(str::to_owned));
         tracing::info!("MCP server on at /mcp");
         apps = apps.merge(mcp::router(
-            state.db.clone(),
+            state.system.clone(),
+            state.tenants.clone(),
             config.time_zone.clone(),
             &issuer,
             hosts,
@@ -219,14 +262,15 @@ async fn serve(config: &Config, db: PgPool) -> Result<()> {
     if config.api {
         tracing::info!("public API on at /api/v1");
         apps = apps.merge(api_v1::router(api_v1::Api {
-            db: state.db.clone(),
+            system: state.system.clone(),
+            tenants: state.tenants.clone(),
             time_zone: config.time_zone.clone().into(),
             organisation_name: config.organisation_name.clone().map(Into::into),
             resource: api_v1::resource(&issuer).into(),
         }));
     }
     if oauth_on {
-        tokio::spawn(oauth::clean_up_hourly(state.db.clone()));
+        tokio::spawn(oauth::clean_up_hourly(state.system.clone()));
         apps = apps.merge(oauth::routes::router());
     }
 

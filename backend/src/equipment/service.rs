@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{self, Equipment, Kind};
@@ -16,13 +16,18 @@ pub struct EquipmentInput {
 
 /// The equipment the actor sees: with `equipment.read` on its group, or
 /// through one of its flights.
-pub async fn list(db: &PgPool, actor: &Actor, kind: Kind) -> ApiResult<Vec<Equipment>> {
+pub async fn list(db: &mut PgConnection, actor: &Actor, kind: Kind) -> ApiResult<Vec<Equipment>> {
     let read = actor.grants.scope(Permission::EquipmentRead);
     Ok(db::list(db, kind, &read, &policy::flight_scope(actor), None).await?)
 }
 
 /// One the actor doesn't see is not found, so its existence isn't revealed.
-pub async fn get(db: &PgPool, actor: &Actor, kind: Kind, id: Uuid) -> ApiResult<Equipment> {
+pub async fn get(
+    db: &mut PgConnection,
+    actor: &Actor,
+    kind: Kind,
+    id: Uuid,
+) -> ApiResult<Equipment> {
     let read = actor.grants.scope(Permission::EquipmentRead);
     db::list(db, kind, &read, &policy::flight_scope(actor), Some(id))
         .await?
@@ -33,7 +38,7 @@ pub async fn get(db: &PgPool, actor: &Actor, kind: Kind, id: Uuid) -> ApiResult<
 /// Renames and moves a drone or controller to an existing group, or to the
 /// organisation.
 pub async fn update(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     kind: Kind,
     id: Uuid,

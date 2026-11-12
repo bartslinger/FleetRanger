@@ -34,6 +34,9 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://fleetranger:${POSTGRES_PASSWORD}@postgres/fleetranger
+      # Requests connect as fleetranger_app, which row-level security limits
+      # to one organisation; the backend sets this password on every start.
+      DATABASE_APP_URL: postgres://fleetranger_app:${POSTGRES_APP_PASSWORD:?}@postgres/fleetranger
       RUST_LOG: ${RUST_LOG:-info}
       FLEETRANGER_PUBLIC_URL: ${FLEETRANGER_PUBLIC_URL:?}
       DJI_APP_KEY: ${DJI_APP_KEY:-}

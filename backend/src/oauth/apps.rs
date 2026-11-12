@@ -2,13 +2,9 @@
 //! screen, but still act only as their user. See "Apps" in
 //! docs/architecture.md.
 
-use axum::{
-    Json,
-    extract::{Path, State},
-    http::StatusCode,
-};
+use crate::db::Db;
+use axum::{Json, extract::Path, http::StatusCode};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
@@ -150,23 +146,17 @@ impl RoleInput {
     }
 }
 
-pub(super) async fn list(
-    actor: Actor,
-    State(db): State<PgPool>,
-) -> ApiResult<Json<Vec<TrustedApp>>> {
+pub(super) async fn list(actor: Actor, mut db: Db) -> ApiResult<Json<Vec<TrustedApp>>> {
     policy::require(&actor, Permission::AppsManage, None)?;
-    Ok(Json(db::trusted_apps(&db).await?))
+    Ok(Json(db::trusted_apps(&mut db).await?))
 }
 
 /// The apps' roles, for the dialogs that give roles to users and members.
-pub(super) async fn roles(
-    actor: Actor,
-    State(db): State<PgPool>,
-) -> ApiResult<Json<Vec<OfferedAppRole>>> {
+pub(super) async fn roles(actor: Actor, mut db: Db) -> ApiResult<Json<Vec<OfferedAppRole>>> {
     if !actor.grants.may(Permission::UsersManage, None) {
         policy::require(&actor, Permission::GroupsManage, None)?;
     }
-    Ok(Json(db::offered_app_roles(&db).await?))
+    Ok(Json(db::offered_app_roles(&mut db).await?))
 }
 #[derive(Serialize)]
 pub(super) struct Added {
@@ -175,12 +165,12 @@ pub(super) struct Added {
 
 pub(super) async fn add(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Json(input): Json<AppInput>,
 ) -> ApiResult<(StatusCode, Json<Added>)> {
     policy::require(&actor, Permission::AppsManage, None)?;
     let (name, uris, roles) = input.checked()?;
-    let id = db::add_trusted(&db, name, &uris, &roles.unwrap_or_default())
+    let id = db::add_trusted(&mut db, name, &uris, &roles.unwrap_or_default())
         .await
         .map_err(roles_taken)?
         .ok_or_else(|| ApiError::Invalid("A new app has only new roles.".to_owned()))?;
@@ -190,13 +180,13 @@ pub(super) async fn add(
 
 pub(super) async fn update(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(input): Json<AppInput>,
 ) -> ApiResult<StatusCode> {
     policy::require(&actor, Permission::AppsManage, None)?;
     let (name, uris, roles) = input.checked()?;
-    if !db::update_trusted(&db, id, name, &uris, roles.as_deref())
+    if !db::update_trusted(&mut db, id, name, &uris, roles.as_deref())
         .await
         .map_err(roles_taken)?
     {
@@ -219,11 +209,11 @@ fn roles_taken(error: sqlx::Error) -> ApiError {
 /// Removes an app: its users' tokens stop working at once.
 pub(super) async fn remove(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
     policy::require(&actor, Permission::AppsManage, None)?;
-    if !db::remove_trusted(&db, id).await? {
+    if !db::remove_trusted(&mut db, id).await? {
         return Err(ApiError::NotFound);
     }
     tracing::info!(%id, by = %actor.user_id, "trusted app removed");
@@ -241,28 +231,29 @@ mod tests {
     /// Clean-up keeps a trusted app without users, as it removes registered
     /// ones; removing a trusted app ends its users' access at once.
     #[sqlx::test]
-    async fn removing_a_trusted_app_ends_its_tokens(db: PgPool) {
+    async fn removing_a_trusted_app_ends_its_tokens(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
         let user: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
-            .fetch_one(&db)
+            .fetch_one(&mut *db)
             .await
             .unwrap();
         sqlx::query("insert into logins (user_id, email) values ($1, 'a@example.org')")
             .bind(user)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
         let uris = ["https://app.example.org/callback".to_owned()];
-        let app = db::add_trusted(&db, "Test app", &uris, &[])
+        let app = db::add_trusted(&mut db, "Test app", &uris, &[])
             .await
             .unwrap()
             .unwrap();
         sqlx::query("update oauth_clients set created_at = now() - interval '2 days'")
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
-        db::clean_up(&db, 30).await.unwrap();
+        db::clean_up(&mut db, 30).await.unwrap();
         assert!(
-            db::client(&db, app)
+            db::client(&mut db, app)
                 .await
                 .unwrap()
                 .is_some_and(|c| c.trusted)
@@ -271,6 +262,7 @@ mod tests {
         let code = Code {
             client_id: app,
             user_id: user,
+            organisation_id: crate::testing::organisation(&mut db).await,
             redirect_uri: uris[0].clone(),
             code_challenge: String::new(),
             scopes: vec!["sessions:list".to_owned()],
@@ -282,17 +274,17 @@ mod tests {
             refresh_sha256: &sha256("refresh"),
             access_seconds: 60.0,
         };
-        db::create_grant(&db, &code, &tokens).await.unwrap();
+        db::create_grant(&mut db, &code, &tokens).await.unwrap();
         assert!(
-            db::use_access(&db, &sha256("access"))
+            db::use_access(&mut db, &sha256("access"))
                 .await
                 .unwrap()
                 .is_some()
         );
 
-        assert!(db::remove_trusted(&db, app).await.unwrap());
+        assert!(db::remove_trusted(&mut db, app).await.unwrap());
         assert!(
-            db::use_access(&db, &sha256("access"))
+            db::use_access(&mut db, &sha256("access"))
                 .await
                 .unwrap()
                 .is_none()
@@ -307,17 +299,18 @@ mod impersonation_tests {
         db::{Code, Tokens},
         sha256,
     };
+    use sqlx::PgConnection;
 
-    async fn user(db: &PgPool, email: &str) -> Uuid {
+    async fn user(db: &mut PgConnection, email: &str) -> Uuid {
         let id: Uuid = sqlx::query_scalar("insert into users (name) values ($1) returning id")
             .bind(email)
-            .fetch_one(db)
+            .fetch_one(&mut *db)
             .await
             .unwrap();
         sqlx::query("insert into logins (user_id, email) values ($1, $2)")
             .bind(id)
             .bind(email)
-            .execute(db)
+            .execute(&mut *db)
             .await
             .unwrap();
         id
@@ -327,18 +320,20 @@ mod impersonation_tests {
     /// person's connected apps, and ends with the impersonation; the
     /// person's own connection stays.
     #[sqlx::test]
-    async fn impersonated_connections_end_with_the_impersonation(db: PgPool) {
-        let pilot = user(&db, "pilot@example.org").await;
-        let admin = user(&db, "admin@example.org").await;
+    async fn impersonated_connections_end_with_the_impersonation(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let pilot = user(&mut db, "pilot@example.org").await;
+        let admin = user(&mut db, "admin@example.org").await;
         let uris = ["https://app.example.org/callback".to_owned()];
-        let app = db::add_trusted(&db, "Test app", &uris, &[])
+        let app = db::add_trusted(&mut db, "Test app", &uris, &[])
             .await
             .unwrap()
             .unwrap();
-        let connect = async |impersonated_by: Option<Uuid>, token: &str| {
+        let mut connect = async |impersonated_by: Option<Uuid>, token: &str| {
             let code = Code {
                 client_id: app,
                 user_id: pilot,
+                organisation_id: crate::testing::organisation(&mut db).await,
                 redirect_uri: uris[0].clone(),
                 code_challenge: String::new(),
                 scopes: vec!["sessions:list".to_owned()],
@@ -350,26 +345,31 @@ mod impersonation_tests {
                 refresh_sha256: &sha256(&format!("{token}-refresh")),
                 access_seconds: 60.0,
             };
-            db::create_grant(&db, &code, &tokens).await.unwrap();
+            db::create_grant(&mut db, &code, &tokens).await.unwrap();
         };
         connect(None, "own").await;
         connect(Some(admin), "impersonated").await;
 
-        let access = db::use_access(&db, &sha256("impersonated"))
+        let access = db::use_access(&mut db, &sha256("impersonated"))
             .await
             .unwrap()
             .unwrap();
         assert_eq!(access.user_id, pilot);
         assert_eq!(access.impersonated_by, Some(admin));
-        assert_eq!(db::connections(&db, pilot).await.unwrap().len(), 1);
+        assert_eq!(db::connections(&mut db, pilot).await.unwrap().len(), 1);
 
-        db::end_impersonation(&db, admin).await.unwrap();
+        db::end_impersonation(&mut db, admin).await.unwrap();
         assert!(
-            db::use_access(&db, &sha256("impersonated"))
+            db::use_access(&mut db, &sha256("impersonated"))
                 .await
                 .unwrap()
                 .is_none()
         );
-        assert!(db::use_access(&db, &sha256("own")).await.unwrap().is_some());
+        assert!(
+            db::use_access(&mut db, &sha256("own"))
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 }

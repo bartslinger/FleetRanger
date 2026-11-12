@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{self, Refused, User, UserFields};
@@ -25,12 +25,12 @@ pub fn email(value: &str) -> Option<String> {
         .then_some(email)
 }
 
-pub async fn list(db: &PgPool, actor: &Actor, archived: bool) -> ApiResult<Vec<User>> {
+pub async fn list(db: &mut PgConnection, actor: &Actor, archived: bool) -> ApiResult<Vec<User>> {
     policy::require(actor, Permission::UsersManage, None)?;
     Ok(db::list(db, archived, None).await?)
 }
 
-pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<User> {
+pub async fn get(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<User> {
     policy::require(actor, Permission::UsersManage, None)?;
     db::list(db, true, Some(id))
         .await?
@@ -38,7 +38,7 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<User> {
         .ok_or(ApiError::NotFound)
 }
 
-pub async fn create(db: &PgPool, actor: &Actor, input: &UserInput) -> ApiResult<User> {
+pub async fn create(db: &mut PgConnection, actor: &Actor, input: &UserInput) -> ApiResult<User> {
     policy::require(actor, Permission::UsersManage, None)?;
     let checked = Checked::new(input)?;
     let id = db::insert(db, &checked.fields())
@@ -49,7 +49,12 @@ pub async fn create(db: &PgPool, actor: &Actor, input: &UserInput) -> ApiResult<
 
 /// Admins can't remove their own login, so they can still log in; the last
 /// active admin keeps Admin.
-pub async fn update(db: &PgPool, actor: &Actor, id: Uuid, input: &UserInput) -> ApiResult<User> {
+pub async fn update(
+    db: &mut PgConnection,
+    actor: &Actor,
+    id: Uuid,
+    input: &UserInput,
+) -> ApiResult<User> {
     let current = get(db, actor, id).await?;
     let checked = Checked::new(input)?;
     if id == actor.user_id && checked.email.is_none() && current.email.is_some() {
@@ -65,7 +70,12 @@ pub async fn update(db: &PgPool, actor: &Actor, id: Uuid, input: &UserInput) -> 
 }
 
 /// Admins can't archive themselves, and the last active admin isn't archived.
-pub async fn set_archived(db: &PgPool, actor: &Actor, id: Uuid, archived: bool) -> ApiResult<User> {
+pub async fn set_archived(
+    db: &mut PgConnection,
+    actor: &Actor,
+    id: Uuid,
+    archived: bool,
+) -> ApiResult<User> {
     policy::require(actor, Permission::UsersManage, None)?;
     if archived && id == actor.user_id {
         return Err(ApiError::Conflict("You can't archive yourself.".to_owned()));
@@ -76,7 +86,7 @@ pub async fn set_archived(db: &PgPool, actor: &Actor, id: Uuid, archived: bool) 
 
 /// Only a user without flights or comments can be deleted; others are
 /// archived.
-pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
+pub async fn delete(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<()> {
     let user = get(db, actor, id).await?;
     if id == actor.user_id {
         return Err(ApiError::Conflict("You can't delete yourself.".to_owned()));
@@ -172,22 +182,27 @@ mod tests {
     /// The last active admin can't lose Admin or be archived, so nobody locks
     /// the organisation out; an archived admin doesn't count.
     #[sqlx::test]
-    async fn the_last_active_admin_stays(db: PgPool) {
-        let first = testing::user(&db, "A", &["admin"]).await;
-        let second = testing::user(&db, "B", &["admin"]).await;
-        let actor = testing::actor(&db, second).await;
+    async fn the_last_active_admin_stays(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let first = testing::user(&mut db, "A", &["admin"]).await;
+        let second = testing::user(&mut db, "B", &["admin"]).await;
+        let actor = testing::actor(&mut db, second).await;
 
-        assert!(set_archived(&db, &actor, first, true).await.is_ok());
+        assert!(set_archived(&mut db, &actor, first, true).await.is_ok());
         assert!(matches!(
-            update(&db, &actor, second, &input("B", &[])).await,
+            update(&mut db, &actor, second, &input("B", &[])).await,
             Err(ApiError::Conflict(_))
         ));
         assert!(matches!(
-            db::set_archived(&db, second, true).await,
+            db::set_archived(&mut db, second, true).await,
             Ok(Err(Refused::LastAdmin))
         ));
 
-        assert!(set_archived(&db, &actor, first, false).await.is_ok());
-        assert!(update(&db, &actor, second, &input("B", &[])).await.is_ok());
+        assert!(set_archived(&mut db, &actor, first, false).await.is_ok());
+        assert!(
+            update(&mut db, &actor, second, &input("B", &[]))
+                .await
+                .is_ok()
+        );
     }
 }

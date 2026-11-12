@@ -2,8 +2,9 @@ use std::collections::HashSet;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use sqlx::Connection as _;
+use sqlx::PgConnection;
 use sqlx::types::Uuid;
-use sqlx::{PgConnection, PgPool};
 
 use super::flight::{BatteryUse, Flight};
 use crate::{
@@ -14,19 +15,20 @@ use crate::{
 pub struct PendingLog {
     pub id: Uuid,
     pub path: String,
+    pub organisation_id: Uuid,
 }
 
-pub async fn known_paths(db: &PgPool) -> sqlx::Result<HashSet<String>> {
+pub async fn known_paths(db: &mut PgConnection) -> sqlx::Result<HashSet<String>> {
     let paths = sqlx::query_scalar!("select path from raw_logs")
-        .fetch_all(db)
+        .fetch_all(&mut *db)
         .await?;
     Ok(paths.into_iter().collect())
 }
 
 /// Every group, by name.
-pub async fn groups(db: &PgPool) -> sqlx::Result<Vec<(Uuid, String)>> {
+pub async fn groups(db: &mut PgConnection) -> sqlx::Result<Vec<(Uuid, String)>> {
     let rows = sqlx::query!("select id, name from groups order by name")
-        .fetch_all(db)
+        .fetch_all(&mut *db)
         .await?;
     Ok(rows.into_iter().map(|row| (row.id, row.name)).collect())
 }
@@ -34,7 +36,7 @@ pub async fn groups(db: &PgPool) -> sqlx::Result<Vec<(Uuid, String)>> {
 /// Registers a raw log as pending, for a group. Returns false if a log with the same content
 /// (or path) is already registered.
 pub async fn insert_raw_log(
-    db: &PgPool,
+    db: &mut PgConnection,
     sha256: &[u8],
     path: &str,
     size_bytes: i64,
@@ -49,7 +51,7 @@ pub async fn insert_raw_log(
         size_bytes,
         group_id,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await?;
     Ok(inserted.is_some())
 }
@@ -67,22 +69,25 @@ pub enum Stored {
 }
 
 /// Whether a log with this content is already stored, at any path.
-pub async fn has_content(db: &PgPool, sha256: &[u8]) -> sqlx::Result<bool> {
+pub async fn has_content(db: &mut PgConnection, sha256: &[u8]) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
         r#"select exists(select 1 from raw_logs where sha256 = $1) as "exists!""#,
         sha256
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
 /// Which of these contents are already stored, at any path.
-pub async fn stored_contents(db: &PgPool, sha256s: &[Vec<u8>]) -> sqlx::Result<HashSet<Vec<u8>>> {
+pub async fn stored_contents(
+    db: &mut PgConnection,
+    sha256s: &[Vec<u8>],
+) -> sqlx::Result<HashSet<Vec<u8>>> {
     let stored = sqlx::query_scalar!(
         "select sha256 from raw_logs where sha256 = any($1)",
         sha256s
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await?;
     Ok(stored.into_iter().collect())
 }
@@ -92,7 +97,7 @@ pub async fn stored_contents(db: &PgPool, sha256s: &[Vec<u8>]) -> sqlx::Result<H
 /// they count is decided when the log is processed). A log already at that
 /// path is a previous version: it's replaced and processed again.
 pub async fn save_upload(
-    db: &PgPool,
+    db: &mut PgConnection,
     sha256: &[u8],
     path: &str,
     size_bytes: i64,
@@ -103,7 +108,7 @@ pub async fn save_upload(
         r#"insert into raw_logs (sha256, path, size_bytes, pilot_id, group_id)
            values ($1, $2, $3, (select id from users where id = $4),
                    (select id from groups where id = $5))
-           on conflict (path) do update set
+           on conflict (organisation_id, path) do update set
                sha256 = excluded.sha256,
                size_bytes = excluded.size_bytes,
                pilot_id = excluded.pilot_id,
@@ -121,7 +126,7 @@ pub async fn save_upload(
         pilot_id,
         group_id,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await?;
     Ok(if replaced {
         Stored::Replaced
@@ -130,8 +135,9 @@ pub async fn save_upload(
     })
 }
 
-/// The oldest pending raw log, counting this as an attempt to process it.
-pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
+/// The oldest pending raw log of any organisation (with `System`), counting
+/// this as an attempt to process it.
+pub async fn next_pending(db: &mut PgConnection) -> sqlx::Result<Option<PendingLog>> {
     sqlx::query_as!(
         PendingLog,
         "update raw_logs set attempts = attempts + 1
@@ -141,9 +147,9 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
              limit 1
              for update skip locked
          )
-         returning id, path",
+         returning id, path, organisation_id",
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
@@ -155,7 +161,11 @@ pub async fn next_pending(db: &PgPool) -> sqlx::Result<Option<PendingLog>> {
 /// controller's (user's decision, 2026-11-11), else the only group there is.
 /// Re-processing updates the flight in place, so its id, group and pilot stay
 /// the same. Returns whether the flight is new.
-pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>) -> Result<bool> {
+pub async fn save_result(
+    db: &mut PgConnection,
+    raw_log_id: Uuid,
+    flight: Option<&Flight>,
+) -> Result<bool> {
     let mut tx = db.begin().await?;
     let new = match flight {
         Some(flight) => {
@@ -195,7 +205,7 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
             if let Some(serial) = &flight.aircraft_serial {
                 sqlx::query!(
                     "insert into aircraft (serial, group_id) values ($1, $2)
-                     on conflict (serial) do nothing",
+                     on conflict (organisation_id, serial) do nothing",
                     serial,
                     group_id,
                 )
@@ -205,7 +215,7 @@ pub async fn save_result(db: &PgPool, raw_log_id: Uuid, flight: Option<&Flight>)
             if let Some(serial) = &flight.rc_serial {
                 sqlx::query!(
                     "insert into remote_controllers (serial, group_id) values ($1, $2)
-                     on conflict (serial) do nothing",
+                     on conflict (organisation_id, serial) do nothing",
                     serial,
                     group_id,
                 )
@@ -281,7 +291,7 @@ async fn save_battery(
         return Ok(());
     };
     sqlx::query!(
-        "insert into batteries (serial) values ($1) on conflict (serial) do nothing",
+        "insert into batteries (serial) values ($1) on conflict (organisation_id, serial) do nothing",
         battery.serial,
     )
     .execute(&mut *tx)
@@ -312,20 +322,23 @@ async fn save_battery(
     Ok(())
 }
 
-pub async fn mark_failed(db: &PgPool, id: Uuid, error: &str) -> sqlx::Result<()> {
+pub async fn mark_failed(db: &mut PgConnection, id: Uuid, error: &str) -> sqlx::Result<()> {
     sqlx::query!(
         "update raw_logs set status = 'failed', last_error = $2, processed_at = now()
          where id = $1",
         id,
         error,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
 
 /// The body of the latest successful key request for a raw log.
-pub async fn stored_key_response(db: &PgPool, raw_log_id: Uuid) -> sqlx::Result<Option<String>> {
+pub async fn stored_key_response(
+    db: &mut PgConnection,
+    raw_log_id: Uuid,
+) -> sqlx::Result<Option<String>> {
     let body = sqlx::query_scalar!(
         "select response_body from dji_key_requests
          where raw_log_id = $1 and response_status = 200 and response_body is not null
@@ -333,13 +346,13 @@ pub async fn stored_key_response(db: &PgPool, raw_log_id: Uuid) -> sqlx::Result<
          limit 1",
         raw_log_id,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await?;
     Ok(body.flatten())
 }
 
 pub async fn insert_key_request(
-    db: &PgPool,
+    db: &mut PgConnection,
     raw_log_id: Uuid,
     request_body: &str,
     response_status: Option<i32>,
@@ -356,7 +369,7 @@ pub async fn insert_key_request(
         response_body,
         error,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
@@ -369,7 +382,10 @@ pub struct BatchCounts {
     pub failed: i64,
 }
 
-pub async fn batch_counts(db: &PgPool, since: DateTime<Utc>) -> sqlx::Result<BatchCounts> {
+pub async fn batch_counts(
+    db: &mut PgConnection,
+    since: DateTime<Utc>,
+) -> sqlx::Result<BatchCounts> {
     sqlx::query_as!(
         BatchCounts,
         r#"select count(*) filter (where status = 'pending') as "pending!",
@@ -378,7 +394,7 @@ pub async fn batch_counts(db: &PgPool, since: DateTime<Utc>) -> sqlx::Result<Bat
            from raw_logs"#,
         since,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
@@ -395,7 +411,7 @@ pub struct Processed {
 
 /// The latest logs processed since a batch started, newest first.
 pub async fn latest_processed(
-    db: &PgPool,
+    db: &mut PgConnection,
     since: DateTime<Utc>,
     limit: i64,
 ) -> sqlx::Result<Vec<Processed>> {
@@ -410,7 +426,7 @@ pub async fn latest_processed(
         since,
         limit,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -440,10 +456,10 @@ mod tests {
         }
     }
 
-    async fn pilot_and_group(db: &PgPool, raw_log: Uuid) -> (Option<Uuid>, Option<Uuid>) {
+    async fn pilot_and_group(db: &mut PgConnection, raw_log: Uuid) -> (Option<Uuid>, Option<Uuid>) {
         sqlx::query_as("select pilot_id, group_id from flights where raw_log_id = $1")
             .bind(raw_log)
-            .fetch_one(db)
+            .fetch_one(&mut *db)
             .await
             .unwrap()
     }
@@ -451,39 +467,40 @@ mod tests {
     /// An upload's flight gets the pilot chosen on the controller; a new
     /// version of the log replaces it and keeps the flight.
     #[sqlx::test]
-    async fn uploads_bring_their_pilot_and_replace_earlier_versions(db: PgPool) {
-        let team = crate::testing::group(&db, "North").await;
+    async fn uploads_bring_their_pilot_and_replace_earlier_versions(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let team = crate::testing::group(&mut db, "North").await;
         let pilot: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
-            .fetch_one(&db)
+            .fetch_one(&mut *db)
             .await
             .unwrap();
-        crate::testing::join(&db, pilot, team).await;
+        crate::testing::join(&mut db, pilot, team).await;
         let path = "raw/TESTRC0003/FlightRecord/DJIFlightRecord_test.txt";
 
-        let first = save_upload(&db, &[1; 32], path, 10, Some(pilot), Some(team))
+        let first = save_upload(&mut db, &[1; 32], path, 10, Some(pilot), Some(team))
             .await
             .unwrap();
         assert_eq!(first, Stored::Added);
-        let log = next_pending(&db).await.unwrap().unwrap();
-        assert!(save_result(&db, log.id, Some(&flight())).await.unwrap());
+        let log = next_pending(&mut db).await.unwrap().unwrap();
+        assert!(save_result(&mut db, log.id, Some(&flight())).await.unwrap());
         assert_eq!(
-            pilot_and_group(&db, log.id).await,
+            pilot_and_group(&mut db, log.id).await,
             (Some(pilot), Some(team))
         );
 
-        let second = save_upload(&db, &[2; 32], path, 20, Some(pilot), Some(team))
+        let second = save_upload(&mut db, &[2; 32], path, 20, Some(pilot), Some(team))
             .await
             .unwrap();
         assert_eq!(second, Stored::Replaced);
-        let again = next_pending(&db).await.unwrap().unwrap();
+        let again = next_pending(&mut db).await.unwrap().unwrap();
         assert_eq!(again.id, log.id, "the same log, to be processed again");
         assert!(
-            !save_result(&db, log.id, Some(&flight())).await.unwrap(),
+            !save_result(&mut db, log.id, Some(&flight())).await.unwrap(),
             "the same flight, so it isn't placed in a session again"
         );
-        assert!(has_content(&db, &[2; 32]).await.unwrap());
-        assert!(!has_content(&db, &[1; 32]).await.unwrap());
-        let stored = stored_contents(&db, &[vec![1; 32], vec![2; 32]])
+        assert!(has_content(&mut db, &[2; 32]).await.unwrap());
+        assert!(!has_content(&mut db, &[1; 32]).await.unwrap());
+        let stored = stored_contents(&mut db, &[vec![1; 32], vec![2; 32]])
             .await
             .unwrap();
         assert_eq!(
@@ -498,24 +515,25 @@ mod tests {
     /// goes to the controller's group. An import's flight goes to the group
     /// it was imported for, whatever the controller's.
     #[sqlx::test]
-    async fn the_flights_group_is_chosen_else_the_controllers(db: PgPool) {
+    async fn the_flights_group_is_chosen_else_the_controllers(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
         use crate::testing::group;
         let (north, south, base, other) = (
-            group(&db, "North").await,
-            group(&db, "South").await,
-            group(&db, "Base").await,
-            group(&db, "Other").await,
+            group(&mut db, "North").await,
+            group(&mut db, "South").await,
+            group(&mut db, "Base").await,
+            group(&mut db, "Other").await,
         );
         let pilot: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
-            .fetch_one(&db)
+            .fetch_one(&mut *db)
             .await
             .unwrap();
         for team in [north, south] {
-            crate::testing::join(&db, pilot, team).await;
+            crate::testing::join(&mut db, pilot, team).await;
         }
         sqlx::query("insert into remote_controllers (serial, group_id) values ('TESTRC0003', $1)")
             .bind(base)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
 
@@ -523,21 +541,21 @@ mod tests {
         for (n, chosen) in [Some(south), None, Some(other)].into_iter().enumerate() {
             let path = format!("raw/TESTRC0003/FlightRecord/DJIFlightRecord_test{n}.txt");
             let sha256 = [u8::try_from(n).unwrap(); 32];
-            save_upload(&db, &sha256, &path, 10, Some(pilot), chosen)
+            save_upload(&mut db, &sha256, &path, 10, Some(pilot), chosen)
                 .await
                 .unwrap();
-            let log = next_pending(&db).await.unwrap().unwrap();
-            save_result(&db, log.id, Some(&flight())).await.unwrap();
-            processed.push(pilot_and_group(&db, log.id).await);
+            let log = next_pending(&mut db).await.unwrap().unwrap();
+            save_result(&mut db, log.id, Some(&flight())).await.unwrap();
+            processed.push(pilot_and_group(&mut db, log.id).await);
         }
         assert!(
-            insert_raw_log(&db, &[9; 32], "old/test.txt", 10, other)
+            insert_raw_log(&mut db, &[9; 32], "old/test.txt", 10, other)
                 .await
                 .unwrap()
         );
-        let log = next_pending(&db).await.unwrap().unwrap();
-        save_result(&db, log.id, Some(&flight())).await.unwrap();
-        processed.push(pilot_and_group(&db, log.id).await);
+        let log = next_pending(&mut db).await.unwrap().unwrap();
+        save_result(&mut db, log.id, Some(&flight())).await.unwrap();
+        processed.push(pilot_and_group(&mut db, log.id).await);
         assert_eq!(
             processed,
             [

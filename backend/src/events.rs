@@ -6,6 +6,7 @@
 //! before. A refresh now and then catches what nothing signals, such as logs
 //! imported from the command line.
 
+use crate::db::Tenants;
 use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -23,7 +24,6 @@ use axum::{
 };
 use futures_util::stream;
 use serde::Serialize;
-use sqlx::PgPool;
 use tokio::sync::watch;
 
 use crate::auth::Actor;
@@ -66,7 +66,8 @@ impl Changes {
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
     Activity: FromRef<S>,
     Changes: FromRef<S>,
 {
@@ -74,7 +75,8 @@ where
 }
 
 struct Stream {
-    db: PgPool,
+    /// Connects for each refresh: a stream stays open for hours.
+    tenants: Tenants,
     actor: Actor,
     activity: Activity,
     signal: watch::Receiver<Signal>,
@@ -86,14 +88,14 @@ struct Stream {
 
 async fn events(
     actor: Actor,
-    State(db): State<PgPool>,
+    State(tenants): State<Tenants>,
     State(activity): State<Activity>,
     State(Changes(changes)): State<Changes>,
 ) -> impl IntoResponse {
     let mut signal = changes.subscribe();
     signal.borrow_and_update();
     let state = Stream {
-        db,
+        tenants,
         actor,
         activity,
         signal,
@@ -145,7 +147,11 @@ impl Stream {
     /// Queues the states that differ from what was sent.
     async fn refresh(&mut self) {
         if self.actor.grants.may(Permission::LogsManage, None) {
-            match ingest::status(&self.db, &self.actor, &self.activity).await {
+            let status = async {
+                let mut db = self.tenants.connect(self.actor.organisation_id).await?;
+                ingest::status(&mut db, &self.actor, &self.activity).await
+            };
+            match status.await {
                 Ok(status) => queue(&mut self.queue, &mut self.processing, "processing", &status),
                 Err(error) => failed("processing status", error),
             }

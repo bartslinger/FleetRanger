@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::Connection as _;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::{LATE_UPLOAD_HOURS, SessionGap};
@@ -55,7 +56,7 @@ pub struct Window {
 /// One page of the sessions in the scope that pass the filter (and have a
 /// flight in the window, if given), newest first.
 pub async fn list(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
     window: Option<Window>,
@@ -128,13 +129,13 @@ pub async fn list(
         with_tracks,
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// The number of sessions `list` lists in all.
 pub async fn count(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
     window: Option<Window>,
@@ -183,7 +184,7 @@ pub async fn count(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
@@ -201,7 +202,7 @@ pub struct Neighbours {
 /// `list` orders it: the sessions before and after it. None if the session
 /// isn't in that list.
 pub async fn neighbours(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
     id: Uuid,
@@ -260,7 +261,7 @@ pub async fn neighbours(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
@@ -270,8 +271,8 @@ const SESSIONS_LOCK: i64 = 0x5e55_1015;
 
 /// A transaction holding the sessions lock.
 pub(crate) async fn locked(
-    db: &PgPool,
-) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+    db: &mut PgConnection,
+) -> sqlx::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
     let mut tx = db.begin().await?;
     sqlx::query!("select pg_advisory_xact_lock($1)", SESSIONS_LOCK)
         .execute(&mut *tx)
@@ -281,9 +282,9 @@ pub(crate) async fn locked(
 
 /// The group of each of these sessions, or None if one of them doesn't
 /// exist.
-pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Uuid>>> {
+pub async fn groups_of(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Uuid>>> {
     let groups = sqlx::query_scalar!("select group_id from sessions where id = any($1)", ids)
-        .fetch_all(db)
+        .fetch_all(&mut *db)
         .await?;
     Ok((groups.len() == ids.len()).then_some(groups))
 }
@@ -296,7 +297,7 @@ pub struct OwnGroup {
 }
 
 /// The group of a session, or None if it doesn't exist.
-pub async fn own_group(db: &PgPool, id: Uuid) -> sqlx::Result<Option<OwnGroup>> {
+pub async fn own_group(db: &mut PgConnection, id: Uuid) -> sqlx::Result<Option<OwnGroup>> {
     sqlx::query_as!(
         OwnGroup,
         r#"select s.group_id, g.name as group_name
@@ -304,7 +305,7 @@ pub async fn own_group(db: &PgPool, id: Uuid) -> sqlx::Result<Option<OwnGroup>> 
            where s.id = $1"#,
         id
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
@@ -312,7 +313,7 @@ pub async fn own_group(db: &PgPool, id: Uuid) -> sqlx::Result<Option<OwnGroup>> 
 /// `flights::db::groups_in` offers the flights' groups: those of sessions
 /// with a visible flight passing the other filters, and the chosen ones.
 pub async fn groups_in(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
 ) -> sqlx::Result<Vec<GroupOption>> {
@@ -355,30 +356,30 @@ pub async fn groups_in(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// The groups of the sessions these flights are in, once each; flights
 /// without a session add none.
-pub async fn groups_left(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Vec<Uuid>> {
+pub async fn groups_left(db: &mut PgConnection, flight_ids: &[Uuid]) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar!(
         "select s.group_id from sessions s
          where s.id in (select session_id from flights where id = any($1))",
         flight_ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// The group of every flight in these sessions, or None if one of them
 /// doesn't exist. The visibility check is the policy's job, not this query's.
-pub async fn flight_groups(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Uuid>>> {
+pub async fn flight_groups(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Uuid>>> {
     let flights = sqlx::query!(
         r#"select session_id as "session_id!", group_id from flights where session_id = any($1)"#,
         ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await?;
     let found: HashSet<Uuid> = flights.iter().map(|flight| flight.session_id).collect();
     Ok((found.len() == ids.len())
@@ -387,12 +388,12 @@ pub async fn flight_groups(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec
 
 /// The one session all these flights are in, or None if one of them doesn't
 /// exist, isn't in a session, or they are in different sessions.
-pub async fn session_of(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Option<Uuid>> {
+pub async fn session_of(db: &mut PgConnection, flight_ids: &[Uuid]) -> sqlx::Result<Option<Uuid>> {
     let sessions = sqlx::query_scalar!(
         "select session_id from flights where id = any($1)",
         flight_ids
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await?;
     let first = sessions.first().copied().flatten();
     let same = sessions.len() == flight_ids.len() && sessions.iter().all(|s| *s == first);
@@ -401,7 +402,7 @@ pub async fn session_of(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Option
 
 /// Puts all flights of these sessions in the one that starts first, deletes
 /// the others, and returns the remaining session.
-pub async fn merge(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Uuid> {
+pub async fn merge(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Uuid> {
     let mut tx = locked(db).await?;
     let target = sqlx::query_scalar!(
         r#"select session_id as "session_id!" from flights where session_id = any($1)
@@ -441,7 +442,11 @@ pub async fn merge(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Uuid> {
 
 /// Moves these flights into a new session of this group, and returns it.
 /// Deletes a session left without flights.
-pub async fn split(db: &PgPool, flight_ids: &[Uuid], group_id: Uuid) -> sqlx::Result<Option<Uuid>> {
+pub async fn split(
+    db: &mut PgConnection,
+    flight_ids: &[Uuid],
+    group_id: Uuid,
+) -> sqlx::Result<Option<Uuid>> {
     let mut tx = locked(db).await?;
     let left = sessions_of(&mut tx, flight_ids).await?;
     let session = sqlx::query_scalar!(
@@ -467,7 +472,11 @@ pub async fn split(db: &PgPool, flight_ids: &[Uuid], group_id: Uuid) -> sqlx::Re
 
 /// Moves these flights into the session. Deletes a session left without
 /// flights.
-pub async fn add(db: &PgPool, session: Uuid, flight_ids: &[Uuid]) -> sqlx::Result<Option<()>> {
+pub async fn add(
+    db: &mut PgConnection,
+    session: Uuid,
+    flight_ids: &[Uuid],
+) -> sqlx::Result<Option<()>> {
     let mut tx = locked(db).await?;
     let left = sessions_of(&mut tx, flight_ids).await?;
     sqlx::query!(
@@ -487,7 +496,7 @@ pub async fn add(db: &PgPool, session: Uuid, flight_ids: &[Uuid]) -> sqlx::Resul
 
 /// Takes these flights out of their sessions, and returns how many were in
 /// one. Deletes a session left without flights.
-pub async fn remove(db: &PgPool, flight_ids: &[Uuid]) -> sqlx::Result<Option<u64>> {
+pub async fn remove(db: &mut PgConnection, flight_ids: &[Uuid]) -> sqlx::Result<Option<u64>> {
     let mut tx = locked(db).await?;
     let left = sessions_of(&mut tx, flight_ids).await?;
     let removed = sqlx::query!(
@@ -532,7 +541,7 @@ async fn stranded(tx: &mut sqlx::PgConnection, ids: &[Uuid]) -> sqlx::Result<boo
 
 /// Deletes a session and its comments; its flights stay, without a session.
 /// Returns false if there is no such session.
-pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+pub async fn delete(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     let mut tx = locked(db).await?;
     sqlx::query!(
         "update flights set session_id = null where session_id = $1",
@@ -555,7 +564,7 @@ pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
 /// Moves a session to a group, and with `with_flights` its flights as well. Returns false if there is no such
 /// session.
 pub async fn set_group(
-    db: &PgPool,
+    db: &mut PgConnection,
     id: Uuid,
     group_id: Uuid,
     with_flights: bool,
@@ -603,7 +612,11 @@ async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
 /// session, it starts a new one of the flight's group. Imported logs have no
 /// pilot and flights already in a session stay where they are, so this never
 /// undoes a user's changes.
-pub async fn place_upload(db: &PgPool, raw_log_id: Uuid, gap: SessionGap) -> sqlx::Result<()> {
+pub async fn place_upload(
+    db: &mut PgConnection,
+    raw_log_id: Uuid,
+    gap: SessionGap,
+) -> sqlx::Result<()> {
     let mut tx = locked(db).await?;
     let Some(flight) = sqlx::query!(
         r#"select f.id, f.pilot_id as "pilot_id!", f.group_id, f.takeoff_at, f.landed_at,
@@ -681,12 +694,12 @@ pub async fn place_upload(db: &PgPool, raw_log_id: Uuid, gap: SessionGap) -> sql
 mod tests {
     use super::*;
 
-    async fn insert_id(db: &PgPool, sql: &'static str) -> Uuid {
-        sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
+    async fn insert_id(db: &mut PgConnection, sql: &'static str) -> Uuid {
+        sqlx::query_scalar(sql).fetch_one(&mut *db).await.unwrap()
     }
 
     /// Adds a flight of this pilot, from and to times on the same day.
-    async fn flight(db: &PgPool, pilot: Uuid, takeoff: &str, landed: &str) -> Uuid {
+    async fn flight(db: &mut PgConnection, pilot: Uuid, takeoff: &str, landed: &str) -> Uuid {
         let at =
             |time: &str| -> DateTime<Utc> { format!("2026-10-12T{time}:00Z").parse().unwrap() };
         let raw_log = insert_id(
@@ -706,7 +719,7 @@ mod tests {
         .bind(at(takeoff))
         .bind(at(landed))
         .bind(pilot)
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
         .unwrap()
     }
@@ -714,13 +727,19 @@ mod tests {
     /// Adds a flight of this pilot as a controller uploads it (its log carries
     /// the pilot), received on 12 Oct at `received` or on a later day's
     /// `"+1 12:00"`, and places it as the processing loop does.
-    async fn upload(db: &PgPool, pilot: Uuid, takeoff: &str, landed: &str, received: &str) -> Uuid {
+    async fn upload(
+        db: &mut PgConnection,
+        pilot: Uuid,
+        takeoff: &str,
+        landed: &str,
+        received: &str,
+    ) -> Uuid {
         upload_for(db, pilot, None, takeoff, landed, received).await
     }
 
     /// As `upload`, with the group chosen on the controller (None: General).
     async fn upload_for(
-        db: &PgPool,
+        db: &mut PgConnection,
         pilot: Uuid,
         group: Option<Uuid>,
         takeoff: &str,
@@ -731,7 +750,7 @@ mod tests {
         sqlx::query("update flights set group_id = coalesce($2, group_id) where id = $1")
             .bind(flight)
             .bind(group)
-            .execute(db)
+            .execute(&mut *db)
             .await
             .unwrap();
         let received: DateTime<Utc> = match received.strip_prefix("+1 ") {
@@ -748,17 +767,17 @@ mod tests {
         .bind(flight)
         .bind(pilot)
         .bind(received)
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
         .unwrap();
         place_upload(db, raw_log, SessionGap(120)).await.unwrap();
         flight
     }
 
-    async fn session_of(db: &PgPool, flight: Uuid) -> Option<Uuid> {
+    async fn session_of(db: &mut PgConnection, flight: Uuid) -> Option<Uuid> {
         sqlx::query_scalar("select session_id from flights where id = $1")
             .bind(flight)
-            .fetch_one(db)
+            .fetch_one(&mut *db)
             .await
             .unwrap()
     }
@@ -767,71 +786,101 @@ mod tests {
     /// also when processed out of order; a longer break or another pilot
     /// starts a new one.
     #[sqlx::test]
-    async fn uploads_group_by_pilot_and_gap(db: PgPool) {
-        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
+    async fn uploads_group_by_pilot_and_gap(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let b = insert_id(
+            &mut db,
+            "insert into users (name) values ('B') returning id",
+        )
+        .await;
 
-        let first = upload(&db, a, "18:12", "18:40", "21:30").await;
-        let last = upload(&db, a, "20:30", "21:21", "21:30").await;
-        let other_pilot = upload(&db, b, "18:20", "18:50", "21:30").await;
-        assert_eq!(session_of(&db, first).await, session_of(&db, last).await);
+        let first = upload(&mut db, a, "18:12", "18:40", "21:30").await;
+        let last = upload(&mut db, a, "20:30", "21:21", "21:30").await;
+        let other_pilot = upload(&mut db, b, "18:20", "18:50", "21:30").await;
+        assert_eq!(
+            session_of(&mut db, first).await,
+            session_of(&mut db, last).await
+        );
         assert_ne!(
-            session_of(&db, first).await,
-            session_of(&db, other_pilot).await
+            session_of(&mut db, first).await,
+            session_of(&mut db, other_pilot).await
         );
 
         // Processed later, in between: it joins, and doesn't move the others.
-        let middle = upload(&db, a, "19:30", "19:50", "21:31").await;
-        assert_eq!(session_of(&db, middle).await, session_of(&db, first).await);
+        let middle = upload(&mut db, a, "19:30", "19:50", "21:31").await;
+        assert_eq!(
+            session_of(&mut db, middle).await,
+            session_of(&mut db, first).await
+        );
         // More than two hours after the last landing.
-        let later = upload(&db, a, "23:22", "23:40", "23:50").await;
-        assert!(session_of(&db, later).await.is_some());
-        assert_ne!(session_of(&db, later).await, session_of(&db, first).await);
+        let later = upload(&mut db, a, "23:22", "23:40", "23:50").await;
+        assert!(session_of(&mut db, later).await.is_some());
+        assert_ne!(
+            session_of(&mut db, later).await,
+            session_of(&mut db, first).await
+        );
     }
 
     /// A flight that comes in long after its session's flights doesn't join
     /// it by itself, and neither do imported flights, which have no pilot from
     /// a controller: someone adds them.
     #[sqlx::test]
-    async fn late_uploads_and_imports_stay_out(db: PgPool) {
-        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let synced = upload(&db, a, "18:12", "18:40", "21:30").await;
-        assert!(session_of(&db, synced).await.is_some());
+    async fn late_uploads_and_imports_stay_out(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let synced = upload(&mut db, a, "18:12", "18:40", "21:30").await;
+        assert!(session_of(&mut db, synced).await.is_some());
 
-        let late = upload(&db, a, "19:00", "19:20", "+1 12:00").await;
-        assert_eq!(session_of(&db, late).await, None);
+        let late = upload(&mut db, a, "19:00", "19:20", "+1 12:00").await;
+        assert_eq!(session_of(&mut db, late).await, None);
 
-        let imported = flight(&db, a, "19:30", "19:50").await;
+        let imported = flight(&mut db, a, "19:30", "19:50").await;
         let raw_log: Uuid = sqlx::query_scalar("select raw_log_id from flights where id = $1")
             .bind(imported)
-            .fetch_one(&db)
+            .fetch_one(&mut *db)
             .await
             .unwrap();
-        place_upload(&db, raw_log, SessionGap(120)).await.unwrap();
-        assert_eq!(session_of(&db, imported).await, None);
+        place_upload(&mut db, raw_log, SessionGap(120))
+            .await
+            .unwrap();
+        assert_eq!(session_of(&mut db, imported).await, None);
     }
 
     /// A pilot flying for two groups in one evening gets a session per group,
     /// each owned by its group.
     #[sqlx::test]
-    async fn uploads_group_per_group(db: PgPool) {
-        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let north = crate::testing::group(&db, "North").await;
-        let south = crate::testing::group(&db, "South").await;
-        let first = upload_for(&db, a, Some(north), "08:00", "08:20", "21:00").await;
-        let other_group = upload_for(&db, a, Some(south), "08:30", "08:50", "21:00").await;
-        let same_group = upload_for(&db, a, Some(north), "09:00", "09:20", "21:00").await;
+    async fn uploads_group_per_group(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let north = crate::testing::group(&mut db, "North").await;
+        let south = crate::testing::group(&mut db, "South").await;
+        let first = upload_for(&mut db, a, Some(north), "08:00", "08:20", "21:00").await;
+        let other_group = upload_for(&mut db, a, Some(south), "08:30", "08:50", "21:00").await;
+        let same_group = upload_for(&mut db, a, Some(north), "09:00", "09:20", "21:00").await;
         assert_ne!(
-            session_of(&db, first).await,
-            session_of(&db, other_group).await
+            session_of(&mut db, first).await,
+            session_of(&mut db, other_group).await
         );
         assert_eq!(
-            session_of(&db, first).await,
-            session_of(&db, same_group).await
+            session_of(&mut db, first).await,
+            session_of(&mut db, same_group).await
         );
         for (flight, group) in [(first, north), (other_group, south)] {
-            let session = session_of(&db, flight).await.unwrap();
-            let groups = groups_of(&db, &[session]).await.unwrap();
+            let session = session_of(&mut db, flight).await.unwrap();
+            let groups = groups_of(&mut db, &[session]).await.unwrap();
             assert_eq!(groups, Some(vec![group]));
         }
     }
@@ -839,40 +888,52 @@ mod tests {
     /// Merging keeps the session that starts first, and a later upload
     /// doesn't undo a split.
     #[sqlx::test]
-    async fn merges_and_splits_stay(db: PgPool) {
-        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
-        let first = upload(&db, a, "08:00", "08:20", "10:00").await;
-        let second = upload(&db, a, "08:30", "08:50", "10:00").await;
-        let other_pilot = upload(&db, b, "07:30", "07:50", "10:00").await;
+    async fn merges_and_splits_stay(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let b = insert_id(
+            &mut db,
+            "insert into users (name) values ('B') returning id",
+        )
+        .await;
+        let first = upload(&mut db, a, "08:00", "08:20", "10:00").await;
+        let second = upload(&mut db, a, "08:30", "08:50", "10:00").await;
+        let other_pilot = upload(&mut db, b, "07:30", "07:50", "10:00").await;
 
-        let a_session = session_of(&db, first).await.unwrap();
-        let b_session = session_of(&db, other_pilot).await.unwrap();
-        let merged = merge(&db, &[a_session, b_session]).await.unwrap();
+        let a_session = session_of(&mut db, first).await.unwrap();
+        let b_session = session_of(&mut db, other_pilot).await.unwrap();
+        let merged = merge(&mut db, &[a_session, b_session]).await.unwrap();
         assert_eq!(merged, b_session, "B's session starts first");
-        assert_eq!(session_of(&db, first).await, Some(merged));
+        assert_eq!(session_of(&mut db, first).await, Some(merged));
 
-        let split_off = split(&db, &[second], crate::testing::general(&db).await)
-            .await
-            .unwrap()
-            .unwrap();
+        let general = crate::testing::general(&mut db).await;
+        let split_off = split(&mut db, &[second], general).await.unwrap().unwrap();
         // A new flight of A right after `second` joins one of the sessions
         // without moving the split flight back.
-        upload(&db, a, "09:00", "09:20", "10:01").await;
-        assert_eq!(session_of(&db, second).await, Some(split_off));
-        assert_eq!(session_of(&db, first).await, Some(merged));
+        upload(&mut db, a, "09:00", "09:20", "10:01").await;
+        assert_eq!(session_of(&mut db, second).await, Some(split_off));
+        assert_eq!(session_of(&mut db, first).await, Some(merged));
     }
 
     /// A window or a filter picks sessions with a flight in it, and they
     /// still add up all their flights, not only the ones that matched.
     #[sqlx::test]
-    async fn window_and_filter_pick_whole_sessions(db: PgPool) {
-        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let morning = upload(&db, a, "08:00", "08:20", "21:30").await;
-        let evening = upload(&db, a, "09:30", "09:50", "21:30").await;
+    async fn window_and_filter_pick_whole_sessions(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let morning = upload(&mut db, a, "08:00", "08:20", "21:30").await;
+        let evening = upload(&mut db, a, "09:30", "09:50", "21:30").await;
         assert_eq!(
-            session_of(&db, morning).await,
-            session_of(&db, evening).await
+            session_of(&mut db, morning).await,
+            session_of(&mut db, evening).await
         );
 
         let everything = FlightScope {
@@ -887,13 +948,15 @@ mod tests {
             to: at("08:10"),
         });
         let all = Filter::default();
-        let listed = list(&db, &everything, &all, around_morning, 10, 0, false)
+        let listed = list(&mut db, &everything, &all, around_morning, 10, 0, false)
             .await
             .unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].flights, 2);
         assert_eq!(
-            count(&db, &everything, &all, around_morning).await.unwrap(),
+            count(&mut db, &everything, &all, around_morning)
+                .await
+                .unwrap(),
             1
         );
 
@@ -902,7 +965,7 @@ mod tests {
             to: at("13:00"),
         });
         assert!(
-            list(&db, &everything, &all, afternoon, 10, 0, false)
+            list(&mut db, &everything, &all, afternoon, 10, 0, false)
                 .await
                 .unwrap()
                 .is_empty()
@@ -911,29 +974,42 @@ mod tests {
         // Only the morning flight was with drone A.
         sqlx::query("update flights set aircraft_serial = 'A' where id = $1")
             .bind(morning)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
         let drone = |serial: &str| Filter {
             aircraft_serials: Some(vec![serial.to_owned()]),
             ..Filter::default()
         };
-        let listed = list(&db, &everything, &drone("A"), None, 10, 0, false)
+        let listed = list(&mut db, &everything, &drone("A"), None, 10, 0, false)
             .await
             .unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].flights, 2);
-        assert_eq!(count(&db, &everything, &drone("B"), None).await.unwrap(), 0);
+        assert_eq!(
+            count(&mut db, &everything, &drone("B"), None)
+                .await
+                .unwrap(),
+            0
+        );
     }
 
     /// A session across the end of a period is in the period of its first
     /// takeoff only, not in both (user's decision, 2026-11-12).
     #[sqlx::test]
-    async fn sessions_are_in_the_period_they_start(db: PgPool) {
-        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let first = upload(&db, a, "08:00", "08:20", "21:30").await;
-        let second = upload(&db, a, "09:30", "09:50", "21:30").await;
-        assert_eq!(session_of(&db, first).await, session_of(&db, second).await);
+    async fn sessions_are_in_the_period_they_start(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let first = upload(&mut db, a, "08:00", "08:20", "21:30").await;
+        let second = upload(&mut db, a, "09:30", "09:50", "21:30").await;
+        assert_eq!(
+            session_of(&mut db, first).await,
+            session_of(&mut db, second).await
+        );
         let everything = FlightScope {
             all: true,
             user_id: a,
@@ -949,48 +1025,53 @@ mod tests {
             from: Some(change),
             ..Filter::default()
         };
-        let listed = list(&db, &everything, &before, None, 10, 0, false)
+        let listed = list(&mut db, &everything, &before, None, 10, 0, false)
             .await
             .unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].flights, 2);
-        assert_eq!(count(&db, &everything, &before, None).await.unwrap(), 1);
+        assert_eq!(count(&mut db, &everything, &before, None).await.unwrap(), 1);
         assert!(
-            list(&db, &everything, &after, None, 10, 0, false)
+            list(&mut db, &everything, &after, None, 10, 0, false)
                 .await
                 .unwrap()
                 .is_empty()
         );
-        assert_eq!(count(&db, &everything, &after, None).await.unwrap(), 0);
+        assert_eq!(count(&mut db, &everything, &after, None).await.unwrap(), 0);
     }
 
     /// Stepping through sessions follows the list: newest first, and only
     /// the sessions that pass its filter.
     #[sqlx::test]
-    async fn neighbours_follow_the_list(db: PgPool) {
-        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let morning = upload(&db, a, "08:00", "08:20", "21:30").await;
-        let noon = upload(&db, a, "12:00", "12:20", "21:30").await;
-        let evening = upload(&db, a, "16:00", "16:20", "21:30").await;
+    async fn neighbours_follow_the_list(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let morning = upload(&mut db, a, "08:00", "08:20", "21:30").await;
+        let noon = upload(&mut db, a, "12:00", "12:20", "21:30").await;
+        let evening = upload(&mut db, a, "16:00", "16:20", "21:30").await;
         let everything = FlightScope {
             all: true,
             user_id: a,
             group_ids: Vec::new(),
         };
         let (morning, noon, evening) = (
-            session_of(&db, morning).await.unwrap(),
-            session_of(&db, noon).await.unwrap(),
-            session_of(&db, evening).await.unwrap(),
+            session_of(&mut db, morning).await.unwrap(),
+            session_of(&mut db, noon).await.unwrap(),
+            session_of(&mut db, evening).await.unwrap(),
         );
         let all = Filter::default();
-        let place = neighbours(&db, &everything, &all, noon)
+        let place = neighbours(&mut db, &everything, &all, noon)
             .await
             .unwrap()
             .unwrap();
         assert_eq!(place.previous, Some(evening), "newer first");
         assert_eq!(place.next, Some(morning));
         assert!(place.previous_start > place.next_start);
-        let listed: Vec<Uuid> = list(&db, &everything, &all, None, 10, 0, false)
+        let listed: Vec<Uuid> = list(&mut db, &everything, &all, None, 10, 0, false)
             .await
             .unwrap()
             .into_iter()
@@ -1001,21 +1082,21 @@ mod tests {
         // Drone A flew in the morning and the evening, not at noon.
         sqlx::query("update flights set aircraft_serial = 'A' where session_id = any($1)")
             .bind([morning, evening])
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
         let drone_a = Filter {
             aircraft_serials: Some(vec!["A".to_owned()]),
             ..Filter::default()
         };
-        let place = neighbours(&db, &everything, &drone_a, evening)
+        let place = neighbours(&mut db, &everything, &drone_a, evening)
             .await
             .unwrap()
             .unwrap();
         assert_eq!(place.next, Some(morning), "noon is left out");
         assert_eq!(place.previous, None);
         assert!(
-            neighbours(&db, &everything, &drone_a, noon)
+            neighbours(&mut db, &everything, &drone_a, noon)
                 .await
                 .unwrap()
                 .is_none()
@@ -1025,50 +1106,65 @@ mod tests {
     /// A session merged across groups shows each group only its own flights,
     /// in the list and the session's flights alike; outsiders see nothing.
     #[sqlx::test]
-    async fn sessions_show_only_visible_flights(db: PgPool) {
-        let north = crate::testing::group(&db, "North").await;
-        let south = crate::testing::group(&db, "South").await;
-        let a = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let b = insert_id(&db, "insert into users (name) values ('B') returning id").await;
-        let outsider = insert_id(&db, "insert into users (name) values ('C') returning id").await;
-        let session = insert_id(&db, "insert into sessions (group_id) select id from groups where name = 'General' returning id").await;
+    async fn sessions_show_only_visible_flights(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let north = crate::testing::group(&mut db, "North").await;
+        let south = crate::testing::group(&mut db, "South").await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let b = insert_id(
+            &mut db,
+            "insert into users (name) values ('B') returning id",
+        )
+        .await;
+        let outsider = insert_id(
+            &mut db,
+            "insert into users (name) values ('C') returning id",
+        )
+        .await;
+        let session = insert_id(&mut db, "insert into sessions (group_id) select id from groups where name = 'General' returning id").await;
         for (pilot, group, takeoff, landed) in
             [(a, north, "08:00", "08:20"), (b, south, "08:30", "08:50")]
         {
-            crate::testing::join(&db, pilot, group).await;
-            let flight = flight(&db, pilot, takeoff, landed).await;
+            crate::testing::join(&mut db, pilot, group).await;
+            let flight = flight(&mut db, pilot, takeoff, landed).await;
             sqlx::query("update flights set group_id = $2, session_id = $3 where id = $1")
                 .bind(flight)
                 .bind(group)
                 .bind(session)
-                .execute(&db)
+                .execute(&mut *db)
                 .await
                 .unwrap();
         }
 
         let all = Filter::default();
-        let member = crate::testing::scope(&db, a).await;
-        let listed = list(&db, &member, &all, None, 10, 0, false).await.unwrap();
+        let member = crate::testing::scope(&mut db, a).await;
+        let listed = list(&mut db, &member, &all, None, 10, 0, false)
+            .await
+            .unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(
             (listed[0].flights, listed[0].pilots.clone()),
             (1, vec!["A".to_owned()])
         );
-        assert_eq!(count(&db, &member, &all, None).await.unwrap(), 1);
-        let flights = crate::flights::db::of_session(&db, &member, session)
+        assert_eq!(count(&mut db, &member, &all, None).await.unwrap(), 1);
+        let flights = crate::flights::db::of_session(&mut db, &member, session)
             .await
             .unwrap();
         assert_eq!(flights.len(), 1);
 
-        let stranger = crate::testing::scope(&db, outsider).await;
+        let stranger = crate::testing::scope(&mut db, outsider).await;
         assert!(
-            list(&db, &stranger, &all, None, 10, 0, false)
+            list(&mut db, &stranger, &all, None, 10, 0, false)
                 .await
                 .unwrap()
                 .is_empty()
         );
-        assert_eq!(count(&db, &stranger, &all, None).await.unwrap(), 0);
-        let flights = crate::flights::db::of_session(&db, &stranger, session)
+        assert_eq!(count(&mut db, &stranger, &all, None).await.unwrap(), 0);
+        let flights = crate::flights::db::of_session(&mut db, &stranger, session)
             .await
             .unwrap();
         assert!(flights.is_empty());
@@ -1079,7 +1175,7 @@ mod tests {
             group_ids: Vec::new(),
         };
         assert_eq!(
-            list(&db, &everything, &all, None, 10, 0, false)
+            list(&mut db, &everything, &all, None, 10, 0, false)
                 .await
                 .unwrap()[0]
                 .flights,

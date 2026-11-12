@@ -4,6 +4,7 @@
 //! checks and approves a request through `/api/oauth/…`, as does the list of
 //! connected apps. Admins manage trusted apps through `/api/apps`.
 
+use crate::db::{Db, System};
 use axum::{
     Form, Json, Router,
     extract::{DefaultBodyLimit, FromRef, Path, State},
@@ -14,7 +15,7 @@ use axum::{
 use openidconnect::url::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::{
@@ -30,7 +31,8 @@ use crate::{
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
     OAuth: FromRef<S>,
 {
     Router::new()
@@ -105,7 +107,10 @@ struct Registration {
 
 /// RFC 7591: an app registers itself, which grants nothing until a user
 /// allows it. Only apps without a secret (with PKCE), as AI assistants are.
-async fn register(State(db): State<PgPool>, Json(registration): Json<Registration>) -> Response {
+async fn register(
+    State(system): State<System>,
+    Json(registration): Json<Registration>,
+) -> Response {
     let uris = &registration.redirect_uris;
     if uris.is_empty() || uris.len() > 10 || !uris.iter().all(|uri| redirect_uri_allowed(uri)) {
         return oauth_error(
@@ -123,7 +128,13 @@ async fn register(State(db): State<PgPool>, Json(registration): Json<Registratio
         .chars()
         .take(100)
         .collect();
-    match db::register(&db, &name, uris).await {
+    // Before anyone logs in, and in no organisation: each user's permission
+    // for it is in theirs.
+    let registered = async {
+        let mut system = system.acquire().await?;
+        db::register(&mut system, &name, uris).await
+    };
+    match registered.await {
         Ok(id) => (
             StatusCode::CREATED,
             Json(json!({
@@ -204,7 +215,11 @@ struct Valid {
 /// Checks a request. A short title on failure, for the consent page's error
 /// (which says what to do): the app isn't sent an error, since it may not be
 /// who it says it is.
-async fn validate(db: &PgPool, oauth: &OAuth, request: &AuthorizationRequest) -> ApiResult<Valid> {
+async fn validate(
+    db: &mut PgConnection,
+    oauth: &OAuth,
+    request: &AuthorizationRequest,
+) -> ApiResult<Valid> {
     let invalid = |message: &str| ApiError::Invalid(message.to_owned());
     let client = match request.client_id.as_deref().map(str::parse::<Uuid>) {
         Some(Ok(id)) => db::client(db, id).await?,
@@ -276,12 +291,12 @@ struct RequestInfo {
 
 async fn check(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     State(oauth): State<OAuth>,
     Json(request): Json<AuthorizationRequest>,
 ) -> ApiResult<Json<RequestInfo>> {
     may_connect(&actor)?;
-    let valid = validate(&db, &oauth, &request).await?;
+    let valid = validate(&mut db, &oauth, &request).await?;
     Ok(Json(RequestInfo {
         host: host(&valid.redirect_uri),
         app: valid.app,
@@ -326,12 +341,12 @@ struct Redirect {
 /// The user's answer on the consent page.
 async fn approve(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     State(oauth): State<OAuth>,
     Json(decision): Json<Decision>,
 ) -> ApiResult<Json<Redirect>> {
     may_connect(&actor)?;
-    let valid = validate(&db, &oauth, &decision.request).await?;
+    let valid = validate(&mut db, &oauth, &decision.request).await?;
     let mut url = Url::parse(&valid.redirect_uri)
         .map_err(|_| ApiError::Invalid("Invalid return address".to_owned()))?;
     let code = if decision.allow {
@@ -339,13 +354,14 @@ async fn approve(
         let stored = Code {
             client_id: valid.client_id,
             user_id: actor.user_id,
+            organisation_id: actor.organisation_id,
             redirect_uri: valid.redirect_uri,
             code_challenge: valid.code_challenge,
             scopes: valid.scopes,
             resource: valid.resource,
             impersonated_by: actor.impersonated_by.as_ref().map(|admin| admin.user_id),
         };
-        db::create_code(&db, &sha256(&code), &stored, CODE_SECONDS).await?;
+        db::create_code(&mut db, &sha256(&code), &stored, CODE_SECONDS).await?;
         Some(code)
     } else {
         None
@@ -377,9 +393,15 @@ struct TokenRequest {
     resource: Option<String>,
 }
 
-/// The app exchanges a code, or a refresh token, for new tokens.
-async fn token(State(db): State<PgPool>, Form(request): Form<TokenRequest>) -> Response {
-    match issue(&db, &request).await {
+/// The app exchanges a code, or a refresh token, for new tokens. The app
+/// has no login, so its code or refresh token is looked up across
+/// organisations.
+async fn token(State(system): State<System>, Form(request): Form<TokenRequest>) -> Response {
+    let issued = async {
+        let mut system = system.acquire().await?;
+        issue(&mut system, &request).await
+    };
+    match issued.await {
         Ok(response) => response,
         Err(TokenError::Refused(error)) => {
             oauth_error(StatusCode::BAD_REQUEST, error, "The request was refused.")
@@ -403,7 +425,7 @@ impl From<sqlx::Error> for TokenError {
     }
 }
 
-async fn issue(db: &PgPool, request: &TokenRequest) -> Result<Response, TokenError> {
+async fn issue(db: &mut PgConnection, request: &TokenRequest) -> Result<Response, TokenError> {
     let client_id: Uuid = request
         .client_id
         .as_deref()
@@ -488,17 +510,13 @@ fn oauth_error(status: StatusCode, error: &str, description: &str) -> Response {
 }
 
 /// The apps the user connected.
-async fn connections(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<Connection>>> {
-    Ok(Json(db::connections(&db, actor.user_id).await?))
+async fn connections(actor: Actor, mut db: Db) -> ApiResult<Json<Vec<Connection>>> {
+    Ok(Json(db::connections(&mut db, actor.user_id).await?))
 }
 
 /// Disconnects one of the user's apps: its tokens stop working at once.
-async fn disconnect(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<StatusCode> {
-    if db::disconnect(&db, actor.user_id, id).await? {
+async fn disconnect(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    if db::disconnect(&mut db, actor.user_id, id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::NotFound)
@@ -527,7 +545,10 @@ mod tests {
     }
 
     /// The tokens in a successful response, or the OAuth error code.
-    async fn tokens(db: &PgPool, request: &TokenRequest) -> Result<(String, String), &'static str> {
+    async fn tokens(
+        db: &mut PgConnection,
+        request: &TokenRequest,
+    ) -> Result<(String, String), &'static str> {
         let response = match issue(db, request).await {
             Ok(response) => response,
             Err(TokenError::Refused(error)) => return Err(error),
@@ -560,49 +581,51 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn codes_and_refresh_tokens_work_once(db: PgPool) {
+    async fn codes_and_refresh_tokens_work_once(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
         let user: Uuid = sqlx::query_scalar("insert into users (name) values ('A') returning id")
-            .fetch_one(&db)
+            .fetch_one(&mut *db)
             .await
             .unwrap();
         sqlx::query("insert into logins (user_id, email) values ($1, 'a@example.org')")
             .bind(user)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
-        let client = db::register(&db, "Test app", &[REDIRECT.to_owned()])
+        let client = db::register(&mut db, "Test app", &[REDIRECT.to_owned()])
             .await
             .unwrap();
         let code = Code {
             client_id: client,
             user_id: user,
+            organisation_id: crate::testing::organisation(&mut db).await,
             redirect_uri: REDIRECT.to_owned(),
             code_challenge: CHALLENGE.to_owned(),
             scopes: vec!["flights:read".to_owned()],
             resource: RESOURCE.to_owned(),
             impersonated_by: None,
         };
-        db::create_code(&db, &sha256("good"), &code, 60.0)
+        db::create_code(&mut db, &sha256("good"), &code, 60.0)
             .await
             .unwrap();
-        db::create_code(&db, &sha256("guessed"), &code, 60.0)
+        db::create_code(&mut db, &sha256("guessed"), &code, 60.0)
             .await
             .unwrap();
 
         let mut wrong_verifier = request("authorization_code", client);
         wrong_verifier.code = Some("guessed".to_owned());
         wrong_verifier.code_verifier = Some("not-the-verifier".to_owned());
-        assert_eq!(tokens(&db, &wrong_verifier).await, Err("invalid_grant"));
+        assert_eq!(tokens(&mut db, &wrong_verifier).await, Err("invalid_grant"));
         // A failed attempt uses the code up too.
         wrong_verifier.code_verifier = Some(VERIFIER.to_owned());
-        assert_eq!(tokens(&db, &wrong_verifier).await, Err("invalid_grant"));
+        assert_eq!(tokens(&mut db, &wrong_verifier).await, Err("invalid_grant"));
 
         let mut exchange = request("authorization_code", client);
         exchange.code = Some("good".to_owned());
-        let (access, refresh) = tokens(&db, &exchange).await.unwrap();
-        assert_eq!(tokens(&db, &exchange).await, Err("invalid_grant"));
+        let (access, refresh) = tokens(&mut db, &exchange).await.unwrap();
+        assert_eq!(tokens(&mut db, &exchange).await, Err("invalid_grant"));
         assert!(
-            db::use_access(&db, &sha256(&access))
+            db::use_access(&mut db, &sha256(&access))
                 .await
                 .unwrap()
                 .is_some()
@@ -610,16 +633,17 @@ mod tests {
 
         let mut renewal = request("refresh_token", client);
         renewal.refresh_token = Some(refresh);
-        let (new_access, new_refresh) = tokens(&db, &renewal).await.unwrap();
-        let works =
-            async |token: &str| db::use_access(&db, &sha256(token)).await.unwrap().is_some();
-        assert!(!works(&access).await);
-        assert!(works(&new_access).await);
+        let (new_access, new_refresh) = tokens(&mut db, &renewal).await.unwrap();
+        let works = async |db: &mut PgConnection, token: &str| {
+            db::use_access(db, &sha256(token)).await.unwrap().is_some()
+        };
+        assert!(!works(&mut db, &access).await);
+        assert!(works(&mut db, &new_access).await);
 
         // The old refresh token again: copied, so the connection ends for both.
-        assert_eq!(tokens(&db, &renewal).await, Err("invalid_grant"));
-        assert!(!works(&new_access).await);
+        assert_eq!(tokens(&mut db, &renewal).await, Err("invalid_grant"));
+        assert!(!works(&mut db, &new_access).await);
         renewal.refresh_token = Some(new_refresh);
-        assert_eq!(tokens(&db, &renewal).await, Err("invalid_grant"));
+        assert_eq!(tokens(&mut db, &renewal).await, Err("invalid_grant"));
     }
 }

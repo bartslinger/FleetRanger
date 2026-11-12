@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select l.user_id, l.organisation_id\n         from logins l join users u on u.id = l.user_id\n         where l.oidc_subject = $1 and u.archived_at is null\n         order by (select max(s.created_at) from login_sessions s\n                   where s.user_id = l.user_id) desc nulls last,\n                  l.created_at\n         limit 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "organisation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "organisation_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "70db4dfaeeab7c059d8d404c37c0a8df2a3af4c9fc1352507a08b6c5dc2c0f9a"
+}

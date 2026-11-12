@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db;
@@ -29,7 +29,7 @@ pub struct Comment {
 }
 
 /// A session's comments, oldest first.
-pub async fn of_session(db: &PgPool, session: Uuid) -> sqlx::Result<Vec<Comment>> {
+pub async fn of_session(db: &mut PgConnection, session: Uuid) -> sqlx::Result<Vec<Comment>> {
     sqlx::query_as!(
         Comment,
         "select c.id, c.author_id, u.name as author_name, c.body, c.created_at, c.edited_at
@@ -39,12 +39,17 @@ pub async fn of_session(db: &PgPool, session: Uuid) -> sqlx::Result<Vec<Comment>
          order by c.created_at, c.id",
         session
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// Adds the actor's comment to a session, and returns it.
-pub async fn add(db: &PgPool, actor: &Actor, session: Uuid, body: &str) -> ApiResult<Uuid> {
+pub async fn add(
+    db: &mut PgConnection,
+    actor: &Actor,
+    session: Uuid,
+    body: &str,
+) -> ApiResult<Uuid> {
     let groups = db::groups_of(db, &[session])
         .await?
         .ok_or(ApiError::NotFound)?;
@@ -57,14 +62,14 @@ pub async fn add(db: &PgPool, actor: &Actor, session: Uuid, body: &str) -> ApiRe
         actor.user_id,
         body
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await?)
 }
 
 /// Changes the text of one of the actor's own comments. It is marked edited
 /// only when the text changes.
 pub async fn edit(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     session: Uuid,
     id: Uuid,
@@ -78,23 +83,28 @@ pub async fn edit(
         id,
         body
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
 
 /// Deletes one of the actor's own comments.
-pub async fn delete(db: &PgPool, actor: &Actor, session: Uuid, id: Uuid) -> ApiResult<()> {
+pub async fn delete(
+    db: &mut PgConnection,
+    actor: &Actor,
+    session: Uuid,
+    id: Uuid,
+) -> ApiResult<()> {
     own(db, actor, session, id).await?;
     sqlx::query!("delete from session_comments where id = $1", id)
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     Ok(())
 }
 
 /// Authors change only their own comments, and only while they may still
 /// change the session.
-async fn own(db: &PgPool, actor: &Actor, session: Uuid, id: Uuid) -> ApiResult<()> {
+async fn own(db: &mut PgConnection, actor: &Actor, session: Uuid, id: Uuid) -> ApiResult<()> {
     let comment = sqlx::query!(
         "select c.author_id, s.group_id from session_comments c
          join sessions s on s.id = c.session_id
@@ -102,7 +112,7 @@ async fn own(db: &PgPool, actor: &Actor, session: Uuid, id: Uuid) -> ApiResult<(
         id,
         session
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await?
     .ok_or(ApiError::NotFound)?;
     policy::change_sessions(&actor.grants, &[comment.group_id])?;

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use axum::{Extension, Json, extract::State};
 use chrono::NaiveDate;
 use serde::Deserialize;
+use sqlx::PgConnection;
 use utoipa::IntoParams;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
@@ -21,6 +22,7 @@ use super::{
         GroupAppRoles, Me, Organisation, Page, Person, Session,
     },
 };
+use crate::db::Db;
 use crate::{
     batteries,
     equipment::{self, db::Kind},
@@ -86,12 +88,9 @@ const AREA_EXPANSIONS: &[(&str, Option<&str>)] = &[("geometry", Some("areas:read
     responses((status = 200, body = Me), (status = 401, body = Error)),
     security(("oauth" = []))
 )]
-async fn me(
-    State(api): State<Api>,
-    Extension(caller): Extension<Caller>,
-) -> Result<Json<Me>, V1Error> {
+async fn me(mut db: Db, Extension(caller): Extension<Caller>) -> Result<Json<Me>, V1Error> {
     let held = match caller.client_id {
-        Some(client_id) => oauth::held_app_roles(&api.db, client_id, caller.actor.user_id).await?,
+        Some(client_id) => oauth::held_app_roles(&mut db, client_id, caller.actor.user_id).await?,
         None => HeldAppRoles::default(),
     };
     Ok(Json(Me {
@@ -221,6 +220,7 @@ struct AreaExpand {
 )]
 async fn list_sessions(
     State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     Params(filters): Params<Filters>,
     Params(expansion): Params<SessionExpand>,
@@ -228,12 +228,12 @@ async fn list_sessions(
 ) -> Result<Json<Page<Session>>, V1Error> {
     caller.require("sessions:list")?;
     let expand = Expand::parse(expansion.expand.as_deref(), SESSION_EXPANSIONS, &caller)?;
-    let filter = filter(&api, &filters).await?;
+    let filter = filter(&mut db, &api, &filters).await?;
     let limit = limit(paging.limit)?;
     let after = decode::<TimeCursor>(paging.cursor.as_deref())?;
     let scope = policy::flight_scope(&caller.actor);
     let mut rows = db::sessions(
-        &api.db,
+        &mut db,
         &scope,
         &filter,
         None,
@@ -250,7 +250,7 @@ async fn list_sessions(
             id: row.id,
         })
     });
-    let items = sessions(&api, &scope, rows, &expand).await?;
+    let items = sessions(&mut db, &api, &scope, rows, &expand).await?;
     Ok(Json(Page { items, next_cursor }))
 }
 
@@ -266,6 +266,7 @@ async fn list_sessions(
 )]
 async fn get_session(
     State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     PathId(id): PathId,
     Params(query): Params<SessionExpand>,
@@ -274,7 +275,7 @@ async fn get_session(
     let expand = Expand::parse(query.expand.as_deref(), SESSION_EXPANSIONS, &caller)?;
     let scope = policy::flight_scope(&caller.actor);
     let rows = db::sessions(
-        &api.db,
+        &mut db,
         &scope,
         &Filter::default(),
         Some(&[id]),
@@ -282,7 +283,7 @@ async fn get_session(
         Some(1),
     )
     .await?;
-    sessions(&api, &scope, rows, &expand)
+    sessions(&mut db, &api, &scope, rows, &expand)
         .await?
         .pop()
         .map(Json)
@@ -303,6 +304,7 @@ async fn get_session(
 )]
 async fn list_flights(
     State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     Params(filters): Params<Filters>,
     Params(flight_filters): Params<FlightFilters>,
@@ -311,21 +313,21 @@ async fn list_flights(
 ) -> Result<Json<Page<Flight>>, V1Error> {
     caller.require("flights:list")?;
     let expand = Expand::parse(expansion.expand.as_deref(), FLIGHT_EXPANSIONS, &caller)?;
-    let mut filter = filter(&api, &filters).await?;
+    let mut filter = filter(&mut db, &api, &filters).await?;
     let (drones, _) = ids(&flight_filters.drone, "drone", false)?;
     let (controllers, _) = ids(&flight_filters.controller, "controller", false)?;
     if let Some(drones) = drones {
-        filter.aircraft_serials = Some(db::drone_serials(&api.db, &drones).await?);
+        filter.aircraft_serials = Some(db::drone_serials(&mut db, &drones).await?);
     }
     if let Some(controllers) = controllers {
-        filter.rc_serials = Some(db::controller_serials(&api.db, &controllers).await?);
+        filter.rc_serials = Some(db::controller_serials(&mut db, &controllers).await?);
     }
     let (session_ids, no_session) = ids(flight_filters.session.as_slice(), "session", true)?;
     let limit = limit(paging.limit)?;
     let after = decode::<TimeCursor>(paging.cursor.as_deref())?;
     let scope = policy::flight_scope(&caller.actor);
     let mut rows = db::flights(
-        &api.db,
+        &mut db,
         &scope,
         &filter,
         InSession {
@@ -346,7 +348,7 @@ async fn list_flights(
             id: row.id,
         })
     });
-    let items = flights(&api, &scope, rows, &expand).await?;
+    let items = flights(&mut db, &api, &scope, rows, &expand).await?;
     Ok(Json(Page { items, next_cursor }))
 }
 
@@ -362,6 +364,7 @@ async fn list_flights(
 )]
 async fn get_flight(
     State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     PathId(id): PathId,
     Params(query): Params<FlightExpand>,
@@ -370,7 +373,7 @@ async fn get_flight(
     let expand = Expand::parse(query.expand.as_deref(), FLIGHT_EXPANSIONS, &caller)?;
     let scope = policy::flight_scope(&caller.actor);
     let rows = db::flights(
-        &api.db,
+        &mut db,
         &scope,
         &Filter::default(),
         InSession::default(),
@@ -379,7 +382,7 @@ async fn get_flight(
         Some(1),
     )
     .await?;
-    flights(&api, &scope, rows, &expand)
+    flights(&mut db, &api, &scope, rows, &expand)
         .await?
         .pop()
         .map(Json)
@@ -398,7 +401,7 @@ async fn get_flight(
     security(("oauth" = ["groups:list"]))
 )]
 async fn list_groups(
-    State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Group>>, V1Error> {
@@ -406,7 +409,7 @@ async fn list_groups(
     let limit = limit(paging.limit)?;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
     let scope = policy::flight_scope(&caller.actor);
-    let mut rows = db::groups(&api.db, &scope, after, limit + 1).await?;
+    let mut rows = db::groups(&mut db, &scope, after, limit + 1).await?;
     let next_cursor = next(&mut rows, limit, |row| encode(&IdCursor { id: row.id }));
     let items = rows
         .into_iter()
@@ -429,7 +432,7 @@ async fn list_groups(
     security(("oauth" = ["areas:list"]))
 )]
 async fn list_areas(
-    State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     Params(expansion): Params<AreaExpand>,
     Params(paging): Params<Paging>,
@@ -438,7 +441,7 @@ async fn list_areas(
     let expand = Expand::parse(expansion.expand.as_deref(), AREA_EXPANSIONS, &caller)?;
     let limit = limit(paging.limit)?;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
-    let mut rows = db::areas(&api.db, expand.has("geometry"), after, limit + 1).await?;
+    let mut rows = db::areas(&mut db, expand.has("geometry"), after, limit + 1).await?;
     let next_cursor = next(&mut rows, limit, |row| encode(&IdCursor { id: row.id }));
     let items = rows
         .into_iter()
@@ -461,12 +464,12 @@ async fn list_areas(
     security(("oauth" = ["equipment:list"]))
 )]
 async fn list_drones(
-    State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     Params(expansion): Params<DeviceExpand>,
     Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Device>>, V1Error> {
-    devices(&api, &caller, Kind::Aircraft, &expansion, &paging)
+    devices(&mut db, &caller, Kind::Aircraft, &expansion, &paging)
         .await
         .map(Json)
 }
@@ -482,14 +485,20 @@ async fn list_drones(
     security(("oauth" = ["equipment:list"]))
 )]
 async fn list_controllers(
-    State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     Params(expansion): Params<DeviceExpand>,
     Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Device>>, V1Error> {
-    devices(&api, &caller, Kind::RemoteController, &expansion, &paging)
-        .await
-        .map(Json)
+    devices(
+        &mut db,
+        &caller,
+        Kind::RemoteController,
+        &expansion,
+        &paging,
+    )
+    .await
+    .map(Json)
 }
 
 /// List batteries
@@ -503,7 +512,7 @@ async fn list_controllers(
     security(("oauth" = ["equipment:list"]))
 )]
 async fn list_batteries(
-    State(api): State<Api>,
+    mut db: Db,
     Extension(caller): Extension<Caller>,
     Params(paging): Params<Paging>,
 ) -> Result<Json<Page<Battery>>, V1Error> {
@@ -511,7 +520,7 @@ async fn list_batteries(
     let limit = limit(paging.limit)? as usize;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
     let scope = policy::flight_scope(&caller.actor);
-    let mut all = batteries::db::list(&api.db, &scope, None).await?;
+    let mut all = batteries::db::list(&mut db, &scope, None).await?;
     all.sort_by_key(|battery| battery.id);
     let mut rows: Vec<_> = all
         .into_iter()
@@ -535,7 +544,7 @@ async fn list_batteries(
 /// A page of drones or controllers. Equipment is a few dozen items, so the
 /// page is taken from the whole list the Equipment page shows.
 async fn devices(
-    api: &Api,
+    db: &mut PgConnection,
     caller: &Caller,
     kind: Kind,
     expansion: &DeviceExpand,
@@ -545,7 +554,7 @@ async fn devices(
     let expand = Expand::parse(expansion.expand.as_deref(), DEVICE_EXPANSIONS, caller)?;
     let limit = limit(paging.limit)? as usize;
     let after = decode::<IdCursor>(paging.cursor.as_deref())?.map(|cursor| cursor.id);
-    let mut all = equipment::service::list(&api.db, &caller.actor, kind).await?;
+    let mut all = equipment::service::list(&mut *db, &caller.actor, kind).await?;
     all.sort_by_key(|item| item.id);
     let mut rows: Vec<_> = all
         .into_iter()
@@ -557,7 +566,7 @@ async fn devices(
     });
     let groups = if expand.has("group") {
         let ids: Vec<Uuid> = rows.iter().map(|row| row.group_id).collect();
-        Some(groups_by_id(api, &ids).await?)
+        Some(groups_by_id(db, &ids).await?)
     } else {
         None
     };
@@ -587,7 +596,7 @@ fn next<T>(rows: &mut Vec<T>, limit: i64, cursor: impl Fn(&T) -> String) -> Opti
 
 /// The flights' filter: days in the organisation's time zone, ids with
 /// `none` for "without one".
-async fn filter(api: &Api, filters: &Filters) -> Result<Filter, V1Error> {
+async fn filter(db: &mut PgConnection, api: &Api, filters: &Filters) -> Result<Filter, V1Error> {
     let day = |value: &str| {
         NaiveDate::parse_from_str(value, "%Y-%m-%d")
             .map_err(|_| V1Error::Invalid(format!("`{value}` isn’t a day; give it as YYYY-MM-DD.")))
@@ -603,9 +612,9 @@ async fn filter(api: &Api, filters: &Filters) -> Result<Filter, V1Error> {
             if last < first {
                 return Err(V1Error::Invalid("`to` is before `from`.".to_owned()));
             }
-            let start = mcp::db::start_of_day(&api.db, first, &api.time_zone).await?;
-            let end =
-                mcp::db::start_of_day(&api.db, last + chrono::Days::new(1), &api.time_zone).await?;
+            let start = mcp::db::start_of_day(&mut *db, first, &api.time_zone).await?;
+            let end = mcp::db::start_of_day(&mut *db, last + chrono::Days::new(1), &api.time_zone)
+                .await?;
             (Some(start), Some(end))
         }
         (None, Some(_)) => {
@@ -660,8 +669,11 @@ fn pick<T: Clone>(id: Uuid, objects: Option<&HashMap<Uuid, T>>) -> Expandable<T>
     }
 }
 
-async fn groups_by_id(api: &Api, ids: &[Uuid]) -> Result<HashMap<Uuid, Group>, V1Error> {
-    Ok(db::groups_by_id(&api.db, ids)
+async fn groups_by_id(
+    db: &mut PgConnection,
+    ids: &[Uuid],
+) -> Result<HashMap<Uuid, Group>, V1Error> {
+    Ok(db::groups_by_id(&mut *db, ids)
         .await?
         .into_iter()
         .map(|row| {
@@ -676,8 +688,11 @@ async fn groups_by_id(api: &Api, ids: &[Uuid]) -> Result<HashMap<Uuid, Group>, V
         .collect())
 }
 
-async fn people_by_id(api: &Api, ids: &[Uuid]) -> Result<HashMap<Uuid, Person>, V1Error> {
-    Ok(db::people_by_id(&api.db, ids)
+async fn people_by_id(
+    db: &mut PgConnection,
+    ids: &[Uuid],
+) -> Result<HashMap<Uuid, Person>, V1Error> {
+    Ok(db::people_by_id(&mut *db, ids)
         .await?
         .into_iter()
         .map(|row| {
@@ -693,8 +708,8 @@ async fn people_by_id(api: &Api, ids: &[Uuid]) -> Result<HashMap<Uuid, Person>, 
         .collect())
 }
 
-async fn areas_by_id(api: &Api, ids: &[Uuid]) -> Result<HashMap<Uuid, Area>, V1Error> {
-    Ok(db::areas_by_id(&api.db, ids)
+async fn areas_by_id(db: &mut PgConnection, ids: &[Uuid]) -> Result<HashMap<Uuid, Area>, V1Error> {
+    Ok(db::areas_by_id(&mut *db, ids)
         .await?
         .into_iter()
         .map(|row| {
@@ -736,6 +751,7 @@ fn area_ids<'a>(lists: impl Iterator<Item = &'a serde_json::Value>) -> Vec<Uuid>
 
 /// Sessions as answered, with what `expand` asks for.
 async fn sessions(
+    db: &mut PgConnection,
     api: &Api,
     scope: &FlightScope,
     rows: Vec<SessionRow>,
@@ -744,27 +760,27 @@ async fn sessions(
     let session_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
     let groups = if expand.has("group") {
         let ids: Vec<Uuid> = rows.iter().map(|row| row.group_id).collect();
-        Some(groups_by_id(api, &ids).await?)
+        Some(groups_by_id(db, &ids).await?)
     } else {
         None
     };
     let pilots = if expand.has("pilots") {
         let ids: Vec<Uuid> = rows.iter().flat_map(|row| row.pilot_ids.clone()).collect();
-        Some(people_by_id(api, &ids).await?)
+        Some(people_by_id(db, &ids).await?)
     } else {
         None
     };
     let areas = if expand.has("areas.area") {
-        Some(areas_by_id(api, &area_ids(rows.iter().map(|row| &row.areas))).await?)
+        Some(areas_by_id(db, &area_ids(rows.iter().map(|row| &row.areas))).await?)
     } else {
         None
     };
     let mut comments: Option<HashMap<Uuid, Vec<Comment>>> = None;
     if expand.has("comments") {
-        let stored = db::comments(&api.db, &session_ids).await?;
+        let stored = db::comments(&mut *db, &session_ids).await?;
         let authors = if expand.has("comments.author") {
             let ids: Vec<Uuid> = stored.iter().map(|comment| comment.author_id).collect();
-            Some(people_by_id(api, &ids).await?)
+            Some(people_by_id(db, &ids).await?)
         } else {
             None
         };
@@ -786,7 +802,7 @@ async fn sessions(
     let mut flights_by_session: Option<HashMap<Uuid, Vec<Flight>>> = None;
     if expand.has("flights") {
         let rows = db::flights(
-            &api.db,
+            &mut *db,
             scope,
             &Filter::default(),
             InSession {
@@ -799,7 +815,7 @@ async fn sessions(
         )
         .await?;
         let mut by_session: HashMap<Uuid, Vec<Flight>> = HashMap::new();
-        for flight in flights(api, scope, rows, &expand.under("flights")).await? {
+        for flight in flights(db, api, scope, rows, &expand.under("flights")).await? {
             if let Some(Expandable::Id(session)) = &flight.session {
                 by_session.entry(*session).or_default().push(flight);
             }
@@ -835,6 +851,7 @@ async fn sessions(
 /// Flights as answered, with what `expand` asks for. An expanded session is
 /// its base shape.
 async fn flights(
+    db: &mut PgConnection,
     api: &Api,
     scope: &FlightScope,
     rows: Vec<FlightRow>,
@@ -842,21 +859,22 @@ async fn flights(
 ) -> Result<Vec<Flight>, V1Error> {
     let pilots = if expand.has("pilot") {
         let ids: Vec<Uuid> = rows.iter().filter_map(|row| row.pilot_id).collect();
-        Some(people_by_id(api, &ids).await?)
+        Some(people_by_id(db, &ids).await?)
     } else {
         None
     };
     let groups = if expand.has("group") {
         let ids: Vec<Uuid> = rows.iter().map(|row| row.group_id).collect();
-        Some(groups_by_id(api, &ids).await?)
+        Some(groups_by_id(db, &ids).await?)
     } else {
         None
     };
     let sessions = if expand.has("session") {
         let ids: Vec<Uuid> = rows.iter().filter_map(|row| row.session_id).collect();
         let stored =
-            db::sessions(&api.db, scope, &Filter::default(), Some(&ids), None, None).await?;
+            db::sessions(&mut *db, scope, &Filter::default(), Some(&ids), None, None).await?;
         let base = Box::pin(self::sessions(
+            db,
             api,
             scope,
             stored,
@@ -871,14 +889,14 @@ async fn flights(
     } else {
         None
     };
-    let devices = async |wanted: bool, ids: Vec<Uuid>, drones: bool| -> Result<_, V1Error> {
+    let mut devices = async |wanted: bool, ids: Vec<Uuid>, drones: bool| -> Result<_, V1Error> {
         if !wanted {
             return Ok(None);
         }
         let stored = if drones {
-            db::drones_by_id(&api.db, &ids).await?
+            db::drones_by_id(&mut *db, &ids).await?
         } else {
-            db::controllers_by_id(&api.db, &ids).await?
+            db::controllers_by_id(&mut *db, &ids).await?
         };
         Ok(Some(
             stored
@@ -905,7 +923,7 @@ async fn flights(
             .flat_map(|row| row.battery_ids.clone())
             .collect();
         Some(
-            db::batteries_by_id(&api.db, &ids)
+            db::batteries_by_id(&mut *db, &ids)
                 .await?
                 .into_iter()
                 .map(|row| {
@@ -924,7 +942,7 @@ async fn flights(
         None
     };
     let areas = if expand.has("areas.area") {
-        Some(areas_by_id(api, &area_ids(rows.iter().map(|row| &row.areas))).await?)
+        Some(areas_by_id(db, &area_ids(rows.iter().map(|row| &row.areas))).await?)
     } else {
         None
     };
@@ -970,10 +988,11 @@ mod tests {
     /// Area boundaries are locations: a token for the list of areas can't
     /// expand them.
     #[sqlx::test]
-    async fn area_boundaries_need_areas_read(db: sqlx::PgPool) {
-        let user = crate::testing::user(&db, "A", &[]).await;
+    async fn area_boundaries_need_areas_read(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let user = crate::testing::user(&mut db, "A", &[]).await;
         let mut caller = Caller {
-            actor: crate::testing::actor(&db, user).await,
+            actor: crate::testing::actor(&mut db, user).await,
             scopes: vec!["areas:list".to_owned()],
             client_id: None,
         };

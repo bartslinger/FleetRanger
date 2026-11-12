@@ -27,7 +27,9 @@ use rmcp::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::PgConnection;
+
+use crate::db::{Db, System, Tenants};
 use uuid::Uuid;
 
 use self::db::GroupBy;
@@ -52,11 +54,24 @@ const SCOPE: &str = "flights:read";
 /// Who may use `/mcp`, checked before the tools run.
 #[derive(Clone)]
 struct Gate {
-    db: PgPool,
+    system: System,
+    tenants: Tenants,
     /// This resource's address, which access tokens must be for.
     resource: String,
     /// Where apps learn how to get such a token.
     metadata: String,
+}
+
+impl axum::extract::FromRef<Gate> for System {
+    fn from_ref(gate: &Gate) -> Self {
+        gate.system.clone()
+    }
+}
+
+impl axum::extract::FromRef<Gate> for Tenants {
+    fn from_ref(gate: &Gate) -> Self {
+        gate.tenants.clone()
+    }
 }
 
 /// The address of `/mcp` at an install, which its tokens are for.
@@ -67,7 +82,13 @@ pub fn resource(issuer: &str) -> String {
 /// `/mcp`, for apps with an access token for it from `issuer` (the install's
 /// address). `hosts` are the names the server is reached by, which the
 /// transport checks against DNS rebinding.
-pub fn router<S>(db: PgPool, time_zone: String, issuer: &str, hosts: Vec<String>) -> Router<S>
+pub fn router<S>(
+    system: System,
+    tenants: Tenants,
+    time_zone: String,
+    issuer: &str,
+    hosts: Vec<String>,
+) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
@@ -76,9 +97,9 @@ where
         .with_json_response(true)
         .with_allowed_hosts(hosts);
     let time_zone: Arc<str> = time_zone.into();
-    let tools_db = db.clone();
+    let tools_tenants = tenants.clone();
     let service = StreamableHttpService::new(
-        move || Ok(FleetRanger::new(tools_db.clone(), time_zone.clone())),
+        move || Ok(FleetRanger::new(tools_tenants.clone(), time_zone.clone())),
         Arc::new(NeverSessionManager::default()),
         config,
     );
@@ -86,7 +107,8 @@ where
         .route_service("/mcp", service)
         .layer(middleware::from_fn_with_state(
             Gate {
-                db,
+                system,
+                tenants,
                 resource: resource(issuer),
                 metadata: format!("{issuer}/.well-known/oauth-protected-resource/mcp"),
             },
@@ -102,7 +124,15 @@ where
 /// access, read only: an admin's assistant sees what the admin sees.
 async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) -> Response {
     let (parts, body) = request.into_parts();
-    let bearer = match oauth::bearer(&gate.db, &parts, &gate.resource, Some(SCOPE)).await {
+    let bearer = match oauth::bearer(
+        &gate.system,
+        &gate.tenants,
+        &parts,
+        &gate.resource,
+        Some(SCOPE),
+    )
+    .await
+    {
         Ok(bearer) => bearer,
         Err(error) => {
             tracing::error!(%error, "checking an MCP access token");
@@ -119,7 +149,7 @@ async fn authenticate(State(gate): State<Gate>, request: Request, next: Next) ->
     let refusal = match refusal {
         Err((StatusCode::UNAUTHORIZED, error)) => {
             use axum::extract::FromRequestParts;
-            Actor::from_request_parts(&mut parts.clone(), &gate.db)
+            Actor::from_request_parts(&mut parts.clone(), &gate)
                 .await
                 .map_err(|_| (StatusCode::UNAUTHORIZED, error))
         }
@@ -152,7 +182,7 @@ fn challenge(metadata: &str, status: StatusCode, error: Option<&str>) -> Respons
 
 #[derive(Clone)]
 struct FleetRanger {
-    db: PgPool,
+    tenants: Tenants,
     time_zone: Arc<str>,
     tool_router: ToolRouter<Self>,
 }
@@ -317,9 +347,9 @@ impl From<FlightDetail> for FlightFacts {
 
 #[tool_router]
 impl FleetRanger {
-    fn new(db: PgPool, time_zone: Arc<str>) -> Self {
+    fn new(tenants: Tenants, time_zone: Arc<str>) -> Self {
         Self {
-            db,
+            tenants,
             time_zone,
             tool_router: Self::tool_router(),
         }
@@ -332,25 +362,26 @@ impl FleetRanger {
         &self,
         Extension(parts): Extension<Parts>,
     ) -> Result<CallToolResult, McpError> {
+        let mut db = self.connect(&parts).await?;
         let actor = actor(&parts)?;
         let scope = policy::flight_scope(actor);
         let filter = Filter::default();
-        let today = db::today(&self.db, &self.time_zone)
+        let today = db::today(&mut db, &self.time_zone)
             .await
             .map_err(internal)?;
         let directory = serde_json::json!({
             "you": {
                 "id": actor.user_id,
                 "name": actor.name,
-                "groups": db::own_groups(&self.db, actor.user_id).await.map_err(internal)?,
+                "groups": db::own_groups(&mut db, actor.user_id).await.map_err(internal)?,
             },
             "time_zone": &*self.time_zone,
             "today": today,
-            "groups": flights::db::groups_in(&self.db, &scope, &filter).await.map_err(internal)?,
-            "pilots": flights::db::pilots_in(&self.db, &scope, &filter).await.map_err(internal)?,
-            "drones": flights::db::aircraft_of(&self.db, &scope, &filter).await.map_err(internal)?,
-            "controllers": flights::db::controllers_of(&self.db, &scope, &filter).await.map_err(internal)?,
-            "areas": flights::db::areas_in(&self.db, &scope, &filter).await.map_err(internal)?,
+            "groups": flights::db::groups_in(&mut db, &scope, &filter).await.map_err(internal)?,
+            "pilots": flights::db::pilots_in(&mut db, &scope, &filter).await.map_err(internal)?,
+            "drones": flights::db::aircraft_of(&mut db, &scope, &filter).await.map_err(internal)?,
+            "controllers": flights::db::controllers_of(&mut db, &scope, &filter).await.map_err(internal)?,
+            "areas": flights::db::areas_in(&mut db, &scope, &filter).await.map_err(internal)?,
         });
         json(directory)
     }
@@ -363,11 +394,12 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<TotalsParams>,
     ) -> Result<CallToolResult, McpError> {
+        let mut db = self.connect(&parts).await?;
         let scope = policy::flight_scope(actor(&parts)?);
-        let filter = self.filter(&params.filters).await?;
+        let filter = self.filter(&mut db, &params.filters).await?;
         let totals = match params.group_by.unwrap_or(GroupBy::None) {
-            GroupBy::Area => db::area_totals(&self.db, &scope, &filter).await,
-            group_by => db::totals(&self.db, &scope, &filter, group_by, &self.time_zone).await,
+            GroupBy::Area => db::area_totals(&mut db, &scope, &filter).await,
+            group_by => db::totals(&mut db, &scope, &filter, group_by, &self.time_zone).await,
         };
         json(totals.map_err(internal)?)
     }
@@ -380,11 +412,12 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<ListParams>,
     ) -> Result<CallToolResult, McpError> {
+        let mut db = self.connect(&parts).await?;
         let actor = actor(&parts)?;
-        let filter = self.filter(&params.filters).await?;
+        let filter = self.filter(&mut db, &params.filters).await?;
         let (limit, offset) = page(params.page, params.size)?;
         let (mut sessions, total) =
-            sessions::service::list(&self.db, actor, &filter, None, limit, offset, false)
+            sessions::service::list(&mut db, actor, &filter, None, limit, offset, false)
                 .await
                 .map_err(api)?;
         // Whole metres, as everywhere in these tools; the sum is of the exact
@@ -404,7 +437,8 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<IdParams>,
     ) -> Result<CallToolResult, McpError> {
-        let session = sessions::service::get(&self.db, actor(&parts)?, uuid(&params.id)?)
+        let mut db = self.connect(&parts).await?;
+        let session = sessions::service::get(&mut db, actor(&parts)?, uuid(&params.id)?)
             .await
             .map_err(api)?;
         let flights: Vec<FlightFacts> = session.flights.into_iter().map(Into::into).collect();
@@ -437,8 +471,9 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<FlightListParams>,
     ) -> Result<CallToolResult, McpError> {
+        let mut db = self.connect(&parts).await?;
         let actor = actor(&parts)?;
-        let mut filter = self.filter(&params.filters).await?;
+        let mut filter = self.filter(&mut db, &params.filters).await?;
         if params.without_pilot == Some(true) {
             filter.pilot_ids = Some(Vec::new());
             filter.unknown_pilot = true;
@@ -452,7 +487,7 @@ impl FleetRanger {
         };
         let (limit, offset) = page(params.page, params.size)?;
         let (mut flights, total) =
-            flights::service::list(&self.db, actor, &filter, &sort, limit, offset)
+            flights::service::list(&mut db, actor, &filter, &sort, limit, offset)
                 .await
                 .map_err(internal)?;
         for flight in &mut flights {
@@ -469,7 +504,8 @@ impl FleetRanger {
         Extension(parts): Extension<Parts>,
         Parameters(params): Parameters<IdParams>,
     ) -> Result<CallToolResult, McpError> {
-        let flight = flights::service::get(&self.db, actor(&parts)?, uuid(&params.id)?)
+        let mut db = self.connect(&parts).await?;
+        let flight = flights::service::get(&mut db, actor(&parts)?, uuid(&params.id)?)
             .await
             .map_err(api)?;
         json(FlightFacts::from(flight))
@@ -482,11 +518,12 @@ impl FleetRanger {
         &self,
         Extension(parts): Extension<Parts>,
     ) -> Result<CallToolResult, McpError> {
+        let mut db = self.connect(&parts).await?;
         let actor = actor(&parts)?;
-        let drones = equipment::service::list(&self.db, actor, Kind::Aircraft)
+        let drones = equipment::service::list(&mut db, actor, Kind::Aircraft)
             .await
             .map_err(api)?;
-        let controllers = equipment::service::list(&self.db, actor, Kind::RemoteController)
+        let controllers = equipment::service::list(&mut db, actor, Kind::RemoteController)
             .await
             .map_err(api)?;
         json(serde_json::json!({ "drones": drones, "controllers": controllers }))
@@ -494,9 +531,18 @@ impl FleetRanger {
 }
 
 impl FleetRanger {
+    /// A connection in the organisation of the user the tool acts for.
+    async fn connect(&self, parts: &Parts) -> Result<Db, McpError> {
+        let actor = actor(parts)?;
+        self.tenants
+            .connect(actor.organisation_id)
+            .await
+            .map_err(internal)
+    }
+
     /// The flights' filter from the tools' filters; days in the
     /// organisation's time zone.
-    async fn filter(&self, filters: &Filters) -> Result<Filter, McpError> {
+    async fn filter(&self, db: &mut PgConnection, filters: &Filters) -> Result<Filter, McpError> {
         let day = |value: &str| {
             NaiveDate::parse_from_str(value, "%Y-%m-%d")
                 .map_err(|_| invalid(format!("{value} isn't a day as YYYY-MM-DD")))
@@ -512,12 +558,13 @@ impl FleetRanger {
                 if last < first {
                     return Err(invalid("to is before from".to_owned()));
                 }
-                let start = db::start_of_day(&self.db, first, &self.time_zone);
-                let end = db::start_of_day(&self.db, last + chrono::Days::new(1), &self.time_zone);
-                (
-                    Some(start.await.map_err(internal)?),
-                    Some(end.await.map_err(internal)?),
-                )
+                let start = db::start_of_day(db, first, &self.time_zone)
+                    .await
+                    .map_err(internal)?;
+                let end = db::start_of_day(db, last + chrono::Days::new(1), &self.time_zone)
+                    .await
+                    .map_err(internal)?;
+                (Some(start), Some(end))
             }
             (None, Some(_)) => return Err(invalid("to needs from".to_owned())),
         };

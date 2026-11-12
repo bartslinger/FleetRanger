@@ -2,7 +2,7 @@
 //! change. Each check compares today's rule (see `policy`) with the same
 //! permission under "Groups and roles" in docs/architecture.md.
 
-use sqlx::{PgPool, migrate::Migrator};
+use sqlx::{PgConnection, migrate::Migrator};
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -64,13 +64,13 @@ fn holds(roles: &str, group: &str) -> String {
 }
 
 /// The users and items for which `before` and `after` disagree.
-async fn differ(db: &PgPool, items: &str, before: &str, after: &str) -> Vec<String> {
+async fn differ(db: &mut PgConnection, items: &str, before: &str, after: &str) -> Vec<String> {
     let sql = format!(
         "select u.name || ' ' || i.label from users u cross join ({items}) i
          where coalesce(({before}), false) <> coalesce(({after}), false) order by 1"
     );
     sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
-        .fetch_all(db)
+        .fetch_all(&mut *db)
         .await
         .unwrap()
 }
@@ -78,10 +78,12 @@ async fn differ(db: &PgPool, items: &str, before: &str, after: &str) -> Vec<Stri
 const OWN_TEAM: &str = "i.team_id in (select team_id from team_members where user_id = u.id)";
 
 #[sqlx::test(migrations = false)]
-async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
-    MIGRATOR.run_to(17, &db).await.unwrap();
-    sqlx::raw_sql(BEFORE).execute(&db).await.unwrap();
-    MIGRATOR.run_to(18, &db).await.unwrap();
+async fn fill_from_teams_keeps_everyones_access(pool: sqlx::PgPool) {
+    // Before organisations (migration 0026).
+    let mut db = pool.acquire().await.unwrap();
+    MIGRATOR.run_to(17, &mut *db).await.unwrap();
+    sqlx::raw_sql(BEFORE).execute(&mut *db).await.unwrap();
+    MIGRATOR.run_to(18, &mut *db).await.unwrap();
 
     let flights = "select 'flight ' || r.path as label, f.team_id, f.group_id, f.pilot_id
                    from flights f join raw_logs r on r.id = f.raw_log_id";
@@ -90,7 +92,7 @@ async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
     let before = format!("u.role in ('all_flights', 'admin') or i.pilot_id = u.id or {OWN_TEAM}");
     let after = format!("i.pilot_id = u.id or {}", holds(READS, "i.group_id"));
     assert_eq!(
-        differ(&db, flights, &before, &after).await,
+        differ(&mut db, flights, &before, &after).await,
         Vec::<String>::new()
     );
 
@@ -98,7 +100,7 @@ async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
     let before = format!("u.role = 'admin' or (u.role = 'member' and {OWN_TEAM})");
     let after = holds(CHANGES, "i.group_id");
     assert_eq!(
-        differ(&db, flights, &before, &after).await,
+        differ(&mut db, flights, &before, &after).await,
         Vec::<String>::new()
     );
 
@@ -113,14 +115,14 @@ async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
                           or f.team_id not in (select team_id from team_members where user_id = u.id))))";
     let after = holds(CHANGES, "i.group_id");
     assert_eq!(
-        differ(&db, sessions, before, &after).await,
+        differ(&mut db, sessions, before, &after).await,
         Vec::<String>::new()
     );
 
     let mixed: Option<uuid::Uuid> = sqlx::query_scalar(
         "select group_id from sessions where id = '00000000-0000-0000-0000-000000000002'",
     )
-    .fetch_one(&db)
+    .fetch_one(&mut *db)
     .await
     .unwrap();
     assert_eq!(mixed, None);
@@ -131,7 +133,7 @@ async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
     let before = format!("u.role in ('all_flights', 'admin') or {OWN_TEAM}");
     let after = holds(READS, "i.group_id");
     assert_eq!(
-        differ(&db, equipment, &before, &after).await,
+        differ(&mut db, equipment, &before, &after).await,
         Vec::<String>::new()
     );
 
@@ -140,7 +142,7 @@ async fn fill_from_teams_keeps_everyones_access(db: PgPool) {
     let after = "exists (select 1 from group_members m
                          where m.user_id = u.id and m.group_id = i.team_id and m.role = 'pilot')";
     assert_eq!(
-        differ(&db, teams, OWN_TEAM, after).await,
+        differ(&mut db, teams, OWN_TEAM, after).await,
         Vec::<String>::new()
     );
 }

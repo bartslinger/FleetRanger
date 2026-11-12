@@ -6,14 +6,14 @@ pub mod routes;
 mod service;
 
 use anyhow::{Result, bail};
-use sqlx::PgPool;
+use sqlx::PgConnection;
 
 use db::UserFields;
 
 /// The `add-user` command: adds a user who can log in with the given email
 /// address. This is how the first user of an install is added, with `admin` so
 /// they can manage the rest. For an existing login, `admin` makes it an admin.
-pub async fn add(db: &PgPool, email: &str, name: &str, admin: bool) -> Result<()> {
+pub async fn add(db: &mut PgConnection, email: &str, name: &str, admin: bool) -> Result<()> {
     let Some(email) = service::email(email) else {
         bail!("{email:?} is not an email address");
     };

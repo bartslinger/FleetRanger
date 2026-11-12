@@ -1,6 +1,7 @@
 //! Pairing API: a user creates and revokes codes; a controller pairs with one
 //! and later unpairs itself; an admin can unpair a controller.
 
+use crate::db::{Db, System, Tenants};
 use axum::{
     Json, Router,
     extract::{FromRef, Path, State},
@@ -10,7 +11,6 @@ use axum::{
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
@@ -27,7 +27,8 @@ use crate::{
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
 {
     // The controller's API, see "Clients" in docs/architecture.md.
     let v1 = Router::new()
@@ -58,32 +59,24 @@ struct Create {
     hours: i64,
 }
 
-async fn create(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Json(body): Json<Create>,
-) -> ApiResult<Json<Created>> {
+async fn create(actor: Actor, mut db: Db, Json(body): Json<Create>) -> ApiResult<Json<Created>> {
     Ok(Json(
-        service::create(&db, &actor, body.group, body.hours).await?,
+        service::create(&mut db, &actor, body.group, body.hours).await?,
     ))
 }
 
-async fn open_codes(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<OpenCode>>> {
-    Ok(Json(service::open_codes(&db, &actor).await?))
+async fn open_codes(actor: Actor, mut db: Db) -> ApiResult<Json<Vec<OpenCode>>> {
+    Ok(Json(service::open_codes(&mut db, &actor).await?))
 }
 
-async fn revoke(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<StatusCode> {
-    service::revoke(&db, &actor, id).await?;
+async fn revoke(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    service::revoke(&mut db, &actor, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// Where a controller paired with the actor's code can go.
-async fn destinations(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Destinations>> {
-    Ok(Json(service::destinations(&db, &actor).await?))
+async fn destinations(actor: Actor, mut db: Db) -> ApiResult<Json<Destinations>> {
+    Ok(Json(service::destinations(&mut db, &actor).await?))
 }
 
 #[derive(Deserialize)]
@@ -100,8 +93,19 @@ struct PairedV1 {
     group: Option<GroupChoice>,
 }
 
-async fn pair(State(db): State<PgPool>, Json(body): Json<Pair>) -> ApiResult<Json<PairedV1>> {
-    let paired = service::pair(&db, &body.code, &body.serial, &body.token_sha256).await?;
+async fn pair(
+    State(system): State<System>,
+    State(tenants): State<Tenants>,
+    Json(body): Json<Pair>,
+) -> ApiResult<Json<PairedV1>> {
+    let paired = service::pair(
+        &system,
+        &tenants,
+        &body.code,
+        &body.serial,
+        &body.token_sha256,
+    )
+    .await?;
     Ok(Json(PairedV1 {
         group: paired.group,
     }))
@@ -113,19 +117,30 @@ struct PairedV0 {
     team: Option<String>,
 }
 
-async fn pair_v0(State(db): State<PgPool>, Json(body): Json<Pair>) -> ApiResult<Json<PairedV0>> {
-    let paired = service::pair(&db, &body.code, &body.serial, &body.token_sha256).await?;
+async fn pair_v0(
+    State(system): State<System>,
+    State(tenants): State<Tenants>,
+    Json(body): Json<Pair>,
+) -> ApiResult<Json<PairedV0>> {
+    let paired = service::pair(
+        &system,
+        &tenants,
+        &body.code,
+        &body.serial,
+        &body.token_sha256,
+    )
+    .await?;
     Ok(Json(PairedV0 {
         team: paired.group.map(|g| g.name),
     }))
 }
 
-async fn pilots(controller: Controller, State(db): State<PgPool>) -> ApiResult<Json<Pilots>> {
-    Ok(Json(service::pilots(&db, &controller).await?))
+async fn pilots(controller: Controller, mut db: Db) -> ApiResult<Json<Pilots>> {
+    Ok(Json(service::pilots(&mut db, &controller).await?))
 }
 
-async fn pilots_v0(controller: Controller, State(db): State<PgPool>) -> ApiResult<Json<PilotList>> {
-    Ok(Json(service::pilots_v0(&db, &controller).await?))
+async fn pilots_v0(controller: Controller, mut db: Db) -> ApiResult<Json<PilotList>> {
+    Ok(Json(service::pilots_v0(&mut db, &controller).await?))
 }
 
 /// How far ahead of the server's clock a controller's may be, my choice: a
@@ -145,7 +160,7 @@ struct Status {
 /// The controller's status, sent whole, also without a sync (at start).
 async fn status(
     controller: Controller,
-    State(db): State<PgPool>,
+    mut db: Db,
     Json(body): Json<Status>,
 ) -> ApiResult<StatusCode> {
     let version = app_version(&body.app_version)?;
@@ -157,7 +172,7 @@ async fn status(
             "The last sync is in the future: check the controller's clock.".to_owned(),
         ));
     }
-    db::status(&db, controller.id, version, body.last_sync).await?;
+    db::status(&mut db, controller.id, version, body.last_sync).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -169,11 +184,11 @@ struct Synced {
 /// android-v0.3.0's sync report: it synced just now.
 async fn synced_v0(
     controller: Controller,
-    State(db): State<PgPool>,
+    mut db: Db,
     Json(body): Json<Synced>,
 ) -> ApiResult<StatusCode> {
     let version = app_version(&body.app_version)?;
-    db::status(&db, controller.id, version, Some(Utc::now())).await?;
+    db::status(&mut db, controller.id, version, Some(Utc::now())).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -187,18 +202,14 @@ fn app_version(version: &str) -> ApiResult<&str> {
     Ok(version)
 }
 
-async fn unpair_self(controller: Controller, State(db): State<PgPool>) -> ApiResult<StatusCode> {
-    if !db::unpair(&db, controller.id).await? {
+async fn unpair_self(controller: Controller, mut db: Db) -> ApiResult<StatusCode> {
+    if !db::unpair(&mut db, controller.id).await? {
         return Err(ApiError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn unpair(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<StatusCode> {
-    service::unpair(&db, &actor, id).await?;
+async fn unpair(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    service::unpair(&mut db, &actor, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

@@ -5,6 +5,7 @@ mod db;
 pub mod routes;
 pub mod service;
 
+use crate::db::{RequestOrganisation, System};
 use axum::{
     Json,
     extract::{FromRef, FromRequestParts, Request},
@@ -13,7 +14,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 /// A paired controller, authenticated by the token it sends as
@@ -23,28 +23,36 @@ pub struct Controller {
     pub serial: String,
     /// Its group; its pilots come first.
     pub group_id: Uuid,
+    pub organisation_id: Uuid,
 }
 
 impl<S> FromRequestParts<S> for Controller
 where
     S: Send + Sync,
-    PgPool: FromRef<S>,
+    System: FromRef<S>,
 {
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let hash = token_hash(&parts.headers).ok_or(StatusCode::UNAUTHORIZED)?;
-        let controller = db::by_token(&PgPool::from_ref(state), &hash)
-            .await
-            .map_err(|error| {
-                tracing::error!(%error, "looking up a controller token");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
-            .ok_or(StatusCode::UNAUTHORIZED)?;
+        let controller = async {
+            let mut system = System::from_ref(state).acquire().await?;
+            db::by_token(&mut system, &hash).await
+        }
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "looking up a controller token");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+        parts
+            .extensions
+            .insert(RequestOrganisation(controller.organisation_id));
         Ok(Self {
             id: controller.id,
             serial: controller.serial,
             group_id: controller.group_id,
+            organisation_id: controller.organisation_id,
         })
     }
 }

@@ -1,5 +1,6 @@
 use serde::Serialize;
-use sqlx::{PgConnection, PgPool};
+use sqlx::Connection as _;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 #[derive(Serialize)]
@@ -29,7 +30,7 @@ pub struct Member {
 }
 
 /// Groups by name; `id` narrows it to one.
-pub async fn list(db: &PgPool, id: Option<Uuid>) -> sqlx::Result<Vec<Group>> {
+pub async fn list(db: &mut PgConnection, id: Option<Uuid>) -> sqlx::Result<Vec<Group>> {
     sqlx::query_as!(
         Group,
         r#"select g.id, g.name,
@@ -50,11 +51,11 @@ pub async fn list(db: &PgPool, id: Option<Uuid>) -> sqlx::Result<Vec<Group>> {
            order by lower(g.name), g.id"#,
         id,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
-pub async fn members(db: &PgPool, group_id: Uuid) -> sqlx::Result<Vec<Member>> {
+pub async fn members(db: &mut PgConnection, group_id: Uuid) -> sqlx::Result<Vec<Member>> {
     sqlx::query_as!(
         Member,
         r#"select u.id as user_id, u.name, l.email as "email?",
@@ -74,20 +75,20 @@ pub async fn members(db: &PgPool, group_id: Uuid) -> sqlx::Result<Vec<Member>> {
            order by lower(u.name), u.id"#,
         group_id,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
-pub async fn insert(db: &PgPool, name: &str) -> sqlx::Result<Uuid> {
+pub async fn insert(db: &mut PgConnection, name: &str) -> sqlx::Result<Uuid> {
     sqlx::query_scalar!("insert into groups (name) values ($1) returning id", name)
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
 }
 
 /// False if there is no such group.
-pub async fn rename(db: &PgPool, id: Uuid, name: &str) -> sqlx::Result<bool> {
+pub async fn rename(db: &mut PgConnection, id: Uuid, name: &str) -> sqlx::Result<bool> {
     let result = sqlx::query!("update groups set name = $2 where id = $1", id, name)
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     Ok(result.rows_affected() == 1)
 }
@@ -96,7 +97,7 @@ pub async fn rename(db: &PgPool, id: Uuid, name: &str) -> sqlx::Result<bool> {
 /// removes them from it. False if the group or user doesn't exist, or the
 /// user is archived.
 pub async fn set_roles(
-    db: &PgPool,
+    db: &mut PgConnection,
     group_id: Uuid,
     user_id: Uuid,
     roles: &[String],
@@ -173,7 +174,11 @@ pub enum Deleted {
 ///
 /// The group's row is locked first, so nothing can be put in it in between:
 /// a foreign key check on it waits for the lock.
-pub async fn delete(db: &PgPool, id: Uuid, move_to: Option<Uuid>) -> sqlx::Result<Deleted> {
+pub async fn delete(
+    db: &mut PgConnection,
+    id: Uuid,
+    move_to: Option<Uuid>,
+) -> sqlx::Result<Deleted> {
     let mut tx = db.begin().await?;
     // Every group is locked, so two deletions can't each leave the other last.
     let groups = sqlx::query_scalar!("select id from groups order by id for update")
@@ -209,7 +214,7 @@ async fn is_empty(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
            as "empty!""#,
         id,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
@@ -224,16 +229,16 @@ async fn move_contents(db: &mut PgConnection, from: Uuid, to: Uuid) -> sqlx::Res
         from,
         to,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
 
-pub async fn exists(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+pub async fn exists(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
         r#"select exists(select 1 from groups where id = $1) as "exists!""#,
         id,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }

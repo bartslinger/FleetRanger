@@ -1,72 +1,83 @@
 use std::net::IpAddr;
 
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 /// The user a login is for, if they may log in.
 pub enum LoginUser {
-    Allowed(Uuid),
-    /// No login, an archived user, or the email belongs to another login.
+    Allowed {
+        user_id: Uuid,
+        organisation_id: Uuid,
+    },
+    /// No login, or only archived users.
     Refused,
 }
 
-/// Finds the user for a login by its subject ID. A first login is matched on
-/// its verified email instead, which ties the login to the subject from then on.
+/// Finds the user a Google account logs in as, across organisations (with
+/// `System`): someone in several organisations has a login in each. A first
+/// login in an organisation is matched on its verified email, which ties
+/// that login to the account from then on. With several, it is the
+/// organisation used last.
 pub async fn login_user(
-    db: &PgPool,
+    db: &mut PgConnection,
     subject: &str,
     verified_email: Option<&str>,
 ) -> sqlx::Result<LoginUser> {
-    let mut found = sqlx::query!(
-        r#"select l.user_id, u.archived_at is not null as "archived!"
-           from logins l join users u on u.id = l.user_id
-           where l.oidc_subject = $1"#,
-        subject,
-    )
-    .fetch_optional(db)
-    .await?
-    .map(|row| (row.user_id, row.archived));
-
-    if found.is_none()
-        && let Some(email) = verified_email
-    {
-        found = sqlx::query!(
-            r#"update logins l set oidc_subject = $1
-               from users u
-               where u.id = l.user_id and l.email = lower($2) and l.oidc_subject is null
-               returning l.user_id, u.archived_at is not null as "archived!""#,
+    if let Some(email) = verified_email {
+        sqlx::query!(
+            "update logins set oidc_subject = $1
+             where email = lower($2) and oidc_subject is null
+               and organisation_id not in (select organisation_id from logins
+                                           where oidc_subject = $1)",
             subject,
             email,
         )
-        .fetch_optional(db)
-        .await?
-        .map(|row| (row.user_id, row.archived));
+        .execute(&mut *db)
+        .await?;
     }
-
+    let found = sqlx::query!(
+        "select l.user_id, l.organisation_id
+         from logins l join users u on u.id = l.user_id
+         where l.oidc_subject = $1 and u.archived_at is null
+         order by (select max(s.created_at) from login_sessions s
+                   where s.user_id = l.user_id) desc nulls last,
+                  l.created_at
+         limit 1",
+        subject,
+    )
+    .fetch_optional(&mut *db)
+    .await?;
     Ok(match found {
-        Some((id, false)) => LoginUser::Allowed(id),
-        _ => LoginUser::Refused,
+        Some(row) => LoginUser::Allowed {
+            user_id: row.user_id,
+            organisation_id: row.organisation_id,
+        },
+        None => LoginUser::Refused,
     })
 }
 
+/// Starts a login session for a user, in their organisation (with `System`,
+/// as the login comes before one is known).
 pub async fn create_session(
-    db: &PgPool,
+    db: &mut PgConnection,
     user_id: Uuid,
+    organisation_id: Uuid,
     token_sha256: &[u8],
     idle_days: i32,
     ip: IpAddr,
     user_agent: Option<&str>,
 ) -> sqlx::Result<()> {
     sqlx::query!(
-        "insert into login_sessions (user_id, token_sha256, expires_at, ip, user_agent)
-         values ($1, $2, now() + make_interval(days => $3), $4, $5)",
+        "insert into login_sessions (organisation_id, user_id, token_sha256, expires_at, ip, user_agent)
+         values ($1, $2, $3, now() + make_interval(days => $4), $5, $6)",
+        organisation_id,
         user_id,
         token_sha256,
         idle_days,
         ip as IpAddr,
         user_agent,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
@@ -74,15 +85,17 @@ pub async fn create_session(
 pub struct Session {
     pub id: Uuid,
     pub user_id: Uuid,
+    pub organisation_id: Uuid,
     pub email: String,
     pub name: String,
 }
 
 /// The valid session with this token hash, extending its expiry because it is
-/// in use. None if it is unknown, expired or revoked, its user is archived or
+/// in use (with `System`: the session says which organisation the request is
+/// in). None if it is unknown, expired or revoked, its user is archived or
 /// the user's login is gone.
 pub async fn use_session(
-    db: &PgPool,
+    db: &mut PgConnection,
     token_sha256: &[u8],
     idle_days: i32,
 ) -> sqlx::Result<Option<Session>> {
@@ -93,11 +106,11 @@ pub async fn use_session(
          from users u, logins l
          where s.token_sha256 = $1 and u.id = s.user_id and l.user_id = s.user_id
            and s.revoked_at is null and s.expires_at > now() and u.archived_at is null
-         returning s.id, s.user_id, l.email, u.name",
+         returning s.id, s.user_id, s.organisation_id, l.email, u.name",
         token_sha256,
         idle_days,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
@@ -108,7 +121,7 @@ pub struct ImpersonatedUser {
 
 /// A user an admin impersonates, unless archived: with or without a login.
 pub async fn impersonated_user(
-    db: &PgPool,
+    db: &mut PgConnection,
     user_id: Uuid,
 ) -> sqlx::Result<Option<ImpersonatedUser>> {
     sqlx::query_as!(
@@ -118,19 +131,22 @@ pub async fn impersonated_user(
            where u.id = $1 and u.archived_at is null"#,
         user_id,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
 /// The user's roles: per group, and with no group on the whole organisation.
-pub async fn roles(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<(Option<Uuid>, String)>> {
+pub async fn roles(
+    db: &mut PgConnection,
+    user_id: Uuid,
+) -> sqlx::Result<Vec<(Option<Uuid>, String)>> {
     let rows = sqlx::query!(
         r#"select group_id as "group_id?", role as "role!" from group_members where user_id = $1
            union all
            select null, role from organisation_roles where user_id = $1"#,
         user_id,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await?;
     Ok(rows
         .into_iter()
@@ -138,21 +154,26 @@ pub async fn roles(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<(Option<Uuid>
         .collect())
 }
 
-/// Ends a login session; its user, if it was still open.
-pub async fn revoke_session(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<Uuid>> {
-    sqlx::query_scalar!(
+/// Ends a login session (with `System`: also an expired one, whose request
+/// has no organisation); its user and their organisation, if it was still open.
+pub async fn revoke_session(
+    db: &mut PgConnection,
+    token_sha256: &[u8],
+) -> sqlx::Result<Option<(Uuid, Uuid)>> {
+    let row = sqlx::query!(
         "update login_sessions set revoked_at = now()
          where token_sha256 = $1 and revoked_at is null
-         returning user_id",
+         returning user_id, organisation_id",
         token_sha256,
     )
-    .fetch_optional(db)
-    .await
+    .fetch_optional(&mut *db)
+    .await?;
+    Ok(row.map(|row| (row.user_id, row.organisation_id)))
 }
 
 /// Whether there is more than one group.
-pub async fn several_groups(db: &PgPool) -> sqlx::Result<bool> {
+pub async fn several_groups(db: &mut PgConnection) -> sqlx::Result<bool> {
     sqlx::query_scalar!(r#"select count(*) > 1 as "several!" from groups"#)
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
 }

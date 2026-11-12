@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into login_sessions (organisation_id, user_id, token_sha256, expires_at, ip, user_agent)\n         values ($1, $2, $3, now() + make_interval(days => $4), $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int4",
+        "Inet",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "80342b29772a4c908d5465fbac97f7311dfb8d0ce2b59162337b4c58e1b9b884"
+}

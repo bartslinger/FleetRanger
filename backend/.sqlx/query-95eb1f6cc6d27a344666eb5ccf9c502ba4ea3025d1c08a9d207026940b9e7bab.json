@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into oauth_codes (code_sha256, client_id, user_id, redirect_uri, code_challenge,\n                                  scopes, resource, expires_at, impersonated_by, organisation_id)\n         values ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8), $9, $10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "TextArray",
+        "Text",
+        "Float8",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "95eb1f6cc6d27a344666eb5ccf9c502ba4ea3025d1c08a9d207026940b9e7bab"
+}

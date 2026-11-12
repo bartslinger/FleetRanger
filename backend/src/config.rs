@@ -8,8 +8,13 @@ use openidconnect::url::Url;
 pub struct Config {
     /// Address the HTTP server listens on (`FLEETRANGER_BIND`).
     pub bind: SocketAddr,
-    /// PostgreSQL connection string (`DATABASE_URL`).
+    /// PostgreSQL connection string (`DATABASE_URL`), as the account that
+    /// created the tables: for database changes and work across organisations.
     pub database_url: String,
+    /// The same database as `fleetranger_app`, which row-level security
+    /// limits to one organisation (`DATABASE_APP_URL`), for requests. Its
+    /// password is set from here on every start.
+    pub database_app_url: String,
     /// Directory holding the raw flight logs (`FLEETRANGER_LOG_DIR`).
     pub log_dir: PathBuf,
     /// DJI app key for requesting log decryption keys (`DJI_APP_KEY`). Logs from
@@ -57,6 +62,8 @@ impl Config {
             .parse()
             .context("FLEETRANGER_BIND is not a valid socket address")?;
         let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL is not set")?;
+        let database_app_url =
+            std::env::var("DATABASE_APP_URL").context("DATABASE_APP_URL is not set")?;
         let log_dir = std::env::var("FLEETRANGER_LOG_DIR")
             .unwrap_or_else(|_| "/data/flightlogs".to_owned())
             .into();
@@ -93,6 +100,7 @@ impl Config {
         Ok(Self {
             bind,
             database_url,
+            database_app_url,
             log_dir,
             dji_app_key,
             public_url,

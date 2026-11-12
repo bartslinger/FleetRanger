@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::{
@@ -105,7 +105,7 @@ pub struct Sort {
 
 /// One page of the flights in the scope that pass the filter, in the given order.
 pub async fn list(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
     sort: &Sort,
@@ -181,7 +181,7 @@ pub async fn list(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -227,7 +227,11 @@ pub struct FlightDetail {
 }
 
 /// A flight in the scope, or None if it doesn't exist or isn't in the scope.
-pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Option<FlightDetail>> {
+pub async fn get(
+    db: &mut PgConnection,
+    scope: &FlightScope,
+    id: Uuid,
+) -> sqlx::Result<Option<FlightDetail>> {
     sqlx::query_as!(
         FlightDetail,
         r#"select id, takeoff_at, landed_at, air_time_s, distance_m,
@@ -265,14 +269,14 @@ pub async fn get(db: &PgPool, scope: &FlightScope, id: Uuid) -> sqlx::Result<Opt
         scope.user_id,
         &scope.group_ids,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
 /// The first takeoff of a session's flights in the scope; None if there are
 /// none.
 pub async fn session_takeoff(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     session_id: Uuid,
 ) -> sqlx::Result<Option<DateTime<Utc>>> {
@@ -287,14 +291,14 @@ pub async fn session_takeoff(
         scope.user_id,
         &scope.group_ids,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
 /// The flights of a session that are in the scope, in takeoff order; empty if
 /// the session doesn't exist or none of its flights is in the scope.
 pub async fn of_session(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     session_id: Uuid,
 ) -> sqlx::Result<Vec<FlightDetail>> {
@@ -336,13 +340,13 @@ pub async fn of_session(
         scope.user_id,
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// These flights, as far as they're in the scope, in takeoff order.
 pub async fn details(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     ids: &[Uuid],
 ) -> sqlx::Result<Vec<FlightDetail>> {
@@ -384,12 +388,16 @@ pub async fn details(
         scope.user_id,
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// The number of flights in the scope that pass the filter.
-pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Result<i64> {
+pub async fn count(
+    db: &mut PgConnection,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<i64> {
     sqlx::query_scalar!(
         r#"select count(*) as "count!"
            from flights
@@ -421,13 +429,17 @@ pub async fn count(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::R
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
 /// The ids of all flights in the scope that pass the filter, for a batch
 /// action on everything a filtered list shows.
-pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Result<Vec<Uuid>> {
+pub async fn ids(
+    db: &mut PgConnection,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar!(
         r#"select id
            from flights
@@ -460,7 +472,7 @@ pub async fn ids(db: &PgPool, scope: &FlightScope, filter: &Filter) -> sqlx::Res
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -478,7 +490,7 @@ pub struct Neighbours {
 /// given order; None if it isn't in that list. The order must stay the one
 /// `list` uses.
 pub async fn neighbours(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
     sort: &Sort,
@@ -547,7 +559,7 @@ pub async fn neighbours(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
@@ -563,7 +575,7 @@ pub struct Device {
 /// itself, so more can be added), and the chosen ones, also when they have no
 /// such flights, so a choice never disappears.
 pub async fn aircraft_of(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
 ) -> sqlx::Result<Vec<Device>> {
@@ -604,14 +616,14 @@ pub async fn aircraft_of(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// The controllers to offer in the logbook's filter, as `aircraft_of` does
 /// for drones.
 pub async fn controllers_of(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
 ) -> sqlx::Result<Vec<Device>> {
@@ -652,7 +664,7 @@ pub async fn controllers_of(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -666,7 +678,7 @@ pub struct GroupOption {
 /// The groups to offer in the logbook's filter, as `aircraft_of` does for
 /// drones: those with flights passing the other filters, and the chosen ones.
 pub async fn groups_in(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
 ) -> sqlx::Result<Vec<GroupOption>> {
@@ -706,7 +718,7 @@ pub async fn groups_in(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -721,7 +733,7 @@ pub struct AreaOption {
 /// drones: those with time of flights passing the other filters, and the
 /// chosen ones.
 pub async fn areas_in(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
 ) -> sqlx::Result<Vec<AreaOption>> {
@@ -760,7 +772,7 @@ pub async fn areas_in(
         filter.archived,
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -775,7 +787,7 @@ pub struct PilotOption {
 /// The pilots to offer in the lists' filter, as `aircraft_of` does for
 /// drones: those with flights passing the other filters, and the chosen ones.
 pub async fn pilots_in(
-    db: &PgPool,
+    db: &mut PgConnection,
     scope: &FlightScope,
     filter: &Filter,
 ) -> sqlx::Result<Vec<PilotOption>> {
@@ -815,12 +827,16 @@ pub async fn pilots_in(
         filter.area_ids.as_deref(),
         &scope.group_ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// Whether all these flights exist and are in the scope.
-pub async fn all_visible(db: &PgPool, scope: &FlightScope, ids: &[Uuid]) -> sqlx::Result<bool> {
+pub async fn all_visible(
+    db: &mut PgConnection,
+    scope: &FlightScope,
+    ids: &[Uuid],
+) -> sqlx::Result<bool> {
     let visible = sqlx::query_scalar!(
         r#"select count(*) as "count!" from flights
            where id = any($1)
@@ -832,23 +848,23 @@ pub async fn all_visible(db: &PgPool, scope: &FlightScope, ids: &[Uuid]) -> sqlx
         scope.user_id,
         &scope.group_ids,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await?;
     Ok(usize::try_from(visible).is_ok_and(|visible| visible == ids.len()))
 }
 
 /// The group of each of these flights, or None if one of them doesn't exist.
 /// The visibility check is the policy's job, not this query's.
-pub async fn groups_of(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Uuid>>> {
+pub async fn groups_of(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Option<Vec<Uuid>>> {
     let groups = sqlx::query_scalar!("select group_id from flights where id = any($1)", ids)
-        .fetch_all(db)
+        .fetch_all(&mut *db)
         .await?;
     Ok((groups.len() == ids.len()).then_some(groups))
 }
 
 /// Whether this is an active user who holds `flights.fly_for` in a group:
 /// someone who can be a flight's pilot.
-pub async fn flies(db: &PgPool, user_id: Uuid) -> sqlx::Result<bool> {
+pub async fn flies(db: &mut PgConnection, user_id: Uuid) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
         r#"select exists(
                select 1 from users u
@@ -861,41 +877,45 @@ pub async fn flies(db: &PgPool, user_id: Uuid) -> sqlx::Result<bool> {
         user_id,
         &policy::roles_granting(Permission::FlightsFlyFor),
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
-pub async fn group_exists(db: &PgPool, group_id: Uuid) -> sqlx::Result<bool> {
+pub async fn group_exists(db: &mut PgConnection, group_id: Uuid) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
         r#"select exists(select 1 from groups where id = $1) as "exists!""#,
         group_id,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
 /// Sets the pilot of these flights. They stay in their group and their
 /// session: sessions change only when someone changes them.
-pub async fn set_pilot(db: &PgPool, ids: &[Uuid], pilot_id: Option<Uuid>) -> sqlx::Result<u64> {
+pub async fn set_pilot(
+    db: &mut PgConnection,
+    ids: &[Uuid],
+    pilot_id: Option<Uuid>,
+) -> sqlx::Result<u64> {
     let result = sqlx::query!(
         "update flights set pilot_id = $2 where id = any($1)",
         ids,
         pilot_id,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(result.rows_affected())
 }
 
 /// Moves these flights to a group. They keep their pilot and
 /// their session.
-pub async fn set_group(db: &PgPool, ids: &[Uuid], group_id: Uuid) -> sqlx::Result<u64> {
+pub async fn set_group(db: &mut PgConnection, ids: &[Uuid], group_id: Uuid) -> sqlx::Result<u64> {
     let result = sqlx::query!(
         "update flights set group_id = $2 where id = any($1)",
         ids,
         group_id,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(result.rows_affected())
 }
@@ -903,7 +923,7 @@ pub async fn set_group(db: &PgPool, ids: &[Uuid], group_id: Uuid) -> sqlx::Resul
 /// Archives these flights and returns how many weren't archived yet. Archiving
 /// never changes a session, so it returns None without archiving any when one
 /// of them is in a session.
-pub async fn archive(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<u64>> {
+pub async fn archive(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Option<u64>> {
     let mut tx = sessions::db::locked(db).await?;
     let in_session = sqlx::query_scalar!(
         r#"select exists(select 1 from flights where id = any($1) and session_id is not null)
@@ -928,24 +948,24 @@ pub async fn archive(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Option<u64>> {
 
 /// Restores these archived flights, without a session, and returns how many
 /// were archived.
-pub async fn restore(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<u64> {
+pub async fn restore(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<u64> {
     let result = sqlx::query!(
         "update flights set archived_at = null where id = any($1) and archived_at is not null",
         ids,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(result.rows_affected())
 }
 
 /// Whether any of these flights is archived.
-pub async fn any_archived(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<bool> {
+pub async fn any_archived(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
         r#"select exists(select 1 from flights where id = any($1) and archived_at is not null)
                as "exists!""#,
         ids,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
@@ -961,7 +981,7 @@ pub struct PilotChoice {
 }
 
 /// Everyone who flies, by name.
-pub async fn pilot_choices(db: &PgPool) -> sqlx::Result<Vec<PilotChoice>> {
+pub async fn pilot_choices(db: &mut PgConnection) -> sqlx::Result<Vec<PilotChoice>> {
     sqlx::query_as!(
         PilotChoice,
         r#"select u.id, u.name,
@@ -977,7 +997,7 @@ pub async fn pilot_choices(db: &PgPool) -> sqlx::Result<Vec<PilotChoice>> {
            order by lower(u.name), u.id"#,
         &policy::roles_granting(Permission::FlightsFlyFor),
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -989,22 +1009,22 @@ pub struct GroupChoice {
 }
 
 /// These groups, by name.
-pub async fn groups_named(db: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<GroupChoice>> {
+pub async fn groups_named(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<GroupChoice>> {
     sqlx::query_as!(
         GroupChoice,
         "select id, name from groups where id = any($1) order by lower(name), id",
         ids,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
-pub async fn group_choices(db: &PgPool) -> sqlx::Result<Vec<GroupChoice>> {
+pub async fn group_choices(db: &mut PgConnection) -> sqlx::Result<Vec<GroupChoice>> {
     sqlx::query_as!(
         GroupChoice,
         "select id, name from groups order by lower(name), id",
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -1015,13 +1035,13 @@ mod tests {
 
     /// Adds a flight with the given group (None: General) and pilot, returning
     /// its id.
-    async fn flight(db: &PgPool, group: Option<Uuid>, pilot: Option<Uuid>) -> Uuid {
+    async fn flight(db: &mut PgConnection, group: Option<Uuid>, pilot: Option<Uuid>) -> Uuid {
         let raw_log: Uuid = sqlx::query_scalar(
             "insert into raw_logs (sha256, path, size_bytes)
              values (sha256(gen_random_uuid()::text::bytea), gen_random_uuid()::text, 0)
              returning id",
         )
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
         .unwrap();
         sqlx::query_scalar(
@@ -1034,16 +1054,16 @@ mod tests {
         .bind(raw_log)
         .bind(group)
         .bind(pilot)
-        .fetch_one(db)
+        .fetch_one(&mut *db)
         .await
         .unwrap()
     }
 
-    async fn insert_id(db: &PgPool, sql: &'static str) -> Uuid {
-        sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
+    async fn insert_id(db: &mut PgConnection, sql: &'static str) -> Uuid {
+        sqlx::query_scalar(sql).fetch_one(&mut *db).await.unwrap()
     }
 
-    async fn visible(db: &PgPool, scope: &FlightScope) -> Vec<Uuid> {
+    async fn visible(db: &mut PgConnection, scope: &FlightScope) -> Vec<Uuid> {
         let sort = Sort {
             key: SortKey::TakeoffAt,
             descending: false,
@@ -1059,7 +1079,7 @@ mod tests {
         ids.sort();
         // A single flight is found exactly when it is listed.
         let all: Vec<Uuid> = sqlx::query_scalar("select id from flights")
-            .fetch_all(db)
+            .fetch_all(&mut *db)
             .await
             .unwrap();
         for id in all {
@@ -1072,44 +1092,58 @@ mod tests {
     /// A member sees their own flights, also from an earlier group, and all
     /// flights of their current group; not other groups.
     #[sqlx::test]
-    async fn member_sees_own_and_group_flights(db: PgPool) {
-        let north = testing::group(&db, "North").await;
-        let south = testing::group(&db, "South").await;
-        let me = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let fellow = insert_id(&db, "insert into users (name) values ('B') returning id").await;
-        let other = insert_id(&db, "insert into users (name) values ('C') returning id").await;
+    async fn member_sees_own_and_group_flights(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let north = testing::group(&mut db, "North").await;
+        let south = testing::group(&mut db, "South").await;
+        let me = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let fellow = insert_id(
+            &mut db,
+            "insert into users (name) values ('B') returning id",
+        )
+        .await;
+        let other = insert_id(
+            &mut db,
+            "insert into users (name) values ('C') returning id",
+        )
+        .await;
         for (pilot, group) in [(me, north), (fellow, north), (other, south)] {
-            testing::join(&db, pilot, group).await;
+            testing::join(&mut db, pilot, group).await;
         }
 
         let mut expected = vec![
-            flight(&db, Some(north), Some(me)).await,
-            flight(&db, Some(north), Some(fellow)).await,
-            flight(&db, Some(north), None).await,
+            flight(&mut db, Some(north), Some(me)).await,
+            flight(&mut db, Some(north), Some(fellow)).await,
+            flight(&mut db, Some(north), None).await,
             // Flown for South before moving to North.
-            flight(&db, Some(south), Some(me)).await,
+            flight(&mut db, Some(south), Some(me)).await,
         ];
-        flight(&db, Some(south), Some(other)).await;
-        flight(&db, Some(south), None).await;
-        flight(&db, None, None).await;
+        flight(&mut db, Some(south), Some(other)).await;
+        flight(&mut db, Some(south), None).await;
+        flight(&mut db, None, None).await;
         expected.sort();
 
-        let member = testing::scope(&db, me).await;
-        assert_eq!(visible(&db, &member).await, expected);
+        let member = testing::scope(&mut db, me).await;
+        assert_eq!(visible(&mut db, &member).await, expected);
         let everything = FlightScope {
             all: true,
             user_id: me,
             group_ids: Vec::new(),
         };
-        assert_eq!(visible(&db, &everything).await.len(), 7);
+        assert_eq!(visible(&mut db, &everything).await.len(), 7);
     }
 
     /// A flight's neighbours and position agree with the list, for every
     /// order (ties and missing drones included) and with a filter; a flight
     /// the filter leaves out has none.
     #[sqlx::test]
-    async fn neighbours_follow_the_list(db: PgPool) {
-        let session = insert_id(&db, "insert into sessions (group_id) select id from groups where name = 'General' returning id").await;
+    async fn neighbours_follow_the_list(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let session = insert_id(&mut db, "insert into sessions (group_id) select id from groups where name = 'General' returning id").await;
         let mut grouped = None;
         for (air_time, serial, in_session) in [
             (60, Some("B"), false),
@@ -1118,7 +1152,7 @@ mod tests {
             (90, Some("B"), false),
             (30, None, false),
         ] {
-            let id = flight(&db, None, None).await;
+            let id = flight(&mut db, None, None).await;
             sqlx::query(
                 "update flights set air_time_s = $2, distance_m = $2 * 10, aircraft_serial = $3,
                      session_id = $4, takeoff_at = now() - make_interval(mins => $2)
@@ -1128,7 +1162,7 @@ mod tests {
             .bind(air_time)
             .bind(serial)
             .bind(in_session.then_some(session))
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
             if in_session {
@@ -1140,7 +1174,7 @@ mod tests {
             user_id: Uuid::nil(),
             group_ids: Vec::new(),
         };
-        let general = testing::general(&db).await;
+        let general = testing::general(&mut db).await;
         let keys = [
             SortKey::TakeoffAt,
             SortKey::AirTime,
@@ -1197,21 +1231,21 @@ mod tests {
             a_pilot,
         ] = filters();
         for (filter, expected) in [(&unknown, 5), (&a_pilot, 0)] {
-            assert_eq!(count(&db, &scope, filter).await.unwrap(), expected);
+            assert_eq!(count(&mut db, &scope, filter).await.unwrap(), expected);
         }
         let none = || Sort {
             key: SortKey::TakeoffAt,
             descending: true,
         };
         assert_eq!(
-            list(&db, &scope, &in_general, &none(), 100, 0)
+            list(&mut db, &scope, &in_general, &none(), 100, 0)
                 .await
                 .unwrap()
                 .len(),
             5
         );
         assert!(
-            list(&db, &scope, &a_group, &none(), 100, 0)
+            list(&mut db, &scope, &a_group, &none(), 100, 0)
                 .await
                 .unwrap()
                 .is_empty()
@@ -1220,9 +1254,13 @@ mod tests {
             key: SortKey::TakeoffAt,
             descending: true,
         };
-        let drones = list(&db, &scope, &by_drone, &all(), 100, 0).await.unwrap();
+        let drones = list(&mut db, &scope, &by_drone, &all(), 100, 0)
+            .await
+            .unwrap();
         assert_eq!(drones.len(), 3, "the flights of drones A and B");
-        let window = list(&db, &scope, &by_time, &all(), 100, 0).await.unwrap();
+        let window = list(&mut db, &scope, &by_time, &all(), 100, 0)
+            .await
+            .unwrap();
         let mut air_times: Vec<i32> = window.iter().map(|flight| flight.air_time_s).collect();
         air_times.sort_unstable();
         assert_eq!(air_times, [60, 60, 90]);
@@ -1232,26 +1270,26 @@ mod tests {
                 key: SortKey::TakeoffAt,
                 descending: true,
             };
-            let listed = list(&db, &scope, &filter, &newest_first, 100, 0)
+            let listed = list(&mut db, &scope, &filter, &newest_first, 100, 0)
                 .await
                 .unwrap()
                 .len() as i64;
-            assert_eq!(count(&db, &scope, &filter).await.unwrap(), listed);
+            assert_eq!(count(&mut db, &scope, &filter).await.unwrap(), listed);
             assert_eq!(
-                ids(&db, &scope, &filter).await.unwrap().len() as i64,
+                ids(&mut db, &scope, &filter).await.unwrap().len() as i64,
                 listed
             );
             for key in keys {
                 for descending in [false, true] {
                     let sort = Sort { key, descending };
-                    let ids: Vec<Uuid> = list(&db, &scope, &filter, &sort, 100, 0)
+                    let ids: Vec<Uuid> = list(&mut db, &scope, &filter, &sort, 100, 0)
                         .await
                         .unwrap()
                         .into_iter()
                         .map(|flight| flight.id)
                         .collect();
                     for (index, id) in ids.iter().enumerate() {
-                        let place = neighbours(&db, &scope, &filter, &sort, *id)
+                        let place = neighbours(&mut db, &scope, &filter, &sort, *id)
                             .await
                             .unwrap()
                             .unwrap();
@@ -1272,21 +1310,22 @@ mod tests {
             key: SortKey::TakeoffAt,
             descending: true,
         };
-        let left_out = neighbours(&db, &scope, &filter, &sort, grouped.unwrap()).await;
+        let left_out = neighbours(&mut db, &scope, &filter, &sort, grouped.unwrap()).await;
         assert!(left_out.unwrap().is_none());
     }
 
     /// The filters' options narrow by the other filters, not by their own
     /// choice, and keep what was chosen even without flights left.
     #[sqlx::test]
-    async fn filter_options_narrow_by_the_other_filters(db: PgPool) {
+    async fn filter_options_narrow_by_the_other_filters(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
         for (drone, controller) in [("A", "X"), ("B", "Y")] {
-            let id = flight(&db, None, None).await;
+            let id = flight(&mut db, None, None).await;
             sqlx::query("update flights set aircraft_serial = $2, rc_serial = $3 where id = $1")
                 .bind(id)
                 .bind(drone)
                 .bind(controller)
-                .execute(&db)
+                .execute(&mut *db)
                 .await
                 .unwrap();
         }
@@ -1305,9 +1344,12 @@ mod tests {
             rc_serials: list(&["X"]),
             ..Filter::default()
         };
-        assert_eq!(serials(aircraft_of(&db, &scope, &x).await.unwrap()), ["A"]);
         assert_eq!(
-            serials(controllers_of(&db, &scope, &x).await.unwrap()),
+            serials(aircraft_of(&mut db, &scope, &x).await.unwrap()),
+            ["A"]
+        );
+        assert_eq!(
+            serials(controllers_of(&mut db, &scope, &x).await.unwrap()),
             ["X", "Y"]
         );
 
@@ -1319,65 +1361,79 @@ mod tests {
             ..Filter::default()
         };
         assert_eq!(
-            serials(aircraft_of(&db, &scope, &x_and_b).await.unwrap()),
+            serials(aircraft_of(&mut db, &scope, &x_and_b).await.unwrap()),
             ["A", "B"]
         );
         assert_eq!(
-            serials(controllers_of(&db, &scope, &x_and_b).await.unwrap()),
+            serials(controllers_of(&mut db, &scope, &x_and_b).await.unwrap()),
             ["X", "Y"]
         );
     }
 
     /// A user without a group or flights sees nothing unless they see all.
     #[sqlx::test]
-    async fn user_without_group_sees_nothing(db: PgPool) {
-        let user = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        let group = testing::group(&db, "North").await;
-        flight(&db, Some(group), None).await;
-        flight(&db, None, None).await;
-        let member = testing::scope(&db, user).await;
-        assert!(visible(&db, &member).await.is_empty());
+    async fn user_without_group_sees_nothing(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let user = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let group = testing::group(&mut db, "North").await;
+        flight(&mut db, Some(group), None).await;
+        flight(&mut db, None, None).await;
+        let member = testing::scope(&mut db, user).await;
+        assert!(visible(&mut db, &member).await.is_empty());
     }
 
     /// A flight's pilot and group are independent: moving it, also to a
     /// group its pilot isn't in, keeps its pilot and its
     /// session, and setting its pilot keeps its group.
     #[sqlx::test]
-    async fn pilot_and_group_change_independently(db: PgPool) {
-        let north = testing::group(&db, "North").await;
-        let south = testing::group(&db, "South").await;
-        let pilot = insert_id(&db, "insert into users (name) values ('A') returning id").await;
-        testing::join(&db, pilot, south).await;
-        let flight = flight(&db, Some(north), Some(pilot)).await;
-        let session = sessions::db::split(&db, &[flight], north)
+    async fn pilot_and_group_change_independently(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let north = testing::group(&mut db, "North").await;
+        let south = testing::group(&mut db, "South").await;
+        let pilot = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        testing::join(&mut db, pilot, south).await;
+        let flight = flight(&mut db, Some(north), Some(pilot)).await;
+        let session = sessions::db::split(&mut db, &[flight], north)
             .await
             .unwrap()
             .unwrap();
-        let state = async || -> (Option<Uuid>, Option<Uuid>, Option<Uuid>) {
+        let state = async |db: &mut PgConnection| -> (Option<Uuid>, Option<Uuid>, Option<Uuid>) {
             sqlx::query_as("select pilot_id, group_id, session_id from flights where id = $1")
                 .bind(flight)
-                .fetch_one(&db)
+                .fetch_one(db)
                 .await
                 .unwrap()
         };
 
-        set_group(&db, &[flight], south).await.unwrap();
-        assert_eq!(state().await, (Some(pilot), Some(south), Some(session)));
-        set_group(&db, &[flight], north).await.unwrap();
-        set_pilot(&db, &[flight], None).await.unwrap();
-        assert_eq!(state().await, (None, Some(north), Some(session)));
+        set_group(&mut db, &[flight], south).await.unwrap();
+        assert_eq!(
+            state(&mut db).await,
+            (Some(pilot), Some(south), Some(session))
+        );
+        set_group(&mut db, &[flight], north).await.unwrap();
+        set_pilot(&mut db, &[flight], None).await.unwrap();
+        assert_eq!(state(&mut db).await, (None, Some(north), Some(session)));
     }
 
     /// Only someone active with `flights.fly_for` somewhere can be a pilot:
     /// a member with Pilot in a group, also a guest with only Pilot, but not
     /// an admin or an editor who doesn't fly, nor an archived pilot.
     #[sqlx::test]
-    async fn only_who_flies_can_be_a_pilot(db: PgPool) {
-        let north = testing::group(&db, "North").await;
-        let user = async |name: &str| -> Uuid {
+    async fn only_who_flies_can_be_a_pilot(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let north = testing::group(&mut db, "North").await;
+        let mut user = async |name: &str| -> Uuid {
             sqlx::query_scalar("insert into users (name) values ($1) returning id")
                 .bind(name)
-                .fetch_one(&db)
+                .fetch_one(&mut *db)
                 .await
                 .unwrap()
         };
@@ -1388,11 +1444,11 @@ mod tests {
             user("Editor").await,
             user("Archived").await,
         );
-        testing::join(&db, member, north).await;
-        testing::join(&db, archived, north).await;
+        testing::join(&mut db, member, north).await;
+        testing::join(&mut db, archived, north).await;
         sqlx::query("insert into organisation_roles (user_id, role) values ($1, 'admin')")
             .bind(admin)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
         sqlx::query(
@@ -1402,12 +1458,12 @@ mod tests {
         .bind(north)
         .bind(editor)
         .bind(guest)
-        .execute(&db)
+        .execute(&mut *db)
         .await
         .unwrap();
         sqlx::query("update users set archived_at = now() where id = $1")
             .bind(archived)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
 
@@ -1418,10 +1474,10 @@ mod tests {
             (editor, false),
             (archived, false),
         ] {
-            assert_eq!(flies(&db, who).await.unwrap(), expected);
+            assert_eq!(flies(&mut db, who).await.unwrap(), expected);
         }
         // The pilot list agrees, with the groups each flies for as a member.
-        let listed: Vec<(Uuid, Vec<Uuid>)> = pilot_choices(&db)
+        let listed: Vec<(Uuid, Vec<Uuid>)> = pilot_choices(&mut db)
             .await
             .unwrap()
             .into_iter()
@@ -1434,25 +1490,27 @@ mod tests {
     /// in a session is refused whole. Archived flights are left out of the
     /// list but for the archived filter; restoring brings them back.
     #[sqlx::test]
-    async fn archived_flights_leave_lists_but_never_sessions(db: PgPool) {
+    async fn archived_flights_leave_lists_but_never_sessions(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
         let (a, b, c) = (
-            flight(&db, None, None).await,
-            flight(&db, None, None).await,
-            flight(&db, None, None).await,
+            flight(&mut db, None, None).await,
+            flight(&mut db, None, None).await,
+            flight(&mut db, None, None).await,
         );
-        let session = sessions::db::split(&db, &[b], testing::general(&db).await)
+        let general = testing::general(&mut db).await;
+        let session = sessions::db::split(&mut db, &[b], general)
             .await
             .unwrap()
             .unwrap();
 
-        assert_eq!(archive(&db, &[a, b]).await.unwrap(), None);
-        assert!(!any_archived(&db, &[a, b]).await.unwrap());
-        assert_eq!(archive(&db, &[a, c]).await.unwrap(), Some(2));
-        assert_eq!(archive(&db, &[a]).await.unwrap(), Some(0));
+        assert_eq!(archive(&mut db, &[a, b]).await.unwrap(), None);
+        assert!(!any_archived(&mut db, &[a, b]).await.unwrap());
+        assert_eq!(archive(&mut db, &[a, c]).await.unwrap(), Some(2));
+        assert_eq!(archive(&mut db, &[a]).await.unwrap(), Some(0));
         let session_of_b: Option<Uuid> =
             sqlx::query_scalar("select session_id from flights where id = $1")
                 .bind(b)
-                .fetch_one(&db)
+                .fetch_one(&mut *db)
                 .await
                 .unwrap();
         assert_eq!(session_of_b, Some(session));
@@ -1462,7 +1520,7 @@ mod tests {
             user_id: Uuid::nil(),
             group_ids: Vec::new(),
         };
-        let listed = async |archived: bool| -> Vec<Uuid> {
+        let mut listed = async |archived: bool| -> Vec<Uuid> {
             let filter = Filter {
                 archived,
                 ..Filter::default()
@@ -1471,7 +1529,7 @@ mod tests {
                 key: SortKey::TakeoffAt,
                 descending: false,
             };
-            let mut ids: Vec<Uuid> = list(&db, &everything, &filter, &sort, 100, 0)
+            let mut ids: Vec<Uuid> = list(&mut db, &everything, &filter, &sort, 100, 0)
                 .await
                 .unwrap()
                 .into_iter()
@@ -1485,7 +1543,7 @@ mod tests {
         archived.sort();
         assert_eq!(listed(true).await, archived);
 
-        assert_eq!(restore(&db, &[a]).await.unwrap(), 1);
-        assert!(!any_archived(&db, &[a, b]).await.unwrap());
+        assert_eq!(restore(&mut db, &[a]).await.unwrap(), 1);
+        assert!(!any_archived(&mut db, &[a, b]).await.unwrap());
     }
 }

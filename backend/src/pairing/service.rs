@@ -1,10 +1,11 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{self, OpenCode, Paired, PilotChoice};
 use super::{Controller, parse_sha256};
+use crate::db::{System, Tenants};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -32,7 +33,12 @@ pub struct Created {
 
 /// Creates a single-use code that pairs a controller, valid for `hours`, with
 /// `controllers.pair` on the group the controller joins.
-pub async fn create(db: &PgPool, actor: &Actor, group: Uuid, hours: i64) -> ApiResult<Created> {
+pub async fn create(
+    db: &mut PgConnection,
+    actor: &Actor,
+    group: Uuid,
+    hours: i64,
+) -> ApiResult<Created> {
     if !actor.grants.anywhere(Permission::ControllersPair) {
         return Err(ApiError::Forbidden);
     }
@@ -68,13 +74,13 @@ pub async fn create(db: &PgPool, actor: &Actor, group: Uuid, hours: i64) -> ApiR
 
 /// The codes the actor may see and revoke that can still be used: their own,
 /// and those of the groups where they hold `controllers.manage`.
-pub async fn open_codes(db: &PgPool, actor: &Actor) -> ApiResult<Vec<OpenCode>> {
+pub async fn open_codes(db: &mut PgConnection, actor: &Actor) -> ApiResult<Vec<OpenCode>> {
     let scope = actor.grants.scope(Permission::ControllersManage);
     Ok(db::open_codes(db, actor.user_id, &scope).await?)
 }
 
 /// Revokes a code, so it can't pair a controller any more.
-pub async fn revoke(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
+pub async fn revoke(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<()> {
     // Used or expired just now, before the page caught up.
     let gone = || ApiError::Conflict("This code was used or has expired.".to_owned());
     let owner = db::code_owner(db, id).await?.ok_or_else(gone)?;
@@ -92,7 +98,8 @@ pub async fn revoke(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
 /// token it generated, which becomes its token. Needs no login: the code is
 /// the proof.
 pub async fn pair(
-    db: &PgPool,
+    system: &System,
+    tenants: &Tenants,
     code: &str,
     serial: &str,
     token_sha256_hex: &str,
@@ -105,15 +112,22 @@ pub async fn pair(
     }
     let token_sha256 = parse_sha256(token_sha256_hex)
         .ok_or_else(|| ApiError::Invalid("Send the token's SHA-256 in hex.".to_owned()))?;
-    db::use_code(db, &normalize(code), serial, &token_sha256)
+    let code = normalize(code);
+    let refused = || {
+        ApiError::Invalid(
+            "This code doesn’t pair a controller: it may have been used, revoked or have \
+             expired. Ask for a new one."
+                .to_owned(),
+        )
+    };
+    // The code says which organisation the controller joins.
+    let organisation = db::code_organisation(&mut *system.acquire().await?, &code)
         .await?
-        .ok_or_else(|| {
-            ApiError::Invalid(
-                "This code doesn’t pair a controller: it may have been used, revoked or have \
-                 expired. Ask for a new one."
-                    .to_owned(),
-            )
-        })
+        .ok_or_else(refused)?;
+    let mut db = tenants.connect(organisation).await?;
+    db::use_code(&mut db, &code, serial, &token_sha256)
+        .await?
+        .ok_or_else(refused)
 }
 
 /// The pilots a controller offers, from v1 of its API: whoever holds
@@ -130,7 +144,7 @@ pub struct Pilots {
     pub pilots: Vec<db::Pilot>,
 }
 
-pub async fn pilots(db: &PgPool, controller: &Controller) -> ApiResult<Pilots> {
+pub async fn pilots(db: &mut PgConnection, controller: &Controller) -> ApiResult<Pilots> {
     let mut groups = flights::db::group_choices(db).await?;
     if groups.len() == 1 {
         groups.clear();
@@ -152,7 +166,7 @@ pub struct PilotList {
     pub pilots: Vec<PilotChoice>,
 }
 
-pub async fn pilots_v0(db: &PgPool, controller: &Controller) -> ApiResult<PilotList> {
+pub async fn pilots_v0(db: &mut PgConnection, controller: &Controller) -> ApiResult<PilotList> {
     Ok(PilotList {
         team_id: Some(controller.group_id),
         pilots: db::pilot_choices(db).await?,
@@ -166,7 +180,7 @@ pub struct Destinations {
     pub groups: Vec<flights::db::GroupChoice>,
 }
 
-pub async fn destinations(db: &PgPool, actor: &Actor) -> ApiResult<Destinations> {
+pub async fn destinations(db: &mut PgConnection, actor: &Actor) -> ApiResult<Destinations> {
     let pair = actor.grants.scope(Permission::ControllersPair);
     let groups = if pair.all {
         flights::db::group_choices(db).await?
@@ -178,7 +192,7 @@ pub async fn destinations(db: &PgPool, actor: &Actor) -> ApiResult<Destinations>
 
 /// Unpairs a controller from the web app, with `controllers.manage` on its
 /// group; a controller can also unpair itself.
-pub async fn unpair(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<()> {
+pub async fn unpair(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<()> {
     // Refused before not found, so this doesn't tell whether it exists.
     if !actor.grants.anywhere(Permission::ControllersManage) {
         return Err(ApiError::Forbidden);

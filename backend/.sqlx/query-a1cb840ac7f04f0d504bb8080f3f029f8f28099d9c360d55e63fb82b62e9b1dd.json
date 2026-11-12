@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into batteries (serial) values ($1) on conflict (organisation_id, serial) do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a1cb840ac7f04f0d504bb8080f3f029f8f28099d9c360d55e63fb82b62e9b1dd"
+}

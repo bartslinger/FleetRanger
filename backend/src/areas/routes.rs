@@ -1,14 +1,14 @@
 //! Area API: everyone lists them, admins change them.
 
+use crate::db::Db;
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, State},
+    extract::{FromRef, Path},
     http::StatusCode,
     routing::{get, put},
 };
 use serde::Deserialize;
 use serde_json::Value;
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
@@ -23,7 +23,8 @@ use crate::{
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
 {
     Router::new()
         .route("/api/areas", get(list).post(create))
@@ -44,18 +45,14 @@ struct AreaChange {
     boundary: Option<Value>,
 }
 
-async fn list(actor: Actor, State(db): State<PgPool>) -> ApiResult<Json<Vec<Area>>> {
-    Ok(Json(service::list(&db, &actor).await?))
+async fn list(actor: Actor, mut db: Db) -> ApiResult<Json<Vec<Area>>> {
+    Ok(Json(service::list(&mut db, &actor).await?))
 }
 
-async fn create(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Json(input): Json<NewArea>,
-) -> ApiResult<Json<Saved>> {
+async fn create(actor: Actor, mut db: Db, Json(input): Json<NewArea>) -> ApiResult<Json<Saved>> {
     let drawing = Drawing::New(&input.name);
     Ok(Json(
-        service::save(&db, &actor, drawing, &input.boundary).await?,
+        service::save(&mut db, &actor, drawing, &input.boundary).await?,
     ))
 }
 
@@ -63,16 +60,16 @@ async fn create(
 /// name changes no figures.
 async fn update(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(change): Json<AreaChange>,
 ) -> ApiResult<Json<Option<Saved>>> {
     match (change.boundary, change.name) {
         (Some(boundary), None) => Ok(Json(Some(
-            service::save(&db, &actor, Drawing::Reshape(id), &boundary).await?,
+            service::save(&mut db, &actor, Drawing::Reshape(id), &boundary).await?,
         ))),
         (None, Some(name)) => {
-            service::rename(&db, &actor, id, &name).await?;
+            service::rename(&mut db, &actor, id, &name).await?;
             Ok(Json(None))
         }
         _ => Err(ApiError::Invalid(
@@ -81,11 +78,7 @@ async fn update(
     }
 }
 
-async fn delete(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<StatusCode> {
-    service::delete(&db, &actor, id).await?;
+async fn delete(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    service::delete(&mut db, &actor, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

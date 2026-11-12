@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update oauth_clients set name = $2, redirect_uris = $3\n         where id = $1 and organisation_id is not null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a1498bf4ad2767da285fd937e970e72328ee6563a4ca0e9ec2ca4160bb5e0ea9"
+}

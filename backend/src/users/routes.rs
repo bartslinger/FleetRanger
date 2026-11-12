@@ -1,13 +1,13 @@
 //! User API, for admins.
 
+use crate::db::Db;
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, Query, State},
+    extract::{FromRef, Path, Query},
     http::StatusCode,
     routing::{get, post},
 };
 use serde::Deserialize;
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
@@ -19,7 +19,8 @@ use crate::{auth::Actor, error::ApiResult};
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
 {
     Router::new()
         .route("/api/users", get(list).post(create))
@@ -56,58 +57,44 @@ impl From<Body> for UserInput {
 
 async fn list(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<Vec<User>>> {
-    Ok(Json(service::list(&db, &actor, query.archived).await?))
+    Ok(Json(service::list(&mut db, &actor, query.archived).await?))
 }
 
-async fn show(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<User>> {
-    Ok(Json(service::get(&db, &actor, id).await?))
+async fn show(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<Json<User>> {
+    Ok(Json(service::get(&mut db, &actor, id).await?))
 }
 
-async fn create(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Json(body): Json<Body>,
-) -> ApiResult<Json<User>> {
-    Ok(Json(service::create(&db, &actor, &body.into()).await?))
+async fn create(actor: Actor, mut db: Db, Json(body): Json<Body>) -> ApiResult<Json<User>> {
+    Ok(Json(service::create(&mut db, &actor, &body.into()).await?))
 }
 
 async fn update(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(body): Json<Body>,
 ) -> ApiResult<Json<User>> {
-    Ok(Json(service::update(&db, &actor, id, &body.into()).await?))
+    Ok(Json(
+        service::update(&mut db, &actor, id, &body.into()).await?,
+    ))
 }
 
-async fn remove(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<StatusCode> {
-    service::delete(&db, &actor, id).await?;
+async fn remove(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    service::delete(&mut db, &actor, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn archive(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<User>> {
-    Ok(Json(service::set_archived(&db, &actor, id, true).await?))
+async fn archive(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<Json<User>> {
+    Ok(Json(
+        service::set_archived(&mut db, &actor, id, true).await?,
+    ))
 }
 
-async fn restore(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<User>> {
-    Ok(Json(service::set_archived(&db, &actor, id, false).await?))
+async fn restore(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<Json<User>> {
+    Ok(Json(
+        service::set_archived(&mut db, &actor, id, false).await?,
+    ))
 }

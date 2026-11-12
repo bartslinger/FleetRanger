@@ -1,5 +1,5 @@
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{self, Deleted, Group, Member};
@@ -18,12 +18,12 @@ pub struct GroupDetail {
 }
 
 /// Every group, for whoever manages groups on the whole organisation.
-pub async fn list(db: &PgPool, actor: &Actor) -> ApiResult<Vec<Group>> {
+pub async fn list(db: &mut PgConnection, actor: &Actor) -> ApiResult<Vec<Group>> {
     policy::require(actor, Permission::GroupsManage, None)?;
     Ok(db::list(db, None).await?)
 }
 
-pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<GroupDetail> {
+pub async fn get(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<GroupDetail> {
     policy::require(actor, Permission::GroupsManage, Some(id))?;
     let group = db::list(db, Some(id))
         .await?
@@ -35,14 +35,19 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<GroupDetail>
     })
 }
 
-pub async fn create(db: &PgPool, actor: &Actor, name: &str) -> ApiResult<GroupDetail> {
+pub async fn create(db: &mut PgConnection, actor: &Actor, name: &str) -> ApiResult<GroupDetail> {
     policy::require(actor, Permission::GroupsManage, None)?;
     let name = error::name(name)?;
     let id = db::insert(db, &name).await.map_err(name_taken)?;
     get(db, actor, id).await
 }
 
-pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResult<GroupDetail> {
+pub async fn rename(
+    db: &mut PgConnection,
+    actor: &Actor,
+    id: Uuid,
+    name: &str,
+) -> ApiResult<GroupDetail> {
     policy::require(actor, Permission::GroupsManage, Some(id))?;
     let name = error::name(name)?;
     if !db::rename(db, id, &name).await.map_err(name_taken)? {
@@ -56,7 +61,7 @@ pub async fn rename(db: &PgPool, actor: &Actor, id: Uuid, name: &str) -> ApiResu
 /// has (Admin is on the whole organisation only). Taking someone out of a
 /// group is `remove_member`.
 pub async fn set_roles(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     id: Uuid,
     user_id: Uuid,
@@ -78,7 +83,7 @@ pub async fn set_roles(
 }
 
 pub async fn remove_member(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     id: Uuid,
     user_id: Uuid,
@@ -93,7 +98,12 @@ pub async fn remove_member(
 /// Deletes an empty group, or with `move_to` moves everything in it to
 /// another group first. Moving needs the move permissions on both sides, as
 /// moving each item would. The last group stays: everything is in a group.
-pub async fn delete(db: &PgPool, actor: &Actor, id: Uuid, move_to: Option<Uuid>) -> ApiResult<()> {
+pub async fn delete(
+    db: &mut PgConnection,
+    actor: &Actor,
+    id: Uuid,
+    move_to: Option<Uuid>,
+) -> ApiResult<()> {
     policy::require(actor, Permission::GroupsManage, Some(id))?;
     if let Some(target) = move_to {
         if target == id {
@@ -162,19 +172,21 @@ mod tests {
     /// A membership always has a role: adding someone without one is
     /// refused, as is Admin, which is on the whole organisation only.
     #[sqlx::test]
-    async fn a_member_needs_a_group_role(db: PgPool) {
-        let admin = testing::actor(&db, testing::user(&db, "A", &["admin"]).await).await;
-        let pilot = testing::user(&db, "B", &[]).await;
-        let north = testing::group(&db, "North").await;
+    async fn a_member_needs_a_group_role(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let admin = testing::user(&mut db, "A", &["admin"]).await;
+        let admin = testing::actor(&mut db, admin).await;
+        let pilot = testing::user(&mut db, "B", &[]).await;
+        let north = testing::group(&mut db, "North").await;
 
         for roles in [vec![], vec!["admin".to_owned()]] {
             assert!(matches!(
-                set_roles(&db, &admin, north, pilot, &roles, &[]).await,
+                set_roles(&mut db, &admin, north, pilot, &roles, &[]).await,
                 Err(ApiError::Invalid(_))
             ));
         }
         let roles = ["editor", "pilot", "pilot"].map(str::to_owned);
-        let Ok(members) = set_roles(&db, &admin, north, pilot, &roles, &[]).await else {
+        let Ok(members) = set_roles(&mut db, &admin, north, pilot, &roles, &[]).await else {
             panic!("a member with roles is added");
         };
         assert_eq!(members[0].roles, ["pilot", "editor"]);
@@ -183,41 +195,43 @@ mod tests {
     /// Only an empty group is deleted, unless everything moves along, which
     /// needs the move permissions on both groups; the last group stays.
     #[sqlx::test]
-    async fn a_group_is_deleted_empty_or_with_everything_moved(db: PgPool) {
-        let admin = testing::actor(&db, testing::user(&db, "A", &["admin"]).await).await;
-        let north = testing::group(&db, "North").await;
-        let south = testing::group(&db, "South").await;
-        let editor = testing::user(&db, "B", &[]).await;
-        testing::join(&db, editor, north).await;
-        testing::join(&db, editor, south).await;
-        let editor = testing::actor(&db, editor).await;
+    async fn a_group_is_deleted_empty_or_with_everything_moved(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let admin = testing::user(&mut db, "A", &["admin"]).await;
+        let admin = testing::actor(&mut db, admin).await;
+        let north = testing::group(&mut db, "North").await;
+        let south = testing::group(&mut db, "South").await;
+        let editor = testing::user(&mut db, "B", &[]).await;
+        testing::join(&mut db, editor, north).await;
+        testing::join(&mut db, editor, south).await;
+        let editor = testing::actor(&mut db, editor).await;
         sqlx::query("insert into aircraft (serial, group_id) values ('TESTDRONE', $1)")
             .bind(north)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
 
         assert!(matches!(
-            delete(&db, &admin, north, None).await,
+            delete(&mut db, &admin, north, None).await,
             Err(ApiError::Conflict(_))
         ));
         assert!(matches!(
-            delete(&db, &editor, north, Some(south)).await,
+            delete(&mut db, &editor, north, Some(south)).await,
             Err(ApiError::Forbidden)
         ));
-        assert!(delete(&db, &admin, north, Some(south)).await.is_ok());
+        assert!(delete(&mut db, &admin, north, Some(south)).await.is_ok());
         let drone: Uuid =
             sqlx::query_scalar("select group_id from aircraft where serial = 'TESTDRONE'")
-                .fetch_one(&db)
+                .fetch_one(&mut *db)
                 .await
                 .unwrap();
         assert_eq!(drone, south);
-        assert!(!db::exists(&db, north).await.unwrap());
+        assert!(!db::exists(&mut db, north).await.unwrap());
 
-        let general = testing::general(&db).await;
-        assert!(delete(&db, &admin, general, None).await.is_ok());
+        let general = testing::general(&mut db).await;
+        assert!(delete(&mut db, &admin, general, None).await.is_ok());
         assert!(matches!(
-            delete(&db, &admin, south, None).await,
+            delete(&mut db, &admin, south, None).await,
             Err(ApiError::Conflict(_))
         ));
     }

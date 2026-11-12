@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::Connection as _;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::flights::db::GroupChoice;
@@ -9,7 +10,7 @@ use crate::policy::{self, Permission, Scope};
 /// Adds a pairing code, and deletes expired ones. Returns its id, or None if
 /// the code is already taken, so the caller can try another.
 pub async fn add_code(
-    db: &PgPool,
+    db: &mut PgConnection,
     code: &str,
     created_by: Uuid,
     group_id: Uuid,
@@ -50,7 +51,7 @@ pub struct OpenCode {
 /// The codes that can still be used of this creator, and of the groups in
 /// the scope; those expiring first come first.
 pub async fn open_codes(
-    db: &PgPool,
+    db: &mut PgConnection,
     created_by: Uuid,
     scope: &Scope,
 ) -> sqlx::Result<Vec<OpenCode>> {
@@ -67,7 +68,7 @@ pub async fn open_codes(
         scope.all,
         &scope.groups,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -78,27 +79,27 @@ pub struct CodeOwner {
 }
 
 /// None if there is no such code.
-pub async fn code_owner(db: &PgPool, id: Uuid) -> sqlx::Result<Option<CodeOwner>> {
+pub async fn code_owner(db: &mut PgConnection, id: Uuid) -> sqlx::Result<Option<CodeOwner>> {
     sqlx::query_as!(
         CodeOwner,
         "select created_by, group_id from pairing_codes where id = $1",
         id,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
 /// The group a controller is in; None if there is no such controller.
-pub async fn controller_group(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Uuid>> {
+pub async fn controller_group(db: &mut PgConnection, id: Uuid) -> sqlx::Result<Option<Uuid>> {
     sqlx::query_scalar!("select group_id from remote_controllers where id = $1", id)
-        .fetch_optional(db)
+        .fetch_optional(&mut *db)
         .await
 }
 
 /// Deletes a code. Returns false if there is no such code.
-pub async fn revoke(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+pub async fn revoke(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     let result = sqlx::query!("delete from pairing_codes where id = $1", id)
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     Ok(result.rows_affected() == 1)
 }
@@ -109,12 +110,23 @@ pub struct Paired {
     pub group: Option<GroupChoice>,
 }
 
+/// The organisation of a code that can still be used (with `System`: the
+/// controller has only the code).
+pub async fn code_organisation(db: &mut PgConnection, code: &str) -> sqlx::Result<Option<Uuid>> {
+    sqlx::query_scalar!(
+        "select organisation_id from pairing_codes where code = $1 and expires_at > now()",
+        code,
+    )
+    .fetch_optional(&mut *db)
+    .await
+}
+
 /// Uses a code: it's deleted, and the controller with this serial (registered
 /// now if it's new) gets the token and the code's group. Returns None if the
 /// code doesn't exist, has expired, or its creator has been archived since.
 /// A deleted group takes its codes with it.
 pub async fn use_code(
-    db: &PgPool,
+    db: &mut PgConnection,
     code: &str,
     serial: &str,
     token_sha256: &[u8],
@@ -142,7 +154,7 @@ pub async fn use_code(
     sqlx::query!(
         "insert into remote_controllers (serial, group_id, token_sha256)
          values ($1, $2, $3)
-         on conflict (serial) do update set
+         on conflict (organisation_id, serial) do update set
              group_id = excluded.group_id,
              token_sha256 = excluded.token_sha256",
         serial,
@@ -160,22 +172,29 @@ pub struct Authenticated {
     pub id: Uuid,
     pub serial: String,
     pub group_id: Uuid,
+    pub organisation_id: Uuid,
 }
 
-pub async fn by_token(db: &PgPool, token_sha256: &[u8]) -> sqlx::Result<Option<Authenticated>> {
+/// The controller with this token (with `System`: the token says which
+/// organisation the request is in).
+pub async fn by_token(
+    db: &mut PgConnection,
+    token_sha256: &[u8],
+) -> sqlx::Result<Option<Authenticated>> {
     sqlx::query_as!(
         Authenticated,
-        "select id, serial, group_id from remote_controllers where token_sha256 = $1",
+        "select id, serial, group_id, organisation_id from remote_controllers
+         where token_sha256 = $1",
         token_sha256,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
 /// A controller's status: its app, and when it last looked for logs on an
 /// allowed connection (None for never).
 pub async fn status(
-    db: &PgPool,
+    db: &mut PgConnection,
     id: Uuid,
     app_version: &str,
     last_sync: Option<DateTime<Utc>>,
@@ -186,19 +205,19 @@ pub async fn status(
         app_version,
         last_sync,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
 
 /// Unpairs a controller: its token stops working. Returns false if there is no
 /// such controller.
-pub async fn unpair(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+pub async fn unpair(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     let result = sqlx::query!(
         "update remote_controllers set token_sha256 = null where id = $1",
         id
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(result.rows_affected() == 1)
 }
@@ -216,7 +235,7 @@ pub struct Pilot {
 
 /// Active users who hold `flights.fly_for` anywhere, by name; their groups by
 /// name too.
-pub async fn pilots(db: &PgPool) -> sqlx::Result<Vec<Pilot>> {
+pub async fn pilots(db: &mut PgConnection) -> sqlx::Result<Vec<Pilot>> {
     sqlx::query_as!(
         Pilot,
         r#"select u.id, u.name,
@@ -244,7 +263,7 @@ pub async fn pilots(db: &PgPool) -> sqlx::Result<Vec<Pilot>> {
            order by lower(u.name), u.id"#,
         &policy::roles_granting(Permission::FlightsFlyFor),
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -259,7 +278,7 @@ pub struct PilotChoice {
 }
 
 /// Active users by name, once per group they fly for.
-pub async fn pilot_choices(db: &PgPool) -> sqlx::Result<Vec<PilotChoice>> {
+pub async fn pilot_choices(db: &mut PgConnection) -> sqlx::Result<Vec<PilotChoice>> {
     sqlx::query_as!(
         PilotChoice,
         "select u.id, u.name, g.id as team_id, g.name as team_name
@@ -271,7 +290,7 @@ pub async fn pilot_choices(db: &PgPool) -> sqlx::Result<Vec<PilotChoice>> {
          order by lower(u.name), u.id, lower(g.name)",
         &policy::roles_granting(Permission::FlightsFlyFor),
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
@@ -281,36 +300,37 @@ mod tests {
 
     use super::*;
 
-    async fn insert(db: &PgPool, sql: &'static str) -> Uuid {
-        sqlx::query_scalar(sql).fetch_one(db).await.unwrap()
+    async fn insert(db: &mut PgConnection, sql: &'static str) -> Uuid {
+        sqlx::query_scalar(sql).fetch_one(&mut *db).await.unwrap()
     }
 
     /// A code pairs one controller, with the token whose hash it sent, in the
     /// code's team; it can't be used twice, nor once expired, nor once its
     /// creator was archived.
     #[sqlx::test]
-    async fn a_code_pairs_one_controller(db: PgPool) {
-        let team = crate::testing::group(&db, "North").await;
+    async fn a_code_pairs_one_controller(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let team = crate::testing::group(&mut db, "North").await;
         let user = insert(
-            &db,
+            &mut db,
             "insert into users (name) values ('Test user') returning id",
         )
         .await;
         let soon = Utc::now() + Duration::hours(1);
         assert!(
-            add_code(&db, "AAAA2222", user, team, soon)
+            add_code(&mut db, "AAAA2222", user, team, soon)
                 .await
                 .unwrap()
                 .is_some()
         );
         assert!(
-            add_code(&db, "AAAA2222", user, team, soon)
+            add_code(&mut db, "AAAA2222", user, team, soon)
                 .await
                 .unwrap()
                 .is_none()
         );
 
-        let paired = use_code(&db, "AAAA2222", "RC1", b"token-hash")
+        let paired = use_code(&mut db, "AAAA2222", "RC1", b"token-hash")
             .await
             .unwrap();
         assert_eq!(
@@ -318,12 +338,12 @@ mod tests {
             Some("North")
         );
         assert!(
-            use_code(&db, "AAAA2222", "RC2", b"other")
+            use_code(&mut db, "AAAA2222", "RC2", b"other")
                 .await
                 .unwrap()
                 .is_none()
         );
-        let controller = by_token(&db, b"token-hash").await.unwrap().unwrap();
+        let controller = by_token(&mut db, b"token-hash").await.unwrap().unwrap();
         assert_eq!(controller.serial, "RC1");
         assert_eq!(controller.group_id, team);
 
@@ -334,44 +354,47 @@ mod tests {
         )
         .bind(user)
         .bind(team)
-        .execute(&db)
+        .execute(&mut *db)
         .await
         .unwrap();
         assert!(
-            use_code(&db, "BBBB3333", "RC3", b"late")
+            use_code(&mut db, "BBBB3333", "RC3", b"late")
                 .await
                 .unwrap()
                 .is_none()
         );
 
-        add_code(&db, "CCCC4444", user, team, soon).await.unwrap();
+        add_code(&mut db, "CCCC4444", user, team, soon)
+            .await
+            .unwrap();
         sqlx::query("update users set archived_at = now() where id = $1")
             .bind(user)
-            .execute(&db)
+            .execute(&mut *db)
             .await
             .unwrap();
         assert!(
-            use_code(&db, "CCCC4444", "RC4", b"gone")
+            use_code(&mut db, "CCCC4444", "RC4", b"gone")
                 .await
                 .unwrap()
                 .is_none()
         );
 
-        assert!(unpair(&db, controller.id).await.unwrap());
-        assert!(by_token(&db, b"token-hash").await.unwrap().is_none());
+        assert!(unpair(&mut db, controller.id).await.unwrap());
+        assert!(by_token(&mut db, b"token-hash").await.unwrap().is_none());
     }
 
     /// The controller's pilot list holds only people who fly, each once, with
     /// the groups they fly for; not a group where they only view.
     #[sqlx::test]
-    async fn the_pilot_list_holds_who_flies_with_their_groups(db: PgPool) {
+    async fn the_pilot_list_holds_who_flies_with_their_groups(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
         use crate::testing::{group, join, user};
-        let north = group(&db, "North").await;
-        let south = group(&db, "South").await;
-        let member = user(&db, "Test member pilot", &[]).await;
-        join(&db, member, north).await;
+        let north = group(&mut db, "North").await;
+        let south = group(&mut db, "South").await;
+        let member = user(&mut db, "Test member pilot", &[]).await;
+        join(&mut db, member, north).await;
         // Pilot in South, and a viewer in North.
-        let south_pilot = user(&db, "Test South pilot", &[]).await;
+        let south_pilot = user(&mut db, "Test South pilot", &[]).await;
         sqlx::query(
             "insert into group_members (group_id, user_id, role)
              values ($1, $3, 'pilot'), ($2, $3, 'viewer')",
@@ -379,21 +402,21 @@ mod tests {
         .bind(south)
         .bind(north)
         .bind(south_pilot)
-        .execute(&db)
+        .execute(&mut *db)
         .await
         .unwrap();
-        user(&db, "Test admin", &["admin"]).await;
-        let viewer = user(&db, "Test viewer", &[]).await;
+        user(&mut db, "Test admin", &["admin"]).await;
+        let viewer = user(&mut db, "Test viewer", &[]).await;
         sqlx::query(
             "insert into group_members (group_id, user_id, role) values ($1, $2, 'viewer')",
         )
         .bind(north)
         .bind(viewer)
-        .execute(&db)
+        .execute(&mut *db)
         .await
         .unwrap();
 
-        let pilots = pilots(&db).await.unwrap();
+        let pilots = pilots(&mut db).await.unwrap();
         let found: Vec<_> = pilots
             .iter()
             .map(|p| (p.id, p.groups.clone(), p.other_groups.clone()))

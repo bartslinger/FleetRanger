@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "insert into oauth_clients (name, redirect_uris, trusted) values ($1, $2, true)\n         returning id",
+  "query": "insert into oauth_clients (organisation_id, name, redirect_uris)\n         values (current_setting('app.organisation_id')::uuid, $1, $2)\n         returning id",
   "describe": {
     "columns": [
       {
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "5627887112423177ae54252f6511e16357ea888d19164107be33e2a077d5a020"
+  "hash": "5c8982767ed12e9336c1fd5c4b14e004731a1efce4f36fe7ca134920029e3bcb"
 }

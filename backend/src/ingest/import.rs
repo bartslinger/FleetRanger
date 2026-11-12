@@ -3,16 +3,17 @@
 //! flights go to the group given, which is needed only when there is more
 //! than one (user's decision, 2026-11-11): nothing falls back to a default.
 
+use crate::db::Db;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::db;
 
-pub async fn run(db: &PgPool, log_dir: &Path, group: Option<&str>) -> Result<()> {
+pub async fn run(db: &mut Db, log_dir: &Path, group: Option<&str>) -> Result<()> {
+    let log_dir = &super::organisation_dir(log_dir, db.organisation_id);
     let group_id = choose_group(&db::groups(db).await?, group)?;
     let mut paths = Vec::new();
     collect_logs(log_dir, &mut paths)

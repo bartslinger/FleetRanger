@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::Context;
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{self, Stored};
@@ -25,7 +25,7 @@ pub struct Chosen {
 /// Checks an uploaded log against the hash the controller computed, and
 /// stores it unless the same content is stored already.
 pub async fn receive(
-    db: &PgPool,
+    db: &mut PgConnection,
     log_dir: &Path,
     controller: &Controller,
     file_name: &str,
@@ -78,7 +78,7 @@ pub const MAX_HASHES: usize = 1000;
 /// Which of these logs, by SHA-256 in hex, aren't stored yet: the controller
 /// asks before uploading, so it only sends what's missing. Answers in the
 /// controller's own spelling of each hash.
-pub async fn missing(db: &PgPool, sha256s_hex: Vec<String>) -> ApiResult<Vec<String>> {
+pub async fn missing(db: &mut PgConnection, sha256s_hex: Vec<String>) -> ApiResult<Vec<String>> {
     if sha256s_hex.len() > MAX_HASHES {
         return Err(ApiError::Invalid(format!(
             "Ask about at most {MAX_HASHES} logs at a time."

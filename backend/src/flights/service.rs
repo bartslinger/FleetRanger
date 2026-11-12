@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::db::{
@@ -16,7 +16,7 @@ use crate::{
 /// One page of the flights the actor may see that pass the filter, and how
 /// many there are in all.
 pub async fn list(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     filter: &Filter,
     sort: &Sort,
@@ -30,7 +30,7 @@ pub async fn list(
 }
 
 /// The ids of all flights the actor may see that pass the filter.
-pub async fn ids(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<Vec<Uuid>> {
+pub async fn ids(db: &mut PgConnection, actor: &Actor, filter: &Filter) -> ApiResult<Vec<Uuid>> {
     let scope = policy::flight_scope(actor);
     Ok(db::ids(db, &scope, filter).await?)
 }
@@ -38,7 +38,7 @@ pub async fn ids(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<Vec<U
 /// A flight's neighbours in the list the actor pages through with this filter
 /// and order. Not found if the flight isn't in that list.
 pub async fn neighbours(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     filter: &Filter,
     sort: &Sort,
@@ -61,7 +61,7 @@ pub struct Devices {
     pub areas: Vec<AreaOption>,
 }
 
-pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<Devices> {
+pub async fn devices(db: &mut PgConnection, actor: &Actor, filter: &Filter) -> ApiResult<Devices> {
     let scope = policy::flight_scope(actor);
     Ok(Devices {
         aircraft: db::aircraft_of(db, &scope, filter).await?,
@@ -80,7 +80,7 @@ pub async fn devices(db: &PgPool, actor: &Actor, filter: &Filter) -> ApiResult<D
 
 /// A flight the actor may see. One they may not see is not found, so its
 /// existence isn't revealed.
-pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<FlightDetail> {
+pub async fn get(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<FlightDetail> {
     let scope = policy::flight_scope(actor);
     let mut flight = db::get(db, &scope, id).await?.ok_or(ApiError::NotFound)?;
     link_equipment(actor, std::slice::from_mut(&mut flight));
@@ -90,7 +90,7 @@ pub async fn get(db: &PgPool, actor: &Actor, id: Uuid) -> ApiResult<FlightDetail
 /// The first takeoff of a session's flights the actor may see, as its page
 /// starts with; None if they see none.
 pub async fn session_takeoff(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     session_id: Uuid,
 ) -> ApiResult<Option<DateTime<Utc>>> {
@@ -132,7 +132,7 @@ const CHOOSING_GROUPS: [Permission; 4] = [
     Permission::EquipmentMove,
 ];
 
-pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
+pub async fn choices(db: &mut PgConnection, actor: &Actor) -> ApiResult<Choices> {
     let pilots = if actor.grants.anywhere(Permission::FlightsSetPilot) {
         db::pilot_choices(db).await?
     } else {
@@ -152,7 +152,7 @@ pub async fn choices(db: &PgPool, actor: &Actor) -> ApiResult<Choices> {
 /// (anywhere), or unknown. The flights stay in their group. Returns how many
 /// changed.
 pub async fn set_pilot(
-    db: &PgPool,
+    db: &mut PgConnection,
     actor: &Actor,
     ids: &[Uuid],
     pilot_id: Option<Uuid>,
@@ -169,7 +169,12 @@ pub async fn set_pilot(
 }
 
 /// Moves a batch of flights to a group. They keep their pilot.
-pub async fn set_group(db: &PgPool, actor: &Actor, ids: &[Uuid], group_id: Uuid) -> ApiResult<u64> {
+pub async fn set_group(
+    db: &mut PgConnection,
+    actor: &Actor,
+    ids: &[Uuid],
+    group_id: Uuid,
+) -> ApiResult<u64> {
     let ids = distinct(ids)?;
     // Refused before not found, so this doesn't tell whether flights exist.
     let flight_groups = db::groups_of(db, &ids).await?;
@@ -190,7 +195,7 @@ pub async fn set_group(db: &PgPool, actor: &Actor, ids: &[Uuid], group_id: Uuid)
 /// Archives a batch of flights, all or none: they leave every list and total.
 /// Only flights without a session can be archived, so archiving never changes
 /// a session, perhaps another group's. Returns how many weren't archived yet.
-pub async fn archive(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
+pub async fn archive(db: &mut PgConnection, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
     let ids = archivable(db, actor, ids).await?;
     db::archive(db, &ids).await?.ok_or_else(|| {
         ApiError::Conflict(
@@ -202,14 +207,14 @@ pub async fn archive(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64>
 
 /// Restores a batch of archived flights, without a session. Returns how many
 /// were archived.
-pub async fn restore(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
+pub async fn restore(db: &mut PgConnection, actor: &Actor, ids: &[Uuid]) -> ApiResult<u64> {
     let ids = archivable(db, actor, ids).await?;
     Ok(db::restore(db, &ids).await?)
 }
 
 /// These flights, once, if they all exist and the actor may archive and
 /// restore them.
-async fn archivable(db: &PgPool, actor: &Actor, ids: &[Uuid]) -> ApiResult<Vec<Uuid>> {
+async fn archivable(db: &mut PgConnection, actor: &Actor, ids: &[Uuid]) -> ApiResult<Vec<Uuid>> {
     let ids = distinct(ids)?;
     let flight_groups = db::groups_of(db, &ids).await?.ok_or(ApiError::NotFound)?;
     policy::change_flights(&actor.grants, Permission::FlightsArchive, &flight_groups)?;

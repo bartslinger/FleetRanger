@@ -1,14 +1,14 @@
 //! Session API. A session is visible when one of its flights is, and shows
 //! only the flights the policy allows.
 
+use crate::db::Db;
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, Query, State},
+    extract::{FromRef, Path, Query},
     http::StatusCode,
     routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use chrono::{DateTime, Utc};
@@ -28,7 +28,8 @@ const MAX_PAGE_SIZE: u32 = 100;
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    PgPool: FromRef<S>,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
 {
     Router::new()
         .route("/api/sessions", get(list).post(create))
@@ -62,21 +63,13 @@ struct Changed {
     id: Uuid,
 }
 
-async fn merge(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Json(change): Json<Merge>,
-) -> ApiResult<Json<Changed>> {
-    let id = service::merge(&db, &actor, &change.session_ids).await?;
+async fn merge(actor: Actor, mut db: Db, Json(change): Json<Merge>) -> ApiResult<Json<Changed>> {
+    let id = service::merge(&mut db, &actor, &change.session_ids).await?;
     Ok(Json(Changed { id }))
 }
 
-async fn split(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Json(change): Json<Split>,
-) -> ApiResult<Json<Changed>> {
-    let id = service::split(&db, &actor, &change.flight_ids).await?;
+async fn split(actor: Actor, mut db: Db, Json(change): Json<Split>) -> ApiResult<Json<Changed>> {
+    let id = service::split(&mut db, &actor, &change.flight_ids).await?;
     Ok(Json(Changed { id }))
 }
 
@@ -97,10 +90,10 @@ struct NewSession {
 
 async fn create(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Json(change): Json<NewSession>,
 ) -> ApiResult<Json<Changed>> {
-    let id = service::create(&db, &actor, &change.flight_ids, change.group_id).await?;
+    let id = service::create(&mut db, &actor, &change.flight_ids, change.group_id).await?;
     Ok(Json(Changed { id }))
 }
 
@@ -115,11 +108,11 @@ struct GroupChange {
 /// Moves a session to another group.
 async fn set_group(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(change): Json<GroupChange>,
 ) -> ApiResult<Json<Changed>> {
-    service::set_group(&db, &actor, id, change.group_id, change.move_flights).await?;
+    service::set_group(&mut db, &actor, id, change.group_id, change.move_flights).await?;
     Ok(Json(Changed { id }))
 }
 
@@ -130,22 +123,18 @@ struct Removed {
 }
 
 /// Takes the flights out of their sessions.
-async fn remove(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Json(change): Json<Flights>,
-) -> ApiResult<Json<Removed>> {
-    let removed = service::remove(&db, &actor, &change.flight_ids).await?;
+async fn remove(actor: Actor, mut db: Db, Json(change): Json<Flights>) -> ApiResult<Json<Removed>> {
+    let removed = service::remove(&mut db, &actor, &change.flight_ids).await?;
     Ok(Json(Removed { removed }))
 }
 
 async fn add(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(change): Json<Flights>,
 ) -> ApiResult<Json<Changed>> {
-    service::add(&db, &actor, id, &change.flight_ids).await?;
+    service::add(&mut db, &actor, id, &change.flight_ids).await?;
     Ok(Json(Changed { id }))
 }
 
@@ -207,7 +196,7 @@ struct SessionPage {
 
 async fn list(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Query(query): Query<ListQuery>,
     Query(filter): Query<FilterQuery>,
 ) -> ApiResult<Json<SessionPage>> {
@@ -229,7 +218,7 @@ async fn list(
     };
     let offset = i64::from(page - 1) * i64::from(size);
     let (sessions, total) = service::list(
-        &db,
+        &mut db,
         &actor,
         &filter.parse()?,
         window,
@@ -241,34 +230,26 @@ async fn list(
     Ok(Json(SessionPage { sessions, total }))
 }
 
-async fn show(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<Session>> {
-    Ok(Json(service::get(&db, &actor, id).await?))
+async fn show(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<Json<Session>> {
+    Ok(Json(service::get(&mut db, &actor, id).await?))
 }
 
 /// The session's place in the list with these filters, newest first: the
 /// sessions before and after it, and when they start.
 async fn neighbours(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Query(filter): Query<FilterQuery>,
 ) -> ApiResult<Json<Neighbours>> {
     Ok(Json(
-        service::neighbours(&db, &actor, &filter.parse()?, id).await?,
+        service::neighbours(&mut db, &actor, &filter.parse()?, id).await?,
     ))
 }
 
 /// Deletes a session and its comments; its flights stay, without a session.
-async fn delete(
-    actor: Actor,
-    State(db): State<PgPool>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<StatusCode> {
-    service::delete(&db, &actor, id).await?;
+async fn delete(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    service::delete(&mut db, &actor, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -284,29 +265,29 @@ struct CommentId {
 
 async fn add_comment(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path(id): Path<Uuid>,
     Json(comment): Json<CommentText>,
 ) -> ApiResult<Json<CommentId>> {
-    let id = comments::add(&db, &actor, id, &comment.body).await?;
+    let id = comments::add(&mut db, &actor, id, &comment.body).await?;
     Ok(Json(CommentId { id }))
 }
 
 async fn edit_comment(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path((session, id)): Path<(Uuid, Uuid)>,
     Json(comment): Json<CommentText>,
 ) -> ApiResult<Json<CommentId>> {
-    comments::edit(&db, &actor, session, id, &comment.body).await?;
+    comments::edit(&mut db, &actor, session, id, &comment.body).await?;
     Ok(Json(CommentId { id }))
 }
 
 async fn delete_comment(
     actor: Actor,
-    State(db): State<PgPool>,
+    mut db: Db,
     Path((session, id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<StatusCode> {
-    comments::delete(&db, &actor, session, id).await?;
+    comments::delete(&mut db, &actor, session, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

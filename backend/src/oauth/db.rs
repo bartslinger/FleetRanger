@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{PgConnection, PgPool, types::Json};
+use sqlx::Connection as _;
+use sqlx::{PgConnection, types::Json};
 use uuid::Uuid;
 
 /// An app that registered itself, or a trusted one an admin added.
@@ -12,23 +13,28 @@ pub struct Client {
     pub trusted: bool,
 }
 
-pub async fn register(db: &PgPool, name: &str, redirect_uris: &[String]) -> sqlx::Result<Uuid> {
+pub async fn register(
+    db: &mut PgConnection,
+    name: &str,
+    redirect_uris: &[String],
+) -> sqlx::Result<Uuid> {
     sqlx::query_scalar!(
         "insert into oauth_clients (name, redirect_uris) values ($1, $2) returning id",
         name,
         redirect_uris,
     )
-    .fetch_one(db)
+    .fetch_one(&mut *db)
     .await
 }
 
-pub async fn client(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Client>> {
+pub async fn client(db: &mut PgConnection, id: Uuid) -> sqlx::Result<Option<Client>> {
     sqlx::query_as!(
         Client,
-        "select id, name, redirect_uris, trusted from oauth_clients where id = $1",
+        r#"select id, name, redirect_uris, organisation_id is not null as "trusted!"
+           from oauth_clients where id = $1"#,
         id
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
@@ -36,6 +42,8 @@ pub async fn client(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Client>> {
 pub struct Code {
     pub client_id: Uuid,
     pub user_id: Uuid,
+    /// The user's, which the connection is in.
+    pub organisation_id: Uuid,
     pub redirect_uri: String,
     pub code_challenge: String,
     pub scopes: Vec<String>,
@@ -45,15 +53,15 @@ pub struct Code {
 }
 
 pub async fn create_code(
-    db: &PgPool,
+    db: &mut PgConnection,
     code_sha256: &[u8],
     code: &Code,
     valid_seconds: f64,
 ) -> sqlx::Result<()> {
     sqlx::query!(
         "insert into oauth_codes (code_sha256, client_id, user_id, redirect_uri, code_challenge,
-                                  scopes, resource, expires_at, impersonated_by)
-         values ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8), $9)",
+                                  scopes, resource, expires_at, impersonated_by, organisation_id)
+         values ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8), $9, $10)",
         code_sha256,
         code.client_id,
         code.user_id,
@@ -63,25 +71,28 @@ pub async fn create_code(
         code.resource,
         valid_seconds,
         code.impersonated_by,
+        code.organisation_id,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
 
-/// The code with this hash, used up: a code works once, and only while valid.
-pub async fn take_code(db: &PgPool, code_sha256: &[u8]) -> sqlx::Result<Option<Code>> {
+/// The code with this hash, used up: a code works once, and only while valid
+/// (with `System`: the app has only the code).
+pub async fn take_code(db: &mut PgConnection, code_sha256: &[u8]) -> sqlx::Result<Option<Code>> {
     let row = sqlx::query!(
         r#"delete from oauth_codes where code_sha256 = $1
-           returning client_id, user_id, redirect_uri, code_challenge, scopes, resource,
-                     impersonated_by, expires_at > now() as "valid!""#,
+           returning client_id, user_id, organisation_id, redirect_uri, code_challenge, scopes,
+                     resource, impersonated_by, expires_at > now() as "valid!""#,
         code_sha256,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await?;
     Ok(row.filter(|row| row.valid).map(|row| Code {
         client_id: row.client_id,
         user_id: row.user_id,
+        organisation_id: row.organisation_id,
         redirect_uri: row.redirect_uri,
         code_challenge: row.code_challenge,
         scopes: row.scopes,
@@ -98,11 +109,16 @@ pub struct Tokens<'a> {
 }
 
 /// Connects an app for a user, as allowed with a code.
-pub async fn create_grant(db: &PgPool, code: &Code, tokens: &Tokens<'_>) -> sqlx::Result<()> {
+pub async fn create_grant(
+    db: &mut PgConnection,
+    code: &Code,
+    tokens: &Tokens<'_>,
+) -> sqlx::Result<()> {
     sqlx::query!(
         "insert into oauth_grants (client_id, user_id, scopes, resource, access_token_sha256,
-                                   access_expires_at, refresh_token_sha256, impersonated_by)
-         values ($1, $2, $3, $4, $5, now() + make_interval(secs => $6), $7, $8)",
+                                   access_expires_at, refresh_token_sha256, impersonated_by,
+                                   organisation_id)
+         values ($1, $2, $3, $4, $5, now() + make_interval(secs => $6), $7, $8, $9)",
         code.client_id,
         code.user_id,
         &code.scopes,
@@ -111,8 +127,9 @@ pub async fn create_grant(db: &PgPool, code: &Code, tokens: &Tokens<'_>) -> sqlx
         tokens.access_seconds,
         tokens.refresh_sha256,
         code.impersonated_by,
+        code.organisation_id,
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
@@ -122,7 +139,7 @@ pub async fn create_grant(db: &PgPool, code: &Code, tokens: &Tokens<'_>) -> sqlx
 /// log in. Given the refresh token it had before, the grant ends: the token
 /// was copied, and either holder may be the thief (RFC 9700, 4.14.2).
 pub async fn refresh(
-    db: &PgPool,
+    db: &mut PgConnection,
     refresh_sha256: &[u8],
     client_id: Uuid,
     tokens: &Tokens<'_>,
@@ -148,7 +165,7 @@ pub async fn refresh(
         idle_days,
         resource,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await?;
     if let Some(grant) = refreshed {
         return Ok(Refreshed::Renewed(grant.scopes));
@@ -158,7 +175,7 @@ pub async fn refresh(
         "delete from oauth_grants where previous_refresh_sha256 = $1",
         refresh_sha256
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?
     .rows_affected()
         > 0;
@@ -185,6 +202,7 @@ pub struct Access {
     /// The app the token belongs to.
     pub client_id: Uuid,
     pub user_id: Uuid,
+    pub organisation_id: Uuid,
     pub email: String,
     pub name: String,
     pub scopes: Vec<String>,
@@ -195,22 +213,26 @@ pub struct Access {
     pub impersonator_name: Option<String>,
 }
 
-/// The grant of a valid access token, marked as used. None if it is unknown
+/// The grant of a valid access token, marked as used (with `System`: the
+/// token says which organisation the request is in). None if it is unknown
 /// or expired, or its user may no longer log in.
-pub async fn use_access(db: &PgPool, access_sha256: &[u8]) -> sqlx::Result<Option<Access>> {
+pub async fn use_access(
+    db: &mut PgConnection,
+    access_sha256: &[u8],
+) -> sqlx::Result<Option<Access>> {
     sqlx::query_as!(
         Access,
         r#"update oauth_grants g set last_used_at = now()
            from users u, logins l
            where g.access_token_sha256 = $1 and g.access_expires_at > now()
              and u.id = g.user_id and u.archived_at is null and l.user_id = g.user_id
-           returning g.id as grant_id, g.client_id, g.user_id, l.email, u.name, g.scopes, g.resource,
+           returning g.id as grant_id, g.client_id, g.user_id, g.organisation_id, l.email, u.name, g.scopes, g.resource,
                      g.impersonated_by,
                      (select a.name from users a where a.id = g.impersonated_by)
                          as impersonator_name"#,
         access_sha256,
     )
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await
 }
 
@@ -227,7 +249,7 @@ pub struct Connection {
     pub last_used_at: DateTime<Utc>,
 }
 
-pub async fn connections(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Connection>> {
+pub async fn connections(db: &mut PgConnection, user_id: Uuid) -> sqlx::Result<Vec<Connection>> {
     sqlx::query_as!(
         Connection,
         r#"select g.id, c.name as app,
@@ -239,18 +261,18 @@ pub async fn connections(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Connect
            order by g.created_at desc"#,
         user_id,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// Disconnects one of the user's apps; false if the user has no such grant.
-pub async fn disconnect(db: &PgPool, user_id: Uuid, id: Uuid) -> sqlx::Result<bool> {
+pub async fn disconnect(db: &mut PgConnection, user_id: Uuid, id: Uuid) -> sqlx::Result<bool> {
     let result = sqlx::query!(
         "delete from oauth_grants where id = $1 and user_id = $2",
         id,
         user_id
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(result.rows_affected() == 1)
 }
@@ -258,30 +280,30 @@ pub async fn disconnect(db: &PgPool, user_id: Uuid, id: Uuid) -> sqlx::Result<bo
 /// Removes what's no longer of use: expired codes, grants idle for longer
 /// than `idle_days` (a day for those made while impersonating), and apps that registered themselves without a grant or code a
 /// day later, so open registration can't fill the table.
-pub async fn clean_up(db: &PgPool, idle_days: i32) -> sqlx::Result<()> {
+pub async fn clean_up(db: &mut PgConnection, idle_days: i32) -> sqlx::Result<()> {
     sqlx::query!("delete from oauth_codes where expires_at < now()")
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     sqlx::query!(
         "delete from oauth_grants where last_used_at < now() - make_interval(days => $1)",
         idle_days
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     // An admin who closed the browser without stopping the impersonation.
     sqlx::query!(
         "delete from oauth_grants
          where impersonated_by is not null and last_used_at < now() - interval '1 day'"
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     sqlx::query!(
         "delete from oauth_clients c
-         where not c.trusted and c.created_at < now() - interval '1 day'
+         where c.organisation_id is null and c.created_at < now() - interval '1 day'
            and not exists (select 1 from oauth_grants g where g.client_id = c.id)
            and not exists (select 1 from oauth_codes o where o.client_id = c.id)"
     )
-    .execute(db)
+    .execute(&mut *db)
     .await?;
     Ok(())
 }
@@ -319,7 +341,7 @@ pub struct RoleFields<'a> {
     pub name: &'a str,
 }
 
-pub async fn trusted_apps(db: &PgPool) -> sqlx::Result<Vec<TrustedApp>> {
+pub async fn trusted_apps(db: &mut PgConnection) -> sqlx::Result<Vec<TrustedApp>> {
     sqlx::query_as!(
         TrustedApp,
         r#"select c.id, c.name, c.redirect_uris, c.created_at,
@@ -335,23 +357,24 @@ pub async fn trusted_apps(db: &PgPool) -> sqlx::Result<Vec<TrustedApp>> {
                   (select count(distinct g.user_id) from oauth_grants g where g.client_id = c.id)
                       as "users!"
            from oauth_clients c
-           where c.trusted
+           where c.organisation_id is not null
            order by lower(c.name), c.id"#
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
 
 /// Adds a trusted app with its roles. None if a role's id isn't new.
 pub async fn add_trusted(
-    db: &PgPool,
+    db: &mut PgConnection,
     name: &str,
     redirect_uris: &[String],
     roles: &[RoleFields<'_>],
 ) -> sqlx::Result<Option<Uuid>> {
     let mut tx = db.begin().await?;
     let id = sqlx::query_scalar!(
-        "insert into oauth_clients (name, redirect_uris, trusted) values ($1, $2, true)
+        "insert into oauth_clients (organisation_id, name, redirect_uris)
+         values (current_setting('app.organisation_id')::uuid, $1, $2)
          returning id",
         name,
         redirect_uris,
@@ -368,7 +391,7 @@ pub async fn add_trusted(
 /// False if there is no such trusted app, or a role's id isn't one of its
 /// roles. Roles left out (None) stay as they are.
 pub async fn update_trusted(
-    db: &PgPool,
+    db: &mut PgConnection,
     id: Uuid,
     name: &str,
     redirect_uris: &[String],
@@ -376,7 +399,8 @@ pub async fn update_trusted(
 ) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
     let result = sqlx::query!(
-        "update oauth_clients set name = $2, redirect_uris = $3 where id = $1 and trusted",
+        "update oauth_clients set name = $2, redirect_uris = $3
+         where id = $1 and organisation_id is not null",
         id,
         name,
         redirect_uris,
@@ -439,21 +463,24 @@ async fn set_app_roles(
 
 /// Removes a trusted app; its users' codes and tokens go with it. False if
 /// there is no such trusted app.
-pub async fn remove_trusted(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
-    let result = sqlx::query!("delete from oauth_clients where id = $1 and trusted", id)
-        .execute(db)
-        .await?;
+pub async fn remove_trusted(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
+    let result = sqlx::query!(
+        "delete from oauth_clients where id = $1 and organisation_id is not null",
+        id,
+    )
+    .execute(&mut *db)
+    .await?;
     Ok(result.rows_affected() == 1)
 }
 
 /// Ends the app connections an admin made while impersonating someone, with
 /// codes not yet exchanged.
-pub async fn end_impersonation(db: &PgPool, admin: Uuid) -> sqlx::Result<()> {
+pub async fn end_impersonation(db: &mut PgConnection, admin: Uuid) -> sqlx::Result<()> {
     sqlx::query!("delete from oauth_codes where impersonated_by = $1", admin)
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     sqlx::query!("delete from oauth_grants where impersonated_by = $1", admin)
-        .execute(db)
+        .execute(&mut *db)
         .await?;
     Ok(())
 }
@@ -465,7 +492,7 @@ pub struct HeldAppRoles {
 }
 
 pub async fn held_app_roles(
-    db: &PgPool,
+    db: &mut PgConnection,
     client_id: Uuid,
     user_id: Uuid,
 ) -> sqlx::Result<HeldAppRoles> {
@@ -479,7 +506,7 @@ pub async fn held_app_roles(
         client_id,
         user_id,
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await?
     .into_iter()
     .map(|row| (row.group_id, row.keys))
@@ -497,15 +524,15 @@ pub struct OfferedAppRole {
 }
 
 /// Every trusted app's roles, by app and then name.
-pub async fn offered_app_roles(db: &PgPool) -> sqlx::Result<Vec<OfferedAppRole>> {
+pub async fn offered_app_roles(db: &mut PgConnection) -> sqlx::Result<Vec<OfferedAppRole>> {
     sqlx::query_as!(
         OfferedAppRole,
         "select r.id, r.name, c.id as app_id, c.name as app
          from app_roles r
          join oauth_clients c on c.id = r.client_id
-         where c.trusted
+         where c.organisation_id is not null
          order by lower(c.name), c.id, lower(r.name), r.id",
     )
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await
 }
