@@ -22,6 +22,7 @@
 	import Grid from '#lib/ui/Grid.svelte';
 	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
+	import OverflowMenu, { type OverflowItem } from '#lib/ui/OverflowMenu.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import TextInput from '#lib/ui/TextInput.svelte';
@@ -95,6 +96,21 @@
 		form && 'groupRolesMessage' in form ? form.groupRolesMessage : undefined
 	);
 	const leaveMessage = $derived(form && 'leaveMessage' in form ? form.leaveMessage : undefined);
+	let menuTrigger: HTMLElement | null = $state(null);
+	let impersonateForm: HTMLFormElement | undefined = $state();
+	let archiveOpen = $state(false);
+	let deleteOpen = $state(false);
+	const menuItems: OverflowItem[] = $derived([
+		...(!self && !archived
+			? [
+					{ label: 'Impersonate user', onselect: () => impersonateForm?.requestSubmit() },
+					{ label: 'Archive user', onselect: () => (archiveOpen = true) }
+				]
+			: []),
+		...(!self && user.flights === 0
+			? [{ label: 'Delete user', danger: true, onselect: () => (deleteOpen = true) }]
+			: [])
+	]);
 	let addedTo = $state('');
 	const addedName = $derived(data.otherGroups.find((group) => group.id === addedTo)?.name);
 </script>
@@ -148,18 +164,9 @@
 				autocomplete="off"
 				helper={self
 					? 'You log in with this address.'
-					: 'To log in with the Google account for this address. Empty: no login.'}
+					: 'To log in with the Google account for this address. Leave empty for no login.'}
 			/>
 		</Modal>
-		{#if !self && !archived}
-			<!-- Every page then shows what they see, until Stop impersonating in the
-			     banner. A plain post: the backend sets the cookie and opens the
-			     start page. -->
-			<form method="POST" action="/auth/impersonate">
-				<input type="hidden" name="user" value={user.id} />
-				<Button type="submit" kind="tertiary">Impersonate user</Button>
-			</form>
-		{/if}
 		{#if archived}
 			<form
 				method="POST"
@@ -172,10 +179,30 @@
 			>
 				<Button type="submit" kind="tertiary">Restore user</Button>
 			</form>
-		{:else if !self}
+		{/if}
+		<!-- Edit user is the main action; the rest in an overflow menu, so the
+		     header doesn't stack four buttons on a phone. -->
+		{#if menuItems.length > 0}
+			<OverflowMenu
+				variant="row"
+				label="More actions for {user.name}"
+				tooltip="More actions"
+				bind:trigger={menuTrigger}
+				items={menuItems}
+			/>
+		{/if}
+		{#if !self && !archived}
+			<!-- Every page then shows what they see, until Stop impersonating in the
+			     banner. A plain post: the backend sets the cookie and opens the
+			     start page. -->
+			<form method="POST" action="/auth/impersonate" bind:this={impersonateForm} hidden>
+				<input type="hidden" name="user" value={user.id} />
+			</form>
 			<Modal
 				title="Archive user"
-				triggerKind="tertiary"
+				trigger={false}
+				bind:open={archiveOpen}
+				returnFocus={() => menuTrigger ?? undefined}
 				submitLabel="Archive user"
 				action="?/archive"
 				error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
@@ -190,7 +217,9 @@
 		{#if !self && user.flights === 0}
 			<Modal
 				title="Delete user"
-				triggerKind="danger-tertiary"
+				trigger={false}
+				bind:open={deleteOpen}
+				returnFocus={() => menuTrigger ?? undefined}
 				submitLabel="Delete user"
 				danger
 				action="?/delete"
@@ -327,6 +356,12 @@
 					{/if}
 				{/snippet}
 			</DataTable>
+			{#if data.otherGroups.length === 0}
+				<p class="note">
+					{user.name} is in every group already. New groups are created on the
+					<a href={resolve('/groups')}>Groups page</a>.
+				</p>
+			{/if}
 		</Column>
 	{/if}
 </Grid>
@@ -376,5 +411,13 @@
 
 	.message {
 		margin-bottom: var(--cds-spacing-07);
+	}
+
+	.note {
+		margin: var(--cds-spacing-05) 0 0;
+		padding-inline: var(--cds-spacing-05);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-compact-01-font-size);
+		line-height: var(--cds-body-compact-01-line-height);
 	}
 </style>

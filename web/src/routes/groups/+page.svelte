@@ -51,9 +51,8 @@
 		</DataTable>
 		{#if data.groups.length === 1}
 			<p class="note">
-				Everything is in {data.groups[0].name}, and while it's the only group, the rest of the app
-				doesn't show it. Groups hold flights, sessions and equipment, and give their members roles
-				there; with a second group, each item and role belongs to one of them.
+				Everything is in {data.groups[0].name}. While it's the only group, the app doesn't show
+				groups.
 			</p>
 		{/if}
 	</Column>

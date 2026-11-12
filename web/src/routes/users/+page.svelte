@@ -128,7 +128,7 @@
 						name="email"
 						type="email"
 						autocomplete="off"
-						helper="To log in with the Google account for this address. Leave empty for a pilot who doesn't use the website."
+						helper="To log in with the Google account for this address. Leave empty for no login."
 					/>
 					<CheckboxGroup
 						legend="FleetRanger roles"

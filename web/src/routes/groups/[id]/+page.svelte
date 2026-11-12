@@ -116,8 +116,7 @@
 			>
 				{#if holds}
 					<p>
-						{group.name} holds {holds}. Choose where to move them. Then the group is deleted, and
-						its members lose their roles in it. The group and its memberships can’t be restored.
+						{group.name} holds {holds}. Its members lose their roles in it. This can’t be undone.
 					</p>
 					<Select
 						label="Move contents to"
@@ -230,7 +229,10 @@
 				{/snippet}
 			</DataTable>
 			{#if data.candidates.length === 0}
-				<p class="note">Every user is a member already. New users are created on the Users page.</p>
+				<p class="note">
+					Every user is a member already. New users are created on the
+					<a href={resolve('/users')}>Users page</a>.
+				</p>
 			{/if}
 		{/if}
 	</Column>
