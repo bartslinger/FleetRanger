@@ -178,6 +178,60 @@ pub async fn several_groups(db: &mut PgConnection) -> sqlx::Result<bool> {
         .await
 }
 
+/// One of the organisations a person can switch to.
+#[derive(serde::Serialize)]
+pub struct OrganisationChoice {
+    pub id: Uuid,
+    pub name: String,
+    /// The one the login session is in.
+    pub current: bool,
+}
+
+/// The organisations of the person a login session is for (with `System`):
+/// those where their Google account has a login, as a user who isn't
+/// archived, in an organisation that isn't archived; by name.
+pub async fn organisations_of(
+    db: &mut PgConnection,
+    session_id: Uuid,
+) -> sqlx::Result<Vec<OrganisationChoice>> {
+    sqlx::query_as!(
+        OrganisationChoice,
+        r#"select o.id, o.name, o.id = s.organisation_id as "current!"
+           from login_sessions s
+           join logins mine on mine.user_id = s.user_id
+           join logins l on l.oidc_subject = mine.oidc_subject
+           join users u on u.id = l.user_id and u.archived_at is null
+           join organisations o on o.id = l.organisation_id and o.archived_at is null
+           where s.id = $1
+           order by lower(o.name), o.id"#,
+        session_id,
+    )
+    .fetch_all(&mut *db)
+    .await
+}
+
+/// Moves a login session to the person's user in another of their
+/// organisations (with `System`). False if they have none there.
+pub async fn switch_organisation(
+    db: &mut PgConnection,
+    session_id: Uuid,
+    organisation_id: Uuid,
+) -> sqlx::Result<bool> {
+    let switched = sqlx::query!(
+        "update login_sessions s set user_id = l.user_id, organisation_id = l.organisation_id
+         from logins mine, logins l, users u, organisations o
+         where s.id = $1 and mine.user_id = s.user_id
+           and l.oidc_subject = mine.oidc_subject and l.organisation_id = $2
+           and u.id = l.user_id and u.archived_at is null
+           and o.id = l.organisation_id and o.archived_at is null",
+        session_id,
+        organisation_id,
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(switched.rows_affected() == 1)
+}
+
 #[cfg(test)]
 mod tests {
     use sqlx::PgPool;
@@ -253,5 +307,47 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(signed_in(other), None);
+
+        // Switching moves the session to the person's own user, and only
+        // into an organisation where they have one that isn't archived.
+        let session: Uuid = sqlx::query_scalar("select id from login_sessions")
+            .fetch_one(&mut *system)
+            .await
+            .unwrap();
+        let listed = |choices: Vec<super::OrganisationChoice>| -> Vec<(Uuid, bool)> {
+            choices.into_iter().map(|o| (o.id, o.current)).collect()
+        };
+        let choices = super::organisations_of(&mut system, session).await.unwrap();
+        assert_eq!(listed(choices).len(), 2);
+        assert!(
+            super::switch_organisation(&mut system, session, a_id)
+                .await
+                .unwrap()
+        );
+        let (user, organisation): (Uuid, Uuid) =
+            sqlx::query_as("select user_id, organisation_id from login_sessions where id = $1")
+                .bind(session)
+                .fetch_one(&mut *system)
+                .await
+                .unwrap();
+        assert_eq!((user, organisation), (in_a, a_id));
+        let elsewhere = testing::second_organisation(&mut a, "Test Org C").await;
+        assert!(
+            !super::switch_organisation(&mut system, session, elsewhere)
+                .await
+                .unwrap()
+        );
+        sqlx::query("update users set archived_at = now() where id = $1")
+            .bind(in_b)
+            .execute(&mut *system)
+            .await
+            .unwrap();
+        assert!(
+            !super::switch_organisation(&mut system, session, b_id)
+                .await
+                .unwrap()
+        );
+        let choices = super::organisations_of(&mut system, session).await.unwrap();
+        assert_eq!(listed(choices), [(a_id, true)]);
     }
 }

@@ -46,6 +46,7 @@ where
         .route("/auth/logout", post(logout))
         .route("/auth/impersonate", post(impersonate))
         .route("/auth/impersonate/stop", post(stop_impersonating))
+        .route("/auth/organisation", post(switch_organisation))
         .route("/api/me", get(me))
 }
 
@@ -318,6 +319,47 @@ async fn stop_impersonating(
     (jar, Redirect::to(&back)).into_response()
 }
 
+#[derive(Deserialize)]
+struct OrganisationForm {
+    organisation: Uuid,
+}
+
+/// The login session moves to the person's user in another of their
+/// organisations, for every tab. An impersonation ends with it, as the
+/// impersonated user is in the organisation left. The app starts again at
+/// its home page, as nothing on the page shown was in the other one.
+async fn switch_organisation(
+    State(auth): State<Arc<Auth>>,
+    State(system): State<System>,
+    mut db: Db,
+    actor: Actor,
+    jar: CookieJar,
+    Form(form): Form<OrganisationForm>,
+) -> Response {
+    // Across organisations: the person's user in the other one.
+    let switched = async {
+        let mut system = system.acquire().await?;
+        db::switch_organisation(&mut system, actor.login_session_id, form.organisation).await
+    };
+    match switched.await {
+        Ok(true) => {}
+        Ok(false) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            tracing::error!(%error, "switching organisation");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+    // Only once switched: `db` is still the organisation left, where the
+    // impersonation's app connections are.
+    if let Some(admin) = &actor.impersonated_by
+        && let Err(status) = end_impersonation(&mut db, admin.user_id).await
+    {
+        return status.into_response();
+    }
+    let jar = jar.remove(removal(&auth, impersonation_cookie()));
+    (jar, Redirect::to("/")).into_response()
+}
+
 /// Takes back the apps an admin connected while impersonating someone
 /// ("Impersonation in apps" in docs/architecture.md).
 async fn end_impersonation(db: &mut PgConnection, admin: Uuid) -> Result<(), StatusCode> {
@@ -345,6 +387,9 @@ struct Me {
     impersonated_by: Option<ImpersonatedBy>,
     /// The organisation's: the web app shows every day and time in it.
     time_zone: String,
+    /// The organisations the person can switch between, the current one
+    /// marked; one for most people.
+    organisations: Vec<db::OrganisationChoice>,
     /// Whether the organisation has more than one group: until then the web
     /// app shows no groups (user's decision, 2026-11-11).
     several_groups: bool,
@@ -384,14 +429,18 @@ impl From<&Grants> for Permissions {
 async fn me(
     actor: Actor,
     State(PublicApi(api)): State<PublicApi>,
+    State(system): State<System>,
     mut db: Db,
 ) -> Result<Json<Me>, StatusCode> {
     let read = async {
         let several_groups = db::several_groups(&mut db).await?;
         let settings = crate::organisations::settings(&mut db).await?;
-        Ok::<_, sqlx::Error>((several_groups, settings))
+        // The person's other organisations are looked up across them.
+        let organisations =
+            db::organisations_of(&mut *system.acquire().await?, actor.login_session_id).await?;
+        Ok::<_, sqlx::Error>((several_groups, settings, organisations))
     };
-    let (several_groups, settings) = read.await.map_err(|error| {
+    let (several_groups, settings, organisations) = read.await.map_err(|error| {
         tracing::error!(%error, "reading the user's organisation");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -402,6 +451,7 @@ async fn me(
         name: actor.name,
         apps: settings.mcp || api,
         time_zone: settings.time_zone,
+        organisations,
         impersonated_by: actor.impersonated_by.map(|admin| ImpersonatedBy {
             id: admin.user_id,
             name: admin.name,

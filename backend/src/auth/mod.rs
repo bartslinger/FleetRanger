@@ -90,7 +90,8 @@ pub struct Actor {
     pub organisation_id: Uuid,
     /// Their roles, read once per request; every access decision asks these.
     pub grants: Grants,
-    #[expect(dead_code, reason = "read by the audit log, which comes next")]
+    /// The login session, or an app's connection; switching organisation
+    /// moves the session.
     pub login_session_id: Uuid,
     #[expect(dead_code, reason = "read by the audit log, which comes next")]
     pub ip: IpAddr,

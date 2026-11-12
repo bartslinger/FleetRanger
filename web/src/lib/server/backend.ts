@@ -399,6 +399,9 @@ export interface Account {
 	several_groups: boolean;
 	/** The organisation's time zone; every day and time is shown in it. */
 	time_zone: string;
+	/** The organisations the user can switch between, the current one
+	 * marked; one for most people. */
+	organisations: { id: string; name: string; current: boolean }[];
 }
 
 /** The time zone of the request's organisation (UTC before logging in). */

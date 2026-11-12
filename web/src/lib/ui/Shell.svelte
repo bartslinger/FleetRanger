@@ -21,6 +21,9 @@
 		/** None for a user without a login, whom an admin impersonates. */
 		email: string | null;
 		name: string | null;
+		/** The organisations the user can switch between, the current one
+		 * marked; the profile panel lists them from two on. */
+		organisations?: { id: string; name: string; current: boolean }[];
 	}
 
 	/** A header global action left of Profile: an icon button opening a panel.
@@ -41,13 +44,14 @@
 	import { tick, untrack, type Snippet } from 'svelte';
 	import { mergeProps, Tooltip } from 'bits-ui';
 	import UserAvatar from '@carbon/icons/es/user--avatar/20.js';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { setTheme, type Theme } from '#lib/theme.js';
 	import Button from './Button.svelte';
 	import { startsTrail, startTrail } from '#lib/trail.svelte.js';
 	import Icon from './Icon.svelte';
 	import RadioButtonGroup from './RadioButtonGroup.svelte';
+	import Dropdown from './Dropdown.svelte';
 	import Toasts from './Toasts.svelte';
 	import TooltipContent from './TooltipContent.svelte';
 
@@ -123,8 +127,38 @@
 
 	afterNavigate(() => {
 		open = false;
-		panelOpen = null;
+		if (keepPanel) keepPanel = false;
+		else panelOpen = null;
 	});
+
+	// Switching organisation: posted in the background, then the app loads
+	// its data again for the other organisation at the home page (nothing on
+	// the page shown was in it), without a full reload, so the profile panel
+	// stays open (user's request, 2026-11-12). The backend answers a switch
+	// with a redirect; anything else failed, which the dropdown says (Carbon's
+	// invalid state).
+	let keepPanel = false;
+	let switching = $state(false);
+	let switchError: string | undefined = $state();
+	async function switchOrganisation(organisation: string) {
+		switching = true;
+		switchError = undefined;
+		try {
+			const response = await fetch('/auth/organisation', {
+				method: 'POST',
+				body: new URLSearchParams({ organisation }),
+				redirect: 'manual'
+			});
+			if (response.type !== 'opaqueredirect') throw new Error(String(response.status));
+			keepPanel = true;
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by the caller
+			await goto(home, { invalidateAll: true, reset: false });
+		} catch {
+			switchError = 'Couldn’t switch. Try again.';
+		} finally {
+			switching = false;
+		}
+	}
 
 	async function toggle() {
 		open = !open;
@@ -277,6 +311,22 @@
 						{#if account.name}<p class="account-name">{account.name}</p>{/if}
 						{#if account.email}<p class="email">{account.email}</p>{/if}
 					</div>
+					<!-- Carbon's profile menu holds the session's context, such as where
+					     the user is, with a way to change it (carbon-expert's advice).
+					     A dropdown, as the choice takes effect at once (Carbon). -->
+					{#if account.organisations && account.organisations.length > 1}
+						<Dropdown
+							label="Organisation"
+							options={account.organisations.map((organisation) => ({
+								value: organisation.id,
+								label: organisation.name
+							}))}
+							value={account.organisations.find((organisation) => organisation.current)?.id ?? ''}
+							onchange={switchOrganisation}
+							error={switchError}
+							disabled={switching}
+						/>
+					{/if}
 					<RadioButtonGroup
 						legend="Theme"
 						name="theme"
