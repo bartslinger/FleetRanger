@@ -468,7 +468,7 @@ export type SendResult<T> =
  */
 export async function send<T>(
 	fetch: typeof globalThis.fetch,
-	method: 'POST' | 'PUT',
+	method: 'POST' | 'PUT' | 'DELETE',
 	path: string,
 	body?: unknown
 ): Promise<SendResult<T>> {

@@ -1,4 +1,4 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { may } from '#lib/permissions.js';
 import { get, send, type OrganisationSettings } from '#lib/server/backend.js';
 
@@ -21,5 +21,14 @@ export const actions = {
 		const result = await send<OrganisationSettings>(fetch, 'PUT', '/api/organisation', body);
 		if (!result.ok) return fail(result.status, { message: result.message });
 		return { saved: true };
+	},
+	// The organisation with everything in it, at once; the admin's login goes
+	// with it, so they land on the login page.
+	delete: async ({ fetch, request }) => {
+		const form = await request.formData();
+		const name = String(form.get('name') ?? '');
+		const result = await send(fetch, 'DELETE', '/api/organisation', { name });
+		if (!result.ok) return fail(result.status, { deleteMessage: result.message });
+		redirect(303, '/login?deleted');
 	}
 };

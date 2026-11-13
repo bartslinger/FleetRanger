@@ -32,6 +32,8 @@
 				<InlineNotification kind="error" title="Couldn't log in">
 					Something went wrong. Try again.
 				</InlineNotification>
+			{:else if data.deleted}
+				<InlineNotification kind="success" title="Organisation deleted." />
 			{:else if data.loggedOut}
 				<InlineNotification kind="success" title="You've logged out." />
 			{/if}
