@@ -1,7 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { may } from '#lib/permissions.js';
 import { get, send, type TrustedApp } from '#lib/server/backend.js';
-import { addressLines } from './addresses.js';
+import { addressLines } from '../../apps/addresses.js';
 
 export async function load({ fetch, locals }) {
 	// Only while apps can connect, and for who may add them.
@@ -19,6 +19,6 @@ export const actions = {
 		};
 		const result = await send<{ id: string }>(fetch, 'POST', '/api/apps', body);
 		if (!result.ok) return fail(result.status, { message: result.message });
-		redirect(303, `/apps/${result.data.id}`);
+		redirect(303, `/administration/apps/${result.data.id}`);
 	}
 };

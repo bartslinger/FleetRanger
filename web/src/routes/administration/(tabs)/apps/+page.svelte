@@ -4,9 +4,8 @@
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
 	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
-	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import { dateTime } from '#lib/format.js';
-	import AppDialog from './AppDialog.svelte';
+	import AppDialog from '../../apps/AppDialog.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -44,8 +43,6 @@
 	]);
 </script>
 
-<PageHeader title="Apps" />
-
 {#snippet newApp()}
 	<AppDialog title="New app" submitLabel="Add app" action="?/create" error={form?.message} />
 {/snippet}
@@ -64,7 +61,7 @@
 				{columns}
 				{rows}
 				rowKey={(app) => app.id}
-				rowHref={(app) => resolve('/apps/[id]', { id: app.id })}
+				rowHref={(app) => resolve('/administration/apps/[id]', { id: app.id })}
 				summary={`${count(data.apps.length)} ${data.apps.length === 1 ? 'app' : 'apps'}`}
 			>
 				{#snippet toolbar()}

@@ -37,7 +37,13 @@
 	const summary = $derived(`${app.roles.length} ${app.roles.length === 1 ? 'role' : 'roles'}`);
 </script>
 
-<PageHeader title={app.name} breadcrumb={[{ href: resolve('/apps'), label: 'Apps' }]}>
+<PageHeader
+	title={app.name}
+	breadcrumb={[
+		{ href: resolve('/administration/(tabs)'), label: 'Administration' },
+		{ href: resolve('/administration/(tabs)/apps'), label: 'Apps' }
+	]}
+>
 	{#snippet actions()}
 		{#key app}
 			<AppDialog

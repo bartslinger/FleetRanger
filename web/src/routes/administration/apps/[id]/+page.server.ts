@@ -58,6 +58,6 @@ export const actions = {
 	delete: async ({ fetch, params }) => {
 		const result = await remove(fetch, `/api/apps/${params.id}`);
 		if (!result.ok) return fail(result.status, { deleteMessage: result.message });
-		redirect(303, '/apps');
+		redirect(303, '/administration/apps');
 	}
 };
