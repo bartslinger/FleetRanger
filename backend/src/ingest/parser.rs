@@ -38,8 +38,8 @@ const KEY_REQUEST: &str = "key-request";
 const DECODE: &str = "decode";
 
 /// The child's address space. The largest test log, 8.2 MB, peaks at 60 MB
-/// (2026-11-13): about 7 times its size, so 4 GB leaves room for an upload
-/// of the largest size accepted (256 MB).
+/// (2026-11-13): about 7 times its size, so 4 GB leaves ample room for an
+/// upload of the largest size accepted (64 MB, so about 450 MB).
 const MEMORY_LIMIT_MB: u64 = 4096;
 /// The child's processor time. The largest test log takes 0.2 s.
 const CPU_LIMIT_S: u64 = 60;

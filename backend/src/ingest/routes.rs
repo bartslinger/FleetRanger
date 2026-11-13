@@ -24,8 +24,10 @@ use crate::{
     pairing::Controller,
 };
 
-/// DJI logs are a few megabytes; long flights stay well under this.
-const MAX_LOG_BYTES: usize = 256 * 1024 * 1024;
+/// DJI logs are a few megabytes: the largest test log, of a 35-minute flight,
+/// is 8.2 MB. The parser needs about 7 times a log's size, so this keeps it
+/// under half a gigabyte (user's decision, 2026-11-13).
+const MAX_LOG_BYTES: usize = 64 * 1024 * 1024;
 
 pub fn router<S>() -> Router<S>
 where
