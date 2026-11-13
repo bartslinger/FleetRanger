@@ -45,12 +45,19 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       FLEETRANGER_MCP: ${FLEETRANGER_MCP:-}
       FLEETRANGER_API: ${FLEETRANGER_API:-}
+      # Raw logs on S3 instead of in flightlogs (see "Raw logs on S3" in
+      # docs/architecture.md). Credentials may also come from an EC2 role.
+      FLEETRANGER_S3_BUCKET: ${FLEETRANGER_S3_BUCKET:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ENDPOINT: ${AWS_ENDPOINT:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     # The owner of the flight log directory, so uploads and the logs copied
     # there before share one owner (the image's default is uid 65532).
     user: ${FLEETRANGER_UID:-65532}:${FLEETRANGER_GID:-65532}
     volumes:
-      # Raw flight logs: uploads are written here, and `import` registers
-      # logs copied here before.
+      # Raw flight logs: uploads are written here (with S3, they only pass
+      # through), and `import` registers logs copied here before.
       - ${FLEETRANGER_DATA_DIR}/flightlogs:/data/flightlogs
       # The Android app offered on the download page: FleetRanger.apk and its
       # output-metadata.json, from android/release.sh.

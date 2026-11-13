@@ -2,18 +2,20 @@
 //! copied there before FleetRanger existed. Files stay where they are. Their
 //! flights go to the group given, which is needed only when there is more
 //! than one (user's decision, 2026-11-11): nothing falls back to a default.
+//! With logs on S3, each is copied there before it is registered.
 
 use crate::db::Db;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use sha2::{Digest, Sha256};
+
 use uuid::Uuid;
 
 use super::db;
+use super::store::{LogStore, hash_file};
 
-pub async fn run(db: &mut Db, log_dir: &Path, group: Option<&str>) -> Result<()> {
-    let log_dir = &super::organisation_dir(log_dir, db.organisation_id);
+pub async fn run(db: &mut Db, store: &LogStore, group: Option<&str>) -> Result<()> {
+    let log_dir = &store.organisation_dir(db.organisation_id);
     let group_id = choose_group(&db::groups(db).await?, group)?;
     let mut paths = Vec::new();
     collect_logs(log_dir, &mut paths)
@@ -28,11 +30,16 @@ pub async fn run(db: &mut Db, log_dir: &Path, group: Option<&str>) -> Result<()>
             continue;
         }
 
-        let bytes = tokio::fs::read(&path)
-            .await
-            .with_context(|| format!("failed to read {}", path.display()))?;
-        let sha256 = Sha256::digest(&bytes);
-        if db::insert_raw_log(db, &sha256, &relative, bytes.len() as i64, group_id).await? {
+        let (sha256, size) = hash_file(&path).await?;
+        if db::has_content(db, &sha256).await? {
+            duplicates += 1;
+            tracing::info!(path = relative, "skipped: same content as a registered log");
+            continue;
+        }
+        // Stored before it is registered, so the processing loop finds it.
+        store.store_in_place(db.organisation_id, &relative).await?;
+        let size = i64::try_from(size)?;
+        if db::insert_raw_log(db, &sha256, &relative, size, group_id).await? {
             added += 1;
         } else {
             duplicates += 1;

@@ -2,8 +2,8 @@
 //! that work in one organisation (user's decisions, 2026-11-12: organisations
 //! are created by hand for early access, and their settings set here).
 
+use crate::ingest::store::LogStore;
 use std::collections::HashMap;
-use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use uuid::Uuid;
@@ -26,7 +26,7 @@ pub async fn run(
     args: &[String],
     system: &System,
     tenants: &Tenants,
-    log_dir: &Path,
+    store: &LogStore,
 ) -> Result<()> {
     let Some((command, rest)) = args.split_first() else {
         bail!("{USAGE}");
@@ -53,7 +53,7 @@ pub async fn run(
         "import" => {
             let [] = args.expect(&["organisation", "group"])?;
             let mut db = organisation(system, tenants, &args).await?;
-            crate::ingest::import::run(&mut db, log_dir, args.value("group")).await
+            crate::ingest::import::run(&mut db, store, args.value("group")).await
         }
         other => bail!("unknown command {other:?}\n{USAGE}"),
     }

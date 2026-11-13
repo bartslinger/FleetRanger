@@ -17,6 +17,8 @@ pub struct Config {
     pub database_app_url: String,
     /// Directory holding the raw flight logs (`FLEETRANGER_LOG_DIR`).
     pub log_dir: PathBuf,
+    /// Raw logs go to this S3 bucket instead of the log directory.
+    pub s3_bucket: Option<String>,
     /// DJI app key for requesting log decryption keys (`DJI_APP_KEY`). Logs from
     /// format version 13 on can't be processed without it.
     pub dji_app_key: Option<String>,
@@ -58,6 +60,7 @@ impl Config {
         let log_dir = std::env::var("FLEETRANGER_LOG_DIR")
             .unwrap_or_else(|_| "/data/flightlogs".to_owned())
             .into();
+        let s3_bucket = non_empty_var("FLEETRANGER_S3_BUCKET");
         let dji_app_key = non_empty_var("DJI_APP_KEY");
         let android_apk = non_empty_var("FLEETRANGER_ANDROID_APK")
             .unwrap_or_else(|| "/data/android/FleetRanger.apk".to_owned())
@@ -84,6 +87,7 @@ impl Config {
             database_url,
             database_app_url,
             log_dir,
+            s3_bucket,
             dji_app_key,
             public_url,
             oidc,
