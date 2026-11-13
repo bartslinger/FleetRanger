@@ -1,5 +1,6 @@
 #!/bin/sh
-# Builds the backend and web images for x86_64 from the release tagged on the
+# Builds the backend and web images for the server's architecture (x86_64 or
+# arm64, as the server reports it) from the release tagged on the
 # current commit (vX.Y.Z) and loads them on a server over SSH, without a
 # container registry.
 #
@@ -27,9 +28,15 @@ if [ -z "$tag" ]; then
     exit 1
 fi
 
+case $(ssh "$destination" uname -m) in
+    x86_64) platform=linux/amd64 ;;
+    aarch64) platform=linux/arm64 ;;
+    *) echo "unsupported server architecture" >&2; exit 1 ;;
+esac
+
 for part in backend web; do
     image="fleetranger-$part:$tag"
-    docker buildx build --platform linux/amd64 --tag "$image" --load "$part" >&2
+    docker buildx build --platform "$platform" --tag "$image" --load "$part" >&2
     docker save "$image" | gzip | ssh "$destination" 'gunzip | docker load' >&2
 done
 
