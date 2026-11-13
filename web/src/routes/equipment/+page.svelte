@@ -113,7 +113,7 @@
 
 	/** The tab is kept in the URL, so the back button and breadcrumbs return to it. */
 	function select(next: Tab) {
-		replaceState(resolve(next === 'drones' ? '/equipment' : `/equipment?tab=${next}`), {
+		replaceState(resolve(next === 'controllers' ? '/equipment' : `/equipment?tab=${next}`), {
 			equipmentTab: next
 		});
 	}
@@ -133,8 +133,8 @@
 	<Column narrow>
 		<Tabs
 			tabs={[
-				{ value: 'drones', label: KINDS.drones.label },
 				{ value: 'controllers', label: KINDS.controllers.label },
+				{ value: 'drones', label: KINDS.drones.label },
 				{ value: 'batteries', label: 'Batteries' }
 			]}
 			bind:value={tab}

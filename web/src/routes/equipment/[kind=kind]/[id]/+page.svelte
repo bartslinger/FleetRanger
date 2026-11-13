@@ -24,7 +24,7 @@
 	const item = $derived(data.item);
 	const kind = $derived(KINDS[data.kind]);
 	const list = $derived(
-		resolve(data.kind === 'drones' ? '/equipment' : '/equipment?tab=controllers')
+		resolve(data.kind === 'controllers' ? '/equipment' : '/equipment?tab=drones')
 	);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
 	// Save and Cancel go back to where the user came from, e.g. a flight's page.

@@ -16,7 +16,7 @@ export const KINDS: Record<Kind, { label: string; one: string; api: string }> = 
 };
 
 export function parseTab(value: string | null): Tab {
-	return value === 'controllers' || value === 'batteries' ? value : 'drones';
+	return value === 'drones' || value === 'batteries' ? value : 'controllers';
 }
 
 /** Who flew a device last: their name, or for a flight the user doesn't see,
