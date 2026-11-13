@@ -28,6 +28,8 @@ export const actions = {
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '');
 		const result = await send(fetch, 'DELETE', '/api/organisation', { name });
+		// A name that doesn't match is the field's error (Carbon's modal validation).
+		if (!result.ok && result.status === 400) return fail(400, { nameError: result.message });
 		if (!result.ok) return fail(result.status, { deleteMessage: result.message });
 		redirect(303, '/login?deleted');
 	}

@@ -172,6 +172,7 @@ One install serving several organisations, for a hosted service where FleetRange
 - The web image on distroless Node: about 150 MB instead of 378, mostly Debian and npm it doesn't use (parked by the user, 2026-11-13)
 - Self-service sign-up on the hosted service: someone creates their own organisation for a trial, instead of the operator with the command-line tool (user, 2026-11-13)
 - Prune the tests to those that prevent future mistakes (user, 2026-11-13)
+- Dialogs show a loading state on their primary button while they work (Carbon, Modal "Loading"; from the review of deleting an organisation, 2026-11-13); needs a loading icon that shows on a coloured button
 
 ## Open questions
 

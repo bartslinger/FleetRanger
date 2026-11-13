@@ -13,6 +13,7 @@
 
 	const organisation = $derived(data.organisation);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
+	const nameError = $derived(form && 'nameError' in form ? form.nameError : undefined);
 	const deleteMessage = $derived(form && 'deleteMessage' in form ? form.deleteMessage : undefined);
 	// Reset to the saved value each time the dialog's fields are drawn anew.
 	let gap = $derived(organisation.session_gap_minutes);
@@ -119,6 +120,7 @@
 				</p>
 				<TextInput
 					label="Type {organisation.name} to confirm"
+					error={nameError}
 					name="name"
 					required
 					autocomplete="off"
