@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select exists (select 1 from organisations) as \"exists!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "00503eebe71d1d78d0c16c54102d131f22dc60ac9c955ed4f274d28ef03209a9"
+}

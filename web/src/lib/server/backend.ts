@@ -550,6 +550,8 @@ export interface OrganisationSettings {
 	mcp: boolean;
 	/** Whether the install offers MCP at all; only then is `mcp` shown. */
 	mcp_offered: boolean;
+	/** Whether its admins may delete it: only on an install with several organisations. */
+	deletable: boolean;
 	/** The time zones to choose from, e.g. `Europe/Amsterdam`. */
 	time_zones: string[];
 }

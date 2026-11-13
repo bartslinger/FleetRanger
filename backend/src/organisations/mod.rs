@@ -11,6 +11,12 @@ use sqlx::{PgConnection, PgExecutor};
 
 use crate::sessions::SessionGap;
 
+/// Whether the install holds several organisations (`FLEETRANGER_MULTI_TENANT`,
+/// user's decision, 2026-11-13): only then are organisations added beyond
+/// the first, and deleted. Self-hosted installs hold one.
+#[derive(Clone, Copy)]
+pub struct MultiTenant(pub bool);
+
 /// An organisation's settings, which were environment variables.
 pub struct Settings {
     pub name: String,

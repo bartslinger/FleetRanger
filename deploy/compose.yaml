@@ -45,6 +45,8 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       FLEETRANGER_MCP: ${FLEETRANGER_MCP:-}
       FLEETRANGER_API: ${FLEETRANGER_API:-}
+      # Several organisations, as on the hosted service; one by default.
+      FLEETRANGER_MULTI_TENANT: ${FLEETRANGER_MULTI_TENANT:-}
       # Raw logs on S3 instead of in flightlogs (see "Raw logs on S3" in
       # docs/architecture.md). Credentials may also come from an EC2 role.
       FLEETRANGER_S3_BUCKET: ${FLEETRANGER_S3_BUCKET:-}

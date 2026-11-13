@@ -17,7 +17,7 @@ usage:
   fleetranger organisations
   fleetranger add-organisation <name> [--time-zone <zone>] [--session-gap <minutes>] [--mcp on|off]
   fleetranger set-organisation <id> [--name <name>] [--time-zone <zone>] [--session-gap <minutes>] [--mcp on|off]
-  fleetranger delete-organisation <id> --name <its name>
+  fleetranger delete-organisation <id> --name <its name>   (with FLEETRANGER_MULTI_TENANT=on)
   fleetranger add-user [--organisation <id>] [--admin] <email> <name>
   fleetranger import [--organisation <id>] [--group <name>]
 --organisation may be left out while the install has one organisation.";
@@ -28,6 +28,7 @@ pub async fn run(
     system: &System,
     tenants: &Tenants,
     store: &LogStore,
+    multi_tenant: super::MultiTenant,
 ) -> Result<()> {
     let Some((command, rest)) = args.split_first() else {
         bail!("{USAGE}");
@@ -40,14 +41,14 @@ pub async fn run(
         }
         "add-organisation" => {
             let [name] = args.expect(&["time-zone", "session-gap", "mcp"])?;
-            add(system, name, &args).await
+            add(system, name, &args, multi_tenant).await
         }
         "delete-organisation" => {
             let [id] = args.expect(&["name"])?;
             let name = args
                 .value("name")
                 .context("confirm with the organisation's name: --name <its name>")?;
-            delete(system, store, parse_id(id)?, name).await
+            delete(system, store, parse_id(id)?, name, multi_tenant).await
         }
         "set-organisation" => {
             let [id] = args.expect(&["name", "time-zone", "session-gap", "mcp"])?;
@@ -229,7 +230,19 @@ fn name(name: &str) -> Result<&str> {
 /// A new organisation, with its settings and its first group, "General", as
 /// every organisation has (migration 0025). Its first admin follows with
 /// `add-user --organisation <id> --admin`.
-async fn add(system: &System, given_name: &str, args: &Args<'_>) -> Result<()> {
+async fn add(
+    system: &System,
+    given_name: &str,
+    args: &Args<'_>,
+    super::MultiTenant(multi_tenant): super::MultiTenant,
+) -> Result<()> {
+    if !multi_tenant
+        && sqlx::query_scalar!(r#"select exists (select 1 from organisations) as "exists!""#)
+            .fetch_one(&**system)
+            .await?
+    {
+        bail!("this install holds one organisation; FLEETRANGER_MULTI_TENANT=on allows several");
+    }
     let name = name(given_name)?;
     let changes = changes(system, args).await?;
     let same_name = sqlx::query_scalar!(
@@ -301,7 +314,18 @@ async fn set(system: &System, id: Uuid, args: &Args<'_>) -> Result<()> {
 }
 
 /// Deletes an organisation with everything in it, and says what went.
-async fn delete(system: &System, store: &LogStore, id: Uuid, name: &str) -> Result<()> {
+async fn delete(
+    system: &System,
+    store: &LogStore,
+    id: Uuid,
+    name: &str,
+    super::MultiTenant(multi_tenant): super::MultiTenant,
+) -> Result<()> {
+    if !multi_tenant {
+        bail!(
+            "this install holds one organisation, which stays; FLEETRANGER_MULTI_TENANT=on allows deleting"
+        );
+    }
     let organisation = super::delete::rows(system, id, name).await?;
     let files = super::delete::files(store, id).await?;
     match organisation {

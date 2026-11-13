@@ -102,31 +102,33 @@
 		<!-- Carbon's high-impact deletion: a danger modal where the name is typed
 		     (Common actions, "Delete"); a danger tertiary trigger as a side action,
 		     in its own block away from Edit settings (carbon-expert's advice). -->
-		<section class="delete" aria-labelledby="delete-heading">
-			<h2 id="delete-heading">Delete organisation</h2>
-			<p>Deletes the organisation and all its data at once.</p>
-			<Modal
-				title="Delete organisation"
-				triggerKind="danger-tertiary"
-				label={organisation.name}
-				submitLabel="Delete organisation"
-				danger
-				action="?/delete"
-				error={deleteMessage}
-			>
-				<p>
-					This deletes all flights, sessions, equipment, users and raw logs of {organisation.name}.
-					It can't be undone.
-				</p>
-				<TextInput
-					label="Type {organisation.name} to confirm"
-					error={nameError}
-					name="name"
-					required
-					autocomplete="off"
-				/>
-			</Modal>
-		</section>
+		{#if organisation.deletable}
+			<section class="delete" aria-labelledby="delete-heading">
+				<h2 id="delete-heading">Delete organisation</h2>
+				<p>Deletes the organisation and all its data at once.</p>
+				<Modal
+					title="Delete organisation"
+					triggerKind="danger-tertiary"
+					label={organisation.name}
+					submitLabel="Delete organisation"
+					danger
+					action="?/delete"
+					error={deleteMessage}
+				>
+					<p>
+						This deletes all flights, sessions, equipment, users and raw logs of {organisation.name}.
+						It can't be undone.
+					</p>
+					<TextInput
+						label="Type {organisation.name} to confirm"
+						error={nameError}
+						name="name"
+						required
+						autocomplete="off"
+					/>
+				</Modal>
+			</section>
+		{/if}
 	</Column>
 </Grid>
 

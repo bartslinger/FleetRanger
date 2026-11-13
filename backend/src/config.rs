@@ -37,6 +37,9 @@ pub struct Config {
     /// Whether apps can use the public API at `/api/v1`
     /// (`FLEETRANGER_API=on`); off by default.
     pub api: bool,
+    /// Whether the install holds several organisations, as the hosted
+    /// service does (`FLEETRANGER_MULTI_TENANT=on`); off by default: one.
+    pub multi_tenant: bool,
 }
 
 pub struct OidcConfig {
@@ -81,6 +84,7 @@ impl Config {
         };
         let mcp = switch("FLEETRANGER_MCP")?;
         let api = switch("FLEETRANGER_API")?;
+        let multi_tenant = switch("FLEETRANGER_MULTI_TENANT")?;
 
         Ok(Self {
             bind,
@@ -94,6 +98,7 @@ impl Config {
             android_apk,
             mcp,
             api,
+            multi_tenant,
         })
     }
 }

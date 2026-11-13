@@ -153,7 +153,7 @@ One install serving several organisations, for a hosted service where FleetRange
 - [x] Administration page: admins change their organisation's name and settings (General), with Apps as its second tab (2026-11-13; migration 0028)
 - [x] Tests that no organisation reads or changes another's data, in the database (every table, as `fleetranger_app`), at sign-in and in the processing status
 - [x] Afterwards: raw logs on S3, optionally (`FLEETRANGER_S3_BUCKET`), for the free trial; Garage on dev
-- [x] Deleting an organisation with everything in it, at once: `fleetranger delete-organisation` and the Administration page (2026-11-13); a fresh install starts without organisations (migration 0029)
+- [x] Deleting an organisation with everything in it, at once: `fleetranger delete-organisation` and the Administration page (2026-11-13), only where `FLEETRANGER_MULTI_TENANT=on` allows several; a fresh install starts without organisations (migration 0029)
 
 ## Before production use
 

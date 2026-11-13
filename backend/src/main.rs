@@ -98,7 +98,10 @@ async fn start(args: Vec<String>) -> Result<()> {
 
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [] | ["serve"] => serve(&config, system, tenants, store).await,
-        _ => organisations::cli::run(&args, &system, &tenants, &store).await,
+        _ => {
+            let multi_tenant = organisations::MultiTenant(config.multi_tenant);
+            organisations::cli::run(&args, &system, &tenants, &store, multi_tenant).await
+        }
     }
 }
 
@@ -111,6 +114,7 @@ struct AppState {
     activity: Activity,
     changes: Changes,
     apps: oauth::AppsOn,
+    multi_tenant: organisations::MultiTenant,
     store: LogStore,
     android_apk: AndroidApk,
     oauth: OAuth,
@@ -137,6 +141,12 @@ impl FromRef<AppState> for AndroidApk {
 impl FromRef<AppState> for LogStore {
     fn from_ref(state: &AppState) -> Self {
         state.store.clone()
+    }
+}
+
+impl FromRef<AppState> for organisations::MultiTenant {
+    fn from_ref(state: &AppState) -> Self {
+        state.multi_tenant
     }
 }
 
@@ -227,6 +237,7 @@ async fn serve(
             mcp: config.mcp,
             api: config.api,
         },
+        multi_tenant: organisations::MultiTenant(config.multi_tenant),
         store,
         android_apk: AndroidApk {
             path: config.android_apk.clone(),

@@ -21,6 +21,7 @@ where
     crate::db::System: FromRef<S>,
     crate::db::Tenants: FromRef<S>,
     AppsOn: FromRef<S>,
+    super::MultiTenant: FromRef<S>,
     LogStore: FromRef<S>,
 {
     Router::new().route("/api/organisation", get(show).put(save).delete(remove))
@@ -35,6 +36,9 @@ struct Organisation {
     /// Whether the install offers MCP at all (`FLEETRANGER_MCP`): only then
     /// is the organisation's own switch worth showing.
     mcp_offered: bool,
+    /// Whether its admins may delete it: only on an install with several
+    /// organisations (`FLEETRANGER_MULTI_TENANT`).
+    deletable: bool,
     /// The time zones to choose from.
     time_zones: Vec<String>,
 }
@@ -51,15 +55,17 @@ struct Input {
 async fn show(
     actor: Actor,
     State(apps): State<AppsOn>,
+    State(multi_tenant): State<super::MultiTenant>,
     mut db: Db,
 ) -> ApiResult<Json<Organisation>> {
     policy::require(&actor, Permission::OrganisationManage, None)?;
-    Ok(Json(read(&mut db, apps).await?))
+    Ok(Json(read(&mut db, apps, multi_tenant).await?))
 }
 
 async fn save(
     actor: Actor,
     State(apps): State<AppsOn>,
+    State(multi_tenant): State<super::MultiTenant>,
     mut db: Db,
     Json(input): Json<Input>,
 ) -> ApiResult<Json<Organisation>> {
@@ -98,10 +104,14 @@ async fn save(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Json(read(&mut db, apps).await?))
+    Ok(Json(read(&mut db, apps, multi_tenant).await?))
 }
 
-async fn read(db: &mut Db, apps: AppsOn) -> sqlx::Result<Organisation> {
+async fn read(
+    db: &mut Db,
+    apps: AppsOn,
+    super::MultiTenant(multi_tenant): super::MultiTenant,
+) -> sqlx::Result<Organisation> {
     let settings = super::settings(db).await?;
     Ok(Organisation {
         name: settings.name,
@@ -109,6 +119,7 @@ async fn read(db: &mut Db, apps: AppsOn) -> sqlx::Result<Organisation> {
         session_gap_minutes: settings.session_gap.0,
         mcp: settings.mcp,
         mcp_offered: apps.mcp,
+        deletable: multi_tenant,
         time_zones: super::time_zones(db).await?,
     })
 }
@@ -123,12 +134,17 @@ struct Removal {
 /// with it, the admin's among them, so this request's login session ends.
 async fn remove(
     actor: Actor,
+    State(super::MultiTenant(multi_tenant)): State<super::MultiTenant>,
     State(system): State<System>,
     State(store): State<LogStore>,
     mut db: Db,
     Json(removal): Json<Removal>,
 ) -> ApiResult<StatusCode> {
     policy::require(&actor, Permission::OrganisationManage, None)?;
+    // An install with one organisation keeps it (user's decision, 2026-11-13).
+    if !multi_tenant {
+        return Err(ApiError::Forbidden);
+    }
     let name = super::settings(&mut db).await?.name;
     if removal.name.trim() != name {
         return Err(ApiError::Invalid(
