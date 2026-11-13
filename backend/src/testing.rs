@@ -9,16 +9,20 @@ use crate::{
     policy::FlightScope,
 };
 
-/// A test's connection, in the organisation migration 0026 adds to every
-/// install. Tests connect as the account that created the tables, which
-/// row-level security doesn't limit; the separation tests use
-/// `fleetranger_app`.
+/// A test's connection, in the test's first organisation, made on the first
+/// call: a fresh install has none (migration 0029). Tests connect as the
+/// account that created the tables, which row-level security doesn't limit;
+/// the separation tests use `fleetranger_app`.
 pub async fn db(pool: &PgPool) -> Db {
-    let organisation: Uuid =
+    let first: Option<Uuid> =
         sqlx::query_scalar("select id from organisations order by created_at limit 1")
-            .fetch_one(pool)
+            .fetch_optional(pool)
             .await
             .unwrap();
+    let organisation = match first {
+        Some(id) => id,
+        None => second_organisation(&mut pool.acquire().await.unwrap(), "Test organisation").await,
+    };
     Tenants::of(pool.clone())
         .connect(organisation)
         .await
@@ -116,7 +120,7 @@ pub async fn organisation(db: &mut PgConnection) -> Uuid {
         .unwrap()
 }
 
-/// A second organisation, made as `add-organisation` makes one: its
+/// An organisation, made as `add-organisation` makes one: its
 /// settings and its group "General".
 pub async fn second_organisation(db: &mut PgConnection, name: &str) -> Uuid {
     let id: Uuid = sqlx::query_scalar("insert into organisations (name) values ($1) returning id")

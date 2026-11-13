@@ -168,6 +168,8 @@ One install serving several organisations, for a hosted service where FleetRange
 - Link media
 - Tooltips without JavaScript: the current ones let a fast-moving cursor select their text (user, 2026-11-11)
 - Random (UUIDv4) ids for rows users see, instead of UUIDv7, which reveals when a row was created (user, 2026-11-12)
+- The web image on distroless Node: about 150 MB instead of 378, mostly Debian and npm it doesn't use (parked by the user, 2026-11-13)
+- Self-service sign-up on the hosted service: someone creates their own organisation for a trial, instead of the operator with the command-line tool (user, 2026-11-13)
 
 ## Open questions
 
