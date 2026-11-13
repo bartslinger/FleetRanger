@@ -30,9 +30,12 @@
 		 * screens show beside the content, but on phones only further down. */
 		phoneDescription?: string;
 		actions?: Snippet;
+		/** Line tabs under the title, for a page whose views are pages of their
+		 * own (`TabLinks`); its actions then belong in each tab's content. */
+		tabs?: Snippet;
 	}
 
-	let { title, breadcrumb, crumb, status, description, phoneDescription, actions }: Props =
+	let { title, breadcrumb, crumb, status, description, phoneDescription, actions, tabs }: Props =
 		$props();
 
 	$effect(() => {
@@ -54,7 +57,7 @@
 	<title>{title} · FleetRanger</title>
 </svelte:head>
 
-<header>
+<header class:tabbed={tabs}>
 	<Grid>
 		<Column>
 			<div class="content">
@@ -83,6 +86,7 @@
 				</div>
 				{#if actions}<div class="actions">{@render actions()}</div>{/if}
 			</div>
+			{#if tabs}<div class="tabs">{@render tabs()}</div>{/if}
 		</Column>
 	</Grid>
 </header>
@@ -92,6 +96,12 @@
 	   content below. */
 	header {
 		padding-block: var(--cds-spacing-07);
+	}
+
+	/* With tabs, 16px to the content (user's choice, 2026-11-13; carbon-expert's
+	   advice): the tabs belong to what is below them. */
+	header.tabbed {
+		padding-bottom: var(--cds-spacing-05);
 	}
 
 	.content {
@@ -152,6 +162,12 @@
 		.phone {
 			display: none;
 		}
+	}
+
+	/* 24px under the title; the first label lines up with it, as in
+	   Carbon's page header (its tab bar starts 16px to the left). */
+	.tabs {
+		margin: var(--cds-spacing-06) 0 0 calc(-1 * var(--cds-spacing-05));
 	}
 
 	.actions {

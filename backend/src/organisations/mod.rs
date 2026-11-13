@@ -1,10 +1,12 @@
 //! Organisations and their settings ("Several organisations per install" in
-//! docs/architecture.md). The operator creates them and sets their settings
-//! with the command-line tool (`cli`); requests read their own organisation's.
+//! docs/architecture.md). The operator creates them with the command-line
+//! tool (`cli`); the operator and the organisation's admins (`routes`) change
+//! their settings.
 
 pub mod cli;
+pub mod routes;
 
-use sqlx::PgConnection;
+use sqlx::{PgConnection, PgExecutor};
 
 use crate::sessions::SessionGap;
 
@@ -35,4 +37,27 @@ pub async fn settings(db: &mut PgConnection) -> sqlx::Result<Settings> {
         session_gap: SessionGap(row.session_gap_minutes),
         mcp: row.mcp,
     })
+}
+
+/// Whether Postgres knows the time zone, e.g. `Europe/Amsterdam`.
+pub async fn known_time_zone<'e>(db: impl PgExecutor<'e>, zone: &str) -> sqlx::Result<bool> {
+    sqlx::query_scalar!(
+        r#"select exists(select 1 from pg_timezone_names where name = $1) as "known!""#,
+        zone
+    )
+    .fetch_one(db)
+    .await
+}
+
+/// The time zones to choose from: the regions' names, such as
+/// `Europe/Amsterdam`, and UTC, without Postgres's aliases (`posix/…`,
+/// `Etc/GMT+1`, `CET`).
+pub async fn time_zones(db: &mut PgConnection) -> sqlx::Result<Vec<String>> {
+    sqlx::query_scalar!(
+        r#"select name as "name!" from pg_timezone_names
+           where (name like '%/%' and name !~ '^(posix|Etc|SystemV)/') or name = 'UTC'
+           order by name"#
+    )
+    .fetch_all(&mut *db)
+    .await
 }

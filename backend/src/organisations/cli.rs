@@ -177,12 +177,7 @@ struct Changes {
 async fn changes(system: &System, args: &Args<'_>) -> Result<Changes> {
     let time_zone = match args.value("time-zone") {
         Some(zone) => {
-            let known = sqlx::query_scalar!(
-                r#"select exists(select 1 from pg_timezone_names where name = $1) as "known!""#,
-                zone
-            )
-            .fetch_one(&**system)
-            .await?;
+            let known = super::known_time_zone(&**system, zone).await?;
             if !known {
                 bail!("{zone:?} is not a known time zone, e.g. Europe/Amsterdam");
             }

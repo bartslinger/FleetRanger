@@ -9,6 +9,7 @@ The decisions made so far, each with a short reason. Open questions are listed i
 - **No organisation in the paths** (user's decision, 2026-10-22): a login can belong to users in several organisations, and its login session holds the current one, with a switcher. Subdomains per organisation can come later without changing routes.
 - **Login on the hosted service is Google only, for now** (user's decision, 2026-11-12); Microsoft accounts can follow.
 - **Settings per organisation** (time zone, session gap, the MCP switch) are set by the operator with the command-line tool, when creating an organisation and later (user's decision, 2026-11-12); they replace the environment variables. A settings page may come with self-service sign-up. The commands (my choices): `fleetranger organisations` lists them with their ids and settings; `add-organisation <name>` creates one with its settings (`--time-zone`, `--session-gap`, `--mcp on|off`) and its group "General"; `set-organisation <id>` changes them (and `--name`); `add-user` and `import` take `--organisation <id>`, which may be left out while there is one.
+- **Admins change their organisation's name and all its settings too** (user's decision, 2026-11-13), on an **Administration** page in the side navigation, where Apps was (user's choice). It has tabs, each a page of its own: General (the name and settings) and Apps (user's choice: Apps belongs there). General shows the settings as facts with "Edit settings" in the tab, not the page header that both tabs share (user's choice after a Carbon review), opening a dialog (user's choice over an in-page form with Save; Carbon's dialog form fits a few settings that rarely change). Changing the session gap only affects suggestions and new uploads; existing sessions stay. The MCP switch is shown only where the install offers MCP. Migration 0028 lets `fleetranger_app` rename its own organisation; row-level security keeps it to that one.
 - **One database, an organisation on every row, with row-level security**, as proposed in October (`docs/multi-tenancy.md`, not committed) and taken as the basis by the user on 2026-11-12. PostgreSQL itself keeps organisations apart, and each request uses a connection with its organisation set.
 - **Pairing stays as it is:** a pairing code belongs to the organisation of the user who created it, and so does the controller paired with it.
 - **Raw logs on S3, optionally** (user's decision, 2026-11-12): an environment variable switches from files on disk to an S3-compatible store; without it, logs stay on disk. Built after multi-tenancy.
@@ -99,10 +100,11 @@ User's decisions, 2026-10-23, unless marked as mine. They replaced teams, the th
 | `flights.set_pilot`, `flights.archive`, `sessions.edit`, `equipment.rename` | | | ✓ | ✓ |
 | `flights.move`, `sessions.move`, `equipment.move`, `batteries.rename` | | | | ✓ |
 | `controllers.manage` | | | | ✓ |
-| `users.manage`, `groups.manage`, `areas.manage`, `logs.manage`, `apps.manage` | | | | ✓ |
+| `users.manage`, `groups.manage`, `areas.manage`, `logs.manage`, `apps.manage`, `organisation.manage` | | | | ✓ |
 
 - **Two permissions for admin work the table first lacked** (user's decision, 2026-10-23, my proposal): `controllers.manage` on a group, for unpairing its controllers and seeing and revoking others' pairing codes for it; `logs.manage` on the organisation, for log processing.
 - **`apps.manage`** on the organisation, for adding trusted apps (my choice, 2026-10-25): given to Admin like the other admin pages.
+- **`organisation.manage`** on the organisation, for its name and settings on the Administration page (my choice, 2026-11-13): given to Admin like the other admin pages.
 
 - **Admin doesn't include `flights.fly_for`** (user's decision, 2026-10-23): it puts someone in pilot lists, so an admin who flies also gets Pilot in a group.
 - **Pilot doesn't read the group's flights:** a pilot always sees their own, so a guest pilot sees only theirs. A pilot who should see the group's work also gets Viewer or Editor.

@@ -541,3 +541,15 @@ export interface OfferedAppRole {
 	app_id: string;
 	app: string;
 }
+
+/** The organisation's name and settings, from `GET /api/organisation`. */
+export interface OrganisationSettings {
+	name: string;
+	time_zone: string;
+	session_gap_minutes: number;
+	mcp: boolean;
+	/** Whether the install offers MCP at all; only then is `mcp` shown. */
+	mcp_offered: boolean;
+	/** The time zones to choose from, e.g. `Europe/Amsterdam`. */
+	time_zones: string[];
+}

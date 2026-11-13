@@ -246,6 +246,7 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
         .merge(events::router())
         .merge(flights::routes::router())
         .merge(groups::routes::router())
+        .merge(organisations::routes::router())
         .merge(ingest::routes::router())
         .merge(pairing::routes::router())
         .merge(sessions::routes::router())

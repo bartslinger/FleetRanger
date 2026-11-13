@@ -1,11 +1,11 @@
 <script lang="ts">
 	import '#lib/ui/base.css';
 	import Area from '@carbon/icons/es/area/16.js';
-	import ApplicationWeb from '@carbon/icons/es/application--web/16.js';
 	import Drone from '@carbon/icons/es/drone/16.js';
 	import Enterprise from '@carbon/icons/es/enterprise/16.js';
 	import FlightRoster from '@carbon/icons/es/flight--roster/16.js';
 	import Notebook from '@carbon/icons/es/notebook/16.js';
+	import Settings from '@carbon/icons/es/settings/16.js';
 	import CheckmarkFilled from '@carbon/icons/es/checkmark--filled/20.js';
 	import WarningFilled from '@carbon/icons/es/warning--filled/20.js';
 	import UserMultiple from '@carbon/icons/es/user--multiple/16.js';
@@ -109,9 +109,9 @@
 			? [{ href: resolve('/areas'), label: 'Areas', icon: Area }]
 			: []),
 		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone },
-		// Last (user's choice), and only while apps can connect at all.
-		...(data.account?.apps && may(data.account, 'apps.manage', null)
-			? [{ href: resolve('/apps'), label: 'Apps', icon: ApplicationWeb }]
+		// Last, where Apps was (user's choice); it holds Apps as a tab.
+		...(may(data.account, 'organisation.manage', null)
+			? [{ href: resolve('/administration/(tabs)'), label: 'Administration', icon: Settings }]
 			: [])
 	]);
 </script>
