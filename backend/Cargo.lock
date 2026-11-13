@@ -831,6 +831,7 @@ dependencies = [
  "dji-log-parser",
  "futures-util",
  "geo",
+ "libc",
  "openidconnect",
  "percent-encoding",
  "rmcp",

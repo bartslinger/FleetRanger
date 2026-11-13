@@ -15,16 +15,12 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use dji_log_parser::DJILog;
-use dji_log_parser::frame::records_to_frames;
-use dji_log_parser::record::Record;
-use dji_log_parser::record::smart_battery_group::SmartBatteryGroup;
 use sqlx::PgConnection;
 
 use super::activity::{Activity, Stage};
 use super::db::{self, PendingLog, Saved};
-use super::dji::{self, Keychains, Reply};
-use super::flight::{self, BatteryInfo, Flight, Serials};
+use super::dji::{self, Reply};
+use super::parser::{self, KeyRequest, Processed};
 use crate::db::{System, Tenants};
 use crate::organisations;
 
@@ -48,23 +44,6 @@ fn retry_delay_s(attempts: i32) -> Option<i32> {
         _ if attempts < MAX_ATTEMPTS => Some(6 * 3600),
         _ => None,
     }
-}
-
-/// The record types the parser knows (the `magic` values in its `record/mod.rs`).
-/// A record of one of these types that comes out as `Unknown` failed to decode.
-const KNOWN_RECORD_TYPES: [u8; 24] = [
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 19, 22, 24, 25, 33, 40, 49, 50, 56, 62,
-];
-
-/// What a log contains, or why it can't give a flight (the log's fault).
-type Processed = std::result::Result<Box<Decoded>, String>;
-
-struct Decoded {
-    /// `None` if the aircraft never took off.
-    flight: Option<Flight>,
-    /// The summary DJI's app wrote into the log, logged for comparison with ours.
-    dji_total_time_s: f64,
-    dji_total_distance_m: f32,
 }
 
 /// How one attempt at a log ended, short of an error that may pass.
@@ -129,6 +108,19 @@ async fn process_next(
         return Ok(false);
     };
     let mut db = tenants.connect(log.organisation_id).await?;
+    // Every attempt ends by recording how it went, and the last one that
+    // records an error fails the log. Claimed once more, the log stopped
+    // the backend each time it was tried.
+    if log.attempts > MAX_ATTEMPTS {
+        let reason = format!(
+            "gave up after {MAX_ATTEMPTS} attempts: the backend stopped while processing it"
+        );
+        tracing::warn!(path = log.path, reason, "log failed to process");
+        if !db::mark_failed(&mut db, &log, &reason).await? {
+            superseded(&log);
+        }
+        return Ok(true);
+    }
     activity.start(log.organisation_id, &log.path);
 
     let path = super::organisation_dir(log_dir, log.organisation_id).join(&log.path);
@@ -227,8 +219,9 @@ fn superseded(log: &PendingLog) {
     );
 }
 
-/// One attempt at a log. An error is one that may pass, such as the file
-/// not being readable just now or the parser crashing: the log is tried
+/// One attempt at a log. The parser runs in child processes (see `parser`):
+/// once for the request for the log's keys, once to decode it. An error is
+/// one that may pass, such as the parser not starting: the log is tried
 /// again later.
 async fn process(
     db: &mut PgConnection,
@@ -238,58 +231,38 @@ async fn process(
     dji_app_key: Option<&str>,
     activity: &Activity,
 ) -> Result<Outcome> {
-    let bytes = tokio::fs::read(path)
-        .await
-        .with_context(|| format!("failed to read {}", raw_log.path))?;
-    let log = match blocking(move || DJILog::from_bytes(bytes)).await? {
-        Ok(log) => log,
-        Err(error) => {
-            return Ok(Outcome::Processed(Err(format!(
-                "not a readable DJI log: {error}"
-            ))));
+    let dji_answer = match parser::key_request(path).await? {
+        Ok(KeyRequest::None) => None,
+        Ok(KeyRequest::Body(request_body)) => {
+            match keys(db, system, raw_log, &request_body, dji_app_key, activity).await? {
+                Ok(dji_answer) => Some(dji_answer),
+                Err(outcome) => return Ok(outcome),
+            }
         }
-    };
-
-    // Logs from format version 13 on are encrypted.
-    let keychains = if log.version >= 13 {
-        match keychains(db, system, raw_log, &log, dji_app_key, activity).await? {
-            Ok(keychains) => Some(keychains),
-            Err(outcome) => return Ok(outcome),
-        }
-    } else {
-        None
+        Err(reason) => return Ok(Outcome::Processed(Err(reason))),
     };
 
     activity.stage(Stage::Decoding);
     Ok(Outcome::Processed(
-        blocking(move || decode(&log, keychains)).await?,
+        parser::decode(path, dji_answer.as_deref()).await?,
     ))
 }
 
-/// The keychains for a log: the ones DJI returned before, or else new ones
-/// from DJI, at DJI's shared request rate and only while DJI isn't down.
-async fn keychains(
+/// DJI's answer with the keys for a log: the one DJI gave before, or else a
+/// new one, at DJI's shared request rate and only while DJI isn't down.
+async fn keys(
     db: &mut PgConnection,
     system: &System,
     raw_log: &PendingLog,
-    log: &DJILog,
+    request_body: &str,
     dji_app_key: Option<&str>,
     activity: &Activity,
-) -> Result<std::result::Result<Keychains, Outcome>> {
-    let request = match log.keychains_request() {
-        Ok(request) => request,
-        Err(error) => {
-            return Ok(Err(Outcome::Processed(Err(format!(
-                "failed to read the log's key records: {error}"
-            )))));
-        }
-    };
-    let request_body = serde_json::to_string(&request)?;
+) -> Result<std::result::Result<String, Outcome>> {
     // Only for the same request: a new version of the log may need other keys.
-    if let Some(body) = db::stored_key_response(db, raw_log.id, &request_body).await?
-        && let Ok(Ok(keychains)) = dji::keychains(&body)
+    if let Some(body) = db::stored_key_response(db, raw_log.id, request_body).await?
+        && let Ok(Ok(_)) = dji::keychains(&body)
     {
-        return Ok(Ok(keychains));
+        return Ok(Ok(body));
     }
 
     if let Some((until, reason)) = db::dji_blocked(&mut *system.acquire().await?).await? {
@@ -313,13 +286,13 @@ async fn keychains(
     }
     let exchange = {
         let api_key = api_key.to_owned();
-        let request_body = request_body.clone();
+        let request_body = request_body.to_owned();
         blocking(move || dji::send(&api_key, &request_body)).await?
     };
     db::insert_key_request(
         db,
         raw_log.id,
-        &request_body,
+        request_body,
         exchange.status.map(i32::from),
         exchange.body.as_deref(),
         exchange.error.as_deref(),
@@ -329,7 +302,11 @@ async fn keychains(
     let dji_down = match dji::reply(&exchange) {
         Reply::Answered(answer) => {
             db::dji_answered(&mut *system.acquire().await?).await?;
-            return Ok(answer.map_err(|reason| Outcome::Processed(Err(reason))));
+            // An answer with keys always has a body.
+            return Ok(match answer {
+                Ok(_) => Ok(exchange.body.unwrap_or_default()),
+                Err(reason) => Err(Outcome::Processed(Err(reason))),
+            });
         }
         Reply::Down(reason) => reason,
     };
@@ -337,46 +314,6 @@ async fn keychains(
     Ok(Err(Outcome::DjiDown {
         until,
         reason: dji_down,
-    }))
-}
-
-fn decode(log: &DJILog, keychains: Option<Keychains>) -> Processed {
-    let records = log
-        .records(keychains)
-        .map_err(|error| format!("failed to decode the log: {error}"))?;
-
-    let failed = records
-        .iter()
-        .filter(|record| match record {
-            Record::Invalid(_) => true,
-            Record::Unknown(record_type, _) => KNOWN_RECORD_TYPES.contains(record_type),
-            _ => false,
-        })
-        .count();
-    if failed > 0 {
-        return Err(format!("{failed} records failed to decode"));
-    }
-
-    // The frames leave out the battery's static record.
-    let battery_info = records
-        .iter()
-        .find_map(|record| match record {
-            Record::SmartBatteryGroup(SmartBatteryGroup::SmartBatteryStatic(battery)) => {
-                Some(BatteryInfo {
-                    design_capacity_mah: i32::try_from(battery.designed_capacity)
-                        .ok()
-                        .filter(|&mah| mah > 0),
-                    cycles: Some(i32::from(battery.loop_times)),
-                })
-            }
-            _ => None,
-        })
-        .unwrap_or_default();
-    let frames = records_to_frames(records, log.details.clone());
-    Ok(Box::new(Decoded {
-        flight: flight::derive(&frames, Serials::from_details(&log.details), battery_info),
-        dji_total_time_s: log.details.total_time,
-        dji_total_distance_m: log.details.total_distance,
     }))
 }
 
