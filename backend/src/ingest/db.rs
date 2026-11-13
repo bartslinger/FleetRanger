@@ -16,6 +16,7 @@ use crate::{
 /// A pending log as the loop claimed it. Its result is written only while
 /// the log still has this content and this attempt: a new version uploaded
 /// meanwhile, or another worker's claim, makes it stale (see `save_result`).
+#[derive(Clone)]
 pub struct PendingLog {
     pub id: Uuid,
     pub path: String,

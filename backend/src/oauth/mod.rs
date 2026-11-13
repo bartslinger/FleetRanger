@@ -163,13 +163,17 @@ pub async fn clean_up_hourly(system: System) {
     let mut hourly = tokio::time::interval(std::time::Duration::from_secs(3600));
     loop {
         hourly.tick().await;
-        let cleaned = async {
+        let system = system.clone();
+        // A task of its own, so a panic ends only this round.
+        let cleaned = tokio::spawn(async move {
             // Every organisation's at once.
             let mut system = system.acquire().await?;
             db::clean_up(&mut system, IDLE_DAYS).await
-        };
-        if let Err(error) = cleaned.await {
-            tracing::error!(%error, "cleaning up OAuth data");
+        });
+        match cleaned.await {
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => tracing::error!(%error, "cleaning up OAuth data"),
+            Err(error) => tracing::error!(%error, "cleaning up OAuth data stopped"),
         }
     }
 }

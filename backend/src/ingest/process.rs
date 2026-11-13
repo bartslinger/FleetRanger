@@ -114,6 +114,10 @@ pub async fn run(
 /// organisation. Returns false if there was none. An error means trouble
 /// outside the log, such as the database being unreachable; a log it held
 /// is taken again when its claim runs out.
+///
+/// Each attempt runs as a task of its own, so that a panic, as in a library,
+/// ends only that attempt: it counts as an error that may pass, and the loop
+/// goes on.
 async fn process_next(
     system: &System,
     tenants: &Tenants,
@@ -124,33 +128,49 @@ async fn process_next(
     let Some(log) = db::next_pending(&mut *system.acquire().await?).await? else {
         return Ok(false);
     };
-    let db = &mut tenants.connect(log.organisation_id).await?;
+    let mut db = tenants.connect(log.organisation_id).await?;
     activity.start(log.organisation_id, &log.path);
 
     let path = super::organisation_dir(log_dir, log.organisation_id).join(&log.path);
-    let attempt = async {
-        let outcome = process(db, system, &log, &path, dji_app_key, activity).await?;
-        activity.stage(Stage::Saving);
-        finish(db, &log, outcome).await
-    }
-    .await;
+    let attempt = {
+        let (system, log, activity) = (system.clone(), log.clone(), activity.clone());
+        let dji_app_key = dji_app_key.map(str::to_owned);
+        tokio::spawn(async move {
+            let outcome = process(
+                &mut db,
+                &system,
+                &log,
+                &path,
+                dji_app_key.as_deref(),
+                &activity,
+            )
+            .await?;
+            activity.stage(Stage::Saving);
+            finish(&mut db, &log, outcome).await
+        })
+        .await
+    };
     activity.finished();
-    if let Err(error) = attempt {
-        let error = format!("{error:#}");
-        let still_ours = match retry_delay_s(log.attempts) {
-            Some(delay_s) => {
-                tracing::warn!(path = log.path, error, delay_s, "log will be tried again");
-                db::retry_later(db, &log, delay_s, &error).await?
-            }
-            None => {
-                let reason = format!("gave up after {MAX_ATTEMPTS} attempts: {error}");
-                tracing::warn!(path = log.path, reason, "log failed to process");
-                db::mark_failed(db, &log, &reason).await?
-            }
-        };
-        if !still_ours {
-            superseded(&log);
+    let error = match attempt {
+        Ok(Ok(())) => return Ok(true),
+        Ok(Err(error)) => format!("{error:#}"),
+        Err(error) => format!("processing stopped: {error}"),
+    };
+    // The attempt's connection may have gone with it.
+    let db = &mut tenants.connect(log.organisation_id).await?;
+    let still_ours = match retry_delay_s(log.attempts) {
+        Some(delay_s) => {
+            tracing::warn!(path = log.path, error, delay_s, "log will be tried again");
+            db::retry_later(db, &log, delay_s, &error).await?
         }
+        None => {
+            let reason = format!("gave up after {MAX_ATTEMPTS} attempts: {error}");
+            tracing::warn!(path = log.path, reason, "log failed to process");
+            db::mark_failed(db, &log, &reason).await?
+        }
+    };
+    if !still_ours {
+        superseded(&log);
     }
     Ok(true)
 }
