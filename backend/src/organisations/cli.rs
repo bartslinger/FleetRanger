@@ -17,6 +17,7 @@ usage:
   fleetranger organisations
   fleetranger add-organisation <name> [--time-zone <zone>] [--session-gap <minutes>] [--mcp on|off]
   fleetranger set-organisation <id> [--name <name>] [--time-zone <zone>] [--session-gap <minutes>] [--mcp on|off]
+  fleetranger delete-organisation <id> --name <its name>
   fleetranger add-user [--organisation <id>] [--admin] <email> <name>
   fleetranger import [--organisation <id>] [--group <name>]
 --organisation may be left out while the install has one organisation.";
@@ -40,6 +41,13 @@ pub async fn run(
         "add-organisation" => {
             let [name] = args.expect(&["time-zone", "session-gap", "mcp"])?;
             add(system, name, &args).await
+        }
+        "delete-organisation" => {
+            let [id] = args.expect(&["name"])?;
+            let name = args
+                .value("name")
+                .context("confirm with the organisation's name: --name <its name>")?;
+            delete(system, store, parse_id(id)?, name).await
         }
         "set-organisation" => {
             let [id] = args.expect(&["name", "time-zone", "session-gap", "mcp"])?;
@@ -290,4 +298,19 @@ async fn set(system: &System, id: Uuid, args: &Args<'_>) -> Result<()> {
     .await?;
     tx.commit().await?;
     list(system, Some(id)).await
+}
+
+/// Deletes an organisation with everything in it, and says what went.
+async fn delete(system: &System, store: &LogStore, id: Uuid, name: &str) -> Result<()> {
+    let organisation = super::delete::rows(system, id, name).await?;
+    let files = super::delete::files(store, id).await?;
+    match organisation {
+        Some((name, flights)) => {
+            println!("deleted {name} ({id}) with its {flights} flights and {files} raw log files")
+        }
+        None => println!(
+            "there is no organisation {id} any more; deleted {files} raw log files left of it"
+        ),
+    }
+    Ok(())
 }

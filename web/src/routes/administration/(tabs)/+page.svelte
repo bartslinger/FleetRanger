@@ -13,6 +13,8 @@
 
 	const organisation = $derived(data.organisation);
 	const message = $derived(form && 'message' in form ? form.message : undefined);
+	const nameError = $derived(form && 'nameError' in form ? form.nameError : undefined);
+	const deleteMessage = $derived(form && 'deleteMessage' in form ? form.deleteMessage : undefined);
 	// Reset to the saved value each time the dialog's fields are drawn anew.
 	let gap = $derived(organisation.session_gap_minutes);
 
@@ -97,6 +99,34 @@
 				</div>
 			{/if}
 		</dl>
+		<!-- Carbon's high-impact deletion: a danger modal where the name is typed
+		     (Common actions, "Delete"); a danger tertiary trigger as a side action,
+		     in its own block away from Edit settings (carbon-expert's advice). -->
+		<section class="delete" aria-labelledby="delete-heading">
+			<h2 id="delete-heading">Delete organisation</h2>
+			<p>Deletes the organisation and all its data at once.</p>
+			<Modal
+				title="Delete organisation"
+				triggerKind="danger-tertiary"
+				label={organisation.name}
+				submitLabel="Delete organisation"
+				danger
+				action="?/delete"
+				error={deleteMessage}
+			>
+				<p>
+					This deletes all flights, sessions, equipment, users and raw logs of {organisation.name}.
+					It can't be undone.
+				</p>
+				<TextInput
+					label="Type {organisation.name} to confirm"
+					error={nameError}
+					name="name"
+					required
+					autocomplete="off"
+				/>
+			</Modal>
+		</section>
 	</Column>
 </Grid>
 
@@ -130,6 +160,26 @@
 	dt {
 		color: var(--cds-text-primary);
 		font-weight: var(--cds-heading-compact-01-font-weight);
+	}
+
+	/* Its own block, a section's spacing below the settings. */
+	.delete {
+		margin-top: var(--cds-spacing-09);
+	}
+
+	.delete h2 {
+		margin: 0 0 var(--cds-spacing-03);
+		font-size: var(--cds-heading-compact-02-font-size);
+		font-weight: var(--cds-heading-compact-02-font-weight);
+		line-height: var(--cds-heading-compact-02-line-height);
+		letter-spacing: var(--cds-heading-compact-02-letter-spacing);
+	}
+
+	.delete > p {
+		margin: 0 0 var(--cds-spacing-05);
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-body-01-font-size);
+		line-height: var(--cds-body-01-line-height);
 	}
 
 	dd {

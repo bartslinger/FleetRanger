@@ -153,6 +153,7 @@ One install serving several organisations, for a hosted service where FleetRange
 - [x] Administration page: admins change their organisation's name and settings (General), with Apps as its second tab (2026-11-13; migration 0028)
 - [x] Tests that no organisation reads or changes another's data, in the database (every table, as `fleetranger_app`), at sign-in and in the processing status
 - [x] Afterwards: raw logs on S3, optionally (`FLEETRANGER_S3_BUCKET`), for the free trial; Garage on dev
+- [x] Deleting an organisation with everything in it, at once: `fleetranger delete-organisation` and the Administration page (2026-11-13); a fresh install starts without organisations (migration 0029)
 
 ## Before production use
 
@@ -170,6 +171,8 @@ One install serving several organisations, for a hosted service where FleetRange
 - Random (UUIDv4) ids for rows users see, instead of UUIDv7, which reveals when a row was created (user, 2026-11-12)
 - The web image on distroless Node: about 150 MB instead of 378, mostly Debian and npm it doesn't use (parked by the user, 2026-11-13)
 - Self-service sign-up on the hosted service: someone creates their own organisation for a trial, instead of the operator with the command-line tool (user, 2026-11-13)
+- Prune the tests to those that prevent future mistakes (user, 2026-11-13)
+- Dialogs show a loading state on their primary button while they work (Carbon, Modal "Loading"; from the review of deleting an organisation, 2026-11-13); needs a loading icon that shows on a coloured button
 
 ## Open questions
 

@@ -16,10 +16,10 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
-use object_store::ObjectStoreExt;
 use object_store::aws::{AmazonS3, AmazonS3Builder, AmazonS3ConfigKey};
 use object_store::buffered::BufWriter;
 use object_store::path::Path as ObjectPath;
+use object_store::{ObjectStore, ObjectStoreExt};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
@@ -172,6 +172,57 @@ impl LogStore {
         Ok(LocalLog::Scratch(scratch))
     }
 
+    /// Removes one log again, as when its organisation went while it was
+    /// being uploaded.
+    pub async fn remove(&self, organisation_id: Uuid, path: &str) -> Result<()> {
+        match &self.s3 {
+            Some(bucket) => bucket
+                .delete(&object_path(organisation_id, path)?)
+                .await
+                .with_context(|| format!("failed to remove {path} from S3")),
+            None => match tokio::fs::remove_file(self.file(organisation_id, path)).await {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    Err(error).with_context(|| format!("failed to remove {path}"))
+                }
+                _ => Ok(()),
+            },
+        }
+    }
+
+    /// Deletes all of an organisation's logs: its directory, and with S3 its
+    /// objects in the bucket. Returns how many files there were; nothing to
+    /// delete is no error, so it can run again.
+    pub async fn delete_organisation(&self, organisation_id: Uuid) -> Result<u64> {
+        // Also with S3: the import copies logs there from this directory.
+        let dir = self.organisation_dir(organisation_id);
+        let mut files = tokio::task::spawn_blocking(move || {
+            let files = count_files(&dir);
+            match std::fs::remove_dir_all(&dir) {
+                Ok(()) => Ok(files),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+                Err(error) => {
+                    Err(error).with_context(|| format!("failed to delete {}", dir.display()))
+                }
+            }
+        })
+        .await
+        .context("deleting the log directory stopped")??;
+        let Some(bucket) = &self.s3 else {
+            return Ok(files);
+        };
+        let prefix = ObjectPath::parse(organisation_id.to_string())?;
+        let locations = bucket
+            .list(Some(&prefix))
+            .map(|meta| meta.map(|meta| meta.location))
+            .boxed();
+        let mut deleted = bucket.delete_stream(locations);
+        while let Some(result) = deleted.next().await {
+            result.context("failed to delete logs from S3")?;
+            files += 1;
+        }
+        Ok(files)
+    }
+
     /// The organisation's log directory, for the import.
     pub fn organisation_dir(&self, organisation_id: Uuid) -> PathBuf {
         self.log_dir.join(organisation_id.to_string())
@@ -273,4 +324,19 @@ pub async fn hash_file(path: &Path) -> Result<(Vec<u8>, u64)> {
         size += read as u64;
     }
     Ok((hasher.finalize().to_vec(), size))
+}
+
+/// How many files are below `dir`, for reporting what was deleted.
+fn count_files(dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.file_type() {
+            Ok(kind) if kind.is_dir() => count_files(&entry.path()),
+            Ok(_) => 1,
+            Err(_) => 0,
+        })
+        .sum()
 }
