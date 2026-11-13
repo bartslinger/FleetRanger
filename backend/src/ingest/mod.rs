@@ -7,6 +7,7 @@ mod db;
 mod dji;
 mod flight;
 pub mod import;
+pub mod parser;
 pub mod process;
 pub mod routes;
 pub mod service;

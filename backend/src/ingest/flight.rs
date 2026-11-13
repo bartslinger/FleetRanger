@@ -4,13 +4,14 @@
 use chrono::{DateTime, TimeDelta, Utc};
 use dji_log_parser::frame::Frame;
 use dji_log_parser::layout::details::Details;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// Time between track points.
 const TRACK_INTERVAL: TimeDelta = TimeDelta::seconds(1);
 const EARTH_RADIUS_M: f64 = 6_371_008.8;
 
+#[derive(Serialize, Deserialize)]
 pub struct Flight {
     pub takeoff_at: DateTime<Utc>,
     pub landed_at: DateTime<Utc>,
@@ -33,6 +34,7 @@ pub struct BatteryInfo {
 }
 
 /// A battery on one flight; what the log doesn't report is None.
+#[derive(Serialize, Deserialize)]
 pub struct BatteryUse {
     pub serial: String,
     pub charge_start_pct: Option<i16>,
@@ -47,7 +49,7 @@ pub struct BatteryUse {
 }
 
 /// Display-only summaries, stored as JSON.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Metrics {
     pub max_altitude_m: f64,
     pub camera_serial: Option<String>,

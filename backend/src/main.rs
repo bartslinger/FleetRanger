@@ -41,8 +41,21 @@ use crate::ingest::LogDir;
 use crate::ingest::activity::Activity;
 use crate::oauth::OAuth;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // The log parser's child process needs none of what follows: no
+    // runtime, no log lines on its output, no database.
+    if let Some(code) = ingest::parser::run_child(&args) {
+        std::process::exit(code);
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("failed to start the runtime")?
+        .block_on(start(args))
+}
+
+async fn start(args: Vec<String>) -> Result<()> {
     tracing_subscriber::fmt()
         // Postgres notices ("relation already exists, skipping" on every start) are noise.
         .with_env_filter(
@@ -75,7 +88,6 @@ async fn main() -> Result<()> {
     .context("failed to connect to the database as fleetranger_app")?;
     let system = db::System(system);
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [] | ["serve"] => serve(&config, system, tenants).await,
         _ => organisations::cli::run(&args, &system, &tenants, &config.log_dir).await,
