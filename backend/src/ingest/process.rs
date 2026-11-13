@@ -129,6 +129,17 @@ async fn process_next(
         return Ok(false);
     };
     let mut db = tenants.connect(log.organisation_id).await?;
+    // Every attempt ends by recording how it went, and the last one that
+    // records an error fails the log. Claimed once more, the log stopped
+    // the backend each time it was tried.
+    if log.attempts > MAX_ATTEMPTS {
+        let reason = format!("gave up after {MAX_ATTEMPTS} attempts: the backend stopped while processing it");
+        tracing::warn!(path = log.path, reason, "log failed to process");
+        if !db::mark_failed(&mut db, &log, &reason).await? {
+            superseded(&log);
+        }
+        return Ok(true);
+    }
     activity.start(log.organisation_id, &log.path);
 
     let path = super::organisation_dir(log_dir, log.organisation_id).join(&log.path);
