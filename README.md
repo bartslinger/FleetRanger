@@ -52,6 +52,24 @@ Raw logs are read from `FLEETRANGER_LOG_DIR` (`/data/flightlogs` by default), ea
 FLEETRANGER_LOG_DIR=~/fleetranger-testlogs cargo run --locked -- import
 ```
 
+To keep raw logs on S3 instead, set `FLEETRANGER_S3_BUCKET`; the usual `AWS_*` variables give the credentials, region and, for another provider than AWS, the endpoint. `FLEETRANGER_LOG_DIR` then holds only files passing through. For development, `compose.dev.yaml` runs Garage on port 3900. Set it up once, after `docker compose -f compose.dev.yaml up -d garage`:
+
+```
+garage() { docker compose -f compose.dev.yaml exec -T garage /garage "$@"; }
+garage layout assign -z dev -c 1G "$(garage status | awk '/HEALTHY/ {getline; getline; print $1}')"
+garage layout apply --version 1
+garage bucket create fleetranger-logs
+garage key import --yes -n fleetranger-dev GK000000000000000000000000 0000000000000000000000000000000000000000000000000000000000000000
+garage bucket allow --read --write fleetranger-logs --key fleetranger-dev
+```
+
+Then start the backend with these set as well:
+
+```
+FLEETRANGER_S3_BUCKET=fleetranger-logs AWS_ENDPOINT=http://127.0.0.1:3900 AWS_REGION=garage AWS_ALLOW_HTTP=true \
+AWS_ACCESS_KEY_ID=GK000000000000000000000000 AWS_SECRET_ACCESS_KEY=0000000000000000000000000000000000000000000000000000000000000000
+```
+
 The download page offers the controller app from `FLEETRANGER_ANDROID_APK` (`/data/android/FleetRanger.apk` by default); for development, point it at a copy of `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 After adding or changing a SQL query, run `cargo sqlx prepare` (with `DATABASE_URL` set) and commit the `.sqlx` directory. Image builds check queries against it, as they have no database.

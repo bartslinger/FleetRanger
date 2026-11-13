@@ -32,6 +32,16 @@ services:
       # Kept out of the shared folder: faster, and no host-specific binaries in the repo.
       - web-node-modules:/repo/web/node_modules
 
+  # S3 for raw logs, to try FLEETRANGER_S3_BUCKET (see README). Development only.
+  garage:
+    image: dxflrs/garage:v2.5.0@sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5
+    volumes:
+      - ./garage.dev.toml:/etc/garage.toml:ro
+      - garage:/var/lib/garage
+    ports:
+      - 127.0.0.1:3900:3900
+
 volumes:
   postgres:
   web-node-modules:
+  garage:
