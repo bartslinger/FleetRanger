@@ -3,8 +3,8 @@
 use crate::db::{Db, System, Tenants};
 use axum::{
     Json, Router,
-    body::Bytes,
-    extract::{DefaultBodyLimit, FromRef, Path, State},
+    body::Body,
+    extract::{FromRef, Path, State},
     http::{HeaderMap, StatusCode},
     middleware,
     routing::{get, post, put},
@@ -15,8 +15,8 @@ use uuid::Uuid;
 use super::activity::Activity;
 use super::db::Stored;
 use super::service::{self, Status};
+use super::store::LogStore;
 use super::upload;
-use super::{LogDir, organisation_dir};
 use crate::{
     auth::Actor,
     error::{ApiError, ApiResult},
@@ -24,34 +24,23 @@ use crate::{
     pairing::Controller,
 };
 
-/// DJI logs are a few megabytes: the largest test log, of a 35-minute flight,
-/// is 8.2 MB. The parser needs about 7 times a log's size, so this keeps it
-/// under half a gigabyte (user's decision, 2026-11-13).
-const MAX_LOG_BYTES: usize = 64 * 1024 * 1024;
-
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     crate::db::System: FromRef<S>,
     crate::db::Tenants: FromRef<S>,
     Activity: FromRef<S>,
-    LogDir: FromRef<S>,
+    LogStore: FromRef<S>,
     Changes: FromRef<S>,
 {
     // The controller's API, see "Clients" in docs/architecture.md.
     let v1 = Router::new()
-        .route(
-            "/api/controller/v1/logs/{file_name}",
-            put(put_log).layer(DefaultBodyLimit::max(MAX_LOG_BYTES)),
-        )
+        .route("/api/controller/v1/logs/{file_name}", put(put_log))
         .route("/api/controller/v1/logs/check", post(missing))
         .route_layer(middleware::from_fn(crate::pairing::v1_errors));
     // What android-v0.3.0 calls, until no controller reports it.
     let v0 = Router::new()
-        .route(
-            "/api/controller/logs",
-            post(receive_v0).layer(DefaultBodyLimit::max(MAX_LOG_BYTES)),
-        )
+        .route("/api/controller/logs", post(receive_v0))
         .route("/api/controller/logs/missing", post(missing));
     Router::new()
         .route("/api/logs/processing", get(status))
@@ -106,26 +95,27 @@ struct Received {
 async fn put_log(
     controller: Controller,
     State(tenants): State<Tenants>,
-    State(LogDir(log_dir)): State<LogDir>,
+    State(store): State<LogStore>,
     State(changes): State<Changes>,
     Path(file_name): Path<String>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Body,
 ) -> ApiResult<(StatusCode, Json<Received>)> {
     let chosen = upload::Chosen {
         pilot_id: id_header(&headers, "x-pilot-id")?,
         group_id: id_header(&headers, "x-group-id")?,
     };
     let sha256 = text_header(&headers, "x-sha256");
+    let upload = upload::read(&store, body).await?;
     let mut db = tenants.connect(controller.organisation_id).await?;
     let result = upload::receive(
         &mut db,
-        &organisation_dir(&log_dir, controller.organisation_id),
+        &store,
         &controller,
         &file_name,
         sha256,
         chosen,
-        &body,
+        upload,
     )
     .await?;
     if result != Stored::Duplicate {
@@ -148,10 +138,10 @@ async fn put_log(
 async fn receive_v0(
     controller: Controller,
     State(tenants): State<Tenants>,
-    State(LogDir(log_dir)): State<LogDir>,
+    State(store): State<LogStore>,
     State(changes): State<Changes>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Body,
 ) -> ApiResult<(StatusCode, Json<Received>)> {
     let chosen = upload::Chosen {
         pilot_id: id_header(&headers, "x-pilot-id")?,
@@ -159,15 +149,16 @@ async fn receive_v0(
     };
     let file_name = text_header(&headers, "x-file-name");
     let sha256 = text_header(&headers, "x-sha256");
+    let upload = upload::read(&store, body).await?;
     let mut db = tenants.connect(controller.organisation_id).await?;
     let result = upload::receive(
         &mut db,
-        &organisation_dir(&log_dir, controller.organisation_id),
+        &store,
         &controller,
         file_name,
         sha256,
         chosen,
-        &body,
+        upload,
     )
     .await?;
     let status = match result {

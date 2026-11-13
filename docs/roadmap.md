@@ -8,7 +8,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Groups and roles, before multi-tenancy** (user's decision, 2026-10-23): groups replaced teams, and roles as building blocks (Viewer, Pilot, Editor, Admin) replaced the three fixed roles; see "Groups and roles" in [architecture.md](architecture.md) and the packages below. Teams, the fixed roles and holders are dropped (migration 0020); released as v0.7.0 and android-v0.4.0 on 2026-10-24, with fine-tuning after the release (user, 2026-10-24). Groups replace teams in the code, every access check asks for a permission on the groups tables, a flight's pilot and group are independent, uploads without a chosen group go to the queue, a session's own group decides who changes it, only flights without a session are archived, equipment is also seen through its flights with figures over all of them, pairing puts a controller in a group the creator chooses, holders are gone from the app, and the admin pages manage groups, their members' roles and roles on the whole organisation. The web app says "group" everywhere and shows what the user's permissions allow: sessions get a group chosen by their maker and can be moved with or without their flights, pilot lists put the group's own pilots first; MCP has the user's own access. The controller app has moved over (package 8): each pilot once, then the group they fly for, with "Other group"; it talks to a versioned controller API (`/api/controller/v1`, user's decision), while android-v0.3.0 keeps working, its uploads taking the group (team) chosen with the pilot, and it stays in landscape. Serving several organisations from one install follows after.
 
-**Now:** log processing works with one backend or several (claims, retries per log, DJI's rate and outages shared; see "Processing progress" in [architecture.md](architecture.md)), no backend code outside tests can panic, which clippy enforces, and the parser runs in a child process with limits, so a log that crashes it fails on its own. Next: streaming uploads (Phase 2), then the status from the database and automatic reprocessing, and whatever early access needs. An app's navigation item waits (user, 2026-10-26: the first change to FleetRanger's UI from an outside app, not yet sure if and how). Controller notes are parked.
+**Now:** log processing works with one backend or several (claims, retries per log, DJI's rate and outages shared; see "Processing progress" in [architecture.md](architecture.md)), no backend code outside tests can panic, which clippy enforces, and the parser runs in a child process with limits, so a log that crashes it fails on its own. Uploads stream to a scratch file, and raw logs can be kept on S3, for the free trial on one server. Next: the status from the database and automatic reprocessing, and whatever early access needs. An app's navigation item waits (user, 2026-10-26: the first change to FleetRanger's UI from an outside app, not yet sure if and how). Controller notes are parked.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
@@ -33,7 +33,7 @@ Everyone is a user, with roles in groups (and Admin on the whole organisation) a
 - [x] Parse into flights: times, time in air, distance, track, drone/controller/battery serials
 - [ ] Re-processing of all logs after parser changes
 - [x] Parse each log in a child process with memory and time limits (user, 2026-11-13): a log that runs the parser out of memory or into a stack overflow fails on its own, instead of taking down the backend and its API and being retried every 5 minutes
-- [ ] Stream uploads to disk while hashing them (user, 2026-11-13; a couple of hours): a log is now held in memory whole (up to 64 MB), so a few large uploads at once could run a small server out of memory
+- [x] Stream uploads to disk while hashing them (user, 2026-11-13): a log was held in memory whole, so a few large uploads at once could run a small server out of memory
 
 ## Phase 3: sessions
 
@@ -152,7 +152,7 @@ One install serving several organisations, for a hosted service where FleetRange
 - [x] Web app: an organisation switcher for logins in several organisations
 - [x] Administration page: admins change their organisation's name and settings (General), with Apps as its second tab (2026-11-13; migration 0028)
 - [x] Tests that no organisation reads or changes another's data, in the database (every table, as `fleetranger_app`), at sign-in and in the processing status
-- [ ] Afterwards: raw logs on S3, optionally
+- [x] Afterwards: raw logs on S3, optionally (`FLEETRANGER_S3_BUCKET`), for the free trial; Garage on dev
 
 ## Before production use
 

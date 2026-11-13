@@ -14,6 +14,8 @@ pub enum ApiError {
     Invalid(String),
     /// It conflicts with what is stored, e.g. a name that is already taken.
     Conflict(String),
+    /// The request is larger than allowed, e.g. a log upload.
+    TooLarge(String),
     Internal(anyhow::Error),
 }
 
@@ -38,6 +40,7 @@ impl IntoResponse for ApiError {
             Self::NotFound => StatusCode::NOT_FOUND.into_response(),
             Self::Invalid(message) => (StatusCode::BAD_REQUEST, message).into_response(),
             Self::Conflict(message) => (StatusCode::CONFLICT, message).into_response(),
+            Self::TooLarge(message) => (StatusCode::PAYLOAD_TOO_LARGE, message).into_response(),
             Self::Internal(error) => {
                 tracing::error!(error = format!("{error:#}"), "request failed");
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()

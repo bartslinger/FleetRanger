@@ -10,7 +10,7 @@
 //! pass, such as a failed save (this log, later: tried again after a growing
 //! delay, and failed after `MAX_ATTEMPTS`).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -21,6 +21,7 @@ use super::activity::{Activity, Stage};
 use super::db::{self, PendingLog, Saved};
 use super::dji::{self, Reply};
 use super::parser::{self, KeyRequest, Processed};
+use super::store::LogStore;
 use crate::db::{System, Tenants};
 use crate::organisations;
 
@@ -60,19 +61,13 @@ enum Outcome {
 pub async fn run(
     system: System,
     tenants: Tenants,
-    log_dir: PathBuf,
+    store: LogStore,
     dji_app_key: Option<String>,
     activity: Activity,
 ) {
     loop {
-        let result = process_next(
-            &system,
-            &tenants,
-            &log_dir,
-            dji_app_key.as_deref(),
-            &activity,
-        )
-        .await;
+        let result =
+            process_next(&system, &tenants, &store, dji_app_key.as_deref(), &activity).await;
         let pause = match result {
             Ok(true) => continue,
             Ok(false) => {
@@ -100,7 +95,7 @@ pub async fn run(
 async fn process_next(
     system: &System,
     tenants: &Tenants,
-    log_dir: &Path,
+    store: &LogStore,
     dji_app_key: Option<&str>,
     activity: &Activity,
 ) -> Result<bool> {
@@ -123,16 +118,18 @@ async fn process_next(
     }
     activity.start(log.organisation_id, &log.path);
 
-    let path = super::organisation_dir(log_dir, log.organisation_id).join(&log.path);
     let attempt = {
-        let (system, log, activity) = (system.clone(), log.clone(), activity.clone());
+        let (system, store, log, activity) =
+            (system.clone(), store.clone(), log.clone(), activity.clone());
         let dji_app_key = dji_app_key.map(str::to_owned);
         tokio::spawn(async move {
+            // Removed again, if a copy from S3, once the attempt is over.
+            let local = store.fetch(log.organisation_id, &log.path).await?;
             let outcome = process(
                 &mut db,
                 &system,
                 &log,
-                &path,
+                local.path(),
                 dji_app_key.as_deref(),
                 &activity,
             )

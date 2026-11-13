@@ -2,18 +2,25 @@
 //! `raw/<controller serial>/FlightRecord/<file name>`, the name it had on the
 //! controller; see "Data" in docs/architecture.md.
 
-use std::path::Path;
-
 use anyhow::Context;
+use axum::body::Body;
+use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
 use sqlx::PgConnection;
+use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use super::db::{self, Stored};
+use super::store::{LogStore, Scratch};
 use crate::{
     error::{ApiError, ApiResult},
     pairing::{Controller, parse_sha256},
 };
+
+/// DJI logs are a few megabytes: the largest so far, of a 35-minute flight,
+/// is 8.5 MB. The parser needs about 7 times a log's size, so this keeps it
+/// under half a gigabyte (user's decision, 2026-11-13).
+const MAX_LOG_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Who was chosen on the controller before the log was written.
 pub struct Chosen {
@@ -22,30 +29,65 @@ pub struct Chosen {
     pub group_id: Option<Uuid>,
 }
 
+/// An upload, written to a scratch file as it came in, so that it is never
+/// held in memory whole.
+pub struct Upload {
+    scratch: Scratch,
+    sha256: Vec<u8>,
+    size: u64,
+}
+
+/// Reads an upload's body into a scratch file, computing its SHA-256 on the way.
+pub async fn read(store: &LogStore, body: Body) -> ApiResult<Upload> {
+    let mut scratch = store.scratch().await?;
+    let file = scratch.file()?;
+    let mut hasher = Sha256::new();
+    let mut size = 0;
+    let mut stream = body.into_data_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| ApiError::Invalid("The upload broke off.".to_owned()))?;
+        size += chunk.len() as u64;
+        if size > MAX_LOG_BYTES {
+            return Err(ApiError::TooLarge(format!(
+                "A log can be at most {} MB.",
+                MAX_LOG_BYTES / 1024 / 1024
+            )));
+        }
+        hasher.update(&chunk);
+        file.write_all(&chunk)
+            .await
+            .context("failed to write an upload")?;
+    }
+    Ok(Upload {
+        scratch,
+        sha256: hasher.finalize().to_vec(),
+        size,
+    })
+}
+
 /// Checks an uploaded log against the hash the controller computed, and
 /// stores it unless the same content is stored already.
 pub async fn receive(
     db: &mut PgConnection,
-    log_dir: &Path,
+    store: &LogStore,
     controller: &Controller,
     file_name: &str,
     sha256_hex: &str,
     chosen: Chosen,
-    body: &[u8],
+    upload: Upload,
 ) -> ApiResult<Stored> {
     if !is_log_name(file_name) {
         return Err(ApiError::Invalid("Send the log's file name.".to_owned()));
     }
     let claimed = parse_sha256(sha256_hex)
         .ok_or_else(|| ApiError::Invalid("Send the log's SHA-256 in hex.".to_owned()))?;
-    let sha256 = Sha256::digest(body);
-    if sha256.as_slice() != claimed.as_slice() {
+    if upload.sha256 != claimed {
         // Cut off on the way: the controller sends it again.
         return Err(ApiError::Invalid(
             "The log doesn't match its SHA-256.".to_owned(),
         ));
     }
-    if db::has_content(db, &sha256).await? {
+    if db::has_content(db, &upload.sha256).await? {
         return Ok(Stored::Duplicate);
     }
     if !controller.serial.chars().all(|c| c.is_ascii_alphanumeric()) {
@@ -56,14 +98,14 @@ pub async fn receive(
     }
 
     let relative = format!("raw/{}/FlightRecord/{file_name}", controller.serial);
-    write(&log_dir.join(&relative), body)
-        .await
-        .with_context(|| format!("failed to store {relative}"))
-        .map_err(ApiError::Internal)?;
-    let size = i64::try_from(body.len()).map_err(|error| ApiError::Internal(error.into()))?;
+    let size = i64::try_from(upload.size).map_err(|error| ApiError::Internal(error.into()))?;
+    // Stored before it is registered, so the processing loop finds it.
+    store
+        .store(controller.organisation_id, &relative, upload.scratch)
+        .await?;
     Ok(db::save_upload(
         db,
-        &sha256,
+        &upload.sha256,
         &relative,
         size,
         chosen.pilot_id,
@@ -105,21 +147,6 @@ fn is_log_name(name: &str) -> bool {
         && name.ends_with(".txt")
         && !name.starts_with('.')
         && !name.contains(['/', '\\'])
-}
-
-/// Writes next to the destination first and then renames, so the processing
-/// loop never reads a half-written file.
-async fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
-        return Err(std::io::Error::other(format!(
-            "not a path to a log file: {}",
-            path.display()
-        )));
-    };
-    tokio::fs::create_dir_all(dir).await?;
-    let part = dir.join(format!(".{}.part", name.to_string_lossy()));
-    tokio::fs::write(&part, bytes).await?;
-    tokio::fs::rename(&part, path).await
 }
 
 #[cfg(test)]

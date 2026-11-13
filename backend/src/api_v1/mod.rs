@@ -270,7 +270,9 @@ impl From<ApiError> for V1Error {
     fn from(error: ApiError) -> Self {
         match error {
             ApiError::NotFound | ApiError::Forbidden => Self::NotFound,
-            ApiError::Invalid(message) | ApiError::Conflict(message) => Self::Invalid(message),
+            ApiError::Invalid(message)
+            | ApiError::Conflict(message)
+            | ApiError::TooLarge(message) => Self::Invalid(message),
             ApiError::Internal(error) => {
                 tracing::error!(error = format!("{error:#}"), "answering the public API");
                 Self::Internal

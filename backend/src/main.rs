@@ -37,8 +37,8 @@ use crate::auth::Auth;
 use crate::config::Config;
 use crate::download::AndroidApk;
 use crate::events::Changes;
-use crate::ingest::LogDir;
 use crate::ingest::activity::Activity;
+use crate::ingest::store::LogStore;
 use crate::oauth::OAuth;
 
 fn main() -> Result<()> {
@@ -56,6 +56,13 @@ fn main() -> Result<()> {
 }
 
 async fn start(args: Vec<String>) -> Result<()> {
+    // TLS for S3 (reqwest, through object_store) uses ring, as ureq does.
+    if rustls::crypto::ring::default_provider()
+        .install_default()
+        .is_err()
+    {
+        anyhow::bail!("failed to set up TLS");
+    }
     tracing_subscriber::fmt()
         // Postgres notices ("relation already exists, skipping" on every start) are noise.
         .with_env_filter(
@@ -87,10 +94,11 @@ async fn start(args: Vec<String>) -> Result<()> {
     .await
     .context("failed to connect to the database as fleetranger_app")?;
     let system = db::System(system);
+    let store = LogStore::open(config.log_dir.clone(), config.s3_bucket.as_deref())?;
 
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
-        [] | ["serve"] => serve(&config, system, tenants).await,
-        _ => organisations::cli::run(&args, &system, &tenants, &config.log_dir).await,
+        [] | ["serve"] => serve(&config, system, tenants, store).await,
+        _ => organisations::cli::run(&args, &system, &tenants, &store).await,
     }
 }
 
@@ -103,7 +111,7 @@ struct AppState {
     activity: Activity,
     changes: Changes,
     apps: oauth::AppsOn,
-    log_dir: LogDir,
+    store: LogStore,
     android_apk: AndroidApk,
     oauth: OAuth,
 }
@@ -126,9 +134,9 @@ impl FromRef<AppState> for AndroidApk {
     }
 }
 
-impl FromRef<AppState> for LogDir {
+impl FromRef<AppState> for LogStore {
     fn from_ref(state: &AppState) -> Self {
-        state.log_dir.clone()
+        state.store.clone()
     }
 }
 
@@ -162,13 +170,20 @@ impl FromRef<AppState> for Arc<Auth> {
     }
 }
 
-async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Result<()> {
+async fn serve(
+    config: &Config,
+    system: db::System,
+    tenants: db::Tenants,
+    store: LogStore,
+) -> Result<()> {
+    tracing::info!("raw logs on {}", store.describe());
+    store.remove_old_scratch();
     let changes = Changes::default();
     let activity = Activity::new(changes.clone());
     tokio::spawn(ingest::process::run(
         system.clone(),
         tenants.clone(),
-        config.log_dir.clone(),
+        store.clone(),
         config.dji_app_key.clone(),
         activity.clone(),
     ));
@@ -212,7 +227,7 @@ async fn serve(config: &Config, system: db::System, tenants: db::Tenants) -> Res
             mcp: config.mcp,
             api: config.api,
         },
-        log_dir: LogDir(config.log_dir.clone()),
+        store,
         android_apk: AndroidApk {
             path: config.android_apk.clone(),
             server: issuer.clone(),
