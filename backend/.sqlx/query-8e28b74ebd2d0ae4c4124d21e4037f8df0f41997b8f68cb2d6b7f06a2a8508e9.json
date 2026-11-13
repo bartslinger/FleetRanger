@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select name as \"name!\" from pg_timezone_names\n           where (name like '%/%' and name !~ '^(posix|Etc|SystemV)/') or name = 'UTC'\n           order by name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pg_timezone_names",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "8e28b74ebd2d0ae4c4124d21e4037f8df0f41997b8f68cb2d6b7f06a2a8508e9"
+}

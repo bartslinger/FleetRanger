@@ -282,6 +282,21 @@ mod tests {
             let refused = sqlx::query(sql).bind(a_id).execute(&mut *b).await;
             assert!(refused.is_err(), "{sql}");
         }
+        // Admins rename their own organisation and change its settings
+        // (migration 0028), never another's.
+        for sql in [
+            "update organisations set name = 'Test taken over' where id = $1",
+            "update organisation_settings set session_gap_minutes = 1 where organisation_id = $1",
+        ] {
+            let changed = sqlx::query(sql).bind(a_id).execute(&mut *b).await.unwrap();
+            assert_eq!(changed.rows_affected(), 0, "{sql}");
+        }
+        let renamed = sqlx::query("update organisations set name = 'Test Org B2' where id = $1")
+            .bind(b_id)
+            .execute(&mut *b)
+            .await
+            .unwrap();
+        assert_eq!(renamed.rows_affected(), 1, "B renames itself");
         // B's own rows land in B by themselves.
         let landed: Uuid = sqlx::query_scalar(
             "insert into groups (name) values ('Test North') returning organisation_id",

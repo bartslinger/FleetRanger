@@ -30,10 +30,12 @@ pub enum Permission {
     LogsManage,
     /// Adding trusted apps, which skip the consent screen.
     AppsManage,
+    /// Changing the organisation's name and settings.
+    OrganisationManage,
 }
 
 impl Permission {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::FlightsRead,
         Self::EquipmentRead,
         Self::FlightsFlyFor,
@@ -52,6 +54,7 @@ impl Permission {
         Self::AreasManage,
         Self::LogsManage,
         Self::AppsManage,
+        Self::OrganisationManage,
     ];
 
     /// Its name in docs/architecture.md and the API, such as `flights.read`.
@@ -75,6 +78,7 @@ impl Permission {
             Self::AreasManage => "areas.manage",
             Self::LogsManage => "logs.manage",
             Self::AppsManage => "apps.manage",
+            Self::OrganisationManage => "organisation.manage",
         }
     }
 }
