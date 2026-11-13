@@ -302,15 +302,14 @@ async fn set(system: &System, id: Uuid, args: &Args<'_>) -> Result<()> {
 
 /// Deletes an organisation with everything in it, and says what went.
 async fn delete(system: &System, store: &LogStore, id: Uuid, name: &str) -> Result<()> {
-    let deleted = super::delete::delete(system, store, id, name).await?;
-    match deleted.organisation {
-        Some((name, flights)) => println!(
-            "deleted {name} ({id}) with its {flights} flights and {} raw log files",
-            deleted.files
-        ),
+    let organisation = super::delete::rows(system, id, name).await?;
+    let files = super::delete::files(store, id).await?;
+    match organisation {
+        Some((name, flights)) => {
+            println!("deleted {name} ({id}) with its {flights} flights and {files} raw log files")
+        }
         None => println!(
-            "there is no organisation {id} any more; deleted {} raw log files left of it",
-            deleted.files
+            "there is no organisation {id} any more; deleted {files} raw log files left of it"
         ),
     }
     Ok(())

@@ -3,26 +3,20 @@
 //! on disk or in S3. The name confirms it, as names aren't unique.
 //!
 //! The database goes first, in one statement, so the controllers' tokens and
-//! the logins stop working right away; the files follow. Should deleting the
-//! files fail, deleting the organisation again, which is gone by then,
-//! deletes what is left of them.
+//! the logins stop working right away; the files follow (`files`). Should
+//! deleting the files fail, deleting the organisation again, which is gone by
+//! then, deletes what is left of them.
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
 use crate::db::System;
 use crate::ingest::store::LogStore;
 
-/// What deleting removed.
-pub struct Deleted {
-    /// The organisation's name and flights; None if it was gone already and
-    /// only files were left.
-    pub organisation: Option<(String, i64)>,
-    pub files: u64,
-}
-
-/// Deletes the organisation `id`, if `name` is its name, with all its data.
-pub async fn delete(system: &System, store: &LogStore, id: Uuid, name: &str) -> Result<Deleted> {
+/// Deletes the organisation `id` from the database, if `name` is its name,
+/// with all its data. Returns its name and how many flights went, or None if
+/// it was gone already.
+pub async fn rows(system: &System, id: Uuid, name: &str) -> Result<Option<(String, i64)>> {
     let mut tx = system.begin().await?;
     let found = sqlx::query_scalar!(
         "select name from organisations where id = $1 for update",
@@ -30,23 +24,27 @@ pub async fn delete(system: &System, store: &LogStore, id: Uuid, name: &str) -> 
     )
     .fetch_optional(&mut *tx)
     .await?;
-    let organisation = match found {
-        Some(actual) if actual != name => {
-            bail!("that isn't the organisation's name, which is {actual:?}");
-        }
-        Some(actual) => {
-            let flights = sqlx::query_file_scalar!("src/organisations/delete.sql", id)
-                .fetch_one(&mut *tx)
-                .await?;
-            tx.commit().await?;
-            Some((actual, flights))
-        }
-        None => None,
+    let Some(actual) = found else {
+        return Ok(None);
     };
-    let files = store.delete_organisation(id).await?;
-    Ok(Deleted {
-        organisation,
-        files,
+    if actual != name {
+        bail!("that isn't the organisation's name, which is {actual:?}");
+    }
+    let flights = sqlx::query_file_scalar!("src/organisations/delete.sql", id)
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Some((actual, flights)))
+}
+
+/// Deletes the raw logs of an organisation whose rows are gone. Returns how
+/// many files there were.
+pub async fn files(store: &LogStore, id: Uuid) -> Result<u64> {
+    store.delete_organisation(id).await.with_context(|| {
+        format!(
+            "failed to delete the raw logs of organisation {id}; \
+             `fleetranger delete-organisation {id} --name -` deletes what is left"
+        )
     })
 }
 

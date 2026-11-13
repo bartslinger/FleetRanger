@@ -172,20 +172,43 @@ impl LogStore {
         Ok(LocalLog::Scratch(scratch))
     }
 
-    /// Deletes all of an organisation's logs: its directory, or its objects
-    /// in the bucket. Returns how many files there were; nothing to delete
-    /// is no error, so it can run again.
+    /// Removes one log again, as when its organisation went while it was
+    /// being uploaded.
+    pub async fn remove(&self, organisation_id: Uuid, path: &str) -> Result<()> {
+        match &self.s3 {
+            Some(bucket) => bucket
+                .delete(&object_path(organisation_id, path)?)
+                .await
+                .with_context(|| format!("failed to remove {path} from S3")),
+            None => match tokio::fs::remove_file(self.file(organisation_id, path)).await {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    Err(error).with_context(|| format!("failed to remove {path}"))
+                }
+                _ => Ok(()),
+            },
+        }
+    }
+
+    /// Deletes all of an organisation's logs: its directory, and with S3 its
+    /// objects in the bucket. Returns how many files there were; nothing to
+    /// delete is no error, so it can run again.
     pub async fn delete_organisation(&self, organisation_id: Uuid) -> Result<u64> {
-        let Some(bucket) = &self.s3 else {
-            let dir = self.organisation_dir(organisation_id);
+        // Also with S3: the import copies logs there from this directory.
+        let dir = self.organisation_dir(organisation_id);
+        let mut files = tokio::task::spawn_blocking(move || {
             let files = count_files(&dir);
-            return match tokio::fs::remove_dir_all(&dir).await {
+            match std::fs::remove_dir_all(&dir) {
                 Ok(()) => Ok(files),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
                 Err(error) => {
                     Err(error).with_context(|| format!("failed to delete {}", dir.display()))
                 }
-            };
+            }
+        })
+        .await
+        .context("deleting the log directory stopped")??;
+        let Some(bucket) = &self.s3 else {
+            return Ok(files);
         };
         let prefix = ObjectPath::parse(organisation_id.to_string())?;
         let locations = bucket
@@ -193,7 +216,6 @@ impl LogStore {
             .map(|meta| meta.map(|meta| meta.location))
             .boxed();
         let mut deleted = bucket.delete_stream(locations);
-        let mut files = 0;
         while let Some(result) = deleted.next().await {
             result.context("failed to delete logs from S3")?;
             files += 1;

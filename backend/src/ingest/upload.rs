@@ -103,7 +103,7 @@ pub async fn receive(
     store
         .store(controller.organisation_id, &relative, upload.scratch)
         .await?;
-    Ok(db::save_upload(
+    let saved = db::save_upload(
         db,
         &upload.sha256,
         &relative,
@@ -111,7 +111,21 @@ pub async fn receive(
         chosen.pilot_id,
         chosen.group_id,
     )
-    .await?)
+    .await;
+    // Its pilot and group are looked up, so only a missing organisation
+    // breaks a foreign key: deleted while the log came in. The file goes too.
+    if let Err(error) = &saved
+        && error
+            .as_database_error()
+            .is_some_and(|error| error.is_foreign_key_violation())
+        && let Err(error) = store.remove(controller.organisation_id, &relative).await
+    {
+        tracing::error!(
+            path = relative,
+            "a log of a deleted organisation stayed: {error:#}"
+        );
+    }
+    Ok(saved?)
 }
 
 /// At most this many hashes per question; the controller asks in parts.

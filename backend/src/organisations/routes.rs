@@ -137,12 +137,20 @@ async fn remove(
     }
     let organisation_id = db.organisation_id;
     drop(db);
-    let deleted = super::delete::delete(&system, &store, organisation_id, &name).await?;
+    super::delete::rows(&system, organisation_id, &name).await?;
     tracing::info!(
         %organisation_id,
         by = %actor.user_id,
-        files = deleted.files,
+        impersonated_by = ?actor.impersonated_by.as_ref().map(|admin| admin.user_id),
         "organisation deleted"
     );
+    // The rows are gone, the deletion done: the files follow on their own,
+    // so a closed page or a slow bucket doesn't stop them halfway.
+    tokio::spawn(async move {
+        match super::delete::files(&store, organisation_id).await {
+            Ok(files) => tracing::info!(%organisation_id, files, "raw logs deleted"),
+            Err(error) => tracing::error!("{error:#}"),
+        }
+    });
     Ok(StatusCode::NO_CONTENT)
 }
