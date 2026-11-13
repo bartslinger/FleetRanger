@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Deletes an organisation ($1) with every row of its data: one statement, so\n-- the foreign keys are checked only once all of it is gone, whatever the\n-- order. Every table with an organisation_id is here (a test checks).\n-- Answers how many flights went.\nwith\n  flight_areas as (delete from flight_areas where organisation_id = $1),\n  flight_batteries as (delete from flight_batteries where organisation_id = $1),\n  session_comments as (delete from session_comments where organisation_id = $1),\n  dji_key_requests as (delete from dji_key_requests where organisation_id = $1),\n  flights as (delete from flights where organisation_id = $1 returning 1),\n  sessions as (delete from sessions where organisation_id = $1),\n  raw_logs as (delete from raw_logs where organisation_id = $1),\n  areas as (delete from areas where organisation_id = $1),\n  batteries as (delete from batteries where organisation_id = $1),\n  aircraft as (delete from aircraft where organisation_id = $1),\n  remote_controllers as (delete from remote_controllers where organisation_id = $1),\n  pairing_codes as (delete from pairing_codes where organisation_id = $1),\n  group_app_roles as (delete from group_app_roles where organisation_id = $1),\n  group_members as (delete from group_members where organisation_id = $1),\n  app_roles as (delete from app_roles where organisation_id = $1),\n  oauth_codes as (delete from oauth_codes where organisation_id = $1),\n  oauth_grants as (delete from oauth_grants where organisation_id = $1),\n  login_sessions as (delete from login_sessions where organisation_id = $1),\n  logins as (delete from logins where organisation_id = $1),\n  organisation_roles as (delete from organisation_roles where organisation_id = $1),\n  groups as (delete from groups where organisation_id = $1),\n  oauth_clients as (delete from oauth_clients where organisation_id = $1),\n  users as (delete from users where organisation_id = $1),\n  organisation_settings as (delete from organisation_settings where organisation_id = $1),\n  organisation as (delete from organisations where id = $1)\nselect count(*) as \"flights!\" from flights\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "flights!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "66af784dab3e5470234f9c61ada16adcfbae31c77239ca868ffcccda1b360031"
+}

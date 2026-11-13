@@ -4,6 +4,7 @@
 //! their settings.
 
 pub mod cli;
+pub mod delete;
 pub mod routes;
 
 use sqlx::{PgConnection, PgExecutor};

@@ -16,10 +16,10 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
-use object_store::ObjectStoreExt;
 use object_store::aws::{AmazonS3, AmazonS3Builder, AmazonS3ConfigKey};
 use object_store::buffered::BufWriter;
 use object_store::path::Path as ObjectPath;
+use object_store::{ObjectStore, ObjectStoreExt};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
@@ -172,6 +172,35 @@ impl LogStore {
         Ok(LocalLog::Scratch(scratch))
     }
 
+    /// Deletes all of an organisation's logs: its directory, or its objects
+    /// in the bucket. Returns how many files there were; nothing to delete
+    /// is no error, so it can run again.
+    pub async fn delete_organisation(&self, organisation_id: Uuid) -> Result<u64> {
+        let Some(bucket) = &self.s3 else {
+            let dir = self.organisation_dir(organisation_id);
+            let files = count_files(&dir);
+            return match tokio::fs::remove_dir_all(&dir).await {
+                Ok(()) => Ok(files),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+                Err(error) => {
+                    Err(error).with_context(|| format!("failed to delete {}", dir.display()))
+                }
+            };
+        };
+        let prefix = ObjectPath::parse(organisation_id.to_string())?;
+        let locations = bucket
+            .list(Some(&prefix))
+            .map(|meta| meta.map(|meta| meta.location))
+            .boxed();
+        let mut deleted = bucket.delete_stream(locations);
+        let mut files = 0;
+        while let Some(result) = deleted.next().await {
+            result.context("failed to delete logs from S3")?;
+            files += 1;
+        }
+        Ok(files)
+    }
+
     /// The organisation's log directory, for the import.
     pub fn organisation_dir(&self, organisation_id: Uuid) -> PathBuf {
         self.log_dir.join(organisation_id.to_string())
@@ -273,4 +302,19 @@ pub async fn hash_file(path: &Path) -> Result<(Vec<u8>, u64)> {
         size += read as u64;
     }
     Ok((hasher.finalize().to_vec(), size))
+}
+
+/// How many files are below `dir`, for reporting what was deleted.
+fn count_files(dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.file_type() {
+            Ok(kind) if kind.is_dir() => count_files(&entry.path()),
+            Ok(_) => 1,
+            Err(_) => 0,
+        })
+        .sum()
 }
