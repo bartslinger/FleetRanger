@@ -1,38 +1,69 @@
 <!--
 	@component
 	Carbon's checkbox: a native checkbox with its label; both are click targets.
+	The label can hold links instead (`children`), e.g. to terms to accept.
 -->
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { HTMLInputAttributes } from 'svelte/elements';
 
 	interface Props extends Omit<HTMLInputAttributes, 'type' | 'checked'> {
-		label: string;
+		label?: string;
+		/** The label with links in it, instead of `label`. */
+		children?: Snippet;
 		/** For screen readers only, e.g. in a table row. */
 		hideLabel?: boolean;
 		checked?: boolean;
 		indeterminate?: boolean;
+		/** Error message below it; marks the box invalid (Carbon's error state). */
+		error?: string;
 	}
 
 	let {
 		label,
+		children,
 		hideLabel = false,
 		checked = $bindable(false),
 		indeterminate = false,
+		error,
 		...rest
 	}: Props = $props();
+
+	const id = $props.id();
 </script>
 
-<label class:disabled={rest.disabled}>
-	<input type="checkbox" bind:checked {indeterminate} {...rest} />
-	<span class:visually-hidden={hideLabel}>{label}</span>
-</label>
+{#snippet control()}
+	<label class:disabled={rest.disabled}>
+		<input
+			type="checkbox"
+			bind:checked
+			{indeterminate}
+			class:invalid={error}
+			aria-invalid={error ? true : undefined}
+			aria-describedby={error ? `${id}-error` : undefined}
+			{...rest}
+		/>
+		<span class:visually-hidden={hideLabel}
+			>{#if children}{@render children()}{:else}{label}{/if}</span
+		>
+	</label>
+{/snippet}
+
+{#if error}
+	<div class="with-error">
+		{@render control()}
+		<p id="{id}-error" class="error">{error}</p>
+	</div>
+{:else}
+	{@render control()}
+{/if}
 
 <style>
 	/* The label starts 30px from the left edge: a 20px box for the control and
 	   a 10px gap, as in Carbon. */
 	label {
 		display: inline-flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: 0.625rem;
 		min-height: 1.25rem;
 		color: var(--cds-text-primary);
@@ -105,5 +136,24 @@
 
 	input:disabled:checked {
 		background: var(--cds-icon-disabled);
+	}
+
+	/* Carbon's error state: a 1px support-error border on the box. */
+	input.invalid {
+		border-color: var(--cds-support-error);
+	}
+
+	.with-error {
+		display: flex;
+		flex-direction: column;
+		gap: var(--cds-spacing-02);
+	}
+
+	.error {
+		margin: 0;
+		color: var(--cds-text-error);
+		font-size: var(--cds-helper-text-01-font-size);
+		line-height: var(--cds-helper-text-01-line-height);
+		letter-spacing: var(--cds-helper-text-01-letter-spacing);
 	}
 </style>

@@ -1,11 +1,16 @@
 <!--
 	@component
 	Carbon's login pattern, default style: a title, a short description, then
-	messages and the login action, with optional helper text below. Place it on
-	four grid columns.
+	messages and the login action, with optional helper text below. It places
+	itself on the grid: the form on four columns, as fields should be as wide
+	as their content (Carbon's forms pattern), and the title on more, so a
+	longer one stays on one line, on the same left edge (user's choice on the
+	carbon-expert's advice, 2026-11-16; Carbon sets no width for login pages).
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import Column from './Column.svelte';
+	import Grid from './Grid.svelte';
 
 	interface Props {
 		title: string;
@@ -23,14 +28,24 @@
 </svelte:head>
 
 <section>
-	<div class="heading">
-		<h1>{title}</h1>
-		<p class="description">{description}</p>
-	</div>
-	<div class="body">
-		{@render children()}
-	</div>
-	{#if helper}<p class="helper">{helper}</p>{/if}
+	<Grid>
+		<Column md={6} lg={8}>
+			<div class="heading">
+				<h1>{title}</h1>
+				<p class="description">{description}</p>
+			</div>
+		</Column>
+	</Grid>
+	<Grid>
+		<Column md={4} lg={4}>
+			<div class="form">
+				<div class="body">
+					{@render children()}
+				</div>
+				{#if helper}<p class="helper">{helper}</p>{/if}
+			</div>
+		</Column>
+	</Grid>
 </section>
 
 <style>
@@ -39,6 +54,12 @@
 		flex-direction: column;
 		gap: var(--cds-spacing-05);
 		padding-top: var(--cds-spacing-09);
+	}
+
+	.form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--cds-spacing-05);
 	}
 
 	.heading {

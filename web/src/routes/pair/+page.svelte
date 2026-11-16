@@ -1,6 +1,7 @@
 <script lang="ts">
 	import SubtractAlt from '@carbon/icons/es/subtract--alt/16.js';
 	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
 	import { dateTime } from '#lib/format.js';
 	import { showsGroups } from '#lib/groups.js';
 	import { anywhere } from '#lib/permissions.js';
@@ -126,6 +127,10 @@
 					</p>
 				</InlineNotification>
 				<CodeSnippet code={shown(created.code)} label="pairing code" />
+				<!-- So pilots go straight to the app, not to the login page on the
+				     controller (user's decision, 2026-11-16); helper text, as a
+				     notification holds at most two lines (Carbon). -->
+				<p class="helper">No app on the controller yet? Open {page.url.host}/download there.</p>
 			</div>
 		{/if}
 
@@ -176,6 +181,14 @@
 		flex-wrap: wrap;
 		gap: var(--cds-spacing-05);
 		margin-top: var(--cds-spacing-05);
+	}
+
+	.helper {
+		margin: 0;
+		color: var(--cds-text-helper);
+		font-size: var(--cds-helper-text-01-font-size);
+		line-height: var(--cds-helper-text-01-line-height);
+		letter-spacing: var(--cds-helper-text-01-letter-spacing);
 	}
 
 	.created {

@@ -47,6 +47,7 @@
 						label="Name"
 						name="name"
 						value={organisation.name}
+						maxlength={100}
 						required
 						autocomplete="off"
 					/>
