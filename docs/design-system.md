@@ -178,6 +178,7 @@ This document has two parts. **Our decisions** are choices made for FleetRanger.
 
 **Login**
 - "Log in", never "sign in". Never reveal whether an account exists. After an inactivity logout, return to the last page.
+- Login-style pages (login, sign-up, choosing an organisation) use `LoginForm`, which places itself on the grid: the form on 4 columns, as fields are as wide as their content (forms pattern), and the title and description on 6 (md) or 8 (lg), so a longer title stays on one line, on the same left edge (user's choice on the carbon-expert's advice, 2026-11-16; Carbon sets no width for login pages and allows a title to wrap). No side navigation there, also when logged in.
 
 ### Components (summary)
 
