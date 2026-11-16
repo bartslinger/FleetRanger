@@ -4,7 +4,6 @@
 //! on the waiting list, which the operator works through by hand. Someone
 //! already admin of an organisation can't sign up another.
 
-use openidconnect::url::form_urlencoded;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
@@ -17,33 +16,6 @@ pub struct Request {
     pub time_zone: String,
 }
 
-impl Request {
-    /// As a cookie value: URL-encoded form fields hold only cookie-safe
-    /// characters.
-    pub fn encode(&self) -> String {
-        form_urlencoded::Serializer::new(String::new())
-            .append_pair("organisation_name", &self.organisation_name)
-            .append_pair("time_zone", &self.time_zone)
-            .finish()
-    }
-
-    /// From a cookie value; None unless both choices are there.
-    pub fn decode(value: &str) -> Option<Self> {
-        let (mut organisation_name, mut time_zone) = (None, None);
-        for (key, value) in form_urlencoded::parse(value.as_bytes()) {
-            match &*key {
-                "organisation_name" => organisation_name = Some(value.into_owned()),
-                "time_zone" => time_zone = Some(value.into_owned()),
-                _ => {}
-            }
-        }
-        Some(Self {
-            organisation_name: organisation_name?,
-            time_zone: time_zone?,
-        })
-    }
-}
-
 /// The person Google vouches for.
 pub struct Person<'a> {
     pub subject: &'a str,
@@ -54,6 +26,11 @@ pub struct Person<'a> {
 
 pub enum Outcome {
     Created {
+        /// The new admin; the login session is theirs now.
+        #[cfg_attr(
+            not(test),
+            expect(dead_code, reason = "the session says it; tests check it")
+        )]
         user_id: Uuid,
         organisation_id: Uuid,
     },
@@ -96,16 +73,40 @@ pub fn person_name(google: Option<&str>, email: &str) -> String {
         .collect()
 }
 
-/// Creates the organisation with the person as its admin, or puts them on
-/// the waiting list when `cap` organisations that aren't archived exist
-/// (with `System`, as no organisation is known yet). Someone logged in
-/// already has their login `session` moved to it in the same transaction.
+/// Whether `cap` organisations that aren't archived exist, so that signing
+/// up puts people on the waiting list (with `System`).
+pub async fn full(db: &mut PgConnection, cap: i64) -> sqlx::Result<bool> {
+    let organisations = sqlx::query_scalar!(
+        r#"select count(*) as "count!" from organisations where archived_at is null"#
+    )
+    .fetch_one(&mut *db)
+    .await?;
+    Ok(organisations >= cap)
+}
+
+/// Puts someone on the waiting list, which the operator works through by
+/// hand (with `System`).
+pub async fn join_waitlist(db: &mut PgConnection, email: &str, name: &str) -> sqlx::Result<()> {
+    sqlx::query!(
+        "insert into signup_waitlist (email, name) values (lower($1), $2)
+         on conflict (email) do nothing",
+        email.trim(),
+        name,
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(())
+}
+
+/// Creates the organisation with the person as its admin, and puts their
+/// login `session` in it, in one transaction; or puts them on the waiting
+/// list when it is `full` (with `System`, as no organisation is known yet).
 pub async fn sign_up(
     db: &mut PgConnection,
     request: &Request,
     person: &Person<'_>,
     cap: i64,
-    session: Option<Uuid>,
+    session: Uuid,
 ) -> sqlx::Result<Outcome> {
     let email = person.email.trim().to_lowercase();
     let mut tx = sqlx::Connection::begin(&mut *db).await?;
@@ -116,20 +117,8 @@ pub async fn sign_up(
     if admin_of(&mut tx, person.subject).await?.is_some() {
         return Ok(Outcome::AlreadyAdmin);
     }
-    let organisations = sqlx::query_scalar!(
-        r#"select count(*) as "count!" from organisations where archived_at is null"#
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    if organisations >= cap {
-        sqlx::query!(
-            "insert into signup_waitlist (email, name) values ($1, $2)
-             on conflict (email) do nothing",
-            email,
-            person.name,
-        )
-        .execute(&mut *tx)
-        .await?;
+    if full(&mut tx, cap).await? {
+        join_waitlist(&mut tx, &email, person.name).await?;
         tx.commit().await?;
         return Ok(Outcome::Full);
     }
@@ -167,9 +156,7 @@ pub async fn sign_up(
     sqlx::query!("delete from signup_waitlist where email = $1", email)
         .execute(&mut *tx)
         .await?;
-    if let Some(session) = session
-        && !crate::auth::db::switch_organisation(&mut tx, session, organisation_id).await?
-    {
+    if !crate::auth::db::switch_organisation(&mut tx, session, organisation_id).await? {
         // Rolled back with the transaction: nothing half done.
         return Err(sqlx::Error::RowNotFound);
     }
@@ -185,7 +172,20 @@ mod tests {
     use sqlx::PgPool;
 
     use super::{Outcome, Person, Request, sign_up};
-    use crate::auth::db::{Membership, memberships};
+    use crate::auth::db::{Account, Membership, create_session, memberships};
+
+    /// A login session of someone in no organisation yet.
+    async fn logged_in(db: &mut sqlx::PgConnection, subject: &str, token: u8) -> uuid::Uuid {
+        let account = Account {
+            subject,
+            email: None,
+            name: None,
+        };
+        let ip = [127, 0, 0, 1].into();
+        create_session(db, &account, None, &[token; 32], 30, ip, None)
+            .await
+            .unwrap()
+    }
 
     /// Signing up makes the person the admin of a new organisation, which
     /// they log in to, and they can't sign up another; once the cap is
@@ -203,10 +203,13 @@ mod tests {
             email: "Test-One@example.org",
             name: "Test One",
         };
+        let session = logged_in(&mut db, "test-subject-1", 1).await;
         let Outcome::Created {
             user_id,
             organisation_id,
-        } = sign_up(&mut db, &request, &first, 1, None).await.unwrap()
+        } = sign_up(&mut db, &request, &first, 1, session)
+            .await
+            .unwrap()
         else {
             panic!("the first sign-up within the cap should create an organisation");
         };
@@ -231,7 +234,9 @@ mod tests {
         );
         // Signing up again is refused: one organisation per admin.
         assert!(matches!(
-            sign_up(&mut db, &request, &first, 10, None).await.unwrap(),
+            sign_up(&mut db, &request, &first, 10, session)
+                .await
+                .unwrap(),
             Outcome::AlreadyAdmin
         ));
 
@@ -240,8 +245,11 @@ mod tests {
             email: "test-two@example.org",
             name: "Test Two",
         };
+        let second_session = logged_in(&mut db, "test-subject-2", 2).await;
         assert!(matches!(
-            sign_up(&mut db, &request, &second, 1, None).await.unwrap(),
+            sign_up(&mut db, &request, &second, 1, second_session)
+                .await
+                .unwrap(),
             Outcome::Full
         ));
         let organisations: i64 = sqlx::query_scalar("select count(*) from organisations")
@@ -272,9 +280,12 @@ mod tests {
             email: "test-admin@example.org",
             name: "Test Admin",
         };
+        let admin_session = logged_in(&mut db, "test-subject-admin", 3).await;
         let Outcome::Created {
             organisation_id, ..
-        } = sign_up(&mut db, &request, &admin, 10, None).await.unwrap()
+        } = sign_up(&mut db, &request, &admin, 10, admin_session)
+            .await
+            .unwrap()
         else {
             panic!("the first sign-up should create an organisation");
         };
@@ -319,7 +330,7 @@ mod tests {
 
         // A login session that isn't theirs can't be moved: nothing is made.
         assert!(
-            sign_up(&mut db, &request, &person, 10, Some(uuid::Uuid::nil()))
+            sign_up(&mut db, &request, &person, 10, uuid::Uuid::nil())
                 .await
                 .is_err()
         );
@@ -328,7 +339,7 @@ mod tests {
         let Outcome::Created {
             user_id,
             organisation_id: created,
-        } = sign_up(&mut db, &request, &person, 10, Some(session))
+        } = sign_up(&mut db, &request, &person, 10, session)
             .await
             .unwrap()
         else {

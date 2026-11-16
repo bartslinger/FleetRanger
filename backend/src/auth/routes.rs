@@ -50,8 +50,8 @@ where
         .route("/auth/signup", post(signup))
         .route("/api/signup", get(signup_status))
         .route("/api/signup/enabled", get(signup_enabled))
-        .route("/api/signup/existing", get(existing_status))
-        .route("/auth/signup/existing", post(signup_existing))
+        .route("/api/signup/admin", get(signup_admin))
+        .route("/auth/signup/organisation", post(create_organisation))
         .route("/auth/logout", post(logout))
         .route("/auth/impersonate", post(impersonate))
         .route("/auth/impersonate/stop", post(stop_impersonating))
@@ -71,7 +71,52 @@ async fn login(
     Query(query): Query<LoginQuery>,
 ) -> Response {
     let return_to = local_path(query.return_to.as_deref());
-    start_login(auth, jar, return_to, None, "/login?error=failed").await
+    start_login(auth, jar, return_to, false, "/login?error=failed").await
+}
+
+/// The sign-up page's button: on to Google, which brings the browser back to
+/// `callback` to name the organisation (user's decision, 2026-11-16: log in
+/// first, then the form). Someone logged in already goes straight to the
+/// form, or onto the waiting list when sign-up is full.
+async fn signup(
+    State(auth): State<Arc<Auth>>,
+    State(system): State<System>,
+    person: Result<Person, StatusCode>,
+    jar: CookieJar,
+) -> Response {
+    let Some(config) = &auth.signup else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Ok(person) = person else {
+        return start_login(
+            auth,
+            jar,
+            "/signup".to_owned(),
+            true,
+            "/signup?error=failed",
+        )
+        .await;
+    };
+    let Some(email) = &person.email else {
+        return Redirect::to("/signup?error=unverified").into_response();
+    };
+    let waiting = async {
+        let mut db = system.acquire().await?;
+        if !signup::full(&mut db, config.cap).await? {
+            return Ok(false);
+        }
+        let name = signup::person_name(person.name.as_deref(), email);
+        signup::join_waitlist(&mut db, email, &name).await?;
+        Ok::<_, sqlx::Error>(true)
+    };
+    match waiting.await {
+        Ok(true) => Redirect::to("/signup?waiting").into_response(),
+        Ok(false) => Redirect::to("/signup").into_response(),
+        Err(error) => {
+            tracing::error!(%error, "joining the waiting list");
+            Redirect::to("/signup?error=failed").into_response()
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -82,46 +127,7 @@ struct SignupForm {
     terms: Option<String>,
 }
 
-/// The sign-up page's form: checked, then on to Google, which brings the
-/// browser back to `callback` with the choices in the login cookie.
-async fn signup(
-    State(auth): State<Arc<Auth>>,
-    State(system): State<System>,
-    jar: CookieJar,
-    Form(form): Form<SignupForm>,
-) -> Response {
-    if auth.signup.is_none() {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-    let request = signup::Request {
-        organisation_name: form.organisation_name,
-        time_zone: form.time_zone,
-    };
-    let checked = async {
-        let mut db = system.acquire().await?;
-        checked_signup(&mut db, request).await
-    };
-    let request = match checked.await {
-        Ok(Some(request)) if form.terms.is_some() => request,
-        Ok(_) => return Redirect::to("/signup?error=invalid").into_response(),
-        Err(error) => {
-            tracing::error!(%error, "checking a sign-up");
-            return Redirect::to("/signup?error=failed").into_response();
-        }
-    };
-    start_login(
-        auth,
-        jar,
-        "/".to_owned(),
-        Some(request),
-        "/signup?error=failed",
-    )
-    .await
-}
-
-/// The sign-up choices, if they are acceptable, the name trimmed. Checked
-/// when the form is sent and again when Google sends the browser back, as
-/// they come back from a cookie.
+/// The sign-up choices, if they are acceptable, the name trimmed.
 async fn checked_signup(
     db: &mut PgConnection,
     request: signup::Request,
@@ -139,19 +145,68 @@ async fn checked_signup(
     }))
 }
 
-/// Signs someone up whose sign-up choices came back in a cookie, moving
-/// `session` to the new organisation if given.
-async fn sign_up(
-    db: &mut PgConnection,
-    request: signup::Request,
-    person: &signup::Person<'_>,
-    cap: i64,
-    session: Option<Uuid>,
-) -> anyhow::Result<signup::Outcome> {
-    let request = checked_signup(db, request)
-        .await?
-        .context("sign-up choices changed in the cookie")?;
-    Ok(signup::sign_up(db, &request, person, cap, session).await?)
+/// Someone logged in names their organisation: it is created with them as
+/// its admin, and their login session moves to it in the same transaction.
+async fn create_organisation(
+    State(auth): State<Arc<Auth>>,
+    State(system): State<System>,
+    person: Person,
+    jar: CookieJar,
+    Form(form): Form<SignupForm>,
+) -> Response {
+    let Some(config) = &auth.signup else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if impersonating(&jar) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Some(email) = &person.email else {
+        return Redirect::to("/signup?error=unverified").into_response();
+    };
+    let request = signup::Request {
+        organisation_name: form.organisation_name,
+        time_zone: form.time_zone,
+    };
+    let signed_up = async {
+        let mut db = system.acquire().await?;
+        let Some(request) = checked_signup(&mut db, request).await? else {
+            return Ok(None);
+        };
+        if form.terms.is_none() {
+            return Ok(None);
+        }
+        let name = signup::person_name(person.name.as_deref(), email);
+        let account = signup::Person {
+            subject: &person.subject,
+            email,
+            name: &name,
+        };
+        signup::sign_up(
+            &mut db,
+            &request,
+            &account,
+            config.cap,
+            person.login_session_id,
+        )
+        .await
+        .map(Some)
+    };
+    match signed_up.await {
+        Ok(Some(signup::Outcome::Created {
+            organisation_id, ..
+        })) => {
+            tracing::info!(%organisation_id, "organisation signed up");
+            Redirect::to("/").into_response()
+        }
+        Ok(Some(signup::Outcome::Full)) => Redirect::to("/signup?waiting").into_response(),
+        // The page shows them the organisation they are admin of.
+        Ok(Some(signup::Outcome::AlreadyAdmin)) => Redirect::to("/signup").into_response(),
+        Ok(None) => Redirect::to("/signup?error=invalid").into_response(),
+        Err(error) => {
+            tracing::error!(%error, "signing up");
+            Redirect::to("/signup?error=failed").into_response()
+        }
+    }
 }
 
 /// Whether anyone can sign up here, for the login page's link: from the
@@ -213,21 +268,10 @@ fn impersonating(jar: &CookieJar) -> bool {
     jar.get(impersonation_cookie()).is_some()
 }
 
-/// The sign-up choices kept for someone who came back from Google with an
-/// account they had already (user's decision, 2026-11-16: in the login
-/// cookie, not in a link anyone could send).
-fn pending_signup(jar: &CookieJar) -> Option<signup::Request> {
-    jar.get(login_cookie())
-        .and_then(|cookie| signup::Request::decode(cookie.value()))
-}
-
-/// For the page where someone who signed up with an account they had
-/// already chooses: what they chose, and the organisation they are admin
-/// of, if any, as they can't create another then. 404 without a sign-up
-/// in progress.
+/// For the sign-up page of someone logged in: the organisation they are
+/// admin of, if any, as they can't create another then.
 #[derive(Serialize)]
-struct ExistingStatus {
-    organisation_name: String,
+struct SignupAdmin {
     admin_of: Option<OrganisationRef>,
 }
 
@@ -237,16 +281,14 @@ struct OrganisationRef {
     name: String,
 }
 
-async fn existing_status(
+async fn signup_admin(
     State(auth): State<Arc<Auth>>,
     State(system): State<System>,
     person: Person,
-    jar: CookieJar,
-) -> Result<Json<ExistingStatus>, StatusCode> {
-    if auth.signup.is_none() || impersonating(&jar) {
+) -> Result<Json<SignupAdmin>, StatusCode> {
+    if auth.signup.is_none() {
         return Err(StatusCode::NOT_FOUND);
     }
-    let request = pending_signup(&jar).ok_or(StatusCode::NOT_FOUND)?;
     let read = async {
         let mut db = system.acquire().await?;
         signup::admin_of(&mut db, &person.subject).await
@@ -255,67 +297,9 @@ async fn existing_status(
         tracing::error!(%error, "reading whether someone is an admin");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    Ok(Json(ExistingStatus {
-        organisation_name: request.organisation_name,
+    Ok(Json(SignupAdmin {
         admin_of: admin_of.map(|(id, name)| OrganisationRef { id, name }),
     }))
-}
-
-/// Someone logged in creates the organisation they signed up for, from the
-/// choices in the cookie, and the login session moves to it in the same
-/// transaction.
-async fn signup_existing(
-    State(auth): State<Arc<Auth>>,
-    State(system): State<System>,
-    person: Person,
-    jar: CookieJar,
-) -> Response {
-    let Some(config) = &auth.signup else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    if impersonating(&jar) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-    let Some(request) = pending_signup(&jar) else {
-        // The choices last ten minutes; after that the form is filled in again.
-        return Redirect::to("/signup?error=expired").into_response();
-    };
-    let signed_up = async {
-        let Some(email) = &person.email else {
-            anyhow::bail!("the login has no verified email");
-        };
-        let name = signup::person_name(person.name.as_deref(), email);
-        let account = signup::Person {
-            subject: &person.subject,
-            email,
-            name: &name,
-        };
-        let mut db = system.acquire().await?;
-        sign_up(
-            &mut db,
-            request,
-            &account,
-            config.cap,
-            Some(person.login_session_id),
-        )
-        .await
-    };
-    let outcome = signed_up.await;
-    let jar = jar.remove(removal(&auth, login_cookie()));
-    match outcome {
-        Ok(signup::Outcome::Created {
-            organisation_id, ..
-        }) => {
-            tracing::info!(%organisation_id, "organisation signed up by someone with an account");
-            (jar, Redirect::to("/")).into_response()
-        }
-        Ok(signup::Outcome::Full) => (jar, Redirect::to("/signup?waiting")).into_response(),
-        Ok(signup::Outcome::AlreadyAdmin) => (jar, Redirect::to("/")).into_response(),
-        Err(error) => {
-            tracing::error!(error = format!("{error:#}"), "signing up with an account");
-            (jar, Redirect::to("/signup?error=failed")).into_response()
-        }
-    }
 }
 
 /// Sends the browser to the login provider, keeping what it needs on return
@@ -324,7 +308,7 @@ async fn start_login(
     auth: Arc<Auth>,
     jar: CookieJar,
     return_to: String,
-    signup: Option<signup::Request>,
+    signup: bool,
     failed: &'static str,
 ) -> Response {
     if auth.provider.is_none() {
@@ -383,7 +367,7 @@ async fn callback(
     let jar = jar.remove(removal(&auth, login_cookie()));
     // Someone signing up who cancels at Google, or whose sign-up fails, goes
     // back to the sign-up page, not to logging in.
-    let (cancelled, failed) = if pending.as_ref().is_some_and(|p| p.signup.is_some()) {
+    let (cancelled, failed) = if pending.as_ref().is_some_and(|p| p.signup) {
         ("/signup", "/signup?error=failed")
     } else {
         ("/login", "/login?error=failed")
@@ -408,7 +392,8 @@ async fn callback(
     // Checked again: it comes back from a cookie, which another site on the
     // same domain could have planted, and must never lead off this site.
     let return_to = local_path(Some(&pending.return_to));
-    let signing_up = pending.signup.clone();
+    // Only where anyone may sign up.
+    let signing_up = pending.signup && auth.signup.is_some();
     let finished = {
         let auth = auth.clone();
         tokio::task::spawn_blocking(move || {
@@ -437,94 +422,63 @@ async fn callback(
             return (jar, Redirect::to(failed)).into_response();
         }
     };
+    let mut return_to = return_to;
+    if signing_up {
+        // Signing up needs an email Google has verified; say so.
+        let Some(email) = identity.verified_email.as_deref() else {
+            tracing::info!("sign-up refused: email not verified");
+            return (jar, Redirect::to("/signup?error=unverified")).into_response();
+        };
+        // When full, straight onto the waiting list, without logging in
+        // (user's decision, 2026-11-16).
+        let cap = auth.signup.as_ref().map_or(0, |config| config.cap);
+        let waiting = async {
+            if !signup::full(&mut system, cap).await? {
+                return Ok(false);
+            }
+            let name = signup::person_name(identity.name.as_deref(), email);
+            signup::join_waitlist(&mut system, email, &name).await?;
+            Ok::<_, sqlx::Error>(true)
+        };
+        match waiting.await {
+            Ok(true) => {
+                tracing::info!("sign-up full: on the waiting list");
+                return (jar, Redirect::to("/signup?waiting")).into_response();
+            }
+            Ok(false) => {}
+            Err(error) => {
+                tracing::error!(%error, "joining the waiting list");
+                return (jar, Redirect::to(failed)).into_response();
+            }
+        }
+        // Logged in, they name their organisation next.
+        return_to = "/signup".to_owned();
+    }
     let found = db::memberships(
         &mut system,
         &identity.subject,
         identity.verified_email.as_deref(),
     )
     .await;
-    let mut return_to = return_to;
-    let mut jar = jar;
-    let membership = match found {
-        Ok(found) if !found.is_empty() => {
-            // Signing up with an account that has an organisation already:
-            // they choose on the sign-up page whether to create this one.
-            // The choices stay in the login cookie, not in a link (user's
-            // decision, 2026-11-16).
-            if let (Some(_), Some(request)) = (&auth.signup, &signing_up) {
-                let cookie = Cookie::build((login_cookie(), request.encode()))
-                    .path("/")
-                    .http_only(true)
-                    .secure(auth.secure_cookies())
-                    .same_site(SameSite::Lax)
-                    .max_age(Duration::minutes(10));
-                jar = jar.add(cookie);
-                return_to = "/signup/existing".to_owned();
-            }
-            match found.as_slice() {
-                [only] => Some(*only),
-                // Someone in several organisations chooses one first (user's
-                // request, 2026-11-16), unless they came to sign up, which
-                // asks its own question. The page they were going to comes
-                // along.
-                _ => {
-                    if signing_up.is_none() {
-                        return_to = format!(
-                            "/choose-organisation?{}",
-                            form_urlencoded::Serializer::new(String::new())
-                                .append_pair("return_to", &return_to)
-                                .finish()
-                        );
-                    }
-                    None
-                }
-            }
+    let membership = match found.as_deref() {
+        Ok([]) if !signing_up => {
+            tracing::info!(email = identity.verified_email, "login refused: no login");
+            return (jar, Redirect::to("/login?error=no-access")).into_response();
         }
+        Ok([only]) => Some(*only),
+        // Someone in several organisations chooses one first (user's
+        // request, 2026-11-16), unless they came to sign up. The page they
+        // were going to comes along.
         Ok(_) => {
-            let (Some(config), Some(request), Some(email)) = (
-                &auth.signup,
-                signing_up.clone(),
-                identity.verified_email.as_deref(),
-            ) else {
-                // Signing up needs an email Google has verified; say so.
-                if auth.signup.is_some() && signing_up.is_some() {
-                    tracing::info!("sign-up refused: email not verified");
-                    return (jar, Redirect::to("/signup?error=unverified")).into_response();
-                }
-                tracing::info!(email = identity.verified_email, "login refused: no login");
-                return (jar, Redirect::to("/login?error=no-access")).into_response();
-            };
-            let name = signup::person_name(identity.name.as_deref(), email);
-            let person = signup::Person {
-                subject: &identity.subject,
-                email,
-                name: &name,
-            };
-            match sign_up(&mut system, request, &person, config.cap, None).await {
-                Ok(signup::Outcome::Created {
-                    user_id,
-                    organisation_id,
-                }) => {
-                    tracing::info!(%organisation_id, "organisation signed up");
-                    Some(db::Membership {
-                        user_id,
-                        organisation_id,
-                    })
-                }
-                Ok(signup::Outcome::Full) => {
-                    tracing::info!("sign-up full: on the waiting list");
-                    return (jar, Redirect::to("/signup?waiting")).into_response();
-                }
-                // Only when the same new account signed up twice at once;
-                // left as a refused login (user's choice: simplest code).
-                Ok(signup::Outcome::AlreadyAdmin) => {
-                    return (jar, Redirect::to("/login?error=no-access")).into_response();
-                }
-                Err(error) => {
-                    tracing::error!(error = format!("{error:#}"), "signing up");
-                    return (jar, Redirect::to("/signup?error=failed")).into_response();
-                }
+            if !signing_up {
+                return_to = format!(
+                    "/choose-organisation?{}",
+                    form_urlencoded::Serializer::new(String::new())
+                        .append_pair("return_to", &return_to)
+                        .finish()
+                );
             }
+            None
         }
         Err(error) => {
             tracing::error!(%error, "looking up the user for a login");
