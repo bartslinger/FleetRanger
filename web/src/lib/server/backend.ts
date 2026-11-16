@@ -555,3 +555,38 @@ export interface OrganisationSettings {
 	/** The time zones to choose from, e.g. `Europe/Amsterdam`. */
 	time_zones: string[];
 }
+
+/** `GET /api/signup`: what the sign-up page needs. */
+export interface SignupStatus {
+	/** Signing up puts people on the waiting list. */
+	full: boolean;
+	terms_url: string;
+	privacy_url: string;
+	time_zones: string[];
+}
+
+/** The sign-up status, or null where nobody can sign up. */
+export async function signupStatus(fetch: typeof globalThis.fetch): Promise<SignupStatus | null> {
+	let response: Response;
+	try {
+		response = await fetch(`${BACKEND_URL}/api/signup`);
+	} catch {
+		error(503, 'The backend is not reachable.');
+	}
+	if (response.status === 404) return null;
+	if (!response.ok) error(502, `The backend answered ${response.status}.`);
+	return response.json();
+}
+
+/** Whether anyone can sign up here, for the login page's link. Never fails:
+ * without an answer there is no link, and logging in still works. */
+export async function signupEnabled(fetch: typeof globalThis.fetch): Promise<boolean> {
+	try {
+		const response = await fetch(`${BACKEND_URL}/api/signup/enabled`);
+		if (!response.ok) return false;
+		const { enabled }: { enabled: boolean } = await response.json();
+		return enabled;
+	} catch {
+		return false;
+	}
+}

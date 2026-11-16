@@ -71,6 +71,12 @@ async fn save(
 ) -> ApiResult<Json<Organisation>> {
     policy::require(&actor, Permission::OrganisationManage, None)?;
     let name = error::name(&input.name)?;
+    let Some(name) = super::valid_name(&name) else {
+        return Err(ApiError::Invalid(format!(
+            "Enter a name of at most {} characters.",
+            super::MAX_NAME
+        )));
+    };
     if !super::known_time_zone(&mut *db, &input.time_zone).await? {
         return Err(ApiError::Invalid(
             "Choose a time zone from the list.".to_owned(),

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update logins set oidc_subject = $2 where user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d544209e6d6ff0ca70d0e31df30c880ca07363cb7475cae9a616be5c53567de"
+}

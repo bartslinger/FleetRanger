@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select oidc_subject as \"subject!\", email from logins\n           where user_id = $1 and oidc_subject is not null",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "oidc_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "ce1f41b4363b673c2e001edd684b13d56516d3ff3eb86cfe108c79de81665085"
+}

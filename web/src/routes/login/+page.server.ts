@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { me } from '#lib/server/backend.js';
+import { me, signupEnabled } from '#lib/server/backend.js';
 
 export async function load({ fetch, url }) {
 	if (await me(fetch)) redirect(303, '/');
@@ -11,6 +11,8 @@ export async function load({ fetch, url }) {
 		loginHref: `/auth/login?${new URLSearchParams({ return_to: returnTo })}`,
 		error: error === 'no-access' || error === 'failed' ? error : null,
 		loggedOut: url.searchParams.has('logged-out'),
-		deleted: url.searchParams.has('deleted')
+		deleted: url.searchParams.has('deleted'),
+		// Only where anyone can sign up, as on the hosted service.
+		signup: await signupEnabled(fetch)
 	};
 }

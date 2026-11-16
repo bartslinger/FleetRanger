@@ -1,6 +1,6 @@
 //! Login and the [`Actor`]: who is making a request.
 
-mod db;
+pub(crate) mod db;
 mod oidc;
 pub mod routes;
 
@@ -70,6 +70,8 @@ pub struct Auth {
     pub public_url: Url,
     /// `None` when no login provider is configured.
     pub provider: Option<Provider>,
+    /// `None` unless anyone may sign up (`FLEETRANGER_SIGNUP=on`).
+    pub signup: Option<crate::config::Signup>,
 }
 
 impl Auth {

@@ -14,6 +14,7 @@ use openidconnect::{
 };
 
 use crate::config::OidcConfig;
+use crate::organisations::signup;
 
 pub struct Provider {
     issuer: IssuerUrl,
@@ -31,6 +32,9 @@ pub struct PendingLogin {
     pkce_verifier: String,
     /// The page to show after logging in.
     pub return_to: String,
+    /// What was chosen on the sign-up page, when signing up. Anyone can set
+    /// it in their own cookie, but it only names the organisation they create.
+    pub signup: Option<signup::Request>,
 }
 
 /// The person the provider vouches for.
@@ -60,7 +64,11 @@ impl Provider {
     }
 
     /// The provider's login page to send the browser to. Blocks on HTTP.
-    pub fn begin(&self, return_to: String) -> Result<(Url, PendingLogin)> {
+    pub fn begin(
+        &self,
+        return_to: String,
+        signup: Option<signup::Request>,
+    ) -> Result<(Url, PendingLogin)> {
         let client = self.client()?;
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
         let (url, state, nonce) = client
@@ -78,6 +86,7 @@ impl Provider {
             nonce: nonce.secret().clone(),
             pkce_verifier: pkce_verifier.into_secret(),
             return_to,
+            signup,
         };
         Ok((url, pending))
     }
@@ -134,22 +143,31 @@ impl Provider {
 impl PendingLogin {
     /// As a cookie value: URL-encoded form fields hold only cookie-safe characters.
     pub fn encode(&self) -> String {
-        form_urlencoded::Serializer::new(String::new())
+        let mut serializer = form_urlencoded::Serializer::new(String::new());
+        serializer
             .append_pair("state", &self.state)
             .append_pair("nonce", &self.nonce)
             .append_pair("pkce_verifier", &self.pkce_verifier)
-            .append_pair("return_to", &self.return_to)
-            .finish()
+            .append_pair("return_to", &self.return_to);
+        if let Some(signup) = &self.signup {
+            serializer
+                .append_pair("organisation_name", &signup.organisation_name)
+                .append_pair("time_zone", &signup.time_zone);
+        }
+        serializer.finish()
     }
 
     pub fn decode(value: &str) -> Option<Self> {
         let (mut state, mut nonce, mut pkce_verifier, mut return_to) = (None, None, None, None);
+        let (mut organisation_name, mut time_zone) = (None, None);
         for (key, value) in form_urlencoded::parse(value.as_bytes()) {
             let field = match &*key {
                 "state" => &mut state,
                 "nonce" => &mut nonce,
                 "pkce_verifier" => &mut pkce_verifier,
                 "return_to" => &mut return_to,
+                "organisation_name" => &mut organisation_name,
+                "time_zone" => &mut time_zone,
                 _ => continue,
             };
             *field = Some(value.into_owned());
@@ -159,6 +177,43 @@ impl PendingLogin {
             nonce: nonce?,
             pkce_verifier: pkce_verifier?,
             return_to: return_to?,
+            signup: organisation_name
+                .zip(time_zone)
+                .map(|(organisation_name, time_zone)| signup::Request {
+                    organisation_name,
+                    time_zone,
+                }),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PendingLogin;
+    use crate::organisations::signup::Request;
+
+    /// The sign-up choices travel in the login cookie, hand-encoded: a name
+    /// with the encoding's own characters or accents must come back intact,
+    /// and half a pair means no sign-up at all.
+    #[test]
+    fn sign_up_choices_survive_the_cookie() {
+        let request = Request {
+            organisation_name: "Test & Co = 1; Ålesund".to_owned(),
+            time_zone: "Europe/Oslo".to_owned(),
+        };
+        let pending = PendingLogin {
+            state: "state".to_owned(),
+            nonce: "nonce".to_owned(),
+            pkce_verifier: "verifier".to_owned(),
+            return_to: "/".to_owned(),
+            signup: Some(request.clone()),
+        };
+        let back = PendingLogin::decode(&pending.encode()).unwrap();
+        assert_eq!(back.signup, Some(request.clone()));
+        assert_eq!(Request::decode(&request.encode()), Some(request));
+
+        let half = "state=s&nonce=n&pkce_verifier=v&return_to=%2F&organisation_name=Test";
+        assert_eq!(PendingLogin::decode(half).unwrap().signup, None);
+        assert_eq!(Request::decode("organisation_name=Test"), None);
     }
 }

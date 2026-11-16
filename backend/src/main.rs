@@ -230,6 +230,7 @@ async fn serve(
         auth: Arc::new(Auth {
             public_url: config.public_url.clone(),
             provider,
+            signup: config.signup.clone(),
         }),
         activity,
         changes: changes.clone(),

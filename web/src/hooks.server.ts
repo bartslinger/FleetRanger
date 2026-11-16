@@ -5,7 +5,7 @@ import { me } from '#lib/server/backend.js';
 import { parseTheme, THEME_COOKIE } from '#lib/theme.js';
 
 /** Pages shown without logging in. */
-const PUBLIC_PATHS = new Set(['/login', '/download']);
+const PUBLIC_PATHS = new Set(['/login', '/signup', '/download']);
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const theme = parseTheme(event.cookies.get(THEME_COOKIE));

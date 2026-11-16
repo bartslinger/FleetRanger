@@ -6,8 +6,10 @@
 pub mod cli;
 pub mod delete;
 pub mod routes;
+pub mod signup;
 
 use sqlx::{PgConnection, PgExecutor};
+use uuid::Uuid;
 
 use crate::sessions::SessionGap;
 
@@ -16,6 +18,17 @@ use crate::sessions::SessionGap;
 /// the first, and deleted. Self-hosted installs hold one.
 #[derive(Clone, Copy)]
 pub struct MultiTenant(pub bool);
+
+/// The longest organisation name, wherever one is set, so titles and buttons
+/// stay usable (user's decision, 2026-11-16).
+pub const MAX_NAME: usize = 100;
+
+/// The organisation name as stored: trimmed, not empty, at most `MAX_NAME`
+/// characters.
+pub fn valid_name(name: &str) -> Option<String> {
+    let name = name.trim();
+    (!name.is_empty() && name.chars().count() <= MAX_NAME).then(|| name.to_owned())
+}
 
 /// An organisation's settings, which were environment variables.
 pub struct Settings {
@@ -44,6 +57,41 @@ pub async fn settings(db: &mut PgConnection) -> sqlx::Result<Settings> {
         session_gap: SessionGap(row.session_gap_minutes),
         mcp: row.mcp,
     })
+}
+
+/// Adds an organisation with its settings (defaults for those not given) and
+/// its first group, "General", as every organisation has (migration 0025).
+/// With `System`, in the caller's transaction.
+pub async fn insert(
+    db: &mut PgConnection,
+    name: &str,
+    time_zone: Option<&str>,
+    session_gap: Option<SessionGap>,
+    mcp: Option<bool>,
+) -> sqlx::Result<Uuid> {
+    let id = sqlx::query_scalar!(
+        "insert into organisations (name) values ($1) returning id",
+        name
+    )
+    .fetch_one(&mut *db)
+    .await?;
+    sqlx::query!(
+        "insert into organisation_settings (organisation_id, time_zone, session_gap_minutes, mcp)
+         values ($1, coalesce($2, 'UTC'), coalesce($3, 120), coalesce($4, false))",
+        id,
+        time_zone,
+        session_gap.map(|SessionGap(minutes)| minutes),
+        mcp,
+    )
+    .execute(&mut *db)
+    .await?;
+    sqlx::query!(
+        "insert into groups (organisation_id, name) values ($1, 'General')",
+        id
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(id)
 }
 
 /// Whether Postgres knows the time zone, e.g. `Europe/Amsterdam`.

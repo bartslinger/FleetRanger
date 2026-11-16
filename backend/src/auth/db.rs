@@ -38,7 +38,8 @@ pub async fn login_user(
     let found = sqlx::query!(
         "select l.user_id, l.organisation_id
          from logins l join users u on u.id = l.user_id
-         where l.oidc_subject = $1 and u.archived_at is null
+         join organisations o on o.id = l.organisation_id
+         where l.oidc_subject = $1 and u.archived_at is null and o.archived_at is null
          order by (select max(s.created_at) from login_sessions s
                    where s.user_id = l.user_id) desc nulls last,
                   l.created_at
@@ -54,6 +55,19 @@ pub async fn login_user(
         },
         None => LoginUser::Refused,
     })
+}
+
+/// How many organisations a Google account can log in to (with `System`).
+pub async fn organisation_count(db: &mut PgConnection, subject: &str) -> sqlx::Result<i64> {
+    sqlx::query_scalar!(
+        r#"select count(*) as "count!" from logins l
+           join users u on u.id = l.user_id and u.archived_at is null
+           join organisations o on o.id = l.organisation_id and o.archived_at is null
+           where l.oidc_subject = $1"#,
+        subject,
+    )
+    .fetch_one(&mut *db)
+    .await
 }
 
 /// Starts a login session for a user, in their organisation (with `System`,

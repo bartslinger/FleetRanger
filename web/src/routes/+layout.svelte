@@ -12,6 +12,7 @@
 	import { Tooltip } from 'bits-ui';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import favicon from '#lib/assets/favicon.svg';
 	import ProcessingPanel from '#lib/ProcessingPanel.svelte';
 	import { may } from '#lib/permissions.js';
@@ -93,6 +94,13 @@
 			: [])
 	]);
 
+	// Pages before an organisation is chosen or made (signing up, choosing
+	// one after logging in): no menu of the one the login is in, as on the
+	// login page.
+	const beforeOrganisation = $derived(
+		page.route.id?.startsWith('/signup') || page.route.id === '/choose-organisation'
+	);
+
 	// Admin pages only for who may manage them on the whole organisation; the
 	// backend refuses everyone else anyway. Equipment for everyone: members
 	// see their group's.
@@ -145,7 +153,7 @@
 		home={resolve('/')}
 		logo={favicon}
 		{nav}
-		account={data.account}
+		account={beforeOrganisation ? null : data.account}
 		theme={data.theme}
 		{actions}
 		profileLinks={data.account?.apps
