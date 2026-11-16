@@ -40,6 +40,23 @@ pub struct Config {
     /// Whether the install holds several organisations, as the hosted
     /// service does (`FLEETRANGER_MULTI_TENANT=on`); off by default: one.
     pub multi_tenant: bool,
+    /// Whether anyone can create an organisation by signing up
+    /// (`FLEETRANGER_SIGNUP=on`), as on the hosted service; off by default.
+    /// Needs `FLEETRANGER_MULTI_TENANT=on`.
+    pub signup: Option<Signup>,
+}
+
+/// Self-service sign-up.
+#[derive(Clone)]
+pub struct Signup {
+    /// At most this many organisations that aren't archived
+    /// (`FLEETRANGER_SIGNUP_CAP`, 200 by default); after that, people go on
+    /// the waiting list.
+    pub cap: i64,
+    /// The terms of use and the privacy policy people accept when signing up
+    /// (`FLEETRANGER_TERMS_URL`, `FLEETRANGER_PRIVACY_URL`).
+    pub terms_url: Url,
+    pub privacy_url: Url,
 }
 
 pub struct OidcConfig {
@@ -85,6 +102,32 @@ impl Config {
         let mcp = switch("FLEETRANGER_MCP")?;
         let api = switch("FLEETRANGER_API")?;
         let multi_tenant = switch("FLEETRANGER_MULTI_TENANT")?;
+        let signup = if switch("FLEETRANGER_SIGNUP")? {
+            anyhow::ensure!(
+                multi_tenant,
+                "FLEETRANGER_SIGNUP=on needs FLEETRANGER_MULTI_TENANT=on"
+            );
+            let url = |name: &str| -> Result<Url> {
+                non_empty_var(name)
+                    .with_context(|| format!("FLEETRANGER_SIGNUP=on needs {name}"))?
+                    .parse()
+                    .with_context(|| format!("{name} is not a valid URL"))
+            };
+            Some(Signup {
+                cap: match non_empty_var("FLEETRANGER_SIGNUP_CAP") {
+                    Some(cap) => cap
+                        .parse()
+                        .ok()
+                        .filter(|cap| *cap >= 0)
+                        .context("FLEETRANGER_SIGNUP_CAP is not a number of organisations")?,
+                    None => 200,
+                },
+                terms_url: url("FLEETRANGER_TERMS_URL")?,
+                privacy_url: url("FLEETRANGER_PRIVACY_URL")?,
+            })
+        } else {
+            None
+        };
 
         Ok(Self {
             bind,
@@ -99,6 +142,7 @@ impl Config {
             mcp,
             api,
             multi_tenant,
+            signup,
         })
     }
 }

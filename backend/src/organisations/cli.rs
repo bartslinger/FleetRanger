@@ -224,6 +224,9 @@ fn name(name: &str) -> Result<&str> {
     if name.is_empty() {
         bail!("the name is empty");
     }
+    if name.chars().count() > super::MAX_NAME {
+        bail!("the name is longer than {} characters", super::MAX_NAME);
+    }
     Ok(name)
 }
 
@@ -252,27 +255,13 @@ async fn add(
     .fetch_one(&**system)
     .await?;
     let mut tx = system.begin().await?;
-    let id = sqlx::query_scalar!(
-        "insert into organisations (name) values ($1) returning id",
-        name
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    sqlx::query!(
-        "insert into organisation_settings (organisation_id, time_zone, session_gap_minutes, mcp)
-         values ($1, coalesce($2, 'UTC'), coalesce($3, 120), coalesce($4, false))",
-        id,
-        changes.time_zone,
-        changes.session_gap.map(|SessionGap(minutes)| minutes),
+    let id = super::insert(
+        &mut tx,
+        name,
+        changes.time_zone.as_deref(),
+        changes.session_gap,
         changes.mcp,
     )
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query!(
-        "insert into groups (organisation_id, name) values ($1, 'General')",
-        id
-    )
-    .execute(&mut *tx)
     .await?;
     tx.commit().await?;
     if same_name > 0 {

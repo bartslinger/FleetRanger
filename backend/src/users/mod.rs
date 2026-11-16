@@ -1,7 +1,7 @@
 //! Users: everyone, pilots, viewers and admins. A user has roles in groups or
 //! on the whole organisation, can log in, or both.
 
-mod db;
+pub(crate) mod db;
 pub mod routes;
 mod service;
 
