@@ -1,0 +1,125 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with s as (\n               update login_sessions\n               set last_seen_at = now(), expires_at = now() + make_interval(days => $2)\n               where token_sha256 = $1 and revoked_at is null and expires_at > now()\n               returning id, subject, email, name, user_id, organisation_id)\n           select s.id as \"id!\", s.subject as \"subject!\", s.email, s.name,\n                  s.user_id, s.organisation_id,\n                  l.email as \"login_email?\", u.name as \"user_name?\", u.archived_at\n           from s\n           left join logins l on l.user_id = s.user_id\n           left join users u on u.id = s.user_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "organisation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "login_sessions",
+            "name": "organisation_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "login_email?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logins",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "user_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "archived_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "archived_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "965764b05f7fe9d5b9a2f341893e5fc5eb80339f07ba3660d7db9a0b4713779b"
+}

@@ -24,11 +24,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use super::db::{self, LoginUser};
+use super::db;
 use super::oidc::PendingLogin;
 use super::{
-    Actor, Auth, SESSION_IDLE_DAYS, client_ip, impersonation_cookie, login_cookie, session_cookie,
-    token_hash,
+    Actor, Auth, Person, SESSION_IDLE_DAYS, client_ip, impersonation_cookie, login_cookie,
+    session_cookie, token_hash,
 };
 use crate::oauth::AppsOn;
 use crate::oauth::OAuth;
@@ -57,6 +57,7 @@ where
         .route("/auth/impersonate/stop", post(stop_impersonating))
         .route("/auth/organisation", post(switch_organisation))
         .route("/api/me", get(me))
+        .route("/api/person", get(person))
 }
 
 #[derive(Deserialize)]
@@ -205,17 +206,11 @@ async fn signup_status(
     }))
 }
 
-/// The Google account of the person logged in, across organisations.
-async fn person_of(system: &System, actor: &Actor) -> sqlx::Result<Option<(String, String)>> {
-    let mut db = system.acquire().await?;
-    let row = sqlx::query!(
-        r#"select oidc_subject as "subject!", email from logins
-           where user_id = $1 and oidc_subject is not null"#,
-        actor.user_id,
-    )
-    .fetch_optional(&mut *db)
-    .await?;
-    Ok(row.map(|row| (row.subject, row.email)))
+/// Whether an admin is impersonating someone in this browser: pages before
+/// an organisation then act as nobody, as the impersonated user isn't the
+/// one logged in.
+fn impersonating(jar: &CookieJar) -> bool {
+    jar.get(impersonation_cookie()).is_some()
 }
 
 /// The sign-up choices kept for someone who came back from Google with an
@@ -245,19 +240,16 @@ struct OrganisationRef {
 async fn existing_status(
     State(auth): State<Arc<Auth>>,
     State(system): State<System>,
-    actor: Actor,
+    person: Person,
     jar: CookieJar,
 ) -> Result<Json<ExistingStatus>, StatusCode> {
-    if auth.signup.is_none() || actor.impersonated_by.is_some() {
+    if auth.signup.is_none() || impersonating(&jar) {
         return Err(StatusCode::NOT_FOUND);
     }
     let request = pending_signup(&jar).ok_or(StatusCode::NOT_FOUND)?;
     let read = async {
-        let Some((subject, _)) = person_of(&system, &actor).await? else {
-            return Ok(None);
-        };
         let mut db = system.acquire().await?;
-        signup::admin_of(&mut db, &subject).await
+        signup::admin_of(&mut db, &person.subject).await
     };
     let admin_of = read.await.map_err(|error| {
         tracing::error!(%error, "reading whether someone is an admin");
@@ -275,13 +267,13 @@ async fn existing_status(
 async fn signup_existing(
     State(auth): State<Arc<Auth>>,
     State(system): State<System>,
-    actor: Actor,
+    person: Person,
     jar: CookieJar,
 ) -> Response {
     let Some(config) = &auth.signup else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    if actor.impersonated_by.is_some() {
+    if impersonating(&jar) {
         return StatusCode::FORBIDDEN.into_response();
     }
     let Some(request) = pending_signup(&jar) else {
@@ -289,21 +281,22 @@ async fn signup_existing(
         return Redirect::to("/signup?error=expired").into_response();
     };
     let signed_up = async {
-        let Some((subject, email)) = person_of(&system, &actor).await? else {
-            anyhow::bail!("the login isn't tied to a Google account");
+        let Some(email) = &person.email else {
+            anyhow::bail!("the login has no verified email");
         };
-        let person = signup::Person {
-            subject: &subject,
-            email: &email,
-            name: &actor.name,
+        let name = signup::person_name(person.name.as_deref(), email);
+        let account = signup::Person {
+            subject: &person.subject,
+            email,
+            name: &name,
         };
         let mut db = system.acquire().await?;
         sign_up(
             &mut db,
             request,
-            &person,
+            &account,
             config.cap,
-            Some(actor.login_session_id),
+            Some(person.login_session_id),
         )
         .await
     };
@@ -444,7 +437,7 @@ async fn callback(
             return (jar, Redirect::to(failed)).into_response();
         }
     };
-    let user = db::login_user(
+    let found = db::memberships(
         &mut system,
         &identity.subject,
         identity.verified_email.as_deref(),
@@ -452,11 +445,8 @@ async fn callback(
     .await;
     let mut return_to = return_to;
     let mut jar = jar;
-    let (user_id, organisation_id) = match user {
-        Ok(LoginUser::Allowed {
-            user_id,
-            organisation_id,
-        }) => {
+    let membership = match found {
+        Ok(found) if !found.is_empty() => {
             // Signing up with an account that has an organisation already:
             // they choose on the sign-up page whether to create this one.
             // The choices stay in the login cookie, not in a link (user's
@@ -471,9 +461,26 @@ async fn callback(
                 jar = jar.add(cookie);
                 return_to = "/signup/existing".to_owned();
             }
-            (user_id, organisation_id)
+            match found.as_slice() {
+                [only] => Some(*only),
+                // Someone in several organisations chooses one first (user's
+                // request, 2026-11-16), unless they came to sign up, which
+                // asks its own question. The page they were going to comes
+                // along.
+                _ => {
+                    if signing_up.is_none() {
+                        return_to = format!(
+                            "/choose-organisation?{}",
+                            form_urlencoded::Serializer::new(String::new())
+                                .append_pair("return_to", &return_to)
+                                .finish()
+                        );
+                    }
+                    None
+                }
+            }
         }
-        Ok(LoginUser::Refused) => {
+        Ok(_) => {
             let (Some(config), Some(request), Some(email)) = (
                 &auth.signup,
                 signing_up.clone(),
@@ -499,7 +506,10 @@ async fn callback(
                     organisation_id,
                 }) => {
                     tracing::info!(%organisation_id, "organisation signed up");
-                    (user_id, organisation_id)
+                    Some(db::Membership {
+                        user_id,
+                        organisation_id,
+                    })
                 }
                 Ok(signup::Outcome::Full) => {
                     tracing::info!("sign-up full: on the waiting list");
@@ -526,10 +536,15 @@ async fn callback(
     let user_agent = headers
         .get(header::USER_AGENT)
         .and_then(|value| value.to_str().ok());
+    let account = db::Account {
+        subject: &identity.subject,
+        email: identity.verified_email.as_deref(),
+        name: identity.name.as_deref(),
+    };
     let created = db::create_session(
         &mut system,
-        user_id,
-        organisation_id,
+        &account,
+        membership,
         &token_hash(&token),
         SESSION_IDLE_DAYS,
         client_ip(&headers, peer),
@@ -539,23 +554,6 @@ async fn callback(
     if let Err(error) = created {
         tracing::error!(%error, "creating a login session");
         return (jar, Redirect::to(failed)).into_response();
-    }
-    // Someone in several organisations chooses one first (user's request,
-    // 2026-11-16), unless they came to sign up, which asks its own question.
-    // The page they were going to comes along.
-    if signing_up.is_none() {
-        match db::organisation_count(&mut system, &identity.subject).await {
-            Ok(count) if count > 1 => {
-                return_to = format!(
-                    "/choose-organisation?{}",
-                    form_urlencoded::Serializer::new(String::new())
-                        .append_pair("return_to", &return_to)
-                        .finish()
-                );
-            }
-            Ok(_) => {}
-            Err(error) => tracing::error!(%error, "counting someone's organisations"),
-        }
     }
 
     let cookie = Cookie::build((session_cookie(), token))
@@ -581,7 +579,10 @@ async fn logout(
             db::revoke_session(&mut system, &token_hash(cookie.value())).await
         };
         match revoked.await {
-            Ok(Some((user, organisation))) => {
+            Ok(Some(db::Membership {
+                user_id: user,
+                organisation_id: organisation,
+            })) => {
                 let mut db = match tenants.connect(organisation).await {
                     Ok(db) => db,
                     Err(error) => {
@@ -681,22 +682,23 @@ struct OrganisationForm {
     return_to: Option<String>,
 }
 
-/// The login session moves to the person's user in another of their
-/// organisations, for every tab. An impersonation ends with it, as the
-/// impersonated user is in the organisation left. The app starts again at
-/// its home page, as nothing on the page shown was in the other one.
+/// Puts the login session in one of the person's organisations, as their
+/// user there, for every tab: after logging in to several, or switching
+/// from another. An impersonation ends with it, as the impersonated user is
+/// in the organisation left. The app starts again at its home page, as
+/// nothing on the page shown was in the other one.
 async fn switch_organisation(
     State(auth): State<Arc<Auth>>,
     State(system): State<System>,
-    mut db: Db,
-    actor: Actor,
+    State(tenants): State<Tenants>,
+    person: Person,
     jar: CookieJar,
     Form(form): Form<OrganisationForm>,
 ) -> Response {
     // Across organisations: the person's user in the other one.
     let switched = async {
         let mut system = system.acquire().await?;
-        db::switch_organisation(&mut system, actor.login_session_id, form.organisation).await
+        db::switch_organisation(&mut system, person.login_session_id, form.organisation).await
     };
     match switched.await {
         Ok(true) => {}
@@ -706,12 +708,21 @@ async fn switch_organisation(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
-    // Only once switched: `db` is still the organisation left, where the
+    // Only once switched, in the organisation left, where the
     // impersonation's app connections are.
-    if let Some(admin) = &actor.impersonated_by
-        && let Err(status) = end_impersonation(&mut db, admin.user_id).await
+    if let Some(left) = person.membership
+        && impersonating(&jar)
     {
-        return status.into_response();
+        let mut db = match tenants.connect(left.organisation_id).await {
+            Ok(db) => db,
+            Err(error) => {
+                tracing::error!(%error, "connecting to end an impersonation");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+        if let Err(status) = end_impersonation(&mut db, left.user_id).await {
+            return status.into_response();
+        }
     }
     let jar = jar.remove(removal(&auth, impersonation_cookie()));
     (jar, Redirect::to(&local_path(form.return_to.as_deref()))).into_response()
@@ -814,6 +825,38 @@ async fn me(
             name: admin.name,
         }),
         several_groups,
+    }))
+}
+
+/// Who is logged in, also before choosing an organisation, for the pages
+/// that come before one.
+#[derive(Serialize)]
+struct PersonView {
+    email: Option<String>,
+    name: Option<String>,
+    /// Whether the login session is in an organisation yet.
+    chosen: bool,
+    organisations: Vec<db::OrganisationChoice>,
+}
+
+/// The person logged in, or 401.
+async fn person(
+    person: Person,
+    State(system): State<System>,
+) -> Result<Json<PersonView>, StatusCode> {
+    let read = async {
+        let mut system = system.acquire().await?;
+        db::organisations_of(&mut system, person.login_session_id).await
+    };
+    let organisations = read.await.map_err(|error| {
+        tracing::error!(%error, "reading someone's organisations");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(PersonView {
+        email: person.email,
+        name: person.name,
+        chosen: person.membership.is_some(),
+        organisations,
     }))
 }
 

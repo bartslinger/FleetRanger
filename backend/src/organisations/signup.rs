@@ -185,7 +185,7 @@ mod tests {
     use sqlx::PgPool;
 
     use super::{Outcome, Person, Request, sign_up};
-    use crate::auth::db::{LoginUser, login_user};
+    use crate::auth::db::{Membership, memberships};
 
     /// Signing up makes the person the admin of a new organisation, which
     /// they log in to, and they can't sign up another; once the cap is
@@ -220,13 +220,15 @@ mod tests {
         .await
         .unwrap();
         assert!(admin);
-        match login_user(&mut db, "test-subject-1", None).await.unwrap() {
-            LoginUser::Allowed {
-                user_id: logged_in,
-                organisation_id: into,
-            } => assert_eq!((logged_in, into), (user_id, organisation_id)),
-            LoginUser::Refused => panic!("the new admin should log in"),
-        }
+        let found = memberships(&mut db, "test-subject-1", None).await.unwrap();
+        assert_eq!(
+            found,
+            [Membership {
+                user_id,
+                organisation_id
+            }],
+            "the new admin should log in"
+        );
         // Signing up again is refused: one organisation per admin.
         assert!(matches!(
             sign_up(&mut db, &request, &first, 10, None).await.unwrap(),
@@ -294,8 +296,8 @@ mod tests {
         .unwrap();
 
         let session: uuid::Uuid = sqlx::query_scalar(
-            "insert into login_sessions (organisation_id, user_id, token_sha256, expires_at, ip)
-             values ($1, $2, sha256('test'), now() + interval '1 day', '127.0.0.1')
+            "insert into login_sessions (organisation_id, user_id, subject, token_sha256, expires_at, ip)
+             values ($1, $2, 'test-subject-member', sha256('test'), now() + interval '1 day', '127.0.0.1')
              returning id",
         )
         .bind(organisation_id)
