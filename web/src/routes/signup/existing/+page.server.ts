@@ -6,7 +6,8 @@ import { BACKEND_URL } from '$app/env/private';
  * of theirs. The choices come from the login cookie (user's decision,
  * 2026-11-16), so without a sign-up in progress there is nothing here. */
 export async function load({ fetch, locals }) {
-	if (!locals.account) redirect(303, '/');
+	const organisations = locals.account?.organisations ?? locals.person?.organisations;
+	if (!organisations) redirect(303, '/');
 	const response = await fetch(`${BACKEND_URL}/api/signup/existing`);
 	// Without choices in the cookie: they expired after ten minutes.
 	if (response.status === 404) redirect(303, '/signup?error=expired');
@@ -16,6 +17,6 @@ export async function load({ fetch, locals }) {
 	return {
 		organisationName: status.organisation_name,
 		adminOf: status.admin_of,
-		organisations: locals.account.organisations
+		organisations
 	};
 }

@@ -5,8 +5,11 @@ declare global {
 		// interface Error {}
 		interface Locals {
 			theme: import('#lib/theme.js').Theme;
-			/** Null only on pages shown without logging in. */
+			/** Null on pages shown without logging in, or before an organisation
+			 * is chosen. */
 			account: import('#lib/server/backend.js').Account | null;
+			/** Who is logged in when `account` is null: in no organisation yet. */
+			person: import('#lib/server/backend.js').Person | null;
 		}
 		// interface PageData {}
 		interface PageState {

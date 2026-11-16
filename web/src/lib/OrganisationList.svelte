@@ -2,15 +2,15 @@
 	@component
 	The organisations someone can open, as Carbon's contained list with
 	clickable rows (carbon-expert's advice): one form per organisation, posting
-	to the same switch as the profile panel. The current one, the last used,
-	is marked when there is more than one.
+	to the same switch as the profile panel. The last used one
+	is first, and marked when there is more than one.
 -->
 <script lang="ts">
 	import ArrowRight from '@carbon/icons/es/arrow--right/16.js';
 	import Icon from '#lib/ui/Icon.svelte';
 
 	interface Props {
-		organisations: { id: string; name: string; current: boolean }[];
+		organisations: { id: string; name: string; last_used: boolean }[];
 		/** A visible list title, e.g. "Your organisations"; without it the list
 		 * is labelled for screen readers only. */
 		title?: string;
@@ -21,8 +21,10 @@
 	let { organisations, title, returnTo }: Props = $props();
 
 	const id = $props.id();
-	// The current one first.
-	const sorted = $derived([...organisations].sort((a, b) => Number(b.current) - Number(a.current)));
+	// The last used one first.
+	const sorted = $derived(
+		[...organisations].sort((a, b) => Number(b.last_used) - Number(a.last_used))
+	);
 	// The organisation being opened, against a second click.
 	let opening: string | null = $state(null);
 </script>
@@ -55,7 +57,7 @@
 							<span class="name">
 								{opening === organisation.id ? `Opening ${organisation.name}…` : organisation.name}
 							</span>
-							{#if organisation.current && organisations.length > 1}
+							{#if organisation.last_used && organisations.length > 1}
 								<span class="note">Last used</span>
 							{/if}
 						</span>
