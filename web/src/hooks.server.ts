@@ -8,7 +8,7 @@ import { parseTheme, THEME_COOKIE } from '#lib/theme.js';
 const PUBLIC_PATHS = new Set(['/login', '/signup', '/download']);
 
 /** Pages for someone logged in before they are in an organisation. */
-const BEFORE_ORGANISATION = new Set([...PUBLIC_PATHS, '/choose-organisation', '/signup/existing']);
+const BEFORE_ORGANISATION = new Set([...PUBLIC_PATHS, '/choose-organisation']);
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const theme = parseTheme(event.cookies.get(THEME_COOKIE));
