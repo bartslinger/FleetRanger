@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
+use super::Plan;
 use crate::db::{Db, System, Tenants};
 use crate::sessions::SessionGap;
 
@@ -15,8 +16,8 @@ const USAGE: &str = "\
 usage:
   fleetranger serve
   fleetranger organisations
-  fleetranger add-organisation <name> [--time-zone <zone>] [--session-gap <minutes>] [--mcp on|off]
-  fleetranger set-organisation <id> [--name <name>] [--time-zone <zone>] [--session-gap <minutes>] [--mcp on|off]
+  fleetranger add-organisation <name> [--plan free|unlimited] [--time-zone <zone>] [--session-gap <minutes>] [--mcp on|off]
+  fleetranger set-organisation <id> [--name <name>] [--plan free|unlimited] [--time-zone <zone>] [--session-gap <minutes>] [--mcp on|off]
   fleetranger delete-organisation <id> --name <its name>   (with FLEETRANGER_MULTI_TENANT=on)
   fleetranger add-user [--organisation <id>] [--admin] <email> <name>
   fleetranger import [--organisation <id>] [--group <name>]
@@ -40,7 +41,7 @@ pub async fn run(
             list(system, None).await
         }
         "add-organisation" => {
-            let [name] = args.expect(&["time-zone", "session-gap", "mcp"])?;
+            let [name] = args.expect(&["plan", "time-zone", "session-gap", "mcp"])?;
             add(system, name, &args, multi_tenant).await
         }
         "delete-organisation" => {
@@ -51,7 +52,7 @@ pub async fn run(
             delete(system, store, parse_id(id)?, name, multi_tenant).await
         }
         "set-organisation" => {
-            let [id] = args.expect(&["name", "time-zone", "session-gap", "mcp"])?;
+            let [id] = args.expect(&["name", "plan", "time-zone", "session-gap", "mcp"])?;
             set(system, parse_id(id)?, &args).await
         }
         "add-user" => {
@@ -155,7 +156,7 @@ async fn organisation(system: &System, tenants: &Tenants, args: &Args<'_>) -> Re
 /// Prints the organisations with their settings, or only this one.
 async fn list(system: &System, only: Option<Uuid>) -> Result<()> {
     let rows = sqlx::query!(
-        "select o.id, o.name, s.time_zone, s.session_gap_minutes, s.mcp
+        "select o.id, o.name, o.plan, s.time_zone, s.session_gap_minutes, s.mcp
          from organisations o join organisation_settings s on s.organisation_id = o.id
          where $1::uuid is null or o.id = $1
          order by o.created_at",
@@ -165,9 +166,10 @@ async fn list(system: &System, only: Option<Uuid>) -> Result<()> {
     .await?;
     for row in rows {
         println!(
-            "{}  {}  time zone {}, session gap {} min, MCP {}",
+            "{}  {}  {} plan, time zone {}, session gap {} min, MCP {}",
             row.id,
             row.name,
+            row.plan,
             row.time_zone,
             row.session_gap_minutes,
             if row.mcp { "on" } else { "off" }
@@ -178,12 +180,20 @@ async fn list(system: &System, only: Option<Uuid>) -> Result<()> {
 
 /// The settings given, checked.
 struct Changes {
+    plan: Option<Plan>,
     time_zone: Option<String>,
     session_gap: Option<SessionGap>,
     mcp: Option<bool>,
 }
 
 async fn changes(system: &System, args: &Args<'_>) -> Result<Changes> {
+    let plan = match args.value("plan") {
+        Some(plan) => Some(
+            Plan::parse(plan)
+                .with_context(|| format!("--plan takes free or unlimited, not {plan:?}"))?,
+        ),
+        None => None,
+    };
     let time_zone = match args.value("time-zone") {
         Some(zone) => {
             let known = super::known_time_zone(&**system, zone).await?;
@@ -213,6 +223,7 @@ async fn changes(system: &System, args: &Args<'_>) -> Result<Changes> {
         None => None,
     };
     Ok(Changes {
+        plan,
         time_zone,
         session_gap,
         mcp,
@@ -258,6 +269,7 @@ async fn add(
     let id = super::insert(
         &mut tx,
         name,
+        changes.plan.unwrap_or(Plan::Unlimited),
         changes.time_zone.as_deref(),
         changes.session_gap,
         changes.mcp,
@@ -276,9 +288,11 @@ async fn set(system: &System, id: Uuid, args: &Args<'_>) -> Result<()> {
     let changes = changes(system, args).await?;
     let mut tx = system.begin().await?;
     let found = sqlx::query!(
-        "update organisations set name = coalesce($2, name) where id = $1",
+        "update organisations set name = coalesce($2, name), plan = coalesce($3, plan)
+         where id = $1",
         id,
         name,
+        changes.plan.map(Plan::as_str),
     )
     .execute(&mut *tx)
     .await?;

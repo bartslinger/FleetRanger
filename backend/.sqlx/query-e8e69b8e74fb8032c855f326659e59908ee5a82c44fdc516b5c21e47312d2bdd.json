@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select count(*) as \"count!\" from logins\n           where organisation_id = current_setting('app.organisation_id', true)::uuid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e8e69b8e74fb8032c855f326659e59908ee5a82c44fdc516b5c21e47312d2bdd"
+}

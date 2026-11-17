@@ -5,6 +5,7 @@ use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::flights::db::GroupChoice;
+use crate::organisations::plan::{self, Limit};
 use crate::policy::{self, Permission, Scope};
 
 /// Adds a pairing code, and deletes expired ones. Returns its id, or None if
@@ -124,13 +125,14 @@ pub async fn code_organisation(db: &mut PgConnection, code: &str) -> sqlx::Resul
 /// Uses a code: it's deleted, and the controller with this serial (registered
 /// now if it's new) gets the token and the code's group. Returns None if the
 /// code doesn't exist, has expired, or its creator has been archived since.
-/// A deleted group takes its codes with it.
+/// A deleted group takes its codes with it. A controller not paired now must
+/// fit the organisation's plan, or the code stays unused.
 pub async fn use_code(
     db: &mut PgConnection,
     code: &str,
     serial: &str,
     token_sha256: &[u8],
-) -> sqlx::Result<Option<Paired>> {
+) -> sqlx::Result<Option<Result<Paired, Limit>>> {
     let mut tx = db.begin().await?;
     let Some(group_id) = sqlx::query_scalar!(
         "delete from pairing_codes c using users u
@@ -144,6 +146,10 @@ pub async fn use_code(
     else {
         return Ok(None);
     };
+    if let Err(limit) = plan::check_controller(&mut tx, serial).await? {
+        // Rolled back: the code can be used once a place is free.
+        return Ok(Some(Err(limit)));
+    }
     let group = sqlx::query_as!(
         GroupChoice,
         "select id, name from groups where id = $1",
@@ -164,7 +170,7 @@ pub async fn use_code(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Some(Paired { group }))
+    Ok(Some(Ok(Paired { group })))
 }
 
 /// A paired controller, as it authenticates.
@@ -334,7 +340,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            paired.and_then(|p| p.group).map(|g| g.name).as_deref(),
+            paired
+                .and_then(Result::ok)
+                .and_then(|p| p.group)
+                .map(|g| g.name)
+                .as_deref(),
             Some("North")
         );
         assert!(

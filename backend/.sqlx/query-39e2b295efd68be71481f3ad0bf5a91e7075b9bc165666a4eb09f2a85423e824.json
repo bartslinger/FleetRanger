@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select count(*) as \"count!\" from remote_controllers\n           where organisation_id = current_setting('app.organisation_id', true)::uuid\n             and token_sha256 is not null and serial <> $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "39e2b295efd68be71481f3ad0bf5a91e7075b9bc165666a4eb09f2a85423e824"
+}

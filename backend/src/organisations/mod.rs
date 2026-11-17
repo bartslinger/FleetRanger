@@ -5,6 +5,7 @@
 
 pub mod cli;
 pub mod delete;
+pub mod plan;
 pub mod routes;
 pub mod signup;
 
@@ -12,6 +13,7 @@ use sqlx::{PgConnection, PgExecutor};
 use uuid::Uuid;
 
 use crate::sessions::SessionGap;
+use plan::Plan;
 
 /// Whether the install holds several organisations (`FLEETRANGER_MULTI_TENANT`,
 /// user's decision, 2026-11-13): only then are organisations added beyond
@@ -65,13 +67,15 @@ pub async fn settings(db: &mut PgConnection) -> sqlx::Result<Settings> {
 pub async fn insert(
     db: &mut PgConnection,
     name: &str,
+    plan: Plan,
     time_zone: Option<&str>,
     session_gap: Option<SessionGap>,
     mcp: Option<bool>,
 ) -> sqlx::Result<Uuid> {
     let id = sqlx::query_scalar!(
-        "insert into organisations (name) values ($1) returning id",
-        name
+        "insert into organisations (name, plan) values ($1, $2) returning id",
+        name,
+        plan.as_str(),
     )
     .fetch_one(&mut *db)
     .await?;

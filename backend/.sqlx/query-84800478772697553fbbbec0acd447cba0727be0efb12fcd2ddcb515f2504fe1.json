@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update organisations set name = coalesce($2, name), plan = coalesce($3, plan)\n         where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "84800478772697553fbbbec0acd447cba0727be0efb12fcd2ddcb515f2504fe1"
+}
