@@ -707,6 +707,20 @@ async fn switched_to(
 #[derive(Deserialize)]
 struct InvitationForm {
     organisation: Uuid,
+    /// Where to go after accepting: where they were going when they logged
+    /// in; home otherwise.
+    return_to: Option<String>,
+    /// The page the invitation was answered on, to come back to after
+    /// declining, or when it's gone; the organisation picker otherwise.
+    back: Option<String>,
+}
+
+impl InvitationForm {
+    fn back(&self) -> Redirect {
+        Redirect::to(&local_path(Some(
+            self.back.as_deref().unwrap_or("/choose-organisation"),
+        )))
+    }
 }
 
 /// Accepts an invitation, and goes into that organisation.
@@ -725,13 +739,19 @@ async fn accept_invitation(
     };
     match accepted.await {
         Ok(true) => {}
-        Ok(false) => return StatusCode::NOT_FOUND.into_response(),
+        // Withdrawn, or answered in another tab (two accepts at once meet
+        // the database's one login per account and organisation): back to
+        // the page, which shows what is left.
+        Ok(false) => return form.back().into_response(),
+        Err(error) if crate::error::is_unique_violation(&error) => {
+            return form.back().into_response();
+        }
         Err(error) => {
             tracing::error!(%error, "accepting an invitation");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
-    switched_to(&auth, &tenants, &person, jar, None).await
+    switched_to(&auth, &tenants, &person, jar, form.return_to.as_deref()).await
 }
 
 /// Declines an invitation, back to the page with the others.
@@ -744,9 +764,9 @@ async fn decline_invitation(
         let mut system = system.acquire().await?;
         db::decline_invitation(&mut system, person.login_session_id, form.organisation).await
     };
+    // Also when already gone: the page shows what is left.
     match declined.await {
-        Ok(true) => Redirect::to("/choose-organisation").into_response(),
-        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Ok(_) => form.back().into_response(),
         Err(error) => {
             tracing::error!(%error, "declining an invitation");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
