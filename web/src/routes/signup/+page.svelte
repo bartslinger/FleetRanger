@@ -94,8 +94,8 @@
 	<LoginForm
 		title="Sign-up is full for now"
 		description={data.loggedIn
-			? "All free spots are taken. Join the waiting list and we'll email you when there's room."
-			: "All free spots are taken. Join the waiting list with your Google account and we'll email you when there's room."}
+			? "Join the waiting list and we'll email you when there's room."
+			: "Join the waiting list with your Google account and we'll email you when there's room."}
 	>
 		<!-- A native form: the backend sends the browser on to Google. -->
 		<form method="post" action="/auth/signup" onsubmit={go}>
