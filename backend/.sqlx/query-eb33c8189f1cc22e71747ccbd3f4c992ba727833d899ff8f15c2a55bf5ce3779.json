@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into logins (user_id, email, invited_by) values ($1, $2, $3)\n                 on conflict (user_id) do update\n                 set email = excluded.email, oidc_subject = null,\n                     invited_by = excluded.invited_by",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eb33c8189f1cc22e71747ccbd3f4c992ba727833d899ff8f15c2a55bf5ce3779"
+}

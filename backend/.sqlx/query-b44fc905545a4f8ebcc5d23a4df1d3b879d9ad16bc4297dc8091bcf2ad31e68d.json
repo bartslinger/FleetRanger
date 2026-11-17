@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from logins l using login_sessions s\n         where s.id = $1 and l.organisation_id = $2\n           and l.email = s.email and l.oidc_subject is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b44fc905545a4f8ebcc5d23a4df1d3b879d9ad16bc4297dc8091bcf2ad31e68d"
+}

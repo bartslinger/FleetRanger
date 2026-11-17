@@ -15,6 +15,8 @@ pub struct User {
     /// The login's email address; none if the user can't log in.
     pub email: Option<String>,
     pub last_login_at: Option<DateTime<Utc>>,
+    /// Whether the login is an invitation nobody has accepted yet.
+    pub invited: bool,
     pub archived_at: Option<DateTime<Utc>>,
     /// Flights with this user as pilot; only a user without flights can be deleted.
     pub flights: i64,
@@ -35,12 +37,16 @@ pub struct UserFields<'a> {
     pub roles: &'a [String],
     /// Lowercase; None removes the login.
     pub email: Option<&'a str>,
+    /// Who sends the invitation a new or changed email makes; None for the
+    /// operator's command line.
+    pub invited_by: Option<Uuid>,
 }
 
 /// Why a change was refused.
 pub enum Refused {
     NotFound,
-    /// It would leave the organisation without an active admin.
+    /// It would leave the organisation without an active admin who has
+    /// logged in.
     LastAdmin,
 }
 
@@ -72,6 +78,7 @@ pub async fn list(
                                           where a.group_id = g.id and a.user_id = u.id)),
                            '[]') as "groups!: Json<Vec<Membership>>",
                   l.email as "email?",
+                  (l.user_id is not null and l.oidc_subject is null) as "invited!",
                   (select max(created_at) from login_sessions s where s.user_id = u.id)
                       as last_login_at,
                   u.archived_at,
@@ -97,7 +104,7 @@ pub async fn insert(db: &mut PgConnection, fields: &UserFields<'_>) -> sqlx::Res
     .fetch_one(&mut *tx)
     .await?;
     set_roles(&mut tx, id, fields.roles).await?;
-    set_login(&mut tx, id, fields.email).await?;
+    set_login(&mut tx, id, fields.email, fields.invited_by).await?;
     tx.commit().await?;
     Ok(id)
 }
@@ -117,24 +124,34 @@ pub async fn update(
     if !updated {
         return Ok(Err(Refused::NotFound));
     }
-    if admins == [id] && !fields.roles.iter().any(|role| role == "admin") {
+    // A new email is a new invitation, and its login no longer counts as
+    // logged in.
+    let email = sqlx::query_scalar!("select email from logins where user_id = $1", id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    if admins == [id]
+        && (!fields.roles.iter().any(|role| role == "admin") || email.as_deref() != fields.email)
+    {
         return Ok(Err(Refused::LastAdmin));
     }
     set_roles(&mut tx, id, fields.roles).await?;
-    set_login(&mut tx, id, fields.email).await?;
+    set_login(&mut tx, id, fields.email, fields.invited_by).await?;
     tx.commit().await?;
     Ok(Ok(()))
 }
 
-/// The active admins, locked until the transaction ends, so two changes
-/// can't each take away an admin while the other one still counts.
+/// The active admins who have logged in, locked until the transaction ends,
+/// so two changes can't each take away an admin while the other one still
+/// counts. Admins who never logged in don't count: one with a mistyped email
+/// couldn't help (user's decision, 2026-11-16).
 async fn lock_active_admins(db: &mut PgConnection) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar!(
         "select r.user_id from organisation_roles r
          join users u on u.id = r.user_id
-         where r.role = 'admin' and u.archived_at is null
+         join logins l on l.user_id = r.user_id
+         where r.role = 'admin' and u.archived_at is null and l.oidc_subject is not null
          order by r.user_id
-         for update of r, u",
+         for update of r, u, l",
     )
     .fetch_all(&mut *db)
     .await
@@ -161,10 +178,16 @@ async fn set_roles(db: &mut PgConnection, id: Uuid, roles: &[String]) -> sqlx::R
 }
 
 /// Gives the user a login with this email, changes it, or removes it. A new or
-/// changed address is tied to its login provider again on first use, and
-/// deletes the user's login sessions first, as does removing the login: the
-/// database allows no session for an account the login no longer has.
-async fn set_login(db: &mut PgConnection, id: Uuid, email: Option<&str>) -> sqlx::Result<()> {
+/// changed address is an invitation from `invited_by`, tied to a login
+/// provider's account once accepted, and deletes the user's login sessions
+/// first, as does removing the login: the database allows no session for an
+/// account the login no longer has.
+async fn set_login(
+    db: &mut PgConnection,
+    id: Uuid,
+    email: Option<&str>,
+    invited_by: Option<Uuid>,
+) -> sqlx::Result<()> {
     let current = sqlx::query_scalar!("select email from logins where user_id = $1", id)
         .fetch_optional(&mut *db)
         .await?;
@@ -178,10 +201,13 @@ async fn set_login(db: &mut PgConnection, id: Uuid, email: Option<&str>) -> sqlx
     match email {
         Some(email) => {
             sqlx::query!(
-                "insert into logins (user_id, email) values ($1, $2)
-                 on conflict (user_id) do update set email = excluded.email, oidc_subject = null",
+                "insert into logins (user_id, email, invited_by) values ($1, $2, $3)
+                 on conflict (user_id) do update
+                 set email = excluded.email, oidc_subject = null,
+                     invited_by = excluded.invited_by",
                 id,
                 email,
+                invited_by,
             )
             .execute(&mut *db)
             .await?;
@@ -215,7 +241,7 @@ async fn revoke_sessions(db: &mut PgConnection, id: Uuid) -> sqlx::Result<()> {
 }
 
 /// Archives a user, which also ends their login sessions, or restores them.
-/// The last active admin isn't archived.
+/// The last active admin who has logged in isn't archived.
 pub async fn set_archived(
     db: &mut PgConnection,
     id: Uuid,
