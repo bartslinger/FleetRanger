@@ -1,7 +1,7 @@
 //! Pairing remote controllers with the install, and how a paired controller
 //! authenticates. See "Clients" in docs/architecture.md.
 
-mod db;
+pub(crate) mod db;
 pub mod routes;
 pub mod service;
 

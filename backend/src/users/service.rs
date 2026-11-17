@@ -43,7 +43,8 @@ pub async fn create(db: &mut PgConnection, actor: &Actor, input: &UserInput) -> 
     let checked = Checked::new(input)?;
     let id = db::insert(db, &checked.fields(actor.user_id))
         .await
-        .map_err(email_taken)?;
+        .map_err(email_taken)?
+        .map_err(|limit| refusal(Refused::Limit(limit)))?;
     get(db, actor, id).await
 }
 
@@ -107,6 +108,7 @@ fn refusal(refused: Refused) -> ApiError {
         Refused::LastAdmin => ApiError::Conflict(
             "This is the only admin who has logged in. First make someone else an admin, and have them log in.".to_owned(),
         ),
+        Refused::Limit(limit) => ApiError::Conflict(limit.message()),
     }
 }
 

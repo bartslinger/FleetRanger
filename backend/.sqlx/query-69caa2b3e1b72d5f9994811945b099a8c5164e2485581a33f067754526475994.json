@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "insert into organisations (name) values ($1) returning id",
+  "query": "insert into organisations (name, plan) values ($1, $2) returning id",
   "describe": {
     "columns": [
       {
@@ -17,6 +17,7 @@
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Text"
       ]
     },
@@ -24,5 +25,5 @@
       false
     ]
   },
-  "hash": "d11342e811a2ec70c86b1032380e133de4644d8899a9e12b135d6621d0d8b1b3"
+  "hash": "69caa2b3e1b72d5f9994811945b099a8c5164e2485581a33f067754526475994"
 }

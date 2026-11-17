@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select plan from organisations\n         where id = current_setting('app.organisation_id', true)::uuid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "plan",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "organisations",
+            "name": "plan"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b99250d60a88870a5d69b016d3c6134d6b3c4b5f7a835982fecba81344e8bb41"
+}

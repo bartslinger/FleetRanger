@@ -127,7 +127,8 @@ pub async fn pair(
     let mut db = tenants.connect(organisation).await?;
     db::use_code(&mut db, &code, serial, &token_sha256)
         .await?
-        .ok_or_else(refused)
+        .ok_or_else(refused)?
+        .map_err(|limit| ApiError::Invalid(limit.message()))
 }
 
 /// The pilots a controller offers, from v1 of its API: whoever holds

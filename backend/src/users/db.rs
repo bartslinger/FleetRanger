@@ -4,6 +4,8 @@ use sqlx::Connection as _;
 use sqlx::{PgConnection, types::Json};
 use uuid::Uuid;
 
+use crate::organisations::plan::{self, Limit};
+
 #[derive(Serialize)]
 pub struct User {
     pub id: Uuid,
@@ -48,6 +50,8 @@ pub enum Refused {
     /// It would leave the organisation without an active admin who has
     /// logged in.
     LastAdmin,
+    /// The organisation's plan allows no more logins.
+    Limit(Limit),
 }
 
 /// Users by name, the archived ones only if asked for; `id` narrows it to one.
@@ -95,7 +99,10 @@ pub async fn list(
     .await
 }
 
-pub async fn insert(db: &mut PgConnection, fields: &UserFields<'_>) -> sqlx::Result<Uuid> {
+pub async fn insert(
+    db: &mut PgConnection,
+    fields: &UserFields<'_>,
+) -> sqlx::Result<Result<Uuid, Limit>> {
     let mut tx = db.begin().await?;
     let id = sqlx::query_scalar!(
         "insert into users (name) values ($1) returning id",
@@ -104,9 +111,11 @@ pub async fn insert(db: &mut PgConnection, fields: &UserFields<'_>) -> sqlx::Res
     .fetch_one(&mut *tx)
     .await?;
     set_roles(&mut tx, id, fields.roles).await?;
-    set_login(&mut tx, id, fields.email, fields.invited_by).await?;
+    if let Err(limit) = set_login(&mut tx, id, fields.email, fields.invited_by).await? {
+        return Ok(Err(limit));
+    }
     tx.commit().await?;
-    Ok(id)
+    Ok(Ok(id))
 }
 
 pub async fn update(
@@ -135,7 +144,9 @@ pub async fn update(
         return Ok(Err(Refused::LastAdmin));
     }
     set_roles(&mut tx, id, fields.roles).await?;
-    set_login(&mut tx, id, fields.email, fields.invited_by).await?;
+    if let Err(limit) = set_login(&mut tx, id, fields.email, fields.invited_by).await? {
+        return Ok(Err(Refused::Limit(limit)));
+    }
     tx.commit().await?;
     Ok(Ok(()))
 }
@@ -181,18 +192,24 @@ async fn set_roles(db: &mut PgConnection, id: Uuid, roles: &[String]) -> sqlx::R
 /// changed address is an invitation from `invited_by`, tied to a login
 /// provider's account once accepted, and deletes the user's login sessions
 /// first, as does removing the login: the database allows no session for an
-/// account the login no longer has.
+/// account the login no longer has. A new login must fit the plan; a changed
+/// address takes no new place.
 async fn set_login(
     db: &mut PgConnection,
     id: Uuid,
     email: Option<&str>,
     invited_by: Option<Uuid>,
-) -> sqlx::Result<()> {
+) -> sqlx::Result<Result<(), Limit>> {
     let current = sqlx::query_scalar!("select email from logins where user_id = $1", id)
         .fetch_optional(&mut *db)
         .await?;
     if current.as_deref() == email {
-        return Ok(());
+        return Ok(Ok(()));
+    }
+    if current.is_none()
+        && let Err(limit) = plan::check_login(db).await?
+    {
+        return Ok(Err(limit));
     }
     revoke_sessions(db, id).await?;
     sqlx::query!("delete from login_sessions where user_id = $1", id)
@@ -218,7 +235,7 @@ async fn set_login(
                 .await?;
         }
     }
-    Ok(())
+    Ok(Ok(()))
 }
 
 /// Ends the user's login sessions and disconnects their apps (OAuth grants,

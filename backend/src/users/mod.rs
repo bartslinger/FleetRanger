@@ -41,7 +41,9 @@ pub async fn add(db: &mut PgConnection, email: &str, name: &str, admin: bool) ->
         email: Some(&email),
         invited_by: None,
     };
-    db::insert(db, &fields).await?;
+    if let Err(limit) = db::insert(db, &fields).await? {
+        bail!("{} (see set-organisation --plan)", limit.message());
+    }
     tracing::info!(
         email,
         admin,

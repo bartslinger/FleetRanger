@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select o.id, o.name, s.time_zone, s.session_gap_minutes, s.mcp\n         from organisations o join organisation_settings s on s.organisation_id = o.id\n         where $1::uuid is null or o.id = $1\n         order by o.created_at",
+  "query": "select o.id, o.name, o.plan, s.time_zone, s.session_gap_minutes, s.mcp\n         from organisations o join organisation_settings s on s.organisation_id = o.id\n         where $1::uuid is null or o.id = $1\n         order by o.created_at",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "plan",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "organisations",
+            "name": "plan"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "time_zone",
         "type_info": "Text",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "session_gap_minutes",
         "type_info": "Int4",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "mcp",
         "type_info": "Bool",
         "origin": {
@@ -69,8 +80,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "721ae81c5f99bb2b03f289a5a6768bbd9f937a714b3a6bd9574df2539ba7c437"
+  "hash": "b77061f83a86d3aa4897738754395e64ca708a587d6b74742025c0f1c8b9368e"
 }

@@ -126,6 +126,7 @@ pub async fn sign_up(
     let organisation_id = super::insert(
         &mut tx,
         &request.organisation_name,
+        super::Plan::Free,
         Some(&request.time_zone),
         None,
         None,
@@ -136,7 +137,7 @@ pub async fn sign_up(
         .bind(organisation_id.to_string())
         .execute(&mut *tx)
         .await?;
-    let user_id = insert_user(
+    let Ok(user_id) = insert_user(
         &mut tx,
         &UserFields {
             name: person.name,
@@ -145,7 +146,12 @@ pub async fn sign_up(
             invited_by: None,
         },
     )
-    .await?;
+    .await?
+    else {
+        // A new organisation's first login always fits its plan; rolled back
+        // with the transaction all the same.
+        return Err(sqlx::Error::RowNotFound);
+    };
     sqlx::query!(
         "update logins set oidc_subject = $2 where user_id = $1",
         user_id,
