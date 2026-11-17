@@ -92,18 +92,16 @@
 {:else if data.full}
 	<!-- Only the waiting list while full (user's decision, 2026-11-16). -->
 	<LoginForm
-		title="Join the waiting list"
-		description="Sign-up is full for now. We'll email you when there's room."
+		title="Sign-up is full for now"
+		description={data.loggedIn
+			? "All free spots are taken. Join the waiting list and we'll email you when there's room."
+			: "All free spots are taken. Join the waiting list with your Google account and we'll email you when there's room."}
 	>
 		<!-- A native form: the backend sends the browser on to Google. -->
 		<form method="post" action="/auth/signup" onsubmit={go}>
 			{@render problem()}
 			<Button type="submit" fill aria-disabled={leaving}>
-				{#if data.loggedIn}
-					{leaving ? 'Joining…' : 'Join the waiting list'}
-				{:else}
-					{leaving ? 'Joining…' : 'Join with Google'}
-				{/if}
+				{leaving ? 'Joining…' : 'Join the waiting list'}
 			</Button>
 		</form>
 		{#if !data.loggedIn}
