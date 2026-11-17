@@ -401,7 +401,29 @@ export interface Account {
 	time_zone: string;
 	/** The organisations the user can switch between, the current one
 	 * marked; one for most people. */
-	organisations: { id: string; name: string; current: boolean }[];
+	organisations: OrganisationChoice[];
+}
+
+/** One of the organisations someone can open. */
+export interface OrganisationChoice {
+	id: string;
+	name: string;
+	/** The one the login is in. */
+	current: boolean;
+	/** The one used last: the current one, or before choosing, the one of
+	 * their most recently used other login. */
+	last_used: boolean;
+}
+
+/** Who is logged in, also before choosing an organisation, from
+ * `GET /api/person`. */
+export interface Person {
+	/** As Google gave them at login; the email only if verified. */
+	email: string | null;
+	name: string | null;
+	/** Whether the login is in an organisation yet. */
+	chosen: boolean;
+	organisations: OrganisationChoice[];
 }
 
 /** The time zone of the request's organisation (UTC before logging in). */
@@ -449,6 +471,21 @@ export async function me(fetch: typeof globalThis.fetch): Promise<Account | null
 	let response: Response;
 	try {
 		response = await fetch(`${BACKEND_URL}/api/me`);
+	} catch {
+		error(503, 'The backend is not reachable.');
+	}
+	// 409: logged in, but in no organisation yet.
+	if (response.status === 401 || response.status === 409) return null;
+	if (!response.ok) error(502, `The backend answered ${response.status}.`);
+	return response.json();
+}
+
+/** The person logged in, with or without an organisation, or null if the
+ * browser isn't logged in. */
+export async function person(fetch: typeof globalThis.fetch): Promise<Person | null> {
+	let response: Response;
+	try {
+		response = await fetch(`${BACKEND_URL}/api/person`);
 	} catch {
 		error(503, 'The backend is not reachable.');
 	}

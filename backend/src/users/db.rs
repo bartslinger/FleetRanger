@@ -161,8 +161,9 @@ async fn set_roles(db: &mut PgConnection, id: Uuid, roles: &[String]) -> sqlx::R
 }
 
 /// Gives the user a login with this email, changes it, or removes it. A new or
-/// changed address is tied to its login provider again on first use, and ends
-/// the user's login sessions, as does removing the login.
+/// changed address is tied to its login provider again on first use, and
+/// deletes the user's login sessions first, as does removing the login: the
+/// database allows no session for an account the login no longer has.
 async fn set_login(db: &mut PgConnection, id: Uuid, email: Option<&str>) -> sqlx::Result<()> {
     let current = sqlx::query_scalar!("select email from logins where user_id = $1", id)
         .fetch_optional(&mut *db)
@@ -170,6 +171,10 @@ async fn set_login(db: &mut PgConnection, id: Uuid, email: Option<&str>) -> sqlx
     if current.as_deref() == email {
         return Ok(());
     }
+    revoke_sessions(db, id).await?;
+    sqlx::query!("delete from login_sessions where user_id = $1", id)
+        .execute(&mut *db)
+        .await?;
     match email {
         Some(email) => {
             sqlx::query!(
@@ -187,7 +192,7 @@ async fn set_login(db: &mut PgConnection, id: Uuid, email: Option<&str>) -> sqlx
                 .await?;
         }
     }
-    revoke_sessions(db, id).await
+    Ok(())
 }
 
 /// Ends the user's login sessions and disconnects their apps (OAuth grants,

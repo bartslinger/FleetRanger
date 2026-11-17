@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into signup_waitlist (email, name) values (lower($1), $2)\n         on conflict (email) do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "db7cad0f18998d650c96c4e3898db0ba44dc6030564b2e6b30cf58cc63c256a7"
+}

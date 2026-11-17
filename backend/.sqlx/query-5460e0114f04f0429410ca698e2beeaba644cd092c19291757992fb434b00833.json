@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select l.user_id, l.organisation_id\n         from logins l join users u on u.id = l.user_id\n         join organisations o on o.id = l.organisation_id\n         where l.oidc_subject = $1 and u.archived_at is null and o.archived_at is null\n         order by (select max(s.created_at) from login_sessions s\n                   where s.user_id = l.user_id) desc nulls last,\n                  l.created_at\n         limit 1",
+  "query": "select l.user_id, l.organisation_id\n         from logins l join users u on u.id = l.user_id\n         join organisations o on o.id = l.organisation_id\n         where l.oidc_subject = $1 and u.archived_at is null and o.archived_at is null\n         order by (select max(s.last_seen_at) from login_sessions s\n                   where s.user_id = l.user_id) desc nulls last,\n                  l.created_at",
   "describe": {
     "columns": [
       {
@@ -36,5 +36,5 @@
       false
     ]
   },
-  "hash": "be3c942eee811fd3e396a25f9d1f1b94802b4e0e8b626e4c81d42445088d556b"
+  "hash": "5460e0114f04f0429410ca698e2beeaba644cd092c19291757992fb434b00833"
 }

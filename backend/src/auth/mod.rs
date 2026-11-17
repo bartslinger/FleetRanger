@@ -5,7 +5,7 @@ mod oidc;
 pub mod routes;
 
 use std::net::{IpAddr, SocketAddr};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use axum::{
     extract::{ConnectInfo, FromRef, FromRequestParts, Request, State},
@@ -111,6 +111,74 @@ pub struct Impersonator {
     pub name: String,
 }
 
+/// Who is logged in: the person, with their user once they are in an
+/// organisation. Only the few pages before one is chosen take this (the
+/// organisation picker, sign-up); everything else takes an [`Actor`].
+#[derive(Clone)]
+pub struct Person {
+    pub login_session_id: Uuid,
+    /// The account they logged in with.
+    pub subject: String,
+    /// As the login provider gave them at login; the email only if verified.
+    pub email: Option<String>,
+    pub name: Option<String>,
+    pub membership: Option<db::Membership>,
+}
+
+/// The request's valid login session, looked up once per request (with
+/// `System`: the session says which organisation the request is in).
+async fn session<S>(parts: &mut Parts, state: &S) -> Result<Arc<db::Session>, StatusCode>
+where
+    S: Send + Sync,
+    System: FromRef<S>,
+{
+    if let Some(session) = parts.extensions.get::<Arc<db::Session>>() {
+        return Ok(session.clone());
+    }
+    let jar = CookieJar::from_headers(&parts.headers);
+    let token = match jar.get(session_cookie()) {
+        Some(cookie) => cookie.value(),
+        None => bearer(&parts.headers).ok_or(StatusCode::UNAUTHORIZED)?,
+    };
+    let session = async {
+        let mut system = System::from_ref(state).acquire().await?;
+        db::use_session(&mut system, &token_hash(token), SESSION_IDLE_DAYS).await
+    }
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "looking up a login session");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::UNAUTHORIZED)?;
+    let session = Arc::new(session);
+    parts.extensions.insert(session.clone());
+    Ok(session)
+}
+
+impl<S> FromRequestParts<S> for Person
+where
+    S: Send + Sync,
+    System: FromRef<S>,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let session = session(parts, state).await?;
+        Ok(Person {
+            login_session_id: session.id,
+            subject: session.subject.clone(),
+            email: session.email.clone(),
+            name: session.name.clone(),
+            membership: session.member.as_ref().map(|member| db::Membership {
+                user_id: member.user_id,
+                organisation_id: member.organisation_id,
+            }),
+        })
+    }
+}
+
+/// Refused with 409 while the login session is in no organisation yet: the
+/// web app then sends the person to choose one.
 impl<S> FromRequestParts<S> for Actor
 where
     S: Send + Sync,
@@ -124,41 +192,27 @@ where
         if let Some(actor) = parts.extensions.get::<Actor>() {
             return Ok(actor.clone());
         }
-        let jar = CookieJar::from_headers(&parts.headers);
-        let token = match jar.get(session_cookie()) {
-            Some(cookie) => cookie.value(),
-            None => bearer(&parts.headers).ok_or(StatusCode::UNAUTHORIZED)?,
-        };
+        let session = session(parts, state).await?;
+        let member = session.member.as_ref().ok_or(StatusCode::CONFLICT)?;
         let ConnectInfo(peer) = parts
             .extensions
             .get::<ConnectInfo<SocketAddr>>()
             .copied()
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
         let ip = client_ip(&parts.headers, peer);
-        // The session says which organisation the request is in, so it is
-        // looked up before one is known.
-        let session = async {
-            let mut system = System::from_ref(state).acquire().await?;
-            db::use_session(&mut system, &token_hash(token), SESSION_IDLE_DAYS).await
-        }
-        .await
-        .map_err(|error| {
-            tracing::error!(%error, "looking up a login session");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        let jar = CookieJar::from_headers(&parts.headers);
         let actor = async {
             let mut db = Tenants::from_ref(state)
-                .connect(session.organisation_id)
+                .connect(member.organisation_id)
                 .await?;
             let actor = Actor {
-                user_id: session.user_id,
-                organisation_id: session.organisation_id,
-                grants: grants(&mut db, session.user_id).await?,
+                user_id: member.user_id,
+                organisation_id: member.organisation_id,
+                grants: grants(&mut db, member.user_id).await?,
                 login_session_id: session.id,
                 ip,
-                email: Some(session.email),
-                name: session.name,
+                email: Some(member.email.clone()),
+                name: member.name.clone(),
                 impersonated_by: None,
             };
             // Only a browser sends the cookie, which counts only while the one

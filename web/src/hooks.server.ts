@@ -1,11 +1,14 @@
 import { BACKEND_URL } from '$app/env/private';
 import { redirect } from '@sveltejs/kit';
 import type { Handle, HandleFetch } from '@sveltejs/kit/hooks';
-import { me } from '#lib/server/backend.js';
+import { me, person } from '#lib/server/backend.js';
 import { parseTheme, THEME_COOKIE } from '#lib/theme.js';
 
 /** Pages shown without logging in. */
 const PUBLIC_PATHS = new Set(['/login', '/signup', '/download']);
+
+/** Pages for someone logged in before they are in an organisation. */
+const BEFORE_ORGANISATION = new Set([...PUBLIC_PATHS, '/choose-organisation']);
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const theme = parseTheme(event.cookies.get(THEME_COOKIE));
@@ -14,8 +17,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Everything else needs a login: send the browser to the login page, which
 	// brings it back here afterwards. Public pages still know who is logged in.
 	event.locals.account = await me(event.fetch);
-	if (!event.locals.account && !PUBLIC_PATHS.has(event.url.pathname)) {
-		const returnTo = event.url.pathname + event.url.search;
+	event.locals.person = event.locals.account ? null : await person(event.fetch);
+	const returnTo = event.url.pathname + event.url.search;
+	if (event.locals.person) {
+		// Logged in, but in no organisation yet: they choose one first.
+		if (!BEFORE_ORGANISATION.has(event.url.pathname)) {
+			redirect(303, `/choose-organisation?${new URLSearchParams({ return_to: returnTo })}`);
+		}
+	} else if (!event.locals.account && !PUBLIC_PATHS.has(event.url.pathname)) {
 		redirect(303, `/login?${new URLSearchParams({ return_to: returnTo })}`);
 	}
 
