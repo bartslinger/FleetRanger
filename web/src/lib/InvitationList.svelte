@@ -16,17 +16,27 @@
 		/** Shown above the list, e.g. beside other lists; without it the list
 		 * is labelled for screen readers only. */
 		title?: string;
+		/** Where to go after accepting; the home page otherwise. */
+		returnTo?: string;
+		/** This page, to come back to after declining. */
+		back: string;
 	}
 
-	let { invitations, title }: Props = $props();
+	let { invitations, title, returnTo, back }: Props = $props();
 
 	const id = $props.id();
-	// The invitation being answered, against a second click.
-	let answering: string | null = $state(null);
+	// The answer being sent, against a second click; its button says so.
+	let answering: { organisation: string; accept: boolean } | null = $state(null);
 
-	function answer(event: SubmitEvent, organisation: string) {
+	function answer(event: SubmitEvent, organisation: string, accept: boolean) {
 		if (answering) event.preventDefault();
-		else answering = organisation;
+		else answering = { organisation, accept };
+	}
+
+	function label(organisation: string, accept: boolean): string {
+		const sending = answering?.organisation === organisation && answering.accept === accept;
+		if (accept) return sending ? 'Accepting…' : 'Accept';
+		return sending ? 'Declining…' : 'Decline';
 	}
 </script>
 
@@ -54,19 +64,24 @@
 					<form
 						method="post"
 						action="/auth/invitations/accept"
-						onsubmit={(event) => answer(event, invitation.organisation_id)}
+						onsubmit={(event) => answer(event, invitation.organisation_id, true)}
 					>
 						<input type="hidden" name="organisation" value={invitation.organisation_id} />
-						<Button type="submit" size="sm" aria-disabled={busy || undefined}>Accept</Button>
+						{#if returnTo}<input type="hidden" name="return_to" value={returnTo} />{/if}
+						<input type="hidden" name="back" value={back} />
+						<Button type="submit" size="sm" aria-disabled={busy || undefined}>
+							{label(invitation.organisation_id, true)}
+						</Button>
 					</form>
 					<form
 						method="post"
 						action="/auth/invitations/decline"
-						onsubmit={(event) => answer(event, invitation.organisation_id)}
+						onsubmit={(event) => answer(event, invitation.organisation_id, false)}
 					>
 						<input type="hidden" name="organisation" value={invitation.organisation_id} />
+						<input type="hidden" name="back" value={back} />
 						<Button type="submit" kind="secondary" size="sm" aria-disabled={busy || undefined}>
-							Decline
+							{label(invitation.organisation_id, false)}
 						</Button>
 					</form>
 				</div>

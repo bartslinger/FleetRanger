@@ -158,7 +158,7 @@
 		{actions}
 		profileLinks={[
 			// Pending invitations also show here (user's decision, 2026-11-16).
-			...(data.account?.invitations.length
+			...(data.account?.invitations?.length
 				? [
 						{
 							href: resolve('/choose-organisation'),

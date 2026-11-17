@@ -19,6 +19,8 @@ export async function load({ fetch, locals, url }) {
 	return {
 		organisations,
 		invitations,
-		returnTo: url.searchParams.get('return_to') ?? '/'
+		returnTo: url.searchParams.get('return_to') ?? '/',
+		// Declining comes back here, still going where they were going.
+		back: url.pathname + url.search
 	};
 }

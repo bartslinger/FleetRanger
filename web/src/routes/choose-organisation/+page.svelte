@@ -22,7 +22,9 @@
 				: "You're not in any organisation."
 			: invited
 				? 'Or answer an invitation.'
-				: 'You have access to more than one.'
+				: data.organisations.length > 1
+					? 'You have access to more than one.'
+					: 'Open it to go on.'
 	);
 </script>
 
@@ -32,6 +34,8 @@
 			<InvitationList
 				invitations={data.invitations}
 				title={data.organisations.length ? 'Invitations' : undefined}
+				returnTo={data.returnTo}
+				back={data.back}
 			/>
 		{/if}
 		{#if data.organisations.length}

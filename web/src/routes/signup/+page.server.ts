@@ -22,6 +22,9 @@ export async function load({ fetch, locals, url }) {
 		...status,
 		loggedIn: organisations !== null,
 		organisations: organisations ?? [],
+		// Shown before naming an organisation, so nobody creates one by
+		// mistake (user, 2026-11-17).
+		invitations: locals.account?.invitations ?? locals.person?.invitations ?? [],
 		adminOf,
 		error:
 			(['invalid', 'failed', 'unverified'] as const).find((value) => value === problem) ?? null,

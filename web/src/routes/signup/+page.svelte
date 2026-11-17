@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
+	import InvitationList from '#lib/InvitationList.svelte';
 	import OrganisationList from '#lib/OrganisationList.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import Checkbox from '#lib/ui/Checkbox.svelte';
@@ -125,6 +126,11 @@
 {:else}
 	<LoginForm title="Name your organisation" description="You'll be its admin.">
 		<div class="parts">
+			{#if data.invitations.length}
+				<!-- Before naming one, so nobody creates an organisation by mistake
+				     when invited to one (user, 2026-11-17). -->
+				<InvitationList invitations={data.invitations} title="Invitations" back="/signup" />
+			{/if}
 			<form method="post" action="/auth/signup/organisation" novalidate onsubmit={create}>
 				<div class="fields">
 					<TextInput
