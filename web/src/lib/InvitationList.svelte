@@ -53,9 +53,7 @@
 			<li>
 				<p>
 					{#if invitation.invited_by}
-						{invitation.invited_by.name}{invitation.invited_by.email
-							? ` (${invitation.invited_by.email})`
-							: ''} invited you to {invitation.organisation_name}
+						{invitation.invited_by} invited you to {invitation.organisation_name}
 					{:else}
 						You're invited to {invitation.organisation_name}
 					{/if}

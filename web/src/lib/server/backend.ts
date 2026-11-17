@@ -436,8 +436,9 @@ export interface Person {
 export interface Invitation {
 	organisation_id: string;
 	organisation_name: string;
-	/** None if the operator added it, or its sender was deleted. */
-	invited_by: { name: string; email: string | null } | null;
+	/** The email of who sent it, only while their login is accepted; null if
+	 * the operator added it or its sender is gone. */
+	invited_by: string | null;
 }
 
 /** The time zone of the request's organisation (UTC before logging in). */

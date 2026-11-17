@@ -43,15 +43,11 @@ pub async fn memberships(db: &mut PgConnection, subject: &str) -> sqlx::Result<V
 pub struct Invitation {
     pub organisation_id: Uuid,
     pub organisation_name: String,
-    /// None if the operator added it, or its sender was deleted.
-    pub invited_by: Option<Inviter>,
-}
-
-#[derive(serde::Serialize)]
-pub struct Inviter {
-    pub name: String,
-    /// None if they no longer have a login.
-    pub email: Option<String>,
+    /// The email of who sent it, the only part of them that was verified
+    /// (user, 2026-11-17): only while their own login is accepted, as an
+    /// admin can change it to anything after. None if the operator added
+    /// it, or its sender was deleted or no longer has an accepted login.
+    pub invited_by: Option<String>,
 }
 
 /// Whether someone logging in has invitations (with `System`): for a
@@ -87,14 +83,15 @@ pub async fn invitations_of(
     db: &mut PgConnection,
     session_id: Uuid,
 ) -> sqlx::Result<Vec<Invitation>> {
-    let rows = sqlx::query!(
-        r#"select o.id, o.name, i.name as "inviter_name?", il.email as "inviter_email?"
+    sqlx::query_as!(
+        Invitation,
+        r#"select o.id as organisation_id, o.name as organisation_name,
+                  il.email as "invited_by?"
            from login_sessions s
            join logins l on l.email = s.email and l.oidc_subject is null
            join users u on u.id = l.user_id and u.archived_at is null
            join organisations o on o.id = l.organisation_id and o.archived_at is null
-           left join users i on i.id = l.invited_by
-           left join logins il on il.user_id = l.invited_by
+           left join logins il on il.user_id = l.invited_by and il.oidc_subject is not null
            where s.id = $1
              and not exists (select 1 from logins m
                              where m.organisation_id = l.organisation_id
@@ -103,18 +100,7 @@ pub async fn invitations_of(
         session_id,
     )
     .fetch_all(&mut *db)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(|row| Invitation {
-            organisation_id: row.id,
-            organisation_name: row.name,
-            invited_by: row.inviter_name.map(|name| Inviter {
-                name,
-                email: row.inviter_email,
-            }),
-        })
-        .collect())
+    .await
 }
 
 /// Accepts the organisation's invitation for the person a login session is
@@ -756,9 +742,10 @@ mod tests {
         let [invitation] = invited.as_slice() else {
             panic!("one invitation expected");
         };
-        let inviter = invitation.invited_by.as_ref().unwrap();
-        assert_eq!(inviter.name, "Test Admin");
-        assert_eq!(inviter.email.as_deref(), Some("test-admin@example.org"));
+        assert_eq!(
+            invitation.invited_by.as_deref(),
+            Some("test-admin@example.org")
+        );
 
         // An archived user's invitation can't be answered.
         sqlx::query("update users set archived_at = now() where id = $1")
