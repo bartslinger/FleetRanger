@@ -57,6 +57,9 @@ impl Provider {
             http: openidconnect::ureq::AgentBuilder::new()
                 // Following redirects would open the client up to request forgery.
                 .redirects(0)
+                // A new connection per request: Google drops idle ones, and a
+                // kept one then fails the next login with "connection reset".
+                .max_idle_connections(0)
                 .timeout(Duration::from_secs(10))
                 .build(),
         })
