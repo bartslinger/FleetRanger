@@ -262,7 +262,11 @@
 			<div>
 				<dt>Last login</dt>
 				<dd>
-					{user.last_login_at ? dateTime(user.last_login_at, data.timeZone) : 'Never'}
+					{user.invited
+						? 'Invited, not accepted yet'
+						: user.last_login_at
+							? dateTime(user.last_login_at, data.timeZone)
+							: 'Never'}
 				</dd>
 			</div>
 			<div>

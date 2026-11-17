@@ -156,9 +156,18 @@
 		account={beforeOrganisation ? null : data.account}
 		theme={data.theme}
 		{actions}
-		profileLinks={data.account?.apps
-			? [{ href: resolve('/connected-apps'), label: 'Connected apps' }]
-			: []}
+		profileLinks={[
+			// Pending invitations also show here (user's decision, 2026-11-16).
+			...(data.account?.invitations.length
+				? [
+						{
+							href: resolve('/choose-organisation'),
+							label: `Invitations (${data.account.invitations.length})`
+						}
+					]
+				: []),
+			...(data.account?.apps ? [{ href: resolve('/connected-apps'), label: 'Connected apps' }] : [])
+		]}
 	>
 		{#snippet banner()}
 			<!-- At the top of every page while an admin impersonates someone (user's
