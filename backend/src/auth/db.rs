@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use sqlx::PgConnection;
+use sqlx::{Connection as _, PgConnection};
 use uuid::Uuid;
 
 /// The account someone logged in with, as the login provider vouches for it.
@@ -20,25 +20,8 @@ pub struct Membership {
 
 /// The users a Google account logs in as, one per organisation (with
 /// `System`): those that aren't archived, in organisations that aren't, the
-/// one used last first. A first login in an organisation is matched on its
-/// verified email, which ties that login to the account from then on.
-pub async fn memberships(
-    db: &mut PgConnection,
-    subject: &str,
-    verified_email: Option<&str>,
-) -> sqlx::Result<Vec<Membership>> {
-    if let Some(email) = verified_email {
-        sqlx::query!(
-            "update logins set oidc_subject = $1
-             where email = lower($2) and oidc_subject is null
-               and organisation_id not in (select organisation_id from logins
-                                           where oidc_subject = $1)",
-            subject,
-            email,
-        )
-        .execute(&mut *db)
-        .await?;
-    }
+/// one used last first. Only accepted invitations count.
+pub async fn memberships(db: &mut PgConnection, subject: &str) -> sqlx::Result<Vec<Membership>> {
     sqlx::query_as!(
         Membership,
         "select l.user_id, l.organisation_id
@@ -52,6 +35,131 @@ pub async fn memberships(
     )
     .fetch_all(&mut *db)
     .await
+}
+
+/// An organisation's invitation to the person logged in: a login for their
+/// verified email that no account has accepted yet.
+#[derive(serde::Serialize)]
+pub struct Invitation {
+    pub organisation_id: Uuid,
+    pub organisation_name: String,
+    /// The email of who sent it, the only part of them that was verified
+    /// (user, 2026-11-17): only while their own login is accepted, as an
+    /// admin can change it to anything after. None if the operator added
+    /// it, or its sender was deleted or no longer has an accepted login.
+    pub invited_by: Option<String>,
+}
+
+/// Whether someone logging in has invitations (with `System`): for a
+/// user that isn't archived, in an organisation that isn't, where their
+/// account has no login yet.
+pub async fn invited(
+    db: &mut PgConnection,
+    subject: &str,
+    verified_email: Option<&str>,
+) -> sqlx::Result<bool> {
+    let Some(email) = verified_email else {
+        return Ok(false);
+    };
+    sqlx::query_scalar!(
+        r#"select exists(
+               select 1 from logins l
+               join users u on u.id = l.user_id and u.archived_at is null
+               join organisations o on o.id = l.organisation_id and o.archived_at is null
+               where l.email = lower($2) and l.oidc_subject is null
+                 and not exists (select 1 from logins m
+                                 where m.organisation_id = l.organisation_id
+                                   and m.oidc_subject = $1)) as "invited!""#,
+        subject,
+        email,
+    )
+    .fetch_one(&mut *db)
+    .await
+}
+
+/// The invitations of the person a login session is for (with `System`), by
+/// organisation name.
+pub async fn invitations_of(
+    db: &mut PgConnection,
+    session_id: Uuid,
+) -> sqlx::Result<Vec<Invitation>> {
+    sqlx::query_as!(
+        Invitation,
+        r#"select o.id as organisation_id, o.name as organisation_name,
+                  il.email as "invited_by?"
+           from login_sessions s
+           join logins l on l.email = s.email and l.oidc_subject is null
+           join users u on u.id = l.user_id and u.archived_at is null
+           join organisations o on o.id = l.organisation_id and o.archived_at is null
+           left join logins il on il.user_id = l.invited_by and il.oidc_subject is not null
+           where s.id = $1
+             and not exists (select 1 from logins m
+                             where m.organisation_id = l.organisation_id
+                               and m.oidc_subject = s.subject)
+           order by lower(o.name), o.id"#,
+        session_id,
+    )
+    .fetch_all(&mut *db)
+    .await
+}
+
+/// Accepts the organisation's invitation for the person a login session is
+/// for, tying its login to their account, and puts the session in that
+/// organisation as its user (with `System`). False if there is no such
+/// invitation.
+pub async fn accept_invitation(
+    db: &mut PgConnection,
+    session_id: Uuid,
+    organisation_id: Uuid,
+) -> sqlx::Result<bool> {
+    let mut tx = db.begin().await?;
+    let accepted = sqlx::query!(
+        "update logins l set oidc_subject = s.subject
+         from login_sessions s, users u, organisations o
+         where s.id = $1 and l.organisation_id = $2
+           and l.email = s.email and l.oidc_subject is null
+           and u.id = l.user_id and u.archived_at is null
+           and o.id = l.organisation_id and o.archived_at is null
+           and not exists (select 1 from logins m
+                           where m.organisation_id = l.organisation_id
+                             and m.oidc_subject = s.subject)",
+        session_id,
+        organisation_id,
+    )
+    .execute(&mut *tx)
+    .await?
+    .rows_affected()
+        == 1;
+    if !accepted || !switch_organisation(&mut tx, session_id, organisation_id).await? {
+        return Ok(false);
+    }
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Declines the organisation's invitation for the person a login session is
+/// for: its login goes, and the user stays, without one (user's decision,
+/// 2026-11-16). With `System`; false if there is no such invitation.
+pub async fn decline_invitation(
+    db: &mut PgConnection,
+    session_id: Uuid,
+    organisation_id: Uuid,
+) -> sqlx::Result<bool> {
+    let declined = sqlx::query!(
+        "delete from logins l using login_sessions s, users u, organisations o
+         where s.id = $1 and l.organisation_id = $2
+           and l.email = s.email and l.oidc_subject is null
+           and u.id = l.user_id and u.archived_at is null
+           and o.id = l.organisation_id and o.archived_at is null
+           and not exists (select 1 from logins m
+                           where m.organisation_id = l.organisation_id
+                             and m.oidc_subject = s.subject)",
+        session_id,
+        organisation_id,
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(declined.rows_affected() == 1)
 }
 
 /// Starts a login session for the account (with `System`, as the login
@@ -304,11 +412,11 @@ mod tests {
 
     const EMAIL: &str = "test-person@example.org";
 
-    /// Someone in two organisations has a login in each: their first
-    /// sign-in ties both to their Google account, the one used last comes
-    /// first, and another account with the same email takes over neither.
-    /// A session starts without an organisation and is put in one only
-    /// where the person has a user that isn't archived.
+    /// Someone invited to two organisations is in neither until they
+    /// accept: accepting ties that login to their Google account, the one
+    /// used last comes first, and another account takes over neither. A
+    /// session starts without an organisation and is put in one only where
+    /// the person has a user that isn't archived.
     #[sqlx::test]
     async fn one_account_logs_in_to_its_own_organisations(pool: PgPool) {
         let mut a = testing::db(&pool).await;
@@ -342,20 +450,23 @@ mod tests {
 
         // Logging in comes before an organisation is known.
         let mut system = pool.acquire().await.unwrap();
-        let first = memberships(&mut system, "test-subject", Some("Test-Person@example.org"))
-            .await
-            .unwrap();
-        assert_eq!(first.len(), 2, "both organisations' logins");
+        let first = memberships(&mut system, "test-subject").await.unwrap();
+        assert_eq!(first, [], "not in before accepting");
+        assert!(
+            super::invited(&mut system, "test-subject", Some("Test-Person@example.org"))
+                .await
+                .unwrap()
+        );
 
         let account = Account {
             subject: "test-subject",
             email: Some(EMAIL),
             name: Some("Test Person"),
         };
-        create_session(
+        let session = create_session(
             &mut system,
             &account,
-            Some(in_b),
+            None,
             &[1; 32],
             30,
             [127, 0, 0, 1].into(),
@@ -363,15 +474,58 @@ mod tests {
         )
         .await
         .unwrap();
-        let again = memberships(&mut system, "test-subject", None)
-            .await
-            .unwrap();
+        let invited = super::invitations_of(&mut system, session).await.unwrap();
+        assert_eq!(invited.len(), 2, "both organisations' invitations");
+        for organisation in [a_id, b_id] {
+            assert!(
+                super::accept_invitation(&mut system, session, organisation)
+                    .await
+                    .unwrap()
+            );
+        }
+        let again = memberships(&mut system, "test-subject").await.unwrap();
         assert_eq!(again, [in_b, in_a], "the one used last first");
+        let left = super::invitations_of(&mut system, session).await.unwrap();
+        assert!(left.is_empty());
 
-        let other = memberships(&mut system, "other-subject", Some(EMAIL))
+        // Another Google account with the same email finds nothing left to
+        // accept or decline.
+        let other = Account {
+            subject: "other-subject",
+            email: Some(EMAIL),
+            name: None,
+        };
+        let other_session = create_session(
+            &mut system,
+            &other,
+            None,
+            &[3; 32],
+            30,
+            [127, 0, 0, 1].into(),
+            None,
+        )
+        .await
+        .unwrap();
+        let seen = super::invitations_of(&mut system, other_session)
             .await
             .unwrap();
-        assert_eq!(other, []);
+        assert!(seen.is_empty());
+        for organisation in [a_id, b_id] {
+            assert!(
+                !super::accept_invitation(&mut system, other_session, organisation)
+                    .await
+                    .unwrap()
+            );
+            assert!(
+                !super::decline_invitation(&mut system, other_session, organisation)
+                    .await
+                    .unwrap()
+            );
+        }
+        assert_eq!(
+            memberships(&mut system, "test-subject").await.unwrap(),
+            [in_b, in_a]
+        );
 
         // A new session has no organisation until the person picks one;
         // the one used last is marked.
@@ -487,6 +641,7 @@ mod tests {
             name: "Test Person",
             roles: &[],
             email: Some("test-new@example.org"),
+            invited_by: None,
         };
         let updated = crate::users::db::update(&mut db, user_id, &fields).await;
         assert!(matches!(updated, Ok(Ok(()))));
@@ -495,5 +650,141 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(sessions, 0);
+    }
+
+    /// An invitation shows who sent it, and declining removes only the
+    /// login. Until the invited Admin has logged in, the only Admin who has
+    /// keeps Admin: a mistyped email can't lock the organisation out.
+    #[sqlx::test]
+    async fn an_invitation_is_declined_and_admin_stays(pool: PgPool) {
+        let mut db = testing::db(&pool).await;
+        let organisation = testing::organisation(&mut db).await;
+        let admin = testing::user(&mut db, "Test Admin", &["admin"]).await;
+        let invitee = testing::user(&mut db, "Test Invitee", &["admin"]).await;
+        sqlx::query(
+            "insert into logins (organisation_id, user_id, email, oidc_subject, invited_by)
+             values ($1, $2, 'test-admin@example.org', 'test-admin', null),
+                    ($1, $3, 'test-invitee@example.org', null, $2)",
+        )
+        .bind(organisation)
+        .bind(admin)
+        .bind(invitee)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let fields = crate::users::db::UserFields {
+            name: "Test Admin",
+            roles: &[],
+            email: Some("test-admin@example.org"),
+            invited_by: None,
+        };
+        let updated = crate::users::db::update(&mut db, admin, &fields).await;
+        assert!(matches!(
+            updated,
+            Ok(Err(crate::users::db::Refused::LastAdmin))
+        ));
+        // Nor a new email, which would make their login an invitation again.
+        let roles = ["admin".to_owned()];
+        let fields = crate::users::db::UserFields {
+            roles: &roles,
+            email: Some("test-admin-new@example.org"),
+            ..fields
+        };
+        let updated = crate::users::db::update(&mut db, admin, &fields).await;
+        assert!(matches!(
+            updated,
+            Ok(Err(crate::users::db::Refused::LastAdmin))
+        ));
+
+        let mut system = pool.acquire().await.unwrap();
+        // Without a verified email, no invitations.
+        let unverified = Account {
+            subject: "test-invitee",
+            email: None,
+            name: None,
+        };
+        let session = create_session(
+            &mut system,
+            &unverified,
+            None,
+            &[2; 32],
+            30,
+            [127, 0, 0, 1].into(),
+            None,
+        )
+        .await
+        .unwrap();
+        let invited = super::invitations_of(&mut system, session).await.unwrap();
+        assert!(invited.is_empty());
+        assert!(
+            !super::accept_invitation(&mut system, session, organisation)
+                .await
+                .unwrap()
+        );
+        let account = Account {
+            subject: "test-invitee",
+            email: Some("test-invitee@example.org"),
+            name: None,
+        };
+        let session = create_session(
+            &mut system,
+            &account,
+            None,
+            &[1; 32],
+            30,
+            [127, 0, 0, 1].into(),
+            None,
+        )
+        .await
+        .unwrap();
+        let invited = super::invitations_of(&mut system, session).await.unwrap();
+        let [invitation] = invited.as_slice() else {
+            panic!("one invitation expected");
+        };
+        assert_eq!(
+            invitation.invited_by.as_deref(),
+            Some("test-admin@example.org")
+        );
+
+        // An archived user's invitation can't be answered.
+        sqlx::query("update users set archived_at = now() where id = $1")
+            .bind(invitee)
+            .execute(&mut *system)
+            .await
+            .unwrap();
+        assert!(
+            !super::accept_invitation(&mut system, session, organisation)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !super::decline_invitation(&mut system, session, organisation)
+                .await
+                .unwrap()
+        );
+        sqlx::query("update users set archived_at = null where id = $1")
+            .bind(invitee)
+            .execute(&mut *system)
+            .await
+            .unwrap();
+
+        assert!(
+            super::decline_invitation(&mut system, session, organisation)
+                .await
+                .unwrap()
+        );
+        let logins: i64 = sqlx::query_scalar("select count(*) from logins where user_id = $1")
+            .bind(invitee)
+            .fetch_one(&mut *system)
+            .await
+            .unwrap();
+        assert_eq!(logins, 0);
+        let users: i64 = sqlx::query_scalar("select count(*) from users where id = $1")
+            .bind(invitee)
+            .fetch_one(&mut *system)
+            .await
+            .unwrap();
+        assert_eq!(users, 1);
     }
 }

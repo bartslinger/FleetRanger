@@ -41,14 +41,14 @@ pub async fn get(db: &mut PgConnection, actor: &Actor, id: Uuid) -> ApiResult<Us
 pub async fn create(db: &mut PgConnection, actor: &Actor, input: &UserInput) -> ApiResult<User> {
     policy::require(actor, Permission::UsersManage, None)?;
     let checked = Checked::new(input)?;
-    let id = db::insert(db, &checked.fields())
+    let id = db::insert(db, &checked.fields(actor.user_id))
         .await
         .map_err(email_taken)?;
     get(db, actor, id).await
 }
 
 /// Admins can't remove their own login, so they can still log in; the last
-/// active admin keeps Admin.
+/// active admin who has logged in keeps Admin, and their email.
 pub async fn update(
     db: &mut PgConnection,
     actor: &Actor,
@@ -62,14 +62,15 @@ pub async fn update(
             "You can't remove your own login.".to_owned(),
         ));
     }
-    db::update(db, id, &checked.fields())
+    db::update(db, id, &checked.fields(actor.user_id))
         .await
         .map_err(email_taken)?
         .map_err(refusal)?;
     get(db, actor, id).await
 }
 
-/// Admins can't archive themselves, and the last active admin isn't archived.
+/// Admins can't archive themselves, and the last active admin who has
+/// logged in isn't archived.
 pub async fn set_archived(
     db: &mut PgConnection,
     actor: &Actor,
@@ -104,7 +105,7 @@ fn refusal(refused: Refused) -> ApiError {
     match refused {
         Refused::NotFound => ApiError::NotFound,
         Refused::LastAdmin => ApiError::Conflict(
-            "This is the only active admin. Make someone else an admin first.".to_owned(),
+            "This is the only admin who has logged in. First make someone else an admin, and have them log in.".to_owned(),
         ),
     }
 }
@@ -148,11 +149,12 @@ impl Checked {
         })
     }
 
-    fn fields(&self) -> UserFields<'_> {
+    fn fields(&self, invited_by: Uuid) -> UserFields<'_> {
         UserFields {
             name: &self.name,
             roles: &self.roles,
             email: self.email.as_deref(),
+            invited_by: Some(invited_by),
         }
     }
 }
@@ -175,17 +177,31 @@ mod tests {
         UserInput {
             name: name.to_owned(),
             roles: roles.iter().map(|role| (*role).to_owned()).collect(),
-            email: None,
+            email: Some(format!("test-{}@example.org", name.to_lowercase())),
         }
     }
 
-    /// The last active admin can't lose Admin or be archived, so nobody locks
-    /// the organisation out; an archived admin doesn't count.
+    /// The last active admin who has logged in can't lose Admin or be
+    /// archived, so nobody locks the organisation out; an archived admin
+    /// doesn't count.
     #[sqlx::test]
     async fn the_last_active_admin_stays(pool: sqlx::PgPool) {
         let mut db = crate::testing::db(&pool).await;
         let first = testing::user(&mut db, "A", &["admin"]).await;
         let second = testing::user(&mut db, "B", &["admin"]).await;
+        // Both have logged in.
+        let organisation = testing::organisation(&mut db).await;
+        sqlx::query(
+            "insert into logins (organisation_id, user_id, email, oidc_subject)
+             values ($1, $2, 'test-a@example.org', 'test-a'),
+                    ($1, $3, 'test-b@example.org', 'test-b')",
+        )
+        .bind(organisation)
+        .bind(first)
+        .bind(second)
+        .execute(&pool)
+        .await
+        .unwrap();
         let actor = testing::actor(&mut db, second).await;
 
         assert!(set_archived(&mut db, &actor, first, true).await.is_ok());

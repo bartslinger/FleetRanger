@@ -56,6 +56,8 @@ where
         .route("/auth/impersonate", post(impersonate))
         .route("/auth/impersonate/stop", post(stop_impersonating))
         .route("/auth/organisation", post(switch_organisation))
+        .route("/auth/invitations/accept", post(accept_invitation))
+        .route("/auth/invitations/decline", post(decline_invitation))
         .route("/api/me", get(me))
         .route("/api/person", get(person))
 }
@@ -454,21 +456,30 @@ async fn callback(
         // Logged in, they name their organisation next.
         return_to = "/signup".to_owned();
     }
-    let found = db::memberships(
-        &mut system,
-        &identity.subject,
-        identity.verified_email.as_deref(),
-    )
-    .await;
-    let membership = match found.as_deref() {
-        Ok([]) if !signing_up => {
+    let found = async {
+        let memberships = db::memberships(&mut system, &identity.subject).await?;
+        let invited = db::invited(
+            &mut system,
+            &identity.subject,
+            identity.verified_email.as_deref(),
+        )
+        .await?;
+        Ok::<_, sqlx::Error>((memberships, invited))
+    };
+    let membership = match found
+        .await
+        .as_ref()
+        .map(|(m, invited)| (m.as_slice(), *invited))
+    {
+        Ok(([], false)) if !signing_up => {
             tracing::info!(email = identity.verified_email, "login refused: no login");
             return (jar, Redirect::to("/login?error=no-access")).into_response();
         }
-        Ok([only]) => Some(*only),
+        Ok(([only], false)) => Some(*only),
         // Someone in several organisations chooses one first (user's
-        // request, 2026-11-16), unless they came to sign up. The page they
-        // were going to comes along.
+        // request, 2026-11-16), and someone invited sees the invitations
+        // there first (user, 2026-11-17), unless they came to sign up. The
+        // page they were going to comes along.
         Ok(_) => {
             if !signing_up {
                 return_to = format!(
@@ -662,8 +673,19 @@ async fn switch_organisation(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
-    // Only once switched, in the organisation left, where the
-    // impersonation's app connections are.
+    switched_to(&auth, &tenants, &person, jar, form.return_to.as_deref()).await
+}
+
+/// After the session moved to another organisation: an impersonation ends,
+/// in the organisation left, where its app connections are; then on to
+/// `return_to`.
+async fn switched_to(
+    auth: &Auth,
+    tenants: &Tenants,
+    person: &Person,
+    jar: CookieJar,
+    return_to: Option<&str>,
+) -> Response {
     if let Some(left) = person.membership
         && impersonating(&jar)
     {
@@ -678,8 +700,78 @@ async fn switch_organisation(
             return status.into_response();
         }
     }
-    let jar = jar.remove(removal(&auth, impersonation_cookie()));
-    (jar, Redirect::to(&local_path(form.return_to.as_deref()))).into_response()
+    let jar = jar.remove(removal(auth, impersonation_cookie()));
+    (jar, Redirect::to(&local_path(return_to))).into_response()
+}
+
+#[derive(Deserialize)]
+struct InvitationForm {
+    organisation: Uuid,
+    /// Where to go after accepting: where they were going when they logged
+    /// in; home otherwise.
+    return_to: Option<String>,
+    /// The page the invitation was answered on, to come back to after
+    /// declining, or when it's gone; the organisation picker otherwise.
+    back: Option<String>,
+}
+
+impl InvitationForm {
+    fn back(&self) -> Redirect {
+        Redirect::to(&local_path(Some(
+            self.back.as_deref().unwrap_or("/choose-organisation"),
+        )))
+    }
+}
+
+/// Accepts an invitation, and goes into that organisation.
+async fn accept_invitation(
+    State(auth): State<Arc<Auth>>,
+    State(system): State<System>,
+    State(tenants): State<Tenants>,
+    person: Person,
+    jar: CookieJar,
+    Form(form): Form<InvitationForm>,
+) -> Response {
+    // Across organisations: the login is in the inviting one.
+    let accepted = async {
+        let mut system = system.acquire().await?;
+        db::accept_invitation(&mut system, person.login_session_id, form.organisation).await
+    };
+    match accepted.await {
+        Ok(true) => {}
+        // Withdrawn, or answered in another tab (two accepts at once meet
+        // the database's one login per account and organisation): back to
+        // the page, which shows what is left.
+        Ok(false) => return form.back().into_response(),
+        Err(error) if crate::error::is_unique_violation(&error) => {
+            return form.back().into_response();
+        }
+        Err(error) => {
+            tracing::error!(%error, "accepting an invitation");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+    switched_to(&auth, &tenants, &person, jar, form.return_to.as_deref()).await
+}
+
+/// Declines an invitation, back to the page with the others.
+async fn decline_invitation(
+    State(system): State<System>,
+    person: Person,
+    Form(form): Form<InvitationForm>,
+) -> Response {
+    let declined = async {
+        let mut system = system.acquire().await?;
+        db::decline_invitation(&mut system, person.login_session_id, form.organisation).await
+    };
+    // Also when already gone: the page shows what is left.
+    match declined.await {
+        Ok(_) => form.back().into_response(),
+        Err(error) => {
+            tracing::error!(%error, "declining an invitation");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 /// Takes back the apps an admin connected while impersonating someone
@@ -712,6 +804,9 @@ struct Me {
     /// The organisations the person can switch between, the current one
     /// marked; one for most people.
     organisations: Vec<db::OrganisationChoice>,
+    /// The person's invitations to other organisations, for the organisation
+    /// menu.
+    invitations: Vec<db::Invitation>,
     /// Whether the organisation has more than one group: until then the web
     /// app shows no groups (user's decision, 2026-11-11).
     several_groups: bool,
@@ -757,12 +852,14 @@ async fn me(
     let read = async {
         let several_groups = db::several_groups(&mut db).await?;
         let settings = crate::organisations::settings(&mut db).await?;
-        // The person's other organisations are looked up across them.
-        let organisations =
-            db::organisations_of(&mut *system.acquire().await?, actor.login_session_id).await?;
-        Ok::<_, sqlx::Error>((several_groups, settings, organisations))
+        // The person's other organisations and invitations are looked up
+        // across them.
+        let mut system = system.acquire().await?;
+        let organisations = db::organisations_of(&mut system, actor.login_session_id).await?;
+        let invitations = db::invitations_of(&mut system, actor.login_session_id).await?;
+        Ok::<_, sqlx::Error>((several_groups, settings, organisations, invitations))
     };
-    let (several_groups, settings, organisations) = read.await.map_err(|error| {
+    let (several_groups, settings, organisations, invitations) = read.await.map_err(|error| {
         tracing::error!(%error, "reading the user's organisation");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -774,6 +871,7 @@ async fn me(
         apps: (apps.mcp && settings.mcp) || apps.api,
         time_zone: settings.time_zone,
         organisations,
+        invitations,
         impersonated_by: actor.impersonated_by.map(|admin| ImpersonatedBy {
             id: admin.user_id,
             name: admin.name,
@@ -791,6 +889,7 @@ struct PersonView {
     /// Whether the login session is in an organisation yet.
     chosen: bool,
     organisations: Vec<db::OrganisationChoice>,
+    invitations: Vec<db::Invitation>,
 }
 
 /// The person logged in, or 401.
@@ -800,9 +899,11 @@ async fn person(
 ) -> Result<Json<PersonView>, StatusCode> {
     let read = async {
         let mut system = system.acquire().await?;
-        db::organisations_of(&mut system, person.login_session_id).await
+        let organisations = db::organisations_of(&mut system, person.login_session_id).await?;
+        let invitations = db::invitations_of(&mut system, person.login_session_id).await?;
+        Ok::<_, sqlx::Error>((organisations, invitations))
     };
-    let organisations = read.await.map_err(|error| {
+    let (organisations, invitations) = read.await.map_err(|error| {
         tracing::error!(%error, "reading someone's organisations");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -811,6 +912,7 @@ async fn person(
         name: person.name,
         chosen: person.membership.is_some(),
         organisations,
+        invitations,
     }))
 }
 

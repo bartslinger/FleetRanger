@@ -142,6 +142,7 @@ pub async fn sign_up(
             name: person.name,
             roles: &["admin".to_owned()],
             email: Some(&email),
+            invited_by: None,
         },
     )
     .await?;
@@ -223,7 +224,7 @@ mod tests {
         .await
         .unwrap();
         assert!(admin);
-        let found = memberships(&mut db, "test-subject-1", None).await.unwrap();
+        let found = memberships(&mut db, "test-subject-1").await.unwrap();
         assert_eq!(
             found,
             [Membership {

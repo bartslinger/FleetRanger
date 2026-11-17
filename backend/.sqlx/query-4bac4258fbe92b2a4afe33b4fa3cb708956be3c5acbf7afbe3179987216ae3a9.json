@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from logins l using login_sessions s, users u, organisations o\n         where s.id = $1 and l.organisation_id = $2\n           and l.email = s.email and l.oidc_subject is null\n           and u.id = l.user_id and u.archived_at is null\n           and o.id = l.organisation_id and o.archived_at is null\n           and not exists (select 1 from logins m\n                           where m.organisation_id = l.organisation_id\n                             and m.oidc_subject = s.subject)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4bac4258fbe92b2a4afe33b4fa3cb708956be3c5acbf7afbe3179987216ae3a9"
+}

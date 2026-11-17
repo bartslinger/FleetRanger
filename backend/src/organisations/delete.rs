@@ -73,4 +73,31 @@ mod tests {
             .collect();
         assert!(missing.is_empty(), "not deleted: {missing:?}");
     }
+
+    /// An invitation's sender and its login go in the one statement, as the
+    /// login's link to the sender is set to null on the way.
+    #[sqlx::test]
+    async fn deleting_takes_invitations(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let id = crate::testing::second_organisation(&mut db, "Test Org B").await;
+        sqlx::query(
+            "with admin as (insert into users (organisation_id, name)
+                            values ($1, 'Test Admin') returning id),
+                  invitee as (insert into users (organisation_id, name)
+                              values ($1, 'Test Invitee') returning id)
+             insert into logins (organisation_id, user_id, email, oidc_subject, invited_by)
+             select $1, admin.id, 'test-admin@example.org', 'test-admin', null from admin
+             union all
+             select $1, invitee.id, 'test-invitee@example.org', null, admin.id
+             from invitee, admin",
+        )
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let deleted = super::rows(&crate::db::System(pool.clone()), id, "Test Org B")
+            .await
+            .unwrap();
+        assert!(deleted.is_some());
+    }
 }

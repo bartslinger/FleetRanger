@@ -39,8 +39,13 @@ pub async fn add(db: &mut PgConnection, email: &str, name: &str, admin: bool) ->
         name,
         roles: &roles,
         email: Some(&email),
+        invited_by: None,
     };
     db::insert(db, &fields).await?;
-    tracing::info!(email, admin, "user added; the login is tied on first use");
+    tracing::info!(
+        email,
+        admin,
+        "user added; they accept the invitation after logging in"
+    );
     Ok(())
 }

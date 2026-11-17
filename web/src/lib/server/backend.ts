@@ -268,6 +268,8 @@ export interface User {
 	/** The login's email; null if the user can't log in. */
 	email: string | null;
 	last_login_at: string | null;
+	/** Whether the login is an invitation nobody has accepted yet. */
+	invited: boolean;
 	archived_at: string | null;
 	/** Flights with this user as pilot. */
 	flights: number;
@@ -402,6 +404,8 @@ export interface Account {
 	/** The organisations the user can switch between, the current one
 	 * marked; one for most people. */
 	organisations: OrganisationChoice[];
+	/** The person's invitations to other organisations. */
+	invitations: Invitation[];
 }
 
 /** One of the organisations someone can open. */
@@ -424,6 +428,17 @@ export interface Person {
 	/** Whether the login is in an organisation yet. */
 	chosen: boolean;
 	organisations: OrganisationChoice[];
+	invitations: Invitation[];
+}
+
+/** An organisation's invitation to the person logged in, for their verified
+ * email. */
+export interface Invitation {
+	organisation_id: string;
+	organisation_name: string;
+	/** The email of who sent it, only while their login is accepted; null if
+	 * the operator added it or its sender is gone. */
+	invited_by: string | null;
 }
 
 /** The time zone of the request's organisation (UTC before logging in). */
