@@ -14,7 +14,7 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 use super::comments;
-use super::db::{Neighbours, SessionSummary, Window};
+use super::db::{Around, Neighbours, SessionSummary, Window};
 use super::service::{self, Session};
 use crate::{
     auth::Actor,
@@ -33,6 +33,7 @@ where
 {
     Router::new()
         .route("/api/sessions", get(list).post(create))
+        .route("/api/sessions/around", get(around))
         .route("/api/sessions/{id}", get(show).delete(delete))
         .route("/api/sessions/{id}/comments", post(add_comment))
         .route(
@@ -232,6 +233,18 @@ async fn list(
 
 async fn show(actor: Actor, mut db: Db, Path(id): Path<Uuid>) -> ApiResult<Json<Session>> {
     Ok(Json(service::get(&mut db, &actor, id).await?))
+}
+
+/// When the nearest sessions with these filters start before `from` and at
+/// or after `to`: where the cards' arrows go.
+async fn around(
+    actor: Actor,
+    mut db: Db,
+    Query(filter): Query<FilterQuery>,
+) -> ApiResult<Json<Around>> {
+    Ok(Json(
+        service::around(&mut db, &actor, &filter.parse()?).await?,
+    ))
 }
 
 /// The session's place in the list with these filters, newest first: the

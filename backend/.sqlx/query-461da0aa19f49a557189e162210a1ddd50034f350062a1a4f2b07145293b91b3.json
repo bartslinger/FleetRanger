@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with listed as (\n               select min(f.takeoff_at) as start\n               from flights f\n               where f.session_id is not null\n                 and ($1\n                      or f.pilot_id = $2\n                      or f.group_id = any($11))\n                 and f.session_id in (\n                     select g.session_id from flights g\n                     where g.session_id is not null\n                       and ($1\n                            or g.pilot_id = $2\n                            or g.group_id = any($11))\n                       and ($3::text[] is null or g.aircraft_serial = any($3))\n                       and ($4::text[] is null or g.rc_serial = any($4))\n                       and ($7::uuid[] is null\n                            or g.session_id in (select id from sessions\n                                                where group_id = any($7)))\n                       and ($8::uuid[] is null or g.pilot_id = any($8)\n                            or ($9 and g.pilot_id is null))\n                       and ($10::uuid[] is null or exists (select 1 from flight_areas fa\n                                                           where fa.flight_id = g.id\n                                                             and fa.area_id = any($10))))\n               group by f.session_id\n           )\n           select max(start) filter (where start < $5) as before,\n                  min(start) filter (where start >= $6) as after\n           from listed",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "before",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "after",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "TextArray",
+        "TextArray",
+        "Timestamptz",
+        "Timestamptz",
+        "UuidArray",
+        "UuidArray",
+        "Bool",
+        "UuidArray",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "461da0aa19f49a557189e162210a1ddd50034f350062a1a4f2b07145293b91b3"
+}

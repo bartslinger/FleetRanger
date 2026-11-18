@@ -84,6 +84,17 @@ pub async fn neighbours(
         .ok_or(ApiError::NotFound)
 }
 
+/// When the nearest sessions before and after the filter's period start,
+/// among those the actor may see.
+pub async fn around(
+    db: &mut PgConnection,
+    actor: &Actor,
+    filter: &Filter,
+) -> ApiResult<db::Around> {
+    let scope = policy::flight_scope(actor);
+    Ok(db::around(db, &scope, filter).await?)
+}
+
 /// Puts these flights into a new session, and returns it. They leave the
 /// sessions they were in.
 ///
