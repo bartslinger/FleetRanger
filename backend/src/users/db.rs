@@ -321,6 +321,8 @@ pub async fn set_archived(
 /// between: its foreign key check waits for the lock.
 pub async fn delete(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
+    // The plan lock first, always before row locks (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let deletable = sqlx::query_scalar!(
         r#"select not exists(select 1 from flights where pilot_id = $1)
                   and not exists(select 1 from session_comments where author_id = $1)

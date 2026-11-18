@@ -134,6 +134,8 @@ pub async fn use_code(
     token_sha256: &[u8],
 ) -> sqlx::Result<Option<Result<Paired, Limit>>> {
     let mut tx = db.begin().await?;
+    // The plan lock first, before the code's row (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let Some(group_id) = sqlx::query_scalar!(
         "delete from pairing_codes c using users u
          where c.code = $1 and c.expires_at > now()
