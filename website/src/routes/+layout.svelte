@@ -73,6 +73,14 @@
 			<p class="label">Contact</p>
 			<a href="mailto:{CONTACT}">{CONTACT}</a>
 		</Column>
+		<Column md={4} lg={4}>
+			<p class="label">Hosted service</p>
+			<p class="links">
+				<a href="/terms">Terms of use</a>
+				<a href="/privacy">Privacy policy</a>
+				<a href="/processing-agreement">Processing agreement</a>
+			</p>
+		</Column>
 	</Grid>
 </footer>
 
@@ -262,6 +270,14 @@
 		line-height: var(--cds-body-compact-01-line-height);
 		letter-spacing: var(--cds-body-compact-01-letter-spacing);
 		text-decoration: none;
+	}
+
+	/* Several links under one label, below each other. */
+	footer .links {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--cds-spacing-03);
 	}
 
 	footer a:hover {
