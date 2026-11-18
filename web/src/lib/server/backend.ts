@@ -420,6 +420,8 @@ export interface Account {
 	/** Whether the organisation has more than one group; until then no
 	 * groups are shown. */
 	several_groups: boolean;
+	/** Whether the organisation uses areas: off, nothing about them shows. */
+	areas: boolean;
 	/** The organisation's time zone; every day and time is shown in it. */
 	time_zone: string;
 	/** The organisations the user can switch between, the current one
@@ -623,6 +625,8 @@ export interface OrganisationSettings {
 	mcp: boolean;
 	/** Whether the install offers MCP at all; only then is `mcp` shown. */
 	mcp_offered: boolean;
+	/** Whether the organisation uses areas: off, nothing about them shows. */
+	areas: boolean;
 	/** Whether its admins may delete it: only on an install with several organisations. */
 	deletable: boolean;
 	/** The time zones to choose from, e.g. `Europe/Amsterdam`. */

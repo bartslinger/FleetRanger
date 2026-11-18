@@ -4,7 +4,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { anywhere, may, readsSeveralGroups } from '#lib/permissions.js';
-	import { groupOptions as groupChoices, showsGroups } from '#lib/groups.js';
+	import { groupOptions as groupChoices, showsGroups, usesAreas } from '#lib/groups.js';
 	import Checkbox from '#lib/ui/Checkbox.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import SessionFacts, { sessionGroup } from '#lib/SessionFacts.svelte';
@@ -607,6 +607,7 @@
 								timeZone={data.timeZone}
 								group={sessionGroup(openSession)}
 								showGroup={showsGroups(data.account)}
+								showAreas={usesAreas(data.account)}
 							>
 								{#snippet pilotAction()}
 									{#if canSetPilots}

@@ -1,4 +1,5 @@
 import { isHttpError } from '@sveltejs/kit';
+import { usesAreas } from '#lib/groups.js';
 import {
 	get,
 	timeZone,
@@ -25,7 +26,7 @@ export async function load({ fetch, locals, url }) {
 	filters.set('sort', '-takeoff_at');
 	const [openFlight, openAreas, flightNeighbours] = await Promise.all([
 		get<FlightPage>(fetch, `/api/flights/${encodeURIComponent(id)}`),
-		get<Area[]>(fetch, '/api/areas'),
+		usesAreas(locals.account) ? get<Area[]>(fetch, '/api/areas') : [],
 		// None if the flight no longer passes the filters, e.g. its pilot changed.
 		get<FlightNeighbours>(
 			fetch,

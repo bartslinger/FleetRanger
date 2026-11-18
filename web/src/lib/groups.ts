@@ -69,3 +69,9 @@ export function groupOptions(
 		.filter((group) => may(account, permission, group.id))
 		.map((group) => ({ value: group.id, label: group.name }));
 }
+
+/** Whether areas are shown at all: when the organisation uses them (user's
+ * decision, 2026-11-18: a setting, off for new organisations). */
+export function usesAreas(account: Account | null | undefined): boolean {
+	return account?.areas ?? false;
+}

@@ -1,4 +1,5 @@
 import { isHttpError } from '@sveltejs/kit';
+import { usesAreas } from '#lib/groups.js';
 import {
 	get,
 	timeZone,
@@ -24,7 +25,7 @@ export async function load({ fetch, locals, url }) {
 	const filters = apiFilters({ ...state, from: null, to: null }, timeZone(locals));
 	const [openSession, areas, neighbours] = await Promise.all([
 		get<Session>(fetch, `/api/sessions/${id}`),
-		get<Area[]>(fetch, '/api/areas'),
+		usesAreas(locals.account) ? get<Area[]>(fetch, '/api/areas') : [],
 		// None if the session no longer passes the filters, e.g. its pilot changed.
 		get<SessionNeighbours>(fetch, `/api/sessions/${id}/neighbours?${filters}`).catch((failure) => {
 			if (isHttpError(failure, 404)) return null;

@@ -12,6 +12,7 @@
 	import { Tooltip } from 'bits-ui';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { usesAreas } from '#lib/groups.js';
 	import { page } from '$app/state';
 	import favicon from '#lib/assets/favicon.svg';
 	import ProcessingPanel from '#lib/ProcessingPanel.svelte';
@@ -113,7 +114,7 @@
 		...(may(data.account, 'groups.manage', null)
 			? [{ href: resolve('/groups'), label: 'Groups', icon: Enterprise }]
 			: []),
-		...(may(data.account, 'areas.manage', null)
+		...(usesAreas(data.account) && may(data.account, 'areas.manage', null)
 			? [{ href: resolve('/areas'), label: 'Areas', icon: Area }]
 			: []),
 		{ href: resolve('/equipment'), label: 'Equipment', icon: Drone },

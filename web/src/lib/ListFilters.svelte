@@ -8,7 +8,9 @@
 	together.
 -->
 <script lang="ts" module>
+	import { page } from '$app/state';
 	import { dayMonth } from '#lib/format.js';
+	import { usesAreas } from '#lib/groups.js';
 	import type { Device, Devices } from '#lib/server/backend.js';
 
 	export interface Filters {
@@ -234,8 +236,9 @@
 			onchange={(groups) => change({ groups } as Partial<T>)}
 		/>
 	{/if}
-	<!-- Once the organisation has areas: a flight passes when it has time in any of them. -->
-	{#if areaOptions.length > 0 || draft.areas.length > 0}
+	<!-- Where the organisation uses areas and has some: a flight passes when it
+	     has time in any of them. -->
+	{#if usesAreas(page.data.account) && (areaOptions.length > 0 || draft.areas.length > 0)}
 		<MultiSelect
 			label="Areas flown"
 			placeholder="All areas"

@@ -67,6 +67,7 @@
 						min={1}
 						required
 					/>
+					<Checkbox label="Areas" name="areas" checked={organisation.areas} />
 					{#if organisation.mcp_offered}
 						<input type="hidden" name="mcp_offered" value="on" />
 						<!-- A checkbox, not a toggle: it applies only with Save (Carbon's
@@ -92,6 +93,10 @@
 			<div>
 				<dt>Session gap</dt>
 				<dd>{duration(organisation.session_gap_minutes)}</dd>
+			</div>
+			<div>
+				<dt>Areas</dt>
+				<dd>{organisation.areas ? 'On' : 'Off'}</dd>
 			</div>
 			{#if organisation.mcp_offered}
 				<div>
