@@ -310,7 +310,11 @@ pub async fn save_result(
 ) -> Result<Saved> {
     let raw_log_id = log.id;
     let mut tx = db.begin().await?;
-    // First, and holding the row until the end: the claim must still be the
+    // The sessions lock before any row, as deleting a group takes it before
+    // the groups' rows: placing a new flight in a session needs it later,
+    // after the flight's foreign keys have touched its group's row.
+    sessions::db::lock(&mut tx).await?;
+    // Then, holding the row until the end: the claim must still be the
     // log's, or nothing is saved.
     let current = sqlx::query!(
         "update raw_logs
