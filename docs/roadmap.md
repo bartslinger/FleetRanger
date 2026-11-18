@@ -44,7 +44,7 @@ Everyone is a user, with roles in groups (and Admin on the whole organisation) a
 - [x] Suggested sessions to review (one by one; making all of them at once only if it turns out to be needed)
 - [x] Comments on sessions, and deleting a session explicitly
 - [x] The cards' arrows skip weeks and months without sessions and stop at the ends (user, 2026-11-18)
-- [ ] An overview of flights like the sessions' (user, 2026-11-18): the map central, easy scrolling through flights
+- [x] An overview of flights like the sessions' (user, 2026-11-18): Cards by default, a week or month beside a map of their tracks, a flight opening in their place with arrows through the flights; the table second, Suggestions behind the Without session filter
 - [ ] Areas an optional feature (user, 2026-11-18)
 - [ ] Rethink the open session's layout (user, 2026-10-25): long comments under the facts push the flights table down, and pointing at a flight in the table, which brings it out on the map, happens with the map scrolled out of view
 

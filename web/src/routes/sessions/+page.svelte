@@ -29,7 +29,7 @@
 		month,
 		timeSpan
 	} from '#lib/format.js';
-	import { dayOf, periodName, periodOf, switchTo, today, type Period } from '#lib/period.js';
+	import { dayOf, periodName, periodOf, type Period } from '#lib/period.js';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -41,15 +41,9 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
-	import Calendar from '@carbon/icons/es/calendar/16.js';
-	import Close from '@carbon/icons/es/close/16.js';
-	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
-	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
-	import { Tooltip } from 'bits-ui';
 	import IconButton from '#lib/ui/IconButton.svelte';
-	import TooltipContent from '#lib/ui/TooltipContent.svelte';
-	import { roving } from '#lib/ui/roving.js';
-	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
+	import PeriodToolbar from '#lib/PeriodToolbar.svelte';
+	import CardsView from '#lib/CardsView.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
@@ -258,7 +252,6 @@
 
 	// The period's links: the same filters, another week or month.
 	const at = (period: Period) => href({ ...data.state, period });
-	const thisPeriod = $derived(periodOf(data.state.period.unit, today(data.timeZone)));
 	// The arrows skip weeks and months without sessions and stop at the
 	// logbook's ends (user's request, 2026-11-18): the nearest periods with
 	// sessions that pass the filters.
@@ -287,43 +280,23 @@
 	const laterHref = $derived(
 		neighbourHref(data.neighbours?.previous ?? null, data.neighbours?.previous_start ?? null)
 	);
-	// The toolbar's two lines, the name and the count, and which are cut off:
-	// a tooltip has those in full, only those (user's feedback). Checked when
-	// the width or the text changes.
+	// The toolbar's two lines, the name and the count.
 	// Its day, from its flights: it may be outside the list's period.
 	const openedDay = $derived(
 		openSession?.flights[0] ? day(openSession.flights[0].takeoff_at, data.timeZone, true) : ''
 	);
-	const periodLines = $derived(
+	const periodLines: [string, string] = $derived(
 		openSession
 			? [
 					openedDay,
 					// Counted in time, as the arrows step (the list is newest first):
 					// the newest is the last (user's feedback).
 					openedRow
-						? `${data.sessions.length - openedIndex} of ${data.sessions.length} · ${periodName(data.state.period)}`
+						? `${data.total - openedIndex} of ${data.total} · ${periodName(data.state.period)}`
 						: periodName(data.state.period)
 				]
 			: [periodName(data.state.period), sessions(data.total)]
 	);
-	let periodHeading: HTMLElement | undefined = $state();
-	let cutLines: boolean[] = $state([false, false]);
-	const periodCut = $derived(cutLines.some(Boolean));
-	const periodLabel = $derived(periodLines.filter((_, line) => cutLines[line]).join(' · '));
-	$effect(() => {
-		const heading = periodHeading;
-		if (!heading) return;
-		void periodLines;
-		const check = () =>
-			(cutLines = [...heading.children].map((line) => line.scrollWidth > line.clientWidth));
-		const frame = requestAnimationFrame(check);
-		const resizes = new ResizeObserver(check);
-		resizes.observe(heading);
-		return () => {
-			cancelAnimationFrame(frame);
-			resizes.disconnect();
-		};
-	});
 	// In the cards the period isn't a filter: Clear filters leaves it.
 	const cardsFiltering = $derived(listFiltering({ ...data.state, from: null }));
 
@@ -449,127 +422,29 @@
 	]);
 </script>
 
-<!-- The list's toolbar, attached to the cards as a table's (Carbon's 48px
-     toolbar, carbon-expert's check): the period between previous and next,
-     with its count; at the end Filters, a dot while some apply, and a menu
-     for the unit and the current period, which change less often (no room
-     for a switcher in this column). Above the cards, where the pointer
-     works (user's choice, 2026-10-21). -->
 {#snippet periodToolbar()}
-	{@const unit = data.state.period.unit}
-	{@const other = unit === 'month' ? 'week' : 'month'}
-	<!-- A toolbar for screen readers, one tab stop with the arrow keys
-	     between its controls (Carbon's text toolbar, WAI-ARIA). -->
-	<div class="list-toolbar" role="toolbar" aria-label="Sessions" use:roving>
-		<!-- A session open, the same bar in the same place: the arrows step
-		     through the sessions instead, in time like the periods (‹ earlier),
-		     on into the next period, disabled at the logbook's ends; ✕ in place
-		     of the list's tools
-		     goes back to the list (user's choice, 2026-10-21). -->
-		{#if openSession}
-			<!-- Stepping replaces the history entry, so Back and ✕ return to the
-			     list; the page keeps its scroll. -->
-			{#if earlierHref}
-				<IconButton
-					icon={ChevronLeft}
-					size="lg"
-					label="Earlier session"
-					href={earlierHref}
-					data-sveltekit-replacestate
-					data-sveltekit-noscroll
-				/>
-			{:else}
-				<IconButton icon={ChevronLeft} size="lg" label="Earlier session" disabled />
-			{/if}
-			{#if laterHref}
-				<IconButton
-					icon={ChevronRight}
-					size="lg"
-					label="Later session"
-					href={laterHref}
-					data-sveltekit-replacestate
-					data-sveltekit-noscroll
-				/>
-			{:else}
-				<IconButton icon={ChevronRight} size="lg" label="Later session" disabled />
-			{/if}
-		{:else}
-			{#if previousHref}
-				<IconButton icon={ChevronLeft} size="lg" label="Previous {unit}" href={previousHref} />
-			{:else}
-				<IconButton icon={ChevronLeft} size="lg" label="Previous {unit}" disabled />
-			{/if}
-			{#if nextHref}
-				<IconButton icon={ChevronRight} size="lg" label="Next {unit}" href={nextHref} />
-			{:else}
-				<IconButton icon={ChevronRight} size="lg" label="Next {unit}" disabled />
-			{/if}
-		{/if}
-		<!-- After both arrows, as in a calendar's header, so they stay put
-		     whatever the name's length (user's feedback). -->
-		<!-- Cut off, the full name in a tooltip, on hover and keyboard focus
-		     (our rule for truncated values; user's request). -->
-		<Tooltip.Root disabled={!periodCut}>
-			<Tooltip.Trigger>
-				{#snippet child({ props })}
-					<!-- One of the toolbar's stops only while cut off, so the keyboard
-						     reaches the full name too; screen readers read the text. -->
-					<h2
-						{...props}
-						bind:this={periodHeading}
-						class="period"
-						aria-live="polite"
-						data-roving={periodCut ? 'true' : 'false'}
-					>
-						<span class="period-name">{periodLines[0]}</span>
-						<span class="period-count">{periodLines[1]}</span>
-					</h2>
-				{/snippet}
-			</Tooltip.Trigger>
-			<TooltipContent side="top">{periodLabel}</TooltipContent>
-		</Tooltip.Root>
-		<span class="tools">
-			{#if openSession}
-				<IconButton
-					icon={Close}
-					size="lg"
-					label="Back to {periodName(data.state.period)}"
-					onclick={close}
-				/>
-			{:else}
-				<ListFilters
-					toolbar
-					filters={data.state}
-					none={{ ...data.state, ...NO_FILTERS }}
-					devices={data.devices}
-					groupFilter={readsSeveralGroups(data.account)}
-					filtering={cardsFiltering}
-					onchange={filter}
-				/>
-				<OverflowMenu
-					label="Choose period"
-					variant="row"
-					icon={Calendar}
-					items={[
-						{
-							label: `Show by ${other}`,
-							// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
-							onselect: () => goto(at(switchTo(other, data.state.period, today(data.timeZone))))
-						},
-						...(data.state.period.start === thisPeriod.start
-							? []
-							: [
-									{
-										label: `Go to this ${unit}`,
-										// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
-										onselect: () => goto(at(thisPeriod))
-									}
-								])
-					]}
-				/>
-			{/if}
-		</span>
-	</div>
+	<PeriodToolbar
+		label="Sessions"
+		period={data.state.period}
+		timeZone={data.timeZone}
+		{at}
+		{previousHref}
+		{nextHref}
+		lines={periodLines}
+		open={openSession ? { noun: 'session', earlierHref, laterHref, onclose: close } : null}
+	>
+		{#snippet tools()}
+			<ListFilters
+				toolbar
+				filters={data.state}
+				none={{ ...data.state, ...NO_FILTERS }}
+				devices={data.devices}
+				groupFilter={readsSeveralGroups(data.account)}
+				filtering={cardsFiltering}
+				onchange={filter}
+			/>
+		{/snippet}
+	</PeriodToolbar>
 {/snippet}
 
 <!-- A session open: its title, the breadcrumb back to the list (through the
@@ -661,172 +536,170 @@
 					This {data.state.period.unit} has {data.total} sessions; the table shows them all.
 				</InlineNotification>
 			{/if}
-			<div class="cards-view" class:opened={opened !== null}>
-				<!-- The cards, and in their place the open session's facts. -->
-				<div class="side">
-					<!-- Stays when a session opens; only its controls change. -->
-					{@render periodToolbar()}
-					<div class="cards" inert={opened !== null}>
-						{#if data.total === 0}
-							<EmptyState
-								title="No sessions in {periodName(data.state.period)}"
-								body={cardsFiltering
-									? 'No sessions you can see in this period have a flight that passes these filters.'
-									: previousHref || nextHref
-										? 'Step to another period with the arrows, or see all sessions in the table.'
-										: 'No sessions yet.'}
+			<!-- The cards, and in their place the open session's facts; the toolbar
+			     stays when a session opens, only its controls change. The map
+			     below lg only for an open session, under its facts. -->
+			<CardsView
+				opened={opened !== null}
+				showMap={wide.current || openSession !== null}
+				toolbar={periodToolbar}
+			>
+				{#snippet cards()}
+					{#if data.total === 0}
+						<EmptyState
+							title="No sessions in {periodName(data.state.period)}"
+							body={cardsFiltering
+								? 'No sessions you can see in this period have a flight that passes these filters.'
+								: previousHref || nextHref
+									? 'Step to another period with the arrows, or see all sessions in the table.'
+									: 'No sessions yet.'}
+						>
+							{#snippet action()}
+								{#if cardsFiltering}
+									<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
+								{:else if previousHref || nextHref}
+									<Link href={href({ ...data.state, view: 'table' })}>Show the table</Link>
+								{/if}
+							{/snippet}
+						</EmptyState>
+					{/if}
+					{#each months as group (group.name)}
+						<section>
+							<!-- Only where the period has two months: else the period's name says it. -->
+							{#if months.length > 1}<h2 class="month">{group.name}</h2>{/if}
+							<ul>
+								{#each group.sessions as session (session.id)}
+									<li>
+										<ClickableTile
+											href={sessionHref(session.id)}
+											hovered={wide.current && pointedTrack === session.id}
+											onpointerenter={() => (pointed = session.id)}
+											onpointerleave={() => (pointed = null)}
+											onfocus={() => (pointed = session.id)}
+											onblur={() => (pointed = null)}
+										>
+											<span class="card-title">
+												{daySpan(session.first_takeoff_at, session.last_landed_at, data.timeZone)}
+											</span>
+											<span class="card-strip">
+												<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
+											</span>
+											<span class="card-who">
+												{session.pilots.join(', ')}{#if showsGroups(data.account)}
+													· {sessionGroup(session)}{/if}
+											</span>
+											<span class="card-numbers">
+												{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the air
+												· {distance(session.distance_m)}
+											</span>
+										</ClickableTile>
+									</li>
+								{/each}
+							</ul>
+						</section>
+					{/each}
+				{/snippet}
+				{#snippet facts()}
+					{#if openSession}
+						<div class="panel">
+							<SessionFacts
+								flights={openSession.flights}
+								timeZone={data.timeZone}
+								group={sessionGroup(openSession)}
+								showGroup={showsGroups(data.account)}
 							>
-								{#snippet action()}
-									{#if cardsFiltering}
-										<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
-									{:else if previousHref || nextHref}
-										<Link href={href({ ...data.state, view: 'table' })}>Show the table</Link>
+								{#snippet pilotAction()}
+									{#if canSetPilots}
+										<IconButton
+											icon={Edit}
+											label="Change pilot"
+											name="Change pilot of the session’s flights"
+											onclick={(event) =>
+												changePilot(
+													openFlights,
+													`All ${flightsLabel(openFlights.length)} in the session.`,
+													event
+												)}
+										/>
 									{/if}
 								{/snippet}
-							</EmptyState>
-						{/if}
-						{#each months as group (group.name)}
-							<section>
-								<!-- Only where the period has two months: else the period's name says it. -->
-								{#if months.length > 1}<h2 class="month">{group.name}</h2>{/if}
-								<ul>
-									{#each group.sessions as session (session.id)}
-										<li>
-											<ClickableTile
-												href={sessionHref(session.id)}
-												hovered={wide.current && pointedTrack === session.id}
-												onpointerenter={() => (pointed = session.id)}
-												onpointerleave={() => (pointed = null)}
-												onfocus={() => (pointed = session.id)}
-												onblur={() => (pointed = null)}
-											>
-												<span class="card-title">
-													{daySpan(session.first_takeoff_at, session.last_landed_at, data.timeZone)}
-												</span>
-												<span class="card-strip">
-													<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
-												</span>
-												<span class="card-who">
-													{session.pilots.join(', ')}{#if showsGroups(data.account)}
-														· {sessionGroup(session)}{/if}
-												</span>
-												<span class="card-numbers">
-													{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the
-													air · {distance(session.distance_m)}
-												</span>
-											</ClickableTile>
-										</li>
-									{/each}
-								</ul>
-							</section>
-						{/each}
-					</div>
-					{#if openSession}
-						<div class="facts-side">
-							<div class="panel">
-								<SessionFacts
-									flights={openSession.flights}
-									timeZone={data.timeZone}
-									group={sessionGroup(openSession)}
-									showGroup={showsGroups(data.account)}
-								>
-									{#snippet pilotAction()}
-										{#if canSetPilots}
-											<IconButton
-												icon={Edit}
-												label="Change pilot"
-												name="Change pilot of the session’s flights"
-												onclick={(event) =>
-													changePilot(
-														openFlights,
-														`All ${flightsLabel(openFlights.length)} in the session.`,
-														event
-													)}
-											/>
-										{/if}
-									{/snippet}
-									{#snippet groupAction()}
-										{#if canMoveSession}
-											<!-- carbon-expert's advice: the session only by default; moving
+								{#snippet groupAction()}
+									{#if canMoveSession}
+										<!-- carbon-expert's advice: the session only by default; moving
 											     its flights too only for who may. -->
-											<Modal
-												title="Move to group"
-												triggerIcon={Edit}
-												submitLabel="Move"
-												action="?/setGroup"
-												error={form && 'groupMessage' in form ? form.groupMessage : undefined}
-												onsuccess={sessionMoved}
-											>
-												<input type="hidden" name="session_id" value={openSession?.id} />
-												<Select
-													label="Group"
-													name="group_id"
-													options={moveOptions}
-													bind:value={moveTo}
+										<Modal
+											title="Move to group"
+											triggerIcon={Edit}
+											submitLabel="Move"
+											action="?/setGroup"
+											error={form && 'groupMessage' in form ? form.groupMessage : undefined}
+											onsuccess={sessionMoved}
+										>
+											<input type="hidden" name="session_id" value={openSession?.id} />
+											<Select
+												label="Group"
+												name="group_id"
+												options={moveOptions}
+												bind:value={moveTo}
+											/>
+											{#if canMoveFlights && othersThere > 0}
+												<Checkbox
+													label="Also move its flights to this group"
+													name="move_flights"
+													value="true"
 												/>
-												{#if canMoveFlights && othersThere > 0}
-													<Checkbox
-														label="Also move its flights to this group"
-														name="move_flights"
-														value="true"
-													/>
-													<p class="help">
-														{othersThere === 1
-															? `1 of its ${flightsLabel(openFlights.length)} is in another group.`
-															: `${othersThere} of its ${flightsLabel(openFlights.length)} are in other groups.`}
-													</p>
-												{/if}
-											</Modal>
-										{/if}
-									{/snippet}
-								</SessionFacts>
-							</div>
-							<!-- Keyed: a draft or an edit never follows to another session. -->
-							{#key openSession.id}
-								<SessionComments
-									sessionId={openSession.id}
-									comments={openSession.comments}
-									timeZone={data.timeZone}
-									userId={data.account?.id ?? ''}
-									canWrite={canEditOpen}
-									addError={form && 'commentMessage' in form ? form.commentMessage : undefined}
-									editError={form && 'editCommentMessage' in form
-										? form.editCommentMessage
-										: undefined}
-									deleteError={form && 'deleteCommentMessage' in form
-										? form.deleteCommentMessage
-										: undefined}
-								/>
-							{/key}
+												<p class="help">
+													{othersThere === 1
+														? `1 of its ${flightsLabel(openFlights.length)} is in another group.`
+														: `${othersThere} of its ${flightsLabel(openFlights.length)} are in other groups.`}
+												</p>
+											{/if}
+										</Modal>
+									{/if}
+								{/snippet}
+							</SessionFacts>
 						</div>
+						<!-- Keyed: a draft or an edit never follows to another session. -->
+						{#key openSession.id}
+							<SessionComments
+								sessionId={openSession.id}
+								comments={openSession.comments}
+								timeZone={data.timeZone}
+								userId={data.account?.id ?? ''}
+								canWrite={canEditOpen}
+								addError={form && 'commentMessage' in form ? form.commentMessage : undefined}
+								editError={form && 'editCommentMessage' in form
+									? form.editCommentMessage
+									: undefined}
+								deleteError={form && 'deleteCommentMessage' in form
+									? form.deleteCommentMessage
+									: undefined}
+							/>
+						{/key}
 					{/if}
-				</div>
-				<!-- Below lg only for an open session, under its facts. -->
-				{#if wide.current || openSession}
-					<div class="map-side">
-						<!-- The tracks aren't focusable: the cards are the same sessions. -->
-						<TrackMap
-							tracks={mapTracks}
-							{highlight}
-							ends={openSession !== null}
-							areas={openSession ? data.areas : []}
-							reserveLegend
-							fly
-							height={MAP_HEIGHT}
-							ontrackclick={opened ? undefined : openTrack}
-							ontrackhover={opened
-								? (index) => (pointedFlightTrack = index)
-								: (index) =>
-										(pointedTrack = index === null ? null : (sessionOf(index)?.id ?? null))}
-							tracktip={opened ? flightTip : trackTip}
-							token={data.mapboxToken}
-							label={openSession
-								? 'Map of the session’s tracks'
-								: `Map of the sessions in ${periodName(data.state.period)}; the list beside it has the same sessions`}
-						/>
-					</div>
-				{/if}
-			</div>
+				{/snippet}
+				{#snippet map()}
+					<!-- The tracks aren't focusable: the cards are the same sessions. -->
+					<TrackMap
+						tracks={mapTracks}
+						{highlight}
+						ends={openSession !== null}
+						areas={openSession ? data.areas : []}
+						reserveLegend
+						fly
+						height={MAP_HEIGHT}
+						ontrackclick={opened ? undefined : openTrack}
+						ontrackhover={opened
+							? (index) => (pointedFlightTrack = index)
+							: (index) => (pointedTrack = index === null ? null : (sessionOf(index)?.id ?? null))}
+						tracktip={opened ? flightTip : trackTip}
+						token={data.mapboxToken}
+						label={openSession
+							? 'Map of the session’s tracks'
+							: `Map of the sessions in ${periodName(data.state.period)}; the list beside it has the same sessions`}
+					/>
+				{/snippet}
+			</CardsView>
 			{#if openSession}
 				<div class="opened-flights" id="session-flights">
 					<DataTable
@@ -968,234 +841,6 @@
 		font-size: var(--cds-helper-text-01-font-size);
 		line-height: var(--cds-helper-text-01-line-height);
 		letter-spacing: var(--cds-helper-text-01-letter-spacing);
-	}
-
-	/* Each month under its heading, which stays in view while its cards
-	   scroll; tiles 2px apart, as in Carbon's tile groups. */
-	/* minmax(0, 1fr), here and in the view: as wide as the column, never as
-	   the longest content (the toolbar's name), which scrolled the page
-	   sideways (user's feedback). */
-	.cards {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: var(--cds-spacing-06);
-	}
-
-	.month {
-		position: sticky;
-		top: 3rem;
-		z-index: 1;
-		margin: 0;
-		padding: var(--cds-spacing-03) var(--cds-spacing-05);
-		background: var(--cds-background);
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-heading-compact-01-font-size);
-		font-weight: var(--cds-heading-compact-01-font-weight);
-		line-height: var(--cds-heading-compact-01-line-height);
-		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
-	}
-
-	.cards ul {
-		display: grid;
-		gap: var(--cds-spacing-01);
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.card-title {
-		display: block;
-		font-size: var(--cds-heading-compact-01-font-size);
-		font-weight: var(--cds-heading-compact-01-font-weight);
-		line-height: var(--cds-heading-compact-01-line-height);
-		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
-	}
-
-	.card-who,
-	.card-numbers {
-		display: block;
-		margin-top: var(--cds-spacing-02);
-		font-size: var(--cds-body-compact-01-font-size);
-		line-height: var(--cds-body-compact-01-line-height);
-		letter-spacing: var(--cds-body-compact-01-letter-spacing);
-	}
-
-	/* The last line: room at its end for the tile's arrow (16px + 8px). */
-	.card-numbers {
-		padding-inline-end: 1.5rem;
-		color: var(--cds-text-secondary);
-		font-variant-numeric: tabular-nums;
-	}
-
-	/* Under the times it pictures, the same width on every card, so the
-	   strips line up and share one scale (user's choice, 2026-10-21: a
-	   full-width strip was more than it needs; beside the title, titles
-	   wrapped). */
-	.card-strip {
-		display: block;
-		width: 12rem;
-		max-width: 100%;
-		margin-block: var(--cds-spacing-03);
-	}
-
-	/* Only the cards below lg; from lg, 5 of 16 columns of cards and the map
-	   beside them, in view while the cards scroll. */
-	.cards-view {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: var(--cds-spacing-07);
-	}
-
-	/* From lg the map on the left, 10 of 16 columns (11 from xlg), and the
-	   cards on the right, 6 (5): a card's last line fits beside its arrow.
-	   A session open, its facts take the cards' place and the map stays as
-	   it is, only flying to the session, so the pointer stays over text
-	   (user's choice, 2026-10-21). 16px between, as padding. */
-	@media (min-width: 66rem) {
-		.cards-view {
-			/* minmax(0, …): a column never grows past its share for its content
-			   (the map's canvas, a long name), which scrolled the page sideways. */
-			grid-template-columns: minmax(0, 10fr) minmax(0, 6fr);
-			gap: 0;
-			align-items: start;
-		}
-
-		.side {
-			position: relative;
-			min-width: 0;
-			padding-inline-start: var(--cds-spacing-05);
-		}
-
-		/* Level with the first card, 16px below the header while the cards
-		   scroll, and as high as the window allows (carbon-expert's review). */
-		.map-side {
-			position: sticky;
-			top: calc(3rem + var(--cds-spacing-05));
-			order: -1;
-		}
-
-		/* Carbon's short slide: the cards leave 32px to the left with the
-		   exit curve, out of the flow at once so the facts take their place;
-		   the facts come from 32px to the right with the entrance curve. */
-		.cards {
-			transition:
-				opacity 240ms cubic-bezier(0.2, 0, 1, 0.9),
-				transform 240ms cubic-bezier(0.2, 0, 1, 0.9),
-				visibility 0s;
-		}
-
-		.opened .cards {
-			position: absolute;
-			/* Under the toolbar, which stays: 48px and its 2px. */
-			inset: calc(var(--cds-spacing-09) + var(--cds-spacing-01)) 0 auto var(--cds-spacing-05);
-			visibility: hidden;
-			opacity: 0;
-			transform: translateX(-2rem);
-			transition:
-				opacity 240ms cubic-bezier(0.2, 0, 1, 0.9),
-				transform 240ms cubic-bezier(0.2, 0, 1, 0.9),
-				visibility 0s 240ms;
-		}
-
-		/* On the toolbar's layer, 2px under it, as the cards are: toolbar and
-		   content one block in both states (user's feedback: the toolbar
-		   floated above facts on the page background). */
-		.facts-side {
-			display: grid;
-			gap: var(--cds-spacing-01);
-			animation: 240ms cubic-bezier(0, 0, 0.38, 0.9) 120ms both facts-in;
-		}
-	}
-
-	/* The facts as a panel on the toolbar's layer, 2px under it (the
-	   toolbar's margin), at every width. */
-	.panel {
-		padding: var(--cds-spacing-05);
-		background: var(--cds-layer-01);
-	}
-
-	/* 16px all round: the facts' last group keeps no space of its own. */
-	.panel :global(dl:last-child) {
-		margin-bottom: 0;
-	}
-
-	@keyframes facts-in {
-		from {
-			opacity: 0;
-			transform: translateX(2rem);
-		}
-	}
-
-	/* Below lg a session open shows in the cards' place: toolbar, facts,
-	   map, flights, one under the other. */
-	@media (max-width: 65.99rem) {
-		.opened .cards {
-			display: none;
-		}
-	}
-
-	@media (min-width: 82rem) {
-		.cards-view {
-			grid-template-columns: minmax(0, 11fr) minmax(0, 5fr);
-		}
-	}
-
-	/* Carbon's large table toolbar: 48px on the list's layer, 2px above the
-	   first card, its buttons full height. */
-	.list-toolbar {
-		display: flex;
-		align-items: center;
-		min-height: var(--cds-spacing-09);
-		/* 2px to the first card. */
-		margin-bottom: var(--cds-spacing-01);
-		background: var(--cds-layer-01);
-	}
-
-	/* The buttons keep their 48px; the name gives way, its end (the count)
-	   cut off with an ellipsis (user's feedback: the arrows were squeezed). */
-	.list-toolbar :global(.icon-button) {
-		flex: none;
-	}
-
-	/* The name, and under it the count, each line the full width so the
-	   count isn't cut off behind the name (user's choice, 2026-10-21):
-	   18px + 2px + 16px in the 48px bar. */
-	.period {
-		display: flex;
-		flex: 1;
-		flex-direction: column;
-		gap: 0.125rem;
-		min-width: 0;
-		margin: 0;
-		padding-inline: var(--cds-spacing-03);
-	}
-
-	.period-name,
-	.period-count {
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-	}
-
-	.period-name {
-		font-size: var(--cds-heading-compact-01-font-size);
-		font-weight: var(--cds-heading-compact-01-font-weight);
-		line-height: var(--cds-heading-compact-01-line-height);
-		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
-	}
-
-	.period-count {
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-label-01-font-size);
-		font-weight: var(--cds-label-01-font-weight);
-		line-height: var(--cds-label-01-line-height);
-		letter-spacing: var(--cds-label-01-letter-spacing);
-	}
-
-	.tools {
-		display: flex;
-		flex: none;
-		margin-inline-start: auto;
 	}
 
 	/* The flights under the map and facts, coming in after the facts. */

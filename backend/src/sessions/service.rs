@@ -43,31 +43,35 @@ const PREVIEW_TOLERANCE: f64 = 0.00005;
 /// Each flight's `track` (its coordinates) as a coarse [lon, lat] line, for
 /// a map of many sessions at once: a few dozen points instead of thousands.
 fn simplify_tracks(flights: &mut serde_json::Value) {
-    use geo::{LineString, Simplify};
     let Some(flights) = flights.as_array_mut() else {
         return;
     };
     for flight in flights {
-        let Some(track) = flight.get_mut("track") else {
-            continue;
-        };
-        let points: Vec<(f64, f64)> = track
-            .as_array()
-            .map(|points| {
-                points
-                    .iter()
-                    .filter_map(|point| Some((point.get(0)?.as_f64()?, point.get(1)?.as_f64()?)))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let line = LineString::from(points).simplify(PREVIEW_TOLERANCE);
-        // Six decimals, about 10 cm: the rest is only bytes.
-        let round = |value: f64| (value * 1e6).round() / 1e6;
-        *track = line
-            .points()
-            .map(|point| serde_json::json!([round(point.x()), round(point.y())]))
-            .collect();
+        if let Some(track) = flight.get_mut("track") {
+            *track = coarse(track);
+        }
     }
+}
+
+/// A track's coordinates as a coarse [lon, lat] line, for a map of many
+/// flights at once.
+pub(crate) fn coarse(track: &serde_json::Value) -> serde_json::Value {
+    use geo::{LineString, Simplify};
+    let points: Vec<(f64, f64)> = track
+        .as_array()
+        .map(|points| {
+            points
+                .iter()
+                .filter_map(|point| Some((point.get(0)?.as_f64()?, point.get(1)?.as_f64()?)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let line = LineString::from(points).simplify(PREVIEW_TOLERANCE);
+    // Six decimals, about 10 cm: the rest is only bytes.
+    let round = |value: f64| (value * 1e6).round() / 1e6;
+    line.points()
+        .map(|point| serde_json::json!([round(point.x()), round(point.y())]))
+        .collect()
 }
 
 /// A session's place in the list of those the actor may see that pass the

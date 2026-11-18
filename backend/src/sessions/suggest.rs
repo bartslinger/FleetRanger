@@ -125,10 +125,12 @@ pub async fn neighbours(
     }) else {
         return Ok(None);
     };
-    let id_at = |index: Option<usize>| index.and_then(|index| flights.get(index)).map(|f| f.id);
+    let at = |index: Option<usize>| index.and_then(|index| flights.get(index));
     Ok(Some(Neighbours {
-        previous: id_at(index.checked_sub(1)),
-        next: id_at(Some(index + 1)),
+        previous: at(index.checked_sub(1)).map(|f| f.id),
+        previous_takeoff_at: at(index.checked_sub(1)).map(|f| f.takeoff_at),
+        next: at(Some(index + 1)).map(|f| f.id),
+        next_takeoff_at: at(Some(index + 1)).map(|f| f.takeoff_at),
         position: i64::try_from(index + 1).unwrap_or(i64::MAX),
         total: i64::try_from(flights.len()).unwrap_or(i64::MAX),
     }))

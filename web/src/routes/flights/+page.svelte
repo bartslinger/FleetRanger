@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -20,7 +20,15 @@
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
-	import { dateTime, distance, duration } from '#lib/format.js';
+	import { dateTime, day, daySpan, distance, duration, month } from '#lib/format.js';
+	import FlightFacts from '#lib/FlightFacts.svelte';
+	import { dayOf, periodName, periodOf, type Period } from '#lib/period.js';
+	import CardsView from '#lib/CardsView.svelte';
+	import PeriodToolbar from '#lib/PeriodToolbar.svelte';
+	import ClickableTile from '#lib/ui/ClickableTile.svelte';
+	import InlineNotification from '#lib/ui/InlineNotification.svelte';
+	import Link from '#lib/ui/Link.svelte';
+	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import { anywhere, may, readsSeveralGroups, type Permission } from '#lib/permissions.js';
 	import {
 		groupOptions as groupChoices,
@@ -30,7 +38,14 @@
 	} from '#lib/groups.js';
 	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import { pilotOptions } from '#lib/pilots.js';
-	import { DEFAULT_SORT, PAGE_SIZES, query, type LogbookState } from './logbook.js';
+	import {
+		DEFAULT_SORT,
+		PAGE_SIZES,
+		PERIOD_SIZE,
+		query,
+		showsCards,
+		type LogbookState
+	} from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
 	import Suggestions from './Suggestions.svelte';
 	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
@@ -191,6 +206,150 @@
 	function href(state: LogbookState) {
 		return `${resolve('/flights')}${query(state)}`;
 	}
+
+	// The cards: a week or month of flights beside a map with all their
+	// tracks, as Sessions has (user's decision, 2026-11-18). Pointing at a
+	// card brings out its track; a track is its flight, as its card is.
+	// Below lg there's no map.
+	const wideMap = new MediaQuery('min-width: 66rem');
+	// As on Sessions: the map fits the window under the shell's and page's
+	// headers, with its legend.
+	const MAP_HEIGHT = 'calc(100dvh - 19.75rem - var(--banner-height, 0px))';
+
+	// In the cards the period isn't a filter: Clear filters leaves it.
+	const cardsFiltering = $derived(
+		listFiltering({ ...data.state, from: null }) || data.state.withoutSession || data.state.archived
+	);
+	// The period's links: the same filters, another week or month. The
+	// arrows go to the nearest ones with flights that pass the filters.
+	const at = (period: Period) => href({ ...data.state, period, page: 1 });
+	const periodHref = (start: string | null) =>
+		start ? at(periodOf(data.state.period.unit, dayOf(start, data.timeZone))) : null;
+	const previousHref = $derived(periodHref(data.around.before));
+	const nextHref = $derived(periodHref(data.around.after));
+
+	// Cards, grouped by month; the list comes newest first.
+	const months = $derived.by(() => {
+		const groups: { name: string; flights: Row[] }[] = [];
+		for (const flight of data.flights) {
+			const name = month(flight.takeoff_at, data.timeZone);
+			const last = groups.at(-1);
+			if (last?.name === name) last.flights.push(flight);
+			else groups.push({ name, flights: [flight] });
+		}
+		return groups;
+	});
+
+	// A flight open over the cards, in the URL (`flight=`), as a session is
+	// over Sessions': a card is a link to it, the layout's load brings it. The
+	// one map stays and flies to the flight, its facts take the cards' place.
+	// Back closes it, as ✕ and Esc do.
+	const openFlight = $derived(data.openFlight);
+	const opened = $derived(openFlight?.id ?? null);
+	const flightHref = (id: string) => `${resolve('/flights')}${query(data.state, id)}`;
+
+	// Opened from the cards in this tab, Back returns to them as they were
+	// (their scroll position too); opened directly, or stepped into another
+	// week or month, ✕ replaces it with the cards of that one.
+	let cameFromList = false;
+	const periodParams = (url: URL) =>
+		`${url.searchParams.get('week')} ${url.searchParams.get('month')}`;
+	afterNavigate(({ from, to }) => {
+		if (!to?.url.searchParams.has('flight')) cameFromList = false;
+		else if (from && periodParams(from.url) !== periodParams(to.url)) cameFromList = false;
+		else if (
+			from &&
+			from.url.pathname === to.url.pathname &&
+			!from.url.searchParams.has('flight')
+		) {
+			cameFromList = true;
+		}
+	});
+	function close() {
+		if (cameFromList) history.back();
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves
+		else goto(href(data.state), { replaceState: true });
+	}
+	// Esc closes the open flight, as its ✕ does, unless something over it (a
+	// dialog, a menu) takes the key first.
+	function closeOnEscape(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !opened || event.defaultPrevented) return;
+		if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+		close();
+	}
+
+	// The flights before and after it with the list's filters, also in
+	// another week or month, shown in theirs; in time like the periods.
+	const neighbourHref = (id: string | null, takeoff: string | null) =>
+		id && takeoff
+			? `${resolve('/flights')}${query(
+					{
+						...data.state,
+						period: periodOf(data.state.period.unit, dayOf(takeoff, data.timeZone))
+					},
+					id
+				)}`
+			: null;
+	const earlierHref = $derived(
+		neighbourHref(
+			data.flightNeighbours?.next ?? null,
+			data.flightNeighbours?.next_takeoff_at ?? null
+		)
+	);
+	const laterHref = $derived(
+		neighbourHref(
+			data.flightNeighbours?.previous ?? null,
+			data.flightNeighbours?.previous_takeoff_at ?? null
+		)
+	);
+	// The toolbar's two lines: the period and its count, or the open
+	// flight's day and its place, counted in time (the list is newest first).
+	const openedIndex = $derived(data.flights.findIndex((flight) => flight.id === opened));
+	const toolbarLines: [string, string] = $derived(
+		openFlight
+			? [
+					day(openFlight.takeoff_at, data.timeZone, true),
+					openedIndex >= 0
+						? `${data.total - openedIndex} of ${data.total} · ${periodName(data.state.period)}`
+						: periodName(data.state.period)
+				]
+			: [periodName(data.state.period), flights(data.total)]
+	);
+
+	// The flights with a track, in the cards' order, and their tracks.
+	const trackOf = $derived(new Map(data.tracks.map((flight) => [flight.id, flight.track])));
+	const mapFlights = $derived(
+		data.flights.filter((flight) => (trackOf.get(flight.id)?.length ?? 0) > 1)
+	);
+	// The map: the open flight's full track, else the cards'. It flies from
+	// one to the other: to a flight, to the next, back to the period.
+	const mapTracks = $derived(
+		openFlight
+			? [openFlight.track]
+			: mapFlights.map((flight) => ({
+					type: 'LineString' as const,
+					coordinates: trackOf.get(flight.id) ?? []
+				}))
+	);
+	// The flight pointed at: its card (or focused), or its track on the map.
+	let pointed: string | null = $state(null);
+	let pointedTrack: string | null = $state(null);
+	const highlight = $derived.by(() => {
+		if (openFlight) return [];
+		const index = mapFlights.findIndex((flight) => flight.id === (pointed ?? pointedTrack));
+		return index < 0 ? [] : [index];
+	});
+	function openTrack(index: number) {
+		const flight = mapFlights[index];
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- flightHref resolves
+		if (flight) goto(flightHref(flight.id));
+	}
+	const trackTip = (index: number) => {
+		const flight = mapFlights[index];
+		if (!flight) return '';
+		const when = daySpan(flight.takeoff_at, flight.landed_at, data.timeZone);
+		return `${when} · ${duration(flight.air_time_s)}`;
+	};
 </script>
 
 <!-- A batch action's flights: the selected ones, or all that match the
@@ -204,273 +363,426 @@
 	{/if}
 {/snippet}
 
-<PageHeader title="Flights" {crumb}>
+<!-- A flight open: its title, the breadcrumb back to the cards (through the
+     history, so they are as they were) and no view switcher, as on Sessions. -->
+<svelte:window onkeydown={closeOnEscape} />
+
+<PageHeader
+	title={openFlight ? `Flight ${dateTime(openFlight.takeoff_at, data.timeZone)}` : 'Flights'}
+	breadcrumb={openFlight
+		? [{ href: href(data.state), label: 'Flights', follow: close }]
+		: undefined}
+	crumb={openFlight ? `Flight ${dateTime(openFlight.takeoff_at, data.timeZone)}` : crumb}
+>
 	{#snippet actions()}
-		<!-- The flights without a session, as a list or grouped into suggestions. -->
-		{#if data.state.withoutSession}
-			<ViewSwitcher
+		<!-- Cards and Table are the same flights; with "Without session" on,
+		     they can also be seen as suggested sessions (user's decision,
+		     2026-11-18: Suggestions stays behind that filter). -->
+		{#if !opened}<ViewSwitcher
 				label="View"
 				options={[
 					{
-						label: 'List',
-						href: href({ ...data.state, suggestions: false, page: 1 }),
-						selected: !data.state.suggestions
+						label: 'Cards',
+						href: href({ ...data.state, suggestions: false, view: 'cards', page: 1 }),
+						selected: showsCards(data.state)
 					},
 					{
-						label: 'Suggestions',
-						href: href({ ...data.state, suggestions: true, page: 1 }),
-						selected: data.state.suggestions
-					}
+						label: 'Table',
+						href: href({ ...data.state, suggestions: false, view: 'table', page: 1 }),
+						selected: !data.state.suggestions && data.state.view === 'table'
+					},
+					...(data.state.withoutSession
+						? [
+								{
+									label: 'Suggestions',
+									href: href({ ...data.state, suggestions: true, page: 1 }),
+									selected: data.state.suggestions
+								}
+							]
+						: [])
 				]}
-			/>
-		{/if}
+			/>{/if}
 	{/snippet}
 </PageHeader>
 
-<Grid>
-	<Column narrow>
-		{#if data.total > 0 || filtering}
+<!-- The list's own filters, after the shared ones. -->
+{#snippet ownFilters(draft: Filters, change: (change: Partial<Filters>) => void)}
+	<!-- Archived flights are never in a session. -->
+	{#if !draft.archived}
+		<Select
+			label="Session"
+			options={sessionOptions}
+			value={draft.withoutSession ? 'none' : ''}
+			onchange={(event) => change({ withoutSession: event.currentTarget.value === 'none' })}
+		/>
+	{/if}
+	<Select
+		label="Status"
+		options={statusOptions}
+		value={draft.archived ? 'archived' : ''}
+		onchange={(event) =>
+			change({ archived: event.currentTarget.value === 'archived', withoutSession: false })}
+	/>
+{/snippet}
+
+{#snippet periodToolbar()}
+	<PeriodToolbar
+		label="Flights"
+		period={data.state.period}
+		timeZone={data.timeZone}
+		{at}
+		{previousHref}
+		{nextHref}
+		lines={toolbarLines}
+		open={openFlight ? { noun: 'flight', earlierHref, laterHref, onclose: close } : null}
+	>
+		{#snippet tools()}
 			<ListFilters
+				toolbar
 				filters={data.state}
 				none={{ ...data.state, ...none }}
 				devices={data.devices}
 				groupFilter={readsSeveralGroups(data.account)}
-				{filtering}
+				filtering={cardsFiltering}
 				ownCount={Number(data.state.withoutSession) + Number(data.state.archived)}
 				onchange={filter}
+				own={ownFilters}
+			/>
+		{/snippet}
+	</PeriodToolbar>
+{/snippet}
+
+<Grid>
+	<Column narrow>
+		{#if showsCards(data.state)}
+			{#if data.total > PERIOD_SIZE}
+				<InlineNotification kind="info" title="Only the latest {PERIOD_SIZE}">
+					This {data.state.period.unit} has {data.total} flights; the table shows them all.
+				</InlineNotification>
+			{/if}
+			<!-- The map and the cards, also for a period without flights, so the
+			     layout doesn't change: the empty state takes the cards' place,
+			     under their toolbar. Below lg there's no map. -->
+			<CardsView
+				opened={opened !== null}
+				showMap={wideMap.current || openFlight !== null}
+				toolbar={periodToolbar}
 			>
-				{#snippet own(draft, change)}
-					<!-- Archived flights are never in a session. -->
-					{#if !draft.archived}
-						<Select
-							label="Session"
-							options={sessionOptions}
-							value={draft.withoutSession ? 'none' : ''}
-							onchange={(event) => change({ withoutSession: event.currentTarget.value === 'none' })}
-						/>
+				{#snippet cards()}
+					{#if data.total === 0}
+						<EmptyState
+							title="No flights in {periodName(data.state.period)}"
+							body={cardsFiltering
+								? 'No flights you can see in this period pass these filters.'
+								: previousHref || nextHref
+									? 'Step to another period with the arrows, or see all flights in the table.'
+									: 'Flights appear here when flight logs from your remote controllers are imported.'}
+						>
+							{#snippet action()}
+								{#if cardsFiltering}
+									<Button kind="ghost" onclick={() => filter(none)}>Clear filters</Button>
+								{:else if previousHref || nextHref}
+									<Link href={href({ ...data.state, view: 'table' })}>Show the table</Link>
+								{/if}
+							{/snippet}
+						</EmptyState>
 					{/if}
-					<Select
-						label="Status"
-						options={statusOptions}
-						value={draft.archived ? 'archived' : ''}
-						onchange={(event) =>
-							change({ archived: event.currentTarget.value === 'archived', withoutSession: false })}
+					{#each months as group (group.name)}
+						<section>
+							<!-- Only where the period has two months: else the period's name says it. -->
+							{#if months.length > 1}<h2 class="month">{group.name}</h2>{/if}
+							<ul>
+								{#each group.flights as flight (flight.id)}
+									<li>
+										<ClickableTile
+											href={flightHref(flight.id)}
+											hovered={wideMap.current && pointedTrack === flight.id}
+											onpointerenter={() => (pointed = flight.id)}
+											onpointerleave={() => (pointed = null)}
+											onfocus={() => (pointed = flight.id)}
+											onblur={() => (pointed = null)}
+										>
+											<span class="card-title">
+												{daySpan(flight.takeoff_at, flight.landed_at, data.timeZone)}
+											</span>
+											<span class="card-who">
+												{flight.pilot_name ?? 'Unknown pilot'} · {flight.aircraft_name ??
+													flight.aircraft_serial ??
+													'Unknown drone'}{#if showsGroups(data.account)}
+													· {flight.group_name}{/if}
+											</span>
+											<span class="card-numbers">
+												{duration(flight.air_time_s)} in the air · {distance(flight.distance_m)}
+											</span>
+										</ClickableTile>
+									</li>
+								{/each}
+							</ul>
+						</section>
+					{/each}
+				{/snippet}
+				{#snippet facts()}
+					{#if openFlight}
+						<div class="panel">
+							<FlightFacts
+								flight={openFlight}
+								account={data.account}
+								choices={data.choices}
+								timeZone={data.timeZone}
+								pilotMessage={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
+								groupMessage={form && 'groupMessage' in form ? form.groupMessage : undefined}
+							/>
+						</div>
+					{/if}
+				{/snippet}
+				{#snippet map()}
+					<!-- The tracks aren't focusable: the cards are the same flights. -->
+					<TrackMap
+						tracks={mapTracks}
+						{highlight}
+						ends={openFlight !== null}
+						areas={openFlight ? data.openAreas : []}
+						reserveLegend
+						fly
+						height={MAP_HEIGHT}
+						ontrackclick={opened ? undefined : openTrack}
+						ontrackhover={opened
+							? undefined
+							: (index) => (pointedTrack = index === null ? null : (mapFlights[index]?.id ?? null))}
+						tracktip={opened ? undefined : trackTip}
+						token={data.mapboxToken}
+						label={openFlight
+							? 'Map of the flight’s track'
+							: `Map of the flights in ${periodName(data.state.period)}; the list beside it has the same flights`}
 					/>
 				{/snippet}
-			</ListFilters>
-		{/if}
-		{#if data.total === 0 && filtering}
-			<EmptyState title="No flights match" body="No flights you can see pass these filters.">
-				{#snippet action()}
-					<Button kind="ghost" onclick={() => filter(none)}>Clear filters</Button>
-				{/snippet}
-			</EmptyState>
-		{:else if data.total === 0}
-			<EmptyState
-				title="No flights yet"
-				body="Flights appear here when flight logs from your remote controllers are imported."
-			/>
-		{:else if data.suggestions}
-			<Suggestions
-				suggestions={data.suggestions.suggestions}
-				total={data.suggestions.total}
-				timeZone={data.timeZone}
-				canChange={changeable}
-				href={(key) => `${resolve('/flights/suggestions/[key]', { key })}${query(data.state)}`}
-			/>
-			<Pagination
-				page={data.state.page}
-				size={data.state.size}
-				total={data.suggestions.total}
-				sizes={PAGE_SIZES}
-				noun="suggestions"
-				href={(page, size) => href({ ...data.state, page, size })}
-			/>
+			</CardsView>
 		{:else}
-			<DataTable
-				label="Flights"
-				{columns}
-				rows={data.flights}
-				rowKey={(flight) => flight.id}
-				rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
-				sort={data.state.sort}
-				defaultSort={DEFAULT_SORT}
-				sortHref={(sort) => href({ ...data.state, page: 1, sort: sort ?? DEFAULT_SORT })}
-				selectable={canChange ? changeable : undefined}
-				bind:selected
-				bind:allMatching
-				total={data.total}
-				selectedLabel={(count, all) =>
-					all
-						? `All ${count} ${count === 1 ? 'flight' : 'flights'} selected`
-						: `${count} ${count === 1 ? 'flight' : 'flights'} selected`}
-				selectAllLabel={(total) => `Select all ${total}`}
-				summary={flights(data.total)}
-			>
-				{#snippet batchActions(ids)}
-					{#if data.state.archived}
-						<!-- Archived flights can only be restored. -->
-						<Modal
-							title="Restore"
-							submitLabel="Restore"
-							action="?/restore"
-							error={form && 'restoreMessage' in form ? form.restoreMessage : undefined}
-							onsuccess={() => done(`${flights(count(ids))} restored.`)}
-						>
-							{@render chosenFields(ids)}
-							<p>
-								{count(ids) === 1
-									? 'The flight counts again in Flights and totals. It comes back without a session.'
-									: `The ${count(ids)} flights count again in Flights and totals. They come back without a session.`}
-							</p>
-						</Modal>
-					{:else}
-						<!-- The frequent actions as buttons (on phones only the first); the
-					     rest in the overflow menu, as the bar holds two or three. -->
-						<Modal
-							title="New session"
-							submitLabel="Create"
-							action="?/newSession"
-							error={form && 'newSessionMessage' in form ? form.newSessionMessage : undefined}
-							onsuccess={() => done(`New session with ${flights(count(ids))}.`)}
-						>
-							{@render chosenFields(ids)}
-							<p>
-								The {flights(count(ids))} become one new session. Flights that are in a session leave
-								it.
-							</p>
-							<SessionGroupField
-								choice={sessionGroupChoice(data.account, data.choices.groups, batchGroups(ids))}
-							/>
-						</Modal>
-						<span class="wide-only">
+			{#if data.total > 0 || filtering}
+				<ListFilters
+					filters={data.state}
+					none={{ ...data.state, ...none }}
+					devices={data.devices}
+					groupFilter={readsSeveralGroups(data.account)}
+					{filtering}
+					ownCount={Number(data.state.withoutSession) + Number(data.state.archived)}
+					onchange={filter}
+					own={ownFilters}
+				/>
+			{/if}
+			{#if data.total === 0 && filtering}
+				<EmptyState title="No flights match" body="No flights you can see pass these filters.">
+					{#snippet action()}
+						<Button kind="ghost" onclick={() => filter(none)}>Clear filters</Button>
+					{/snippet}
+				</EmptyState>
+			{:else if data.total === 0}
+				<EmptyState
+					title="No flights yet"
+					body="Flights appear here when flight logs from your remote controllers are imported."
+				/>
+			{:else if data.suggestions}
+				<Suggestions
+					suggestions={data.suggestions.suggestions}
+					total={data.suggestions.total}
+					timeZone={data.timeZone}
+					canChange={changeable}
+					href={(key) => `${resolve('/flights/suggestions/[key]', { key })}${query(data.state)}`}
+				/>
+				<Pagination
+					page={data.state.page}
+					size={data.state.size}
+					total={data.suggestions.total}
+					sizes={PAGE_SIZES}
+					noun="suggestions"
+					href={(page, size) => href({ ...data.state, page, size })}
+				/>
+			{:else}
+				<DataTable
+					label="Flights"
+					{columns}
+					rows={data.flights}
+					rowKey={(flight) => flight.id}
+					rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+					sort={data.state.sort}
+					defaultSort={DEFAULT_SORT}
+					sortHref={(sort) => href({ ...data.state, page: 1, sort: sort ?? DEFAULT_SORT })}
+					selectable={canChange ? changeable : undefined}
+					bind:selected
+					bind:allMatching
+					total={data.total}
+					selectedLabel={(count, all) =>
+						all
+							? `All ${count} ${count === 1 ? 'flight' : 'flights'} selected`
+							: `${count} ${count === 1 ? 'flight' : 'flights'} selected`}
+					selectAllLabel={(total) => `Select all ${total}`}
+					summary={flights(data.total)}
+				>
+					{#snippet batchActions(ids)}
+						{#if data.state.archived}
+							<!-- Archived flights can only be restored. -->
 							<Modal
-								title="Add to session"
-								submitLabel="Add"
-								action="?/addToSession"
-								error={form && 'addMessage' in form ? form.addMessage : undefined}
-								onsuccess={() => done(`${flights(count(ids))} added to the session.`)}
-								bind:open={addOpen}
-								returnFocus={() => (wide.current ? undefined : (overflow ?? undefined))}
+								title="Restore"
+								submitLabel="Restore"
+								action="?/restore"
+								error={form && 'restoreMessage' in form ? form.restoreMessage : undefined}
+								onsuccess={() => done(`${flights(count(ids))} restored.`)}
 							>
 								{@render chosenFields(ids)}
-								<SessionChoice flights={selectedRows(ids)} timeZone={data.timeZone} />
-								<p class="help">Flights that are in another session leave it.</p>
+								<p>
+									{count(ids) === 1
+										? 'The flight counts again in Flights and totals. It comes back without a session.'
+										: `The ${count(ids)} flights count again in Flights and totals. They come back without a session.`}
+								</p>
 							</Modal>
-						</span>
-						<OverflowMenu
-							label="More actions"
-							variant="batch"
-							bind:trigger={overflow}
-							items={[
-								...(can('sessions.edit')
-									? [
-											{
-												label: 'Add to session',
-												onselect: () => (addOpen = true),
-												phoneOnly: true
-											},
-											{ label: 'Remove from session', onselect: () => (removeOpen = true) }
-										]
-									: []),
-								...(can('flights.set_pilot')
-									? [{ label: 'Set pilot', onselect: () => (pilotOpen = true) }]
-									: []),
-								...(can('flights.move')
-									? [{ label: 'Move to group', onselect: () => (groupOpen = true) }]
-									: []),
-								...(can('flights.archive')
-									? [{ label: 'Archive', onselect: () => (archiveOpen = true) }]
-									: [])
-							]}
-						/>
-						<Modal
-							title="Archive"
-							submitLabel="Archive"
-							action="?/archive"
-							error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
-							onsuccess={() => done(`${flights(count(ids))} archived.`)}
-							trigger={false}
-							bind:open={archiveOpen}
-							returnFocus={() => overflow ?? undefined}
-						>
-							{@render chosenFields(ids)}
-							<p>
-								{count(ids) === 1
-									? 'The flight is left out of Flights and totals, as if it hadn’t happened.'
-									: `The ${count(ids)} flights are left out of Flights and totals, as if they hadn’t happened.`}
-								You can restore archived flights from Flights with Status: Archived.
-							</p>
-						</Modal>
-						<Modal
-							title="Remove from session"
-							submitLabel="Remove"
-							action="?/removeFromSession"
-							error={form && 'removeMessage' in form ? form.removeMessage : undefined}
-							onsuccess={(result) => {
-								const count = Number(result?.removed ?? 0);
-								done(
-									count === 0
-										? 'None of these flights were in a session.'
-										: `${flights(count)} removed from ${count === 1 ? 'its session' : 'their sessions'}.`
-								);
-							}}
-							trigger={false}
-							bind:open={removeOpen}
-							returnFocus={() => overflow ?? undefined}
-						>
-							{@render chosenFields(ids)}
-							<p>
-								{count(ids) === 1
-									? 'The flight leaves its session. It stays in Flights, without a session.'
-									: `The ${count(ids)} flights leave the sessions they are in. They stay in Flights, without a session.`}
-							</p>
-						</Modal>
-						<Modal
-							title="Set pilot"
-							submitLabel="Set pilot"
-							action="?/setPilot"
-							error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
-							onsuccess={() => done(`${flights(count(ids))} changed.`)}
-							trigger={false}
-							bind:open={pilotOpen}
-							returnFocus={() => overflow ?? undefined}
-						>
-							{@render chosenFields(ids)}
-							<Select
-								label="Pilot"
-								name="pilot"
-								options={pilotOptions(data.choices, batchGroup(ids))}
-							/>
-							<p class="help">The flights keep their group.</p>
-						</Modal>
-						{#if can('flights.move')}
+						{:else}
+							<!-- The frequent actions as buttons (on phones only the first); the
+					     rest in the overflow menu, as the bar holds two or three. -->
 							<Modal
-								title="Move to group"
-								submitLabel="Move"
-								action="?/setGroup"
-								error={form && 'groupMessage' in form ? form.groupMessage : undefined}
-								onsuccess={() => done(`${flights(count(ids))} changed.`)}
+								title="New session"
+								submitLabel="Create"
+								action="?/newSession"
+								error={form && 'newSessionMessage' in form ? form.newSessionMessage : undefined}
+								onsuccess={() => done(`New session with ${flights(count(ids))}.`)}
+							>
+								{@render chosenFields(ids)}
+								<p>
+									The {flights(count(ids))} become one new session. Flights that are in a session leave
+									it.
+								</p>
+								<SessionGroupField
+									choice={sessionGroupChoice(data.account, data.choices.groups, batchGroups(ids))}
+								/>
+							</Modal>
+							<span class="wide-only">
+								<Modal
+									title="Add to session"
+									submitLabel="Add"
+									action="?/addToSession"
+									error={form && 'addMessage' in form ? form.addMessage : undefined}
+									onsuccess={() => done(`${flights(count(ids))} added to the session.`)}
+									bind:open={addOpen}
+									returnFocus={() => (wide.current ? undefined : (overflow ?? undefined))}
+								>
+									{@render chosenFields(ids)}
+									<SessionChoice flights={selectedRows(ids)} timeZone={data.timeZone} />
+									<p class="help">Flights that are in another session leave it.</p>
+								</Modal>
+							</span>
+							<OverflowMenu
+								label="More actions"
+								variant="batch"
+								bind:trigger={overflow}
+								items={[
+									...(can('sessions.edit')
+										? [
+												{
+													label: 'Add to session',
+													onselect: () => (addOpen = true),
+													phoneOnly: true
+												},
+												{ label: 'Remove from session', onselect: () => (removeOpen = true) }
+											]
+										: []),
+									...(can('flights.set_pilot')
+										? [{ label: 'Set pilot', onselect: () => (pilotOpen = true) }]
+										: []),
+									...(can('flights.move')
+										? [{ label: 'Move to group', onselect: () => (groupOpen = true) }]
+										: []),
+									...(can('flights.archive')
+										? [{ label: 'Archive', onselect: () => (archiveOpen = true) }]
+										: [])
+								]}
+							/>
+							<Modal
+								title="Archive"
+								submitLabel="Archive"
+								action="?/archive"
+								error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
+								onsuccess={() => done(`${flights(count(ids))} archived.`)}
 								trigger={false}
-								bind:open={groupOpen}
+								bind:open={archiveOpen}
 								returnFocus={() => overflow ?? undefined}
 							>
 								{@render chosenFields(ids)}
-								<Select label="Group" name="group_id" options={groupOptions} />
-								<p class="help">The flights keep their pilot and session.</p>
+								<p>
+									{count(ids) === 1
+										? 'The flight is left out of Flights and totals, as if it hadn’t happened.'
+										: `The ${count(ids)} flights are left out of Flights and totals, as if they hadn’t happened.`}
+									You can restore archived flights from Flights with Status: Archived.
+								</p>
 							</Modal>
+							<Modal
+								title="Remove from session"
+								submitLabel="Remove"
+								action="?/removeFromSession"
+								error={form && 'removeMessage' in form ? form.removeMessage : undefined}
+								onsuccess={(result) => {
+									const count = Number(result?.removed ?? 0);
+									done(
+										count === 0
+											? 'None of these flights were in a session.'
+											: `${flights(count)} removed from ${count === 1 ? 'its session' : 'their sessions'}.`
+									);
+								}}
+								trigger={false}
+								bind:open={removeOpen}
+								returnFocus={() => overflow ?? undefined}
+							>
+								{@render chosenFields(ids)}
+								<p>
+									{count(ids) === 1
+										? 'The flight leaves its session. It stays in Flights, without a session.'
+										: `The ${count(ids)} flights leave the sessions they are in. They stay in Flights, without a session.`}
+								</p>
+							</Modal>
+							<Modal
+								title="Set pilot"
+								submitLabel="Set pilot"
+								action="?/setPilot"
+								error={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
+								onsuccess={() => done(`${flights(count(ids))} changed.`)}
+								trigger={false}
+								bind:open={pilotOpen}
+								returnFocus={() => overflow ?? undefined}
+							>
+								{@render chosenFields(ids)}
+								<Select
+									label="Pilot"
+									name="pilot"
+									options={pilotOptions(data.choices, batchGroup(ids))}
+								/>
+								<p class="help">The flights keep their group.</p>
+							</Modal>
+							{#if can('flights.move')}
+								<Modal
+									title="Move to group"
+									submitLabel="Move"
+									action="?/setGroup"
+									error={form && 'groupMessage' in form ? form.groupMessage : undefined}
+									onsuccess={() => done(`${flights(count(ids))} changed.`)}
+									trigger={false}
+									bind:open={groupOpen}
+									returnFocus={() => overflow ?? undefined}
+								>
+									{@render chosenFields(ids)}
+									<Select label="Group" name="group_id" options={groupOptions} />
+									<p class="help">The flights keep their pilot and session.</p>
+								</Modal>
+							{/if}
 						{/if}
-					{/if}
-				{/snippet}
-			</DataTable>
-			<Pagination
-				page={data.state.page}
-				size={data.state.size}
-				total={data.total}
-				sizes={PAGE_SIZES}
-				noun="flights"
-				href={(page, size) => href({ ...data.state, page, size })}
-			/>
+					{/snippet}
+				</DataTable>
+				<Pagination
+					page={data.state.page}
+					size={data.state.size}
+					total={data.total}
+					sizes={PAGE_SIZES}
+					noun="flights"
+					href={(page, size) => href({ ...data.state, page, size })}
+				/>
+			{/if}
 		{/if}
 	</Column>
 </Grid>

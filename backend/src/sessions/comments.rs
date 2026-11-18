@@ -43,19 +43,21 @@ pub async fn of_session(db: &mut PgConnection, session: Uuid) -> sqlx::Result<Ve
     .await
 }
 
-/// Adds the actor's comment to a session, and returns it.
+/// Adds the actor's comment to a session, and returns it. Under the sessions
+/// lock, so grouping can't merge the session away in between.
 pub async fn add(
     db: &mut PgConnection,
     actor: &Actor,
     session: Uuid,
     body: &str,
 ) -> ApiResult<Uuid> {
-    let groups = db::groups_of(db, &[session])
+    let mut tx = db::locked(db).await?;
+    let groups = db::groups_of(&mut tx, &[session])
         .await?
         .ok_or(ApiError::NotFound)?;
     policy::change_sessions(&actor.grants, &groups)?;
     let body = text(body)?;
-    Ok(sqlx::query_scalar!(
+    let id = sqlx::query_scalar!(
         // A comment is a person's change: grouping leaves the session as it
         // is, also after the comment is deleted.
         "with changed as (update sessions set changed_at = now() where id = $1)
@@ -65,8 +67,10 @@ pub async fn add(
         actor.user_id,
         body
     )
-    .fetch_one(&mut *db)
-    .await?)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(id)
 }
 
 /// Changes the text of one of the actor's own comments. It is marked edited

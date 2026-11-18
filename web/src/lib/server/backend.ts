@@ -204,6 +204,13 @@ export interface Neighbours {
 	total: number;
 }
 
+/** A flight's place in a list, with when its neighbours take off, from
+ * `GET /api/flights/{id}/neighbours`. */
+export interface FlightNeighbours extends Neighbours {
+	previous_takeoff_at: string | null;
+	next_takeoff_at: string | null;
+}
+
 /** The pilots and groups to choose from when changing flights, sessions and
  * equipment, from `GET /api/flights/choices`. Which changes the user may
  * make is in their permissions. */
@@ -227,7 +234,15 @@ export interface Pilot {
 /** One page of `GET /api/flights`. */
 export interface FlightPage {
 	flights: FlightSummary[];
+	/** With `tracks=1`: the flights' coarse tracks, [lon, lat] points. */
+	tracks?: { id: string; track: number[][] }[];
 	total: number;
+}
+
+/** When the nearest flights before and after a period take off, `GET /api/flights/around`. */
+export interface FlightsAround {
+	before: string | null;
+	after: string | null;
 }
 
 /** A role in a group; Admin only on the whole organisation. */

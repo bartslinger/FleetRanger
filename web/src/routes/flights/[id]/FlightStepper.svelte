@@ -29,7 +29,7 @@
 		const fromList =
 			url.pathname === resolve('/flights') ||
 			url.pathname.startsWith(`${resolve('/flights')}/suggestions/`);
-		return fromList ? parse(url.searchParams) : null;
+		return fromList ? parse(url.searchParams, page.data.timeZone) : null;
 	});
 
 	let place: Neighbours | null = $state(null);

@@ -185,6 +185,78 @@ pub async fn list(
     .await
 }
 
+/// A flight's track, its coordinates as [lon, lat, height] points, for a map
+/// of many flights.
+#[derive(Serialize)]
+pub struct FlightTrack {
+    pub id: Uuid,
+    pub track: Value,
+}
+
+/// The tracks of these flights. Only for flights the actor may see: the ids
+/// come from `list`.
+pub async fn tracks(db: &mut PgConnection, ids: &[Uuid]) -> sqlx::Result<Vec<FlightTrack>> {
+    sqlx::query_as!(
+        FlightTrack,
+        r#"select id, coalesce(track->'coordinates', '[]'::jsonb) as "track!"
+           from flights where id = any($1)"#,
+        ids,
+    )
+    .fetch_all(&mut *db)
+    .await
+}
+
+/// When the nearest flights outside a period take off: the last before it
+/// and the first after it, so the cards' arrows skip empty weeks and months.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Around {
+    pub before: Option<DateTime<Utc>>,
+    pub after: Option<DateTime<Utc>>,
+}
+
+/// The nearest flights in the scope's list with this filter that take off
+/// before `filter.from` and at or after `filter.to`, with the same filters
+/// as `list`. Without `from` nothing is before, without `to` nothing after.
+pub async fn around(
+    db: &mut PgConnection,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Around> {
+    sqlx::query_as!(
+        Around,
+        r#"select max(takeoff_at) filter (where takeoff_at < $6) as before,
+                  min(takeoff_at) filter (where takeoff_at >= $7) as after
+           from flights
+           where ($1
+                  or pilot_id = $2
+                  or group_id = any($13))
+             and ($3::text[] is null or aircraft_serial = any($3))
+             and ($4::text[] is null or rc_serial = any($4))
+             and ($5::bool is null or (session_id is not null) = $5)
+             and ($8::uuid[] is null or group_id = any($8))
+             and ($9::uuid[] is null or pilot_id = any($9) or ($10 and pilot_id is null))
+             and (archived_at is not null) = $11
+             and ($12::uuid[] is null or exists (select 1 from flight_areas fa
+                                                 where fa.flight_id = flights.id
+                                                   and fa.area_id = any($12)))"#,
+        scope.all,
+        scope.user_id,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.in_session,
+        filter.from,
+        filter.to,
+        filter.group_ids.as_deref(),
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
+        filter.archived,
+        filter.area_ids.as_deref(),
+        &scope.group_ids,
+    )
+    .fetch_one(&mut *db)
+    .await
+}
+
 /// One flight with its track, for the flight's page.
 #[derive(Serialize)]
 pub struct FlightDetail {
@@ -482,6 +554,9 @@ pub async fn ids(
 pub struct Neighbours {
     pub previous: Option<Uuid>,
     pub next: Option<Uuid>,
+    /// When they take off, so the cards can step on into their week or month.
+    pub previous_takeoff_at: Option<DateTime<Utc>>,
+    pub next_takeoff_at: Option<DateTime<Utc>>,
     pub position: i64,
     pub total: i64,
 }
@@ -502,6 +577,8 @@ pub async fn neighbours(
                select id,
                       lag(id) over w as previous,
                       lead(id) over w as next,
+                      lag(takeoff_at) over w as previous_takeoff_at,
+                      lead(takeoff_at) over w as next_takeoff_at,
                       row_number() over w as position,
                       count(*) over () as total
                from flights
@@ -540,7 +617,8 @@ pub async fn neighbours(
                        rc_serial)) end desc nulls last,
                    id)
            )
-           select previous, next, position as "position!", total as "total!"
+           select previous, next, previous_takeoff_at, next_takeoff_at,
+                  position as "position!", total as "total!"
            from listed where id = $8"#,
         sort.key.as_str(),
         sort.descending,
@@ -1074,6 +1152,76 @@ mod tests {
 
     async fn insert_id(db: &mut PgConnection, sql: &'static str) -> Uuid {
         sqlx::query_scalar(sql).fetch_one(&mut *db).await.unwrap()
+    }
+
+    /// The cards' arrows go to the nearest flights that pass the filter: one
+    /// taking off at the period's end is in the next period, one at its
+    /// start in it, and someone who can't see a flight isn't led to it.
+    #[sqlx::test]
+    async fn around_skips_to_the_nearest_flights(pool: sqlx::PgPool) {
+        let mut db = testing::db(&pool).await;
+        let pilot = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let other = insert_id(
+            &mut db,
+            "insert into users (name) values ('B') returning id",
+        )
+        .await;
+        let at =
+            |time: &str| -> DateTime<Utc> { format!("2026-10-12T{time}:00Z").parse().unwrap() };
+        for time in ["08:00", "16:00"] {
+            let id = flight(&mut db, None, Some(pilot)).await;
+            sqlx::query("update flights set takeoff_at = $2, landed_at = $2 where id = $1")
+                .bind(id)
+                .bind(at(time))
+                .execute(&mut *db)
+                .await
+                .unwrap();
+        }
+        let scope = |user_id| FlightScope {
+            all: false,
+            user_id,
+            group_ids: Vec::new(),
+        };
+        let period = |from: &str, to: &str| Filter {
+            from: Some(at(from)),
+            to: Some(at(to)),
+            ..Filter::default()
+        };
+
+        let found = around(&mut db, &scope(pilot), &period("08:00", "16:00"))
+            .await
+            .unwrap();
+        assert_eq!(
+            found,
+            Around {
+                before: None,
+                after: Some(at("16:00"))
+            }
+        );
+        let found = around(&mut db, &scope(pilot), &period("09:00", "10:00"))
+            .await
+            .unwrap();
+        assert_eq!(
+            found,
+            Around {
+                before: Some(at("08:00")),
+                after: Some(at("16:00"))
+            }
+        );
+        let found = around(&mut db, &scope(other), &period("09:00", "10:00"))
+            .await
+            .unwrap();
+        assert_eq!(
+            found,
+            Around {
+                before: None,
+                after: None
+            }
+        );
     }
 
     async fn visible(db: &mut PgConnection, scope: &FlightScope) -> Vec<Uuid> {

@@ -1,3 +1,4 @@
+import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { parsePilot } from '#lib/pilots.js';
 import { sessionGroup } from '#lib/groups.js';
 import { fail, redirect } from '@sveltejs/kit';
@@ -8,30 +9,48 @@ import {
 	type Devices,
 	type FlightChoices,
 	type FlightPage,
+	type FlightsAround,
 	type SuggestionPage
 } from '#lib/server/backend.js';
-import { apiQuery, parse, query } from './logbook.js';
+import { apiQuery, parse, query, showsCards } from './logbook.js';
 
 export async function load({ fetch, locals, url }) {
-	const state = parse(url.searchParams);
+	const state = parse(url.searchParams, timeZone(locals));
 	const api = apiQuery(state, timeZone(locals));
+	const cards = showsCards(state);
 	// The suggestions page through suggestions; the list's first page still
-	// counts the flights.
+	// counts the flights. The cards' map shows all their tracks, coarse.
 	const listApi = new URLSearchParams(api);
 	if (state.suggestions) listApi.set('page', '1');
-	const [{ flights, total }, suggestions, choices, devices] = await Promise.all([
+	if (cards) listApi.set('tracks', '1');
+	// The cards' arrows go to the nearest periods with flights.
+	const noneAround: FlightsAround = { before: null, after: null };
+	const [{ flights, tracks, total }, suggestions, choices, devices, around] = await Promise.all([
 		get<FlightPage>(fetch, `/api/flights?${listApi}`),
 		state.suggestions ? get<SuggestionPage>(fetch, `/api/flights/suggestions?${api}`) : null,
 		get<FlightChoices>(fetch, '/api/flights/choices'),
 		// The filters' options, narrowed by the other filters.
-		get<Devices>(fetch, `/api/flights/devices?${api}`)
+		get<Devices>(fetch, `/api/flights/devices?${api}`),
+		cards ? get<FlightsAround>(fetch, `/api/flights/around?${api}`) : noneAround
 	]);
 
 	// Past the last page, e.g. after flights were removed: go to the last one.
 	const pages = Math.max(1, Math.ceil((suggestions?.total ?? total) / state.size));
-	if (state.page > pages) redirect(307, `${url.pathname}${query({ ...state, page: pages })}`);
+	if (!cards && state.page > pages) {
+		redirect(307, `${url.pathname}${query({ ...state, page: pages })}`);
+	}
 
-	return { flights, total, suggestions, state, choices, devices };
+	return {
+		flights,
+		tracks: tracks ?? [],
+		total,
+		suggestions,
+		state,
+		choices,
+		devices,
+		around,
+		mapboxToken: MAPBOX_ACCESS_TOKEN
+	};
 }
 
 /**
@@ -50,7 +69,7 @@ async function flightIds(
 	if (form.get('all') !== 'true') return { ids: form.getAll('flight_id').map(String) };
 	const { ids } = await get<{ ids: string[] }>(
 		fetch,
-		`/api/flights/ids?${apiQuery(parse(url.searchParams), zone)}`
+		`/api/flights/ids?${apiQuery(parse(url.searchParams, zone), zone)}`
 	);
 	const expected = Number(form.get('expected'));
 	if (ids.length !== expected) {
