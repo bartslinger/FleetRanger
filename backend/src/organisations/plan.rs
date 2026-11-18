@@ -67,8 +67,10 @@ impl Plan {
 }
 
 /// The plan of the connection's organisation, locked until the transaction
-/// ends, so two additions can't both take the last place.
-async fn lock(db: &mut PgConnection) -> sqlx::Result<Plan> {
+/// ends, so two additions can't both take the last place. Taken before any
+/// row lock: whoever changes logins takes it first (`users::db`), so the
+/// lock order is always the same and no two changes deadlock.
+pub async fn lock(db: &mut PgConnection) -> sqlx::Result<Plan> {
     sqlx::query!(
         "select pg_advisory_xact_lock(hashtext('fleetranger.plan.' || current_setting('app.organisation_id', true)))"
     )

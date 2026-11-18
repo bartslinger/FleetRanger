@@ -104,6 +104,8 @@ pub async fn insert(
     fields: &UserFields<'_>,
 ) -> sqlx::Result<Result<Uuid, Limit>> {
     let mut tx = db.begin().await?;
+    // The plan lock first, always before row locks (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let id = sqlx::query_scalar!(
         "insert into users (name) values ($1) returning id",
         fields.name,
@@ -124,6 +126,8 @@ pub async fn update(
     fields: &UserFields<'_>,
 ) -> sqlx::Result<Result<(), Refused>> {
     let mut tx = db.begin().await?;
+    // The plan lock first, always before row locks (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let admins = lock_active_admins(&mut tx).await?;
     let updated = sqlx::query!("update users set name = $2 where id = $1", id, fields.name)
         .execute(&mut *tx)
@@ -273,6 +277,8 @@ pub async fn set_archived(
     archived: bool,
 ) -> sqlx::Result<Result<(), Refused>> {
     let mut tx = db.begin().await?;
+    // The plan lock first, always before row locks (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let admins = lock_active_admins(&mut tx).await?;
     if archived && admins == [id] {
         return Ok(Err(Refused::LastAdmin));
