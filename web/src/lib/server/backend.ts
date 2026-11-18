@@ -204,6 +204,13 @@ export interface Neighbours {
 	total: number;
 }
 
+/** A flight's place in a list, with when its neighbours take off, from
+ * `GET /api/flights/{id}/neighbours`. */
+export interface FlightNeighbours extends Neighbours {
+	previous_takeoff_at: string | null;
+	next_takeoff_at: string | null;
+}
+
 /** The pilots and groups to choose from when changing flights, sessions and
  * equipment, from `GET /api/flights/choices`. Which changes the user may
  * make is in their permissions. */

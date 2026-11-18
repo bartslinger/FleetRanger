@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
@@ -20,7 +20,8 @@
 	import Pagination from '#lib/ui/Pagination.svelte';
 	import Select from '#lib/ui/Select.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
-	import { dateTime, daySpan, distance, duration, month } from '#lib/format.js';
+	import { dateTime, day, daySpan, distance, duration, month } from '#lib/format.js';
+	import FlightFacts from '#lib/FlightFacts.svelte';
 	import { dayOf, periodName, periodOf, type Period } from '#lib/period.js';
 	import CardsView from '#lib/CardsView.svelte';
 	import PeriodToolbar from '#lib/PeriodToolbar.svelte';
@@ -238,28 +239,109 @@
 		}
 		return groups;
 	});
-	const flightHref = (id: string) => resolve('/flights/[id]', { id });
+
+	// A flight open over the cards, in the URL (`flight=`), as a session is
+	// over Sessions': a card is a link to it, the layout's load brings it. The
+	// one map stays and flies to the flight, its facts take the cards' place.
+	// Back closes it, as ✕ and Esc do.
+	const openFlight = $derived(data.openFlight);
+	const opened = $derived(openFlight?.id ?? null);
+	const flightHref = (id: string) => `${resolve('/flights')}${query(data.state, id)}`;
+
+	// Opened from the cards in this tab, Back returns to them as they were
+	// (their scroll position too); opened directly, or stepped into another
+	// week or month, ✕ replaces it with the cards of that one.
+	let cameFromList = false;
+	const periodParams = (url: URL) =>
+		`${url.searchParams.get('week')} ${url.searchParams.get('month')}`;
+	afterNavigate(({ from, to }) => {
+		if (!to?.url.searchParams.has('flight')) cameFromList = false;
+		else if (from && periodParams(from.url) !== periodParams(to.url)) cameFromList = false;
+		else if (
+			from &&
+			from.url.pathname === to.url.pathname &&
+			!from.url.searchParams.has('flight')
+		) {
+			cameFromList = true;
+		}
+	});
+	function close() {
+		if (cameFromList) history.back();
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- href() resolves
+		else goto(href(data.state), { replaceState: true });
+	}
+	// Esc closes the open flight, as its ✕ does, unless something over it (a
+	// dialog, a menu) takes the key first.
+	function closeOnEscape(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !opened || event.defaultPrevented) return;
+		if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+		close();
+	}
+
+	// The flights before and after it with the list's filters, also in
+	// another week or month, shown in theirs; in time like the periods.
+	const neighbourHref = (id: string | null, takeoff: string | null) =>
+		id && takeoff
+			? `${resolve('/flights')}${query(
+					{
+						...data.state,
+						period: periodOf(data.state.period.unit, dayOf(takeoff, data.timeZone))
+					},
+					id
+				)}`
+			: null;
+	const earlierHref = $derived(
+		neighbourHref(
+			data.flightNeighbours?.next ?? null,
+			data.flightNeighbours?.next_takeoff_at ?? null
+		)
+	);
+	const laterHref = $derived(
+		neighbourHref(
+			data.flightNeighbours?.previous ?? null,
+			data.flightNeighbours?.previous_takeoff_at ?? null
+		)
+	);
+	// The toolbar's two lines: the period and its count, or the open
+	// flight's day and its place, counted in time (the list is newest first).
+	const openedIndex = $derived(data.flights.findIndex((flight) => flight.id === opened));
+	const toolbarLines: [string, string] = $derived(
+		openFlight
+			? [
+					day(openFlight.takeoff_at, data.timeZone, true),
+					openedIndex >= 0
+						? `${data.flights.length - openedIndex} of ${data.flights.length} · ${periodName(data.state.period)}`
+						: periodName(data.state.period)
+				]
+			: [periodName(data.state.period), flights(data.total)]
+	);
 
 	// The flights with a track, in the cards' order, and their tracks.
 	const trackOf = $derived(new Map(data.tracks.map((flight) => [flight.id, flight.track])));
 	const mapFlights = $derived(
 		data.flights.filter((flight) => (trackOf.get(flight.id)?.length ?? 0) > 1)
 	);
+	// The map: the open flight's full track, else the cards'. It flies from
+	// one to the other: to a flight, to the next, back to the period.
 	const mapTracks = $derived(
-		mapFlights.map((flight) => ({
-			type: 'LineString' as const,
-			coordinates: trackOf.get(flight.id) ?? []
-		}))
+		openFlight
+			? [openFlight.track]
+			: mapFlights.map((flight) => ({
+					type: 'LineString' as const,
+					coordinates: trackOf.get(flight.id) ?? []
+				}))
 	);
 	// The flight pointed at: its card (or focused), or its track on the map.
 	let pointed: string | null = $state(null);
 	let pointedTrack: string | null = $state(null);
 	const highlight = $derived.by(() => {
+		if (openFlight) return [];
 		const index = mapFlights.findIndex((flight) => flight.id === (pointed ?? pointedTrack));
 		return index < 0 ? [] : [index];
 	});
 	function openTrack(index: number) {
 		const flight = mapFlights[index];
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- flightHref resolves
 		if (flight) goto(flightHref(flight.id));
 	}
 	const trackTip = (index: number) => {
@@ -281,35 +363,45 @@
 	{/if}
 {/snippet}
 
-<PageHeader title="Flights" {crumb}>
+<!-- A flight open: its title, the breadcrumb back to the cards (through the
+     history, so they are as they were) and no view switcher, as on Sessions. -->
+<svelte:window onkeydown={closeOnEscape} />
+
+<PageHeader
+	title={openFlight ? `Flight ${dateTime(openFlight.takeoff_at, data.timeZone)}` : 'Flights'}
+	breadcrumb={openFlight
+		? [{ href: href(data.state), label: 'Flights', follow: close }]
+		: undefined}
+	crumb={openFlight ? `Flight ${dateTime(openFlight.takeoff_at, data.timeZone)}` : crumb}
+>
 	{#snippet actions()}
 		<!-- Cards and Table are the same flights; with "Without session" on,
 		     they can also be seen as suggested sessions (user's decision,
 		     2026-11-18: Suggestions stays behind that filter). -->
-		<ViewSwitcher
-			label="View"
-			options={[
-				{
-					label: 'Cards',
-					href: href({ ...data.state, suggestions: false, view: 'cards', page: 1 }),
-					selected: showsCards(data.state)
-				},
-				{
-					label: 'Table',
-					href: href({ ...data.state, suggestions: false, view: 'table', page: 1 }),
-					selected: !data.state.suggestions && data.state.view === 'table'
-				},
-				...(data.state.withoutSession
-					? [
-							{
-								label: 'Suggestions',
-								href: href({ ...data.state, suggestions: true, page: 1 }),
-								selected: data.state.suggestions
-							}
-						]
-					: [])
-			]}
-		/>
+		{#if !opened}<ViewSwitcher
+				label="View"
+				options={[
+					{
+						label: 'Cards',
+						href: href({ ...data.state, suggestions: false, view: 'cards', page: 1 }),
+						selected: showsCards(data.state)
+					},
+					{
+						label: 'Table',
+						href: href({ ...data.state, suggestions: false, view: 'table', page: 1 }),
+						selected: !data.state.suggestions && data.state.view === 'table'
+					},
+					...(data.state.withoutSession
+						? [
+								{
+									label: 'Suggestions',
+									href: href({ ...data.state, suggestions: true, page: 1 }),
+									selected: data.state.suggestions
+								}
+							]
+						: [])
+				]}
+			/>{/if}
 	{/snippet}
 </PageHeader>
 
@@ -341,7 +433,8 @@
 		{at}
 		{previousHref}
 		{nextHref}
-		lines={[periodName(data.state.period), flights(data.total)]}
+		lines={toolbarLines}
+		open={openFlight ? { noun: 'flight', earlierHref, laterHref, onclose: close } : null}
 	>
 		{#snippet tools()}
 			<ListFilters
@@ -370,7 +463,11 @@
 			<!-- The map and the cards, also for a period without flights, so the
 			     layout doesn't change: the empty state takes the cards' place,
 			     under their toolbar. Below lg there's no map. -->
-			<CardsView opened={false} showMap={wideMap.current} toolbar={periodToolbar}>
+			<CardsView
+				opened={opened !== null}
+				showMap={wideMap.current || openFlight !== null}
+				toolbar={periodToolbar}
+			>
 				{#snippet cards()}
 					{#if data.total === 0}
 						<EmptyState
@@ -424,23 +521,39 @@
 						</section>
 					{/each}
 				{/snippet}
+				{#snippet facts()}
+					{#if openFlight}
+						<div class="panel">
+							<FlightFacts
+								flight={openFlight}
+								account={data.account}
+								choices={data.choices}
+								timeZone={data.timeZone}
+								pilotMessage={form && 'pilotMessage' in form ? form.pilotMessage : undefined}
+								groupMessage={form && 'groupMessage' in form ? form.groupMessage : undefined}
+							/>
+						</div>
+					{/if}
+				{/snippet}
 				{#snippet map()}
 					<!-- The tracks aren't focusable: the cards are the same flights. -->
 					<TrackMap
 						tracks={mapTracks}
 						{highlight}
-						ends={false}
+						ends={openFlight !== null}
+						areas={openFlight ? data.openAreas : []}
 						reserveLegend
 						fly
 						height={MAP_HEIGHT}
-						ontrackclick={openTrack}
-						ontrackhover={(index) =>
-							(pointedTrack = index === null ? null : (mapFlights[index]?.id ?? null))}
-						tracktip={trackTip}
+						ontrackclick={opened ? undefined : openTrack}
+						ontrackhover={opened
+							? undefined
+							: (index) => (pointedTrack = index === null ? null : (mapFlights[index]?.id ?? null))}
+						tracktip={opened ? undefined : trackTip}
 						token={data.mapboxToken}
-						label="Map of the flights in {periodName(
-							data.state.period
-						)}; the list beside it has the same flights"
+						label={openFlight
+							? 'Map of the flight’s track'
+							: `Map of the flights in ${periodName(data.state.period)}; the list beside it has the same flights`}
 					/>
 				{/snippet}
 			</CardsView>
