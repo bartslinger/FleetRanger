@@ -15,6 +15,8 @@
 		hideLabel?: boolean;
 		checked?: boolean;
 		indeterminate?: boolean;
+		/** Helper text below it (Carbon's checkbox helper text); an error replaces it. */
+		helper?: string;
 		/** Error message below it; marks the box invalid (Carbon's error state). */
 		error?: string;
 	}
@@ -25,6 +27,7 @@
 		hideLabel = false,
 		checked = $bindable(false),
 		indeterminate = false,
+		helper,
 		error,
 		...rest
 	}: Props = $props();
@@ -40,7 +43,7 @@
 			{indeterminate}
 			class:invalid={error}
 			aria-invalid={error ? true : undefined}
-			aria-describedby={error ? `${id}-error` : undefined}
+			aria-describedby={error ? `${id}-error` : helper ? `${id}-helper` : undefined}
 			{...rest}
 		/>
 		<span class:visually-hidden={hideLabel}
@@ -53,6 +56,11 @@
 	<div class="with-error">
 		{@render control()}
 		<p id="{id}-error" class="error">{error}</p>
+	</div>
+{:else if helper}
+	<div class="with-error">
+		{@render control()}
+		<p id="{id}-helper" class="helper">{helper}</p>
 	</div>
 {:else}
 	{@render control()}
@@ -149,11 +157,20 @@
 		gap: var(--cds-spacing-02);
 	}
 
-	.error {
+	/* The error or helper text under the box, Carbon's helper type. */
+	.error,
+	.helper {
 		margin: 0;
-		color: var(--cds-text-error);
 		font-size: var(--cds-helper-text-01-font-size);
 		line-height: var(--cds-helper-text-01-line-height);
 		letter-spacing: var(--cds-helper-text-01-letter-spacing);
+	}
+
+	.error {
+		color: var(--cds-text-error);
+	}
+
+	.helper {
+		color: var(--cds-text-secondary);
 	}
 </style>

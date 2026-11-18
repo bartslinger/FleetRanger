@@ -68,7 +68,12 @@
 						required
 					/>
 					<input type="hidden" name="areas_shown" value="on" />
-					<Checkbox label="Areas" name="areas" checked={organisation.areas} />
+					<Checkbox
+						label="Areas"
+						name="areas"
+						helper="Time flown in areas of land you draw on a map."
+						checked={organisation.areas}
+					/>
 					{#if organisation.mcp_offered}
 						<input type="hidden" name="mcp_offered" value="on" />
 						<!-- A checkbox, not a toggle: it applies only with Save (Carbon's
