@@ -423,7 +423,7 @@
 			</form>
 		{:else if openFlight && canArchiveOpen && openFlight.session_id === null}
 			<Modal
-				title="Archive"
+				title="Archive flight"
 				triggerKind="tertiary"
 				submitLabel="Archive"
 				action="?/archive"
@@ -431,10 +431,7 @@
 				onsuccess={() => toast('Flight archived.')}
 			>
 				<input type="hidden" name="flight_id" value={openFlight.id} />
-				<p>
-					The flight is left out of Flights and totals, as if it hadn’t happened. You can restore it
-					later.
-				</p>
+				<p>The flight is left out of Flights and totals. You can restore it later.</p>
 			</Modal>
 		{/if}
 	{/snippet}
@@ -501,11 +498,13 @@
 				{#snippet cards()}
 					{#if data.total === 0}
 						<EmptyState
-							title="No flights in {periodName(data.state.period)}"
+							title={cardsFiltering || previousHref || nextHref
+								? `No flights in ${periodName(data.state.period)}`
+								: 'No flights yet'}
 							body={cardsFiltering
-								? 'No flights you can see in this period pass these filters.'
+								? 'No flights in this period match your filters.'
 								: previousHref || nextHref
-									? 'Step to another period with the arrows, or see all flights in the table.'
+									? 'Use the arrows to see another period, or show all flights in the table.'
 									: 'Flights appear here when flight logs from your remote controllers are imported.'}
 						>
 							{#snippet action()}

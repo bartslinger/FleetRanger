@@ -524,12 +524,8 @@
 		{:else if data.state.view === 'table' && data.total === 0}
 			<EmptyState
 				title="No sessions yet"
-				body="A pilot’s flights are grouped into sessions once the flights have a pilot."
-			>
-				{#snippet action()}
-					<Link href={resolve('/flights')}>Set pilots on the Flights page</Link>
-				{/snippet}
-			</EmptyState>
+				body="Flights from your remote controllers are grouped into sessions here."
+			/>
 		{/if}
 		<!-- The map and the cards, also for a period without sessions, so the
 		     layout doesn't change (user's feedback): the empty state takes
@@ -546,12 +542,14 @@
 				{#snippet cards()}
 					{#if data.total === 0}
 						<EmptyState
-							title="No sessions in {periodName(data.state.period)}"
+							title={cardsFiltering || previousHref || nextHref
+								? `No sessions in ${periodName(data.state.period)}`
+								: 'No sessions yet'}
 							body={cardsFiltering
-								? 'No sessions you can see in this period have a flight that passes these filters.'
+								? 'No sessions in this period match your filters.'
 								: previousHref || nextHref
-									? 'Step to another period with the arrows, or see all sessions in the table.'
-									: 'No sessions yet.'}
+									? 'Use the arrows to see another period, or show all sessions in the table.'
+									: 'Flights from your remote controllers are grouped into sessions here.'}
 						>
 							{#snippet action()}
 								{#if cardsFiltering}
