@@ -21,7 +21,7 @@ export async function load({ fetch, locals, url }) {
 	if (!id) return { openFlight: null, openAreas: [] as Area[], flightNeighbours: null };
 	// Stepping goes on into the weeks or months around, newest first, with
 	// the list's other filters, so without its days.
-	const state = parse(url.searchParams, timeZone(locals));
+	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
 	const filters = apiFilters({ ...state, from: null, to: null }, timeZone(locals));
 	filters.set('sort', '-takeoff_at');
 	const [openFlight, openAreas, flightNeighbours] = await Promise.all([

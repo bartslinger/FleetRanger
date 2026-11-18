@@ -32,7 +32,9 @@ function period(params: URLSearchParams, thisMonth: string): Period {
 	return periodOf('month', thisMonth);
 }
 
-export function parse(params: URLSearchParams, timeZone: string): SessionListState {
+/** With `areas` false (the organisation doesn't use them), an area filter in
+ * the URL is left out: it would filter by something not shown. */
+export function parse(params: URLSearchParams, timeZone: string, areas = true): SessionListState {
 	const page = Number.parseInt(params.get('page') ?? '', 10);
 	const size = Number.parseInt(params.get('size') ?? '', 10);
 	const from = params.get('from');
@@ -48,7 +50,7 @@ export function parse(params: URLSearchParams, timeZone: string): SessionListSta
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
 		groups: list(params.get('group')),
-		areas: list(params.get('area')),
+		areas: areas ? list(params.get('area')) : [],
 		from: isDay(from) ? from : null,
 		to: isDay(from) && isDay(to) && to > from ? to : null
 	};

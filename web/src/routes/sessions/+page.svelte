@@ -406,8 +406,8 @@
 			numeric: true,
 			format: (flight) => distance(flight.distance_m)
 		},
-		// Only when one of the flights crossed an area.
-		...(openFlights.some((flight) => flight.areas.length > 0)
+		// Only where areas are used and one of the flights crossed one.
+		...(usesAreas(data.account) && openFlights.some((flight) => flight.areas.length > 0)
 			? [
 					{
 						key: 'areas',

@@ -56,7 +56,9 @@ function period(params: URLSearchParams, thisMonth: string): Period {
 	return periodOf('month', thisMonth);
 }
 
-export function parse(params: URLSearchParams, timeZone: string): LogbookState {
+/** With `areas` false (the organisation doesn't use them), an area filter in
+ * the URL is left out: it would filter by something not shown. */
+export function parse(params: URLSearchParams, timeZone: string, areas = true): LogbookState {
 	const page = Number.parseInt(params.get('page') ?? '', 10);
 	const size = Number.parseInt(params.get('size') ?? '', 10);
 	const sort = params.get('sort') ?? '';
@@ -76,7 +78,7 @@ export function parse(params: URLSearchParams, timeZone: string): LogbookState {
 		drones: list(params.get('drone')),
 		controllers: list(params.get('controller')),
 		groups: list(params.get('group')),
-		areas: list(params.get('area')),
+		areas: areas ? list(params.get('area')) : [],
 		withoutSession: !archived && params.get('session') === 'none',
 		suggestions:
 			!archived && params.get('session') === 'none' && params.get('view') === 'suggestions',

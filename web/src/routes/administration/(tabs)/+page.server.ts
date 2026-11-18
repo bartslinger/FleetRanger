@@ -17,7 +17,8 @@ export const actions = {
 			session_gap_minutes: Number(form.get('session_gap_minutes')),
 			// Left as it is where the install doesn't offer MCP.
 			mcp: offered ? form.has('mcp') : null,
-			areas: form.has('areas')
+			// Left as it is when the form had no Areas checkbox (one from before it).
+			areas: form.has('areas_shown') ? form.has('areas') : null
 		};
 		const result = await send<OrganisationSettings>(fetch, 'PUT', '/api/organisation', body);
 		if (!result.ok) return fail(result.status, { message: result.message });

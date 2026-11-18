@@ -1,4 +1,5 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
+import { usesAreas } from '#lib/groups.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
@@ -14,7 +15,7 @@ import { parsePilot } from '#lib/pilots.js';
 import { listFilters, parse, PERIOD_SIZE, query } from './list.js';
 
 export async function load({ fetch, locals, url }) {
-	const state = parse(url.searchParams, timeZone(locals));
+	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
 	const filters = listFilters(state, timeZone(locals));
 	const api = new URLSearchParams(filters);
 	// The cards show their whole period on one page.
