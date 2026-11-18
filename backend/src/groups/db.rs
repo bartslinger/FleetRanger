@@ -183,6 +183,10 @@ pub async fn delete(
     // Before the group locks, as pairing takes it before a code's row (see
     // `plan::lock`): moving a group's codes can't deadlock with pairing.
     crate::organisations::plan::lock(&mut tx).await?;
+    // Then the sessions lock, as grouping takes it before a group's row (a
+    // new session's foreign key): grouping can't merge sessions this moves,
+    // nor into the group this deletes.
+    crate::sessions::db::lock(&mut tx).await?;
     // Every group is locked, so two deletions can't each leave the other last.
     let groups = sqlx::query_scalar!("select id from groups order by id for update")
         .fetch_all(&mut *tx)
