@@ -3,7 +3,8 @@
 	A flight's facts in groups: who and where, when and how far, and its
 	equipment, with Change pilot and Move to group for who may. On the
 	flight's page and on Flights with the flight open; the dialogs post to
-	the flight page's actions either way.
+	the page's own actions with the flight's id, and the toast names what
+	the reloaded flight then has.
 -->
 <script lang="ts">
 	import { resolve } from '$app/paths';
@@ -30,9 +31,6 @@
 
 	let { flight, account, choices, timeZone, pilotMessage, groupMessage }: Props = $props();
 
-	// The flight page's actions, wherever the facts are.
-	const actions = $derived(resolve('/flights/[id]', { id: flight.id }));
-
 	const canSetPilot = $derived(may(account, 'flights.set_pilot', flight.group_id));
 	// Its group's own pilots first.
 	const pilotOptions = $derived(pilotOptions_(choices, sharedGroup([flight])));
@@ -46,12 +44,15 @@
 	const canMove = $derived(may(account, 'flights.move', flight.group_id));
 	const groupOptions = $derived(groupChoices(account, 'flights.move', choices.groups));
 	function groupSet(result: Record<string, unknown> | undefined) {
-		const group = result?.groupName as string;
+		// After the page reloaded its data: the flight as it is now.
+		const group = (result?.groupName as string | undefined) ?? flight.group_name;
 		toast(`Flight moved to ${group}.`);
 	}
 
 	function pilotSet(result: Record<string, unknown> | undefined) {
-		const name = (result?.pilotName as string | null) ?? 'Unknown';
+		const name =
+			((result && 'pilotName' in result ? result.pilotName : flight.pilot_name) as string | null) ??
+			'Unknown';
 		toast(`Pilot set to ${name}.`);
 	}
 	const time = (iso: string) => dateTime(iso, timeZone);
@@ -146,10 +147,11 @@
 							title="Change pilot"
 							triggerIcon={Edit}
 							submitLabel="Save"
-							action="{actions}?/setPilot"
+							action="?/setPilot"
 							error={pilotMessage}
 							onsuccess={pilotSet}
 						>
+							<input type="hidden" name="flight_id" value={flight.id} />
 							<Select label="Pilot" name="pilot" options={pilotOptions} value={pilotChoice} />
 							<p class="help">The flight keeps its group.</p>
 						</Modal>
@@ -160,10 +162,11 @@
 							title="Move to group"
 							triggerIcon={Edit}
 							submitLabel="Move"
-							action="{actions}?/setGroup"
+							action="?/setGroup"
 							error={groupMessage}
 							onsuccess={groupSet}
 						>
+							<input type="hidden" name="flight_id" value={flight.id} />
 							<Select
 								label="Group"
 								name="group_id"
