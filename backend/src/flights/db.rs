@@ -554,6 +554,9 @@ pub async fn ids(
 pub struct Neighbours {
     pub previous: Option<Uuid>,
     pub next: Option<Uuid>,
+    /// When they take off, so the cards can step on into their week or month.
+    pub previous_takeoff_at: Option<DateTime<Utc>>,
+    pub next_takeoff_at: Option<DateTime<Utc>>,
     pub position: i64,
     pub total: i64,
 }
@@ -574,6 +577,8 @@ pub async fn neighbours(
                select id,
                       lag(id) over w as previous,
                       lead(id) over w as next,
+                      lag(takeoff_at) over w as previous_takeoff_at,
+                      lead(takeoff_at) over w as next_takeoff_at,
                       row_number() over w as position,
                       count(*) over () as total
                from flights
@@ -612,7 +617,8 @@ pub async fn neighbours(
                        rc_serial)) end desc nulls last,
                    id)
            )
-           select previous, next, position as "position!", total as "total!"
+           select previous, next, previous_takeoff_at, next_takeoff_at,
+                  position as "position!", total as "total!"
            from listed where id = $8"#,
         sort.key.as_str(),
         sort.descending,
