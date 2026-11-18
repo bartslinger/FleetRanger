@@ -810,6 +810,9 @@ struct Me {
     /// Whether the organisation has more than one group: until then the web
     /// app shows no groups (user's decision, 2026-11-11).
     several_groups: bool,
+    /// Whether the organisation uses areas: off, the web app shows nothing
+    /// about them (user's decision, 2026-11-18).
+    areas: bool,
 }
 
 #[derive(Serialize)]
@@ -877,6 +880,7 @@ async fn me(
             name: admin.name,
         }),
         several_groups,
+        areas: settings.areas,
     }))
 }
 
