@@ -56,7 +56,10 @@ pub async fn add(
     policy::change_sessions(&actor.grants, &groups)?;
     let body = text(body)?;
     Ok(sqlx::query_scalar!(
-        "insert into session_comments (session_id, author_id, body) values ($1, $2, $3)
+        // A comment is a person's change: grouping leaves the session as it
+        // is, also after the comment is deleted.
+        "with changed as (update sessions set changed_at = now() where id = $1)
+         insert into session_comments (session_id, author_id, body) values ($1, $2, $3)
          returning id",
         session,
         actor.user_id,

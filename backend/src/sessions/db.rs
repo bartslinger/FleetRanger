@@ -710,7 +710,7 @@ async fn delete_empty(tx: &mut sqlx::PgConnection) -> sqlx::Result<()> {
 /// A pilot's flight also joins its controller's flights without a pilot, in a
 /// session no other pilot flew in. With no such session, it starts a new one
 /// of the flight's group. Sessions it bridges merge into one,
-/// if nobody changed or commented on them, so a backlog comes out the same
+/// if nobody changed them (a comment is a change), so a backlog comes out the same
 /// in any order; a person's changes are never undone.
 pub async fn place_upload(
     db: &mut PgConnection,
@@ -740,10 +740,7 @@ pub async fn place_upload(
         r#"select f.session_id as "session_id!",
                   (select array_agg(distinct o.pilot_id) filter (where o.pilot_id is not null)
                    from flights o where o.session_id = f.session_id) as pilots,
-                  bool_and(s.changed_at is null
-                           and not exists (select 1 from session_comments c
-                                           where c.session_id = f.session_id))
-                      as "untouched!"
+                  bool_and(s.changed_at is null) as "untouched!"
            from flights f
            join sessions s on s.id = f.session_id
            where s.group_id = $5
@@ -771,7 +768,7 @@ pub async fn place_upload(
     let session = match candidates.next() {
         Some(nearest) => {
             // Sessions it bridges become one, so a backlog comes out the same
-            // in any order; only sessions nobody changed or commented on
+            // in any order; only sessions nobody changed
             // (user's decision, 2026-11-18), and never across pilots.
             let mut pilots: Vec<Uuid> = nearest.pilots.unwrap_or_default();
             pilots.extend(flight.pilot_id);
@@ -1106,26 +1103,22 @@ mod tests {
         assert_eq!(unchanged, 0);
     }
 
-    /// A session someone commented on isn't merged by itself.
+    /// A session someone commented on isn't merged by itself, also after the
+    /// comment is deleted.
     #[sqlx::test]
     async fn a_commented_session_isnt_merged(pool: sqlx::PgPool) {
         let mut db = crate::testing::db(&pool).await;
-        let author = insert_id(
-            &mut db,
-            "insert into users (name) values ('A') returning id",
-        )
-        .await;
+        let author = crate::testing::user(&mut db, "A", &["admin"]).await;
+        let actor = crate::testing::actor(&mut db, author).await;
         let early = from_controller(&mut db, None, "06:00", "06:20").await;
         let late = from_controller(&mut db, None, "10:00", "10:20").await;
-        sqlx::query(
-            "insert into session_comments (session_id, author_id, body)
-             select session_id, $2, 'Test comment' from flights where id = $1",
-        )
-        .bind(early)
-        .bind(author)
-        .execute(&mut *db)
-        .await
-        .unwrap();
+        let session = session_of(&mut db, early).await.unwrap();
+        let added = super::super::comments::add(&mut db, &actor, session, "Test comment").await;
+        assert!(added.is_ok());
+        sqlx::query("delete from session_comments")
+            .execute(&mut *db)
+            .await
+            .unwrap();
         from_controller(&mut db, None, "08:00", "08:20").await;
         assert_ne!(
             session_of(&mut db, early).await,
