@@ -14,7 +14,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
 
-Everyone is a user, with roles in groups (and Admin on the whole organisation) and an optional login; admins manage users, groups and equipment in the web app. Sessions are the start page; the logbook of all flights is under "Flights", which sets the pilot, group and session of flights in batches. Uploaded and imported flights join a session by themselves (per pilot, or controller when there is no pilot, and group, on the same night's sync); the rest are grouped by hand or from suggested sessions to review. The remote controller app runs on a DJI RC Pro Enterprise: it pairs with a code from the web app, asks who's flying and for which group, opens DJI Pilot 2 and uploads the finished logs the server lacks. The audit log waits until there is a working version of the app.
+Everyone is a user, with roles in groups (and Admin on the whole organisation) and an optional login; admins manage users, groups and equipment in the web app. Sessions are the start page; the logbook of all flights is under "Flights", which sets the pilot, group and session of flights in batches. Uploaded and imported flights join a session by themselves (per pilot, or controller when there is no pilot, and group, however late they come in); the rest are grouped by hand or from suggested sessions to review. The remote controller app runs on a DJI RC Pro Enterprise: it pairs with a code from the web app, asks who's flying and for which group, opens DJI Pilot 2 and uploads the finished logs the server lacks. The audit log waits until there is a working version of the app.
 
 ## Phase 1: backend skeleton
 
@@ -40,7 +40,7 @@ Everyone is a user, with roles in groups (and Admin on the whole organisation) a
 - [x] Automatic grouping by time gap
 - [x] Assigning a pilot per session (sets it on all its flights)
 - [x] Splitting and merging sessions (moving a flight is splitting it off and merging)
-- [x] Only new flights join sessions by themselves (same night's sync); the rest by hand: new session, add to session, flights without session
+- [x] Only new flights join sessions by themselves; the rest by hand: new session, add to session, flights without session
 - [x] Suggested sessions to review (one by one; making all of them at once only if it turns out to be needed)
 - [x] Comments on sessions, and deleting a session explicitly
 - [ ] Rethink the open session's layout (user, 2026-10-25): long comments under the facts push the flights table down, and pointing at a flight in the table, which brings it out on the map, happens with the map scrolled out of view
