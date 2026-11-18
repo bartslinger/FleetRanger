@@ -310,9 +310,13 @@ pub async fn save_result(
 ) -> Result<Saved> {
     let raw_log_id = log.id;
     let mut tx = db.begin().await?;
-    // The sessions lock before any row, as deleting a group takes it before
-    // the groups' rows: placing a new flight in a session needs it later,
-    // after the flight's foreign keys have touched its group's row.
+    // The areas lock (shared) and then the sessions lock, before any row.
+    // The sessions lock first among the rows, as deleting a group takes it
+    // before the groups' rows: placing a new flight in a session needs it
+    // later, after the flight's foreign keys have touched its group's row.
+    // The areas lock before it, so a log waiting for an area to be saved
+    // doesn't hold up every change to sessions meanwhile.
+    areas::db::lock_for_reading(&mut tx).await?;
     sessions::db::lock(&mut tx).await?;
     // Then, holding the row until the end: the claim must still be the
     // log's, or nothing is saved.

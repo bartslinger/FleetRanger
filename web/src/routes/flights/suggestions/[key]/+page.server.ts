@@ -1,6 +1,6 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { fail, redirect } from '@sveltejs/kit';
-import { sessionGroup } from '#lib/groups.js';
+import { sessionGroup, usesAreas } from '#lib/groups.js';
 import { parsePilot } from '#lib/pilots.js';
 import {
 	get,
@@ -14,7 +14,7 @@ import { apiQuery, parse, query } from '../../logbook.js';
 // The page's query is the suggestions list's, so its filters decide the
 // suggestions and their order; `created` names a session just made.
 export async function load({ fetch, locals, params, url }) {
-	const state = parse(url.searchParams, timeZone(locals));
+	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
 	const [suggestion, choices] = await Promise.all([
 		get<SuggestionDetail>(
 			fetch,
@@ -55,7 +55,7 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { message: result.message });
 		const session = result.data.id;
 
-		const list = query(parse(url.searchParams, timeZone(locals)));
+		const list = query(parse(url.searchParams, timeZone(locals), usesAreas(locals.account)));
 		const then = String(form.get('then') ?? '');
 		if (!then) redirect(303, `/flights${list}`);
 		const params = new URLSearchParams(list);

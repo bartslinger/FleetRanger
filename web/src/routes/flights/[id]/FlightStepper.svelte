@@ -9,6 +9,7 @@
 	import { page } from '$app/state';
 	import { trail } from '#lib/trail.svelte.js';
 	import Stepper from '#lib/ui/Stepper.svelte';
+	import { usesAreas } from '#lib/groups.js';
 	import { apiQuery, parse, type LogbookState } from '../logbook.js';
 
 	let { id }: { id: string } = $props();
@@ -29,7 +30,9 @@
 		const fromList =
 			url.pathname === resolve('/flights') ||
 			url.pathname.startsWith(`${resolve('/flights')}/suggestions/`);
-		return fromList ? parse(url.searchParams, page.data.timeZone) : null;
+		return fromList
+			? parse(url.searchParams, page.data.timeZone, usesAreas(page.data.account))
+			: null;
 	});
 
 	let place: Neighbours | null = $state(null);

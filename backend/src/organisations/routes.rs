@@ -33,6 +33,8 @@ struct Organisation {
     time_zone: String,
     session_gap_minutes: i32,
     mcp: bool,
+    /// Whether it uses areas: off, the web app shows nothing about them.
+    areas: bool,
     /// Whether the install offers MCP at all (`FLEETRANGER_MCP`): only then
     /// is the organisation's own switch worth showing.
     mcp_offered: bool,
@@ -50,6 +52,8 @@ struct Input {
     session_gap_minutes: i32,
     /// Left as it is when not given, as when the install doesn't offer MCP.
     mcp: Option<bool>,
+    /// Left as it is when not given.
+    areas: Option<bool>,
 }
 
 async fn show(
@@ -100,12 +104,14 @@ async fn save(
     .await?;
     sqlx::query!(
         "update organisation_settings
-         set time_zone = $2, session_gap_minutes = $3, mcp = coalesce($4, mcp)
+         set time_zone = $2, session_gap_minutes = $3, mcp = coalesce($4, mcp),
+             areas = coalesce($5, areas)
          where organisation_id = $1",
         organisation_id,
         input.time_zone,
         input.session_gap_minutes,
         mcp,
+        input.areas,
     )
     .execute(&mut *tx)
     .await?;
@@ -124,6 +130,7 @@ async fn read(
         time_zone: settings.time_zone,
         session_gap_minutes: settings.session_gap.0,
         mcp: settings.mcp,
+        areas: settings.areas,
         mcp_offered: apps.mcp,
         deletable: multi_tenant,
         time_zones: super::time_zones(db).await?,

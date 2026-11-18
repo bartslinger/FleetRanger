@@ -11,7 +11,12 @@
 	import Edit from '@carbon/icons/es/edit/16.js';
 	import { areaTimes, dateTime, day, distance, duration } from '#lib/format.js';
 	import { may } from '#lib/permissions.js';
-	import { groupOptions as groupChoices, sharedGroup, showsGroups } from '#lib/groups.js';
+	import {
+		groupOptions as groupChoices,
+		sharedGroup,
+		showsGroups,
+		usesAreas
+	} from '#lib/groups.js';
 	import { offered, pilotOptions as pilotOptions_ } from '#lib/pilots.js';
 	import Link from '#lib/ui/Link.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
@@ -85,7 +90,7 @@
 			{ label: 'Air time', value: duration(flight.air_time_s), numeric: true },
 			{ label: 'Distance', value: distance(flight.distance_m), numeric: true },
 			// Only when the flight crossed an area.
-			...[areaTimes(flight.areas)].filter((fact) => fact !== null),
+			...(usesAreas(account) ? [areaTimes(flight.areas)] : []).filter((fact) => fact !== null),
 			...(flight.metrics.max_altitude_m === undefined
 				? []
 				: [

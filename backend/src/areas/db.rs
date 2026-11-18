@@ -155,15 +155,22 @@ async fn store(
     Ok(())
 }
 
-/// Computes a flight's figures per area, after it was saved in the same
-/// transaction.
-pub async fn compute_flight(tx: &mut PgConnection, flight_id: Uuid) -> anyhow::Result<()> {
+/// Takes the areas lock shared until the end of the transaction: areas can't
+/// change meanwhile, while flights are computed alongside each other.
+pub async fn lock_for_reading(tx: &mut PgConnection) -> sqlx::Result<()> {
     sqlx::query!(
         "select pg_advisory_xact_lock_shared($1, hashtext(coalesce(current_setting('app.organisation_id', true), '')))",
         AREAS_LOCK
     )
     .execute(&mut *tx)
     .await?;
+    Ok(())
+}
+
+/// Computes a flight's figures per area, after it was saved in the same
+/// transaction.
+pub async fn compute_flight(tx: &mut PgConnection, flight_id: Uuid) -> anyhow::Result<()> {
+    lock_for_reading(tx).await?;
     let (ids, shapes) = shapes(tx).await?;
     let flights = sqlx::query_as!(
         TrackedFlight,

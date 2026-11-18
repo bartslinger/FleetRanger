@@ -1,4 +1,5 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
+import { usesAreas } from '#lib/groups.js';
 import { fail } from '@sveltejs/kit';
 import { parsePilot } from '#lib/pilots.js';
 import {
@@ -10,11 +11,11 @@ import {
 	type FlightPage
 } from '#lib/server/backend.js';
 
-export async function load({ fetch, params }) {
+export async function load({ fetch, locals, params }) {
 	const [flight, choices, areas] = await Promise.all([
 		get<FlightPage>(fetch, `/api/flights/${params.id}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),
-		get<Area[]>(fetch, '/api/areas')
+		usesAreas(locals.account) ? get<Area[]>(fetch, '/api/areas') : []
 	]);
 	// A public token: the browser needs it to load the map.
 	return { flight, choices, areas, mapboxToken: MAPBOX_ACCESS_TOKEN };

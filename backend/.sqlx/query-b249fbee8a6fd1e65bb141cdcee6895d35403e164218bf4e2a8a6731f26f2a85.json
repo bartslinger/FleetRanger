@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select o.name, s.time_zone, s.session_gap_minutes, s.mcp\n         from organisations o join organisation_settings s on s.organisation_id = o.id\n         -- Row-level security shows only this one; tests connect without it.\n         where o.id = current_setting('app.organisation_id', true)::uuid",
+  "query": "select o.name, s.time_zone, s.session_gap_minutes, s.mcp, s.areas\n         from organisations o join organisation_settings s on s.organisation_id = o.id\n         -- Row-level security shows only this one; tests connect without it.\n         where o.id = current_setting('app.organisation_id', true)::uuid",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "mcp"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "areas",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "organisation_settings",
+            "name": "areas"
+          }
+        }
       }
     ],
     "parameters": {
@@ -55,8 +66,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "bb60db4b9891983b5c96e6ebd5821870a99586c453e82feaf7e8893b4191ebb1"
+  "hash": "b249fbee8a6fd1e65bb141cdcee6895d35403e164218bf4e2a8a6731f26f2a85"
 }

@@ -1,4 +1,5 @@
 import { isHttpError } from '@sveltejs/kit';
+import { usesAreas } from '#lib/groups.js';
 import {
 	get,
 	timeZone,
@@ -20,11 +21,11 @@ export async function load({ fetch, locals, url }) {
 	if (!id) return { openSession: null, areas: [] as Area[], neighbours: null };
 	// Stepping goes on into the weeks or months around (user's decision,
 	// 2026-10-21) with the list's other filters, so without its days.
-	const state = parse(url.searchParams, timeZone(locals));
+	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
 	const filters = apiFilters({ ...state, from: null, to: null }, timeZone(locals));
 	const [openSession, areas, neighbours] = await Promise.all([
 		get<Session>(fetch, `/api/sessions/${id}`),
-		get<Area[]>(fetch, '/api/areas'),
+		usesAreas(locals.account) ? get<Area[]>(fetch, '/api/areas') : [],
 		// None if the session no longer passes the filters, e.g. its pilot changed.
 		get<SessionNeighbours>(fetch, `/api/sessions/${id}/neighbours?${filters}`).catch((failure) => {
 			if (isHttpError(failure, 404)) return null;

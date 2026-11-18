@@ -67,6 +67,8 @@
 		groupField?: Snippet;
 		/** Whether to show the group: only once the organisation has several. */
 		showGroup?: boolean;
+		/** Whether to show the time per area: only when the organisation uses areas. */
+		showAreas?: boolean;
 	}
 
 	let {
@@ -76,7 +78,8 @@
 		pilotAction,
 		groupAction,
 		groupField,
-		showGroup = true
+		showGroup = true,
+		showAreas = true
 	}: Props = $props();
 
 	const facts = $derived(summary(flights, timeZone));
@@ -105,7 +108,7 @@
 		{ label: 'Distance', value: distance(distanceM), numeric: true },
 		{ label: 'Flights', value: String(flights.length), numeric: true },
 		// Only when the flights crossed an area.
-		...[areaTimes(flights.flatMap((flight) => flight.areas))]
+		...(showAreas ? [areaTimes(flights.flatMap((flight) => flight.areas))] : [])
 			.filter((fact) => fact !== null)
 			.map((fact) => ({ ...fact, wide: true }))
 	]);

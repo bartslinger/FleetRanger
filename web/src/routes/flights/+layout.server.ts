@@ -1,4 +1,5 @@
 import { isHttpError } from '@sveltejs/kit';
+import { usesAreas } from '#lib/groups.js';
 import {
 	get,
 	timeZone,
@@ -20,12 +21,12 @@ export async function load({ fetch, locals, url }) {
 	if (!id) return { openFlight: null, openAreas: [] as Area[], flightNeighbours: null };
 	// Stepping goes on into the weeks or months around, newest first, with
 	// the list's other filters, so without its days.
-	const state = parse(url.searchParams, timeZone(locals));
+	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
 	const filters = apiFilters({ ...state, from: null, to: null }, timeZone(locals));
 	filters.set('sort', '-takeoff_at');
 	const [openFlight, openAreas, flightNeighbours] = await Promise.all([
 		get<FlightPage>(fetch, `/api/flights/${encodeURIComponent(id)}`),
-		get<Area[]>(fetch, '/api/areas'),
+		usesAreas(locals.account) ? get<Area[]>(fetch, '/api/areas') : [],
 		// None if the flight no longer passes the filters, e.g. its pilot changed.
 		get<FlightNeighbours>(
 			fetch,

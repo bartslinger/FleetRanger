@@ -1,6 +1,6 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { parsePilot } from '#lib/pilots.js';
-import { sessionGroup } from '#lib/groups.js';
+import { sessionGroup, usesAreas } from '#lib/groups.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	get,
@@ -15,7 +15,7 @@ import {
 import { apiQuery, parse, query, showsCards } from './logbook.js';
 
 export async function load({ fetch, locals, url }) {
-	const state = parse(url.searchParams, timeZone(locals));
+	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
 	const api = apiQuery(state, timeZone(locals));
 	const cards = showsCards(state);
 	// The suggestions page through suggestions; the list's first page still
@@ -64,12 +64,13 @@ async function flightIds(
 	fetch: typeof globalThis.fetch,
 	url: URL,
 	form: FormData,
-	zone: string
+	zone: string,
+	areas: boolean
 ): Promise<{ ids: string[] } | { message: string }> {
 	if (form.get('all') !== 'true') return { ids: form.getAll('flight_id').map(String) };
 	const { ids } = await get<{ ids: string[] }>(
 		fetch,
-		`/api/flights/ids?${apiQuery(parse(url.searchParams, zone), zone)}`
+		`/api/flights/ids?${apiQuery(parse(url.searchParams, zone, areas), zone)}`
 	);
 	const expected = Number(form.get('expected'));
 	if (ids.length !== expected) {
@@ -83,7 +84,7 @@ async function flightIds(
 export const actions = {
 	setPilot: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form, timeZone(locals));
+		const flights = await flightIds(fetch, url, form, timeZone(locals), usesAreas(locals.account));
 		if ('message' in flights) return fail(409, { pilotMessage: flights.message });
 		const body = { flight_ids: flights.ids, ...parsePilot(String(form.get('pilot') ?? '')) };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/pilot', body);
@@ -92,7 +93,7 @@ export const actions = {
 	},
 	setGroup: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form, timeZone(locals));
+		const flights = await flightIds(fetch, url, form, timeZone(locals), usesAreas(locals.account));
 		if ('message' in flights) return fail(409, { groupMessage: flights.message });
 		const body = {
 			flight_ids: flights.ids,
@@ -104,7 +105,7 @@ export const actions = {
 	},
 	newSession: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form, timeZone(locals));
+		const flights = await flightIds(fetch, url, form, timeZone(locals), usesAreas(locals.account));
 		if ('message' in flights) return fail(409, { newSessionMessage: flights.message });
 		const group = sessionGroup(form);
 		if (!group) return fail(400, { newSessionMessage: 'Choose a group for the session.' });
@@ -115,7 +116,7 @@ export const actions = {
 	},
 	removeFromSession: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form, timeZone(locals));
+		const flights = await flightIds(fetch, url, form, timeZone(locals), usesAreas(locals.account));
 		if ('message' in flights) return fail(409, { removeMessage: flights.message });
 		const body = { flight_ids: flights.ids };
 		const result = await send<{ removed: number }>(fetch, 'POST', '/api/sessions/remove', body);
@@ -124,7 +125,7 @@ export const actions = {
 	},
 	archive: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form, timeZone(locals));
+		const flights = await flightIds(fetch, url, form, timeZone(locals), usesAreas(locals.account));
 		if ('message' in flights) return fail(409, { archiveMessage: flights.message });
 		const body = { flight_ids: flights.ids };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/archive', body);
@@ -133,7 +134,7 @@ export const actions = {
 	},
 	restore: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
-		const flights = await flightIds(fetch, url, form, timeZone(locals));
+		const flights = await flightIds(fetch, url, form, timeZone(locals), usesAreas(locals.account));
 		if ('message' in flights) return fail(409, { restoreMessage: flights.message });
 		const body = { flight_ids: flights.ids };
 		const result = await send<{ changed: number }>(fetch, 'POST', '/api/flights/restore', body);
@@ -144,7 +145,7 @@ export const actions = {
 		const form = await request.formData();
 		const session = String(form.get('session_id') ?? '');
 		if (!session) return fail(400, { addMessage: 'Choose a session.' });
-		const flights = await flightIds(fetch, url, form, timeZone(locals));
+		const flights = await flightIds(fetch, url, form, timeZone(locals), usesAreas(locals.account));
 		if ('message' in flights) return fail(409, { addMessage: flights.message });
 		const body = { flight_ids: flights.ids };
 		const path = `/api/sessions/${encodeURIComponent(session)}/flights`;

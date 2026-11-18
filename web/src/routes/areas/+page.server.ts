@@ -1,4 +1,5 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
+import { usesAreas } from '#lib/groups.js';
 import { error, fail } from '@sveltejs/kit';
 import { may } from '#lib/permissions.js';
 import {
@@ -14,6 +15,8 @@ import {
 export async function load({ fetch, locals }) {
 	// Everyone sees the areas on maps; only who holds areas.manage manages them.
 	if (!may(locals.account, 'areas.manage', null)) error(403);
+	// Only where the organisation uses areas (Administration, General).
+	if (!usesAreas(locals.account)) error(404);
 	const areas = await get<Area[]>(fetch, '/api/areas');
 	// Without areas, the map starts where the latest flight was.
 	let fallback: number[][] = [];
