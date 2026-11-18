@@ -180,6 +180,9 @@ pub async fn delete(
     move_to: Option<Uuid>,
 ) -> sqlx::Result<Deleted> {
     let mut tx = db.begin().await?;
+    // Before the group locks, as pairing takes it before a code's row (see
+    // `plan::lock`): moving a group's codes can't deadlock with pairing.
+    crate::organisations::plan::lock(&mut tx).await?;
     // Every group is locked, so two deletions can't each leave the other last.
     let groups = sqlx::query_scalar!("select id from groups order by id for update")
         .fetch_all(&mut *tx)
