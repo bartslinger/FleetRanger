@@ -12,13 +12,15 @@ import {
 	type SessionPage
 } from '#lib/server/backend.js';
 import { parsePilot } from '#lib/pilots.js';
+import { allPages } from '#lib/server/pages.js';
 import { listFilters, parse, PERIOD_SIZE, query } from './list.js';
 
 export async function load({ fetch, locals, url }) {
 	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
 	const filters = listFilters(state, timeZone(locals));
 	const api = new URLSearchParams(filters);
-	// The cards show their whole period on one page.
+	// The cards show their whole period, in as many of the backend's pages as
+	// it takes; the table one page.
 	const cards = state.view === 'cards';
 	api.set('page', cards ? '1' : String(state.page));
 	api.set('size', cards ? String(PERIOD_SIZE) : String(state.size));
@@ -31,7 +33,12 @@ export async function load({ fetch, locals, url }) {
 	// The cards' arrows go to the nearest periods with sessions.
 	const noneAround: SessionsAround = { before: null, after: null };
 	const [{ sessions, total }, choices, devices, around] = await Promise.all([
-		get<SessionPage>(fetch, `/api/sessions?${api}`),
+		cards
+			? allPages<SessionPage>(fetch, '/api/sessions', api).then((pages) => ({
+					sessions: pages.flatMap((page) => page.sessions),
+					total: pages[0]?.total ?? 0
+				}))
+			: get<SessionPage>(fetch, `/api/sessions?${api}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),
 		get<Devices>(fetch, `/api/flights/devices?${options}`),
 		cards ? get<SessionsAround>(fetch, `/api/sessions/around?${filters}`) : noneAround

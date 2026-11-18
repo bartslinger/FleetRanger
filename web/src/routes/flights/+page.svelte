@@ -26,7 +26,6 @@
 	import CardsView from '#lib/CardsView.svelte';
 	import PeriodToolbar from '#lib/PeriodToolbar.svelte';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
-	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Link from '#lib/ui/Link.svelte';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import { anywhere, may, readsSeveralGroups, type Permission } from '#lib/permissions.js';
@@ -38,14 +37,7 @@
 	} from '#lib/groups.js';
 	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import { pilotOptions } from '#lib/pilots.js';
-	import {
-		DEFAULT_SORT,
-		PAGE_SIZES,
-		PERIOD_SIZE,
-		query,
-		showsCards,
-		type LogbookState
-	} from './logbook.js';
+	import { DEFAULT_SORT, PAGE_SIZES, query, showsCards, type LogbookState } from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
 	import Suggestions from './Suggestions.svelte';
 	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
@@ -247,6 +239,13 @@
 	const openFlight = $derived(data.openFlight);
 	const opened = $derived(openFlight?.id ?? null);
 	const flightHref = (id: string) => `${resolve('/flights')}${query(data.state, id)}`;
+	// A card's second line: who flew which drone, and the group once there are several.
+	const flightWho = (flight: Row) =>
+		[
+			flight.pilot_name ?? 'Unknown pilot',
+			flight.aircraft_name ?? flight.aircraft_serial ?? 'Unknown drone',
+			...(showsGroups(data.account) ? [flight.group_name] : [])
+		].join(' · ');
 
 	// Opened from the cards in this tab, Back returns to them as they were
 	// (their scroll position too); opened directly, or stepped into another
@@ -455,11 +454,6 @@
 <Grid>
 	<Column narrow>
 		{#if showsCards(data.state)}
-			{#if data.total > PERIOD_SIZE}
-				<InlineNotification kind="info" title="Only the latest {PERIOD_SIZE}">
-					This {data.state.period.unit} has {data.total} flights; the table shows them all.
-				</InlineNotification>
-			{/if}
 			<!-- The map and the cards, also for a period without flights, so the
 			     layout doesn't change: the empty state takes the cards' place,
 			     under their toolbar. Below lg there's no map. -->
@@ -506,10 +500,7 @@
 												{daySpan(flight.takeoff_at, flight.landed_at, data.timeZone)}
 											</span>
 											<span class="card-who">
-												{flight.pilot_name ?? 'Unknown pilot'} · {flight.aircraft_name ??
-													flight.aircraft_serial ??
-													'Unknown drone'}{#if showsGroups(data.account)}
-													· {flight.group_name}{/if}
+												{flightWho(flight)}
 											</span>
 											<span class="card-numbers">
 												{duration(flight.air_time_s)} in the air · {distance(flight.distance_m)}

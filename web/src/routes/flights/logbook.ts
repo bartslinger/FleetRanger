@@ -6,7 +6,7 @@ import { isDay, nextDay, startOfDay } from '#lib/zone.js';
 
 export const PAGE_SIZES = [25, 50, 100];
 const DEFAULT_SIZE = 50;
-/** The cards show a whole week or month on one page, up to the backend's largest page. */
+/** The backend's largest page: the cards ask for their whole period in pages of it. */
 export const PERIOD_SIZE = 100;
 
 export const SORTABLE = ['takeoff_at', 'air_time_s', 'distance_m', 'aircraft_serial', 'rc_serial'];

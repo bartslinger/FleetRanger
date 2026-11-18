@@ -18,7 +18,7 @@
 		type Filters
 	} from '#lib/ListFilters.svelte';
 	import Button from '#lib/ui/Button.svelte';
-	import { PAGE_SIZES, PERIOD_SIZE, query, type SessionListState } from './list.js';
+	import { PAGE_SIZES, query, type SessionListState } from './list.js';
 	import {
 		areaTimes,
 		clock,
@@ -37,7 +37,6 @@
 	import EmptyState from '#lib/ui/EmptyState.svelte';
 	import Link from '#lib/ui/Link.svelte';
 	import Grid from '#lib/ui/Grid.svelte';
-	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
@@ -168,6 +167,11 @@
 	const opened = $derived(openSession?.id ?? null);
 	const openedRow = $derived(data.sessions.find((session) => session.id === opened));
 	const sessionHref = (id: string) => `${resolve('/sessions')}${query(data.state, id)}`;
+	// A card's second line: its pilots, and its group once there are several.
+	const sessionWho = (session: Row) =>
+		[session.pilots.join(', '), ...(showsGroups(data.account) ? [sessionGroup(session)] : [])]
+			.filter(Boolean)
+			.join(' · ');
 
 	// Opened from the list in this tab, Back returns to it as it was (its
 	// scroll position too); opened directly, or stepped into another week or
@@ -531,11 +535,6 @@
 		     layout doesn't change (user's feedback): the empty state takes
 		     the cards' place, under their toolbar. -->
 		{#if data.state.view === 'cards'}
-			{#if data.total > PERIOD_SIZE}
-				<InlineNotification kind="info" title="Only the latest {PERIOD_SIZE}">
-					This {data.state.period.unit} has {data.total} sessions; the table shows them all.
-				</InlineNotification>
-			{/if}
 			<!-- The cards, and in their place the open session's facts; the toolbar
 			     stays when a session opens, only its controls change. The map
 			     below lg only for an open session, under its facts. -->
@@ -585,8 +584,7 @@
 												<DayStrip flights={session.flight_times} timeZone={data.timeZone} />
 											</span>
 											<span class="card-who">
-												{session.pilots.join(', ')}{#if showsGroups(data.account)}
-													· {sessionGroup(session)}{/if}
+												{sessionWho(session)}
 											</span>
 											<span class="card-numbers">
 												{plural(session.flights, 'flight')} · {duration(session.air_time_s)} in the air
