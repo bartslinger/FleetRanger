@@ -14,7 +14,7 @@ import { apiQuery, parse, query } from '../../logbook.js';
 // The page's query is the suggestions list's, so its filters decide the
 // suggestions and their order; `created` names a session just made.
 export async function load({ fetch, locals, params, url }) {
-	const state = parse(url.searchParams);
+	const state = parse(url.searchParams, timeZone(locals));
 	const [suggestion, choices] = await Promise.all([
 		get<SuggestionDetail>(
 			fetch,
@@ -46,7 +46,7 @@ export const actions = {
 	 * Makes the flights a session, then on to the suggestion `then` (the
 	 * flights left out, or the next one), which says the session was made.
 	 */
-	create: async ({ fetch, request, url }) => {
+	create: async ({ fetch, locals, request, url }) => {
 		const form = await request.formData();
 		const group = sessionGroup(form);
 		if (!group) return fail(400, { message: 'Choose a group for the session.' });
@@ -55,7 +55,7 @@ export const actions = {
 		if (!result.ok) return fail(result.status, { message: result.message });
 		const session = result.data.id;
 
-		const list = query(parse(url.searchParams));
+		const list = query(parse(url.searchParams, timeZone(locals)));
 		const then = String(form.get('then') ?? '');
 		if (!then) redirect(303, `/flights${list}`);
 		const params = new URLSearchParams(list);

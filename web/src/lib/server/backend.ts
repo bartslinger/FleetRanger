@@ -227,7 +227,15 @@ export interface Pilot {
 /** One page of `GET /api/flights`. */
 export interface FlightPage {
 	flights: FlightSummary[];
+	/** With `tracks=1`: the flights' coarse tracks, [lon, lat] points. */
+	tracks?: { id: string; track: number[][] }[];
 	total: number;
+}
+
+/** When the nearest flights before and after a period take off, `GET /api/flights/around`. */
+export interface FlightsAround {
+	before: string | null;
+	after: string | null;
 }
 
 /** A role in a group; Admin only on the whole organisation. */
