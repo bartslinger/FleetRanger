@@ -224,7 +224,8 @@ async fn is_empty(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
 async fn move_contents(db: &mut PgConnection, from: Uuid, to: Uuid) -> sqlx::Result<()> {
     sqlx::query!(
         "with flights as (update flights set group_id = $2 where group_id = $1),
-              sessions as (update sessions set group_id = $2 where group_id = $1),
+              sessions as (update sessions set group_id = $2, changed_at = now()
+                           where group_id = $1),
               aircraft as (update aircraft set group_id = $2 where group_id = $1),
               controllers as (update remote_controllers set group_id = $2 where group_id = $1),
               logs as (update raw_logs set group_id = $2 where group_id = $1)

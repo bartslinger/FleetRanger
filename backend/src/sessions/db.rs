@@ -963,7 +963,7 @@ mod tests {
         flight
     }
 
-    /// One sync's flights of an outing make one session in any order: a
+    /// An outing's flights make one session in any order: a
     /// flight in between joins the sessions on both sides, and flights from
     /// before and after a pilot was chosen on the controller come together.
     /// Different pilots stay apart.
@@ -1026,6 +1026,40 @@ mod tests {
         assert_ne!(
             session_of(&mut db, first).await,
             session_of(&mut db, second).await
+        );
+        // Both halves count as changed, whichever a later flight is nearest.
+        let unchanged: i64 =
+            sqlx::query_scalar("select count(*) from sessions where changed_at is null")
+                .fetch_one(&mut *db)
+                .await
+                .unwrap();
+        assert_eq!(unchanged, 0);
+    }
+
+    /// A session someone commented on isn't merged by itself.
+    #[sqlx::test]
+    async fn a_commented_session_isnt_merged(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let author = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let early = from_controller(&mut db, None, "06:00", "06:20").await;
+        let late = from_controller(&mut db, None, "10:00", "10:20").await;
+        sqlx::query(
+            "insert into session_comments (session_id, author_id, body)
+             select session_id, $2, 'Test comment' from flights where id = $1",
+        )
+        .bind(early)
+        .bind(author)
+        .execute(&mut *db)
+        .await
+        .unwrap();
+        from_controller(&mut db, None, "08:00", "08:20").await;
+        assert_ne!(
+            session_of(&mut db, early).await,
+            session_of(&mut db, late).await
         );
     }
 
