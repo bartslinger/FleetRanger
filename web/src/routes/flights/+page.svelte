@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { enhance } from '$app/forms';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
@@ -238,12 +239,15 @@
 	// Back closes it, as ✕ and Esc do.
 	const openFlight = $derived(data.openFlight);
 	const opened = $derived(openFlight?.id ?? null);
+	const canArchiveOpen = $derived(
+		openFlight !== null && may(data.account, 'flights.archive', openFlight.group_id)
+	);
 	const flightHref = (id: string) => `${resolve('/flights')}${query(data.state, id)}`;
-	// A card's second line: who flew which drone, and the group once there are several.
+	// A card's second line: who flew, and the group once there are several, as
+	// on a session's card (user's request, 2026-11-18: no drone).
 	const flightWho = (flight: Row) =>
 		[
 			flight.pilot_name ?? 'Unknown pilot',
-			flight.aircraft_name ?? flight.aircraft_serial ?? 'Unknown drone',
 			...(showsGroups(data.account) ? [flight.group_name] : [])
 		].join(' · ');
 
@@ -372,6 +376,7 @@
 		? [{ href: href(data.state), label: 'Flights', follow: close }]
 		: undefined}
 	crumb={openFlight ? `Flight ${dateTime(openFlight.takeoff_at, data.timeZone)}` : crumb}
+	status={openFlight?.archived_at ? 'Archived' : undefined}
 >
 	{#snippet actions()}
 		<!-- Cards and Table are the same flights; with "Without session" on,
@@ -401,6 +406,37 @@
 						: [])
 				]}
 			/>{/if}
+		<!-- A flight open: archiving it, or restoring an archived one, as its own
+		     page had them. Only a flight without a session can be archived. -->
+		{#if openFlight && canArchiveOpen && openFlight.archived_at !== null}
+			<form
+				method="POST"
+				action="?/restore"
+				use:enhance={() =>
+					async ({ result, update }) => {
+						await update();
+						if (result.type === 'success') toast('Flight restored.');
+					}}
+			>
+				<input type="hidden" name="flight_id" value={openFlight.id} />
+				<Button type="submit" kind="tertiary">Restore</Button>
+			</form>
+		{:else if openFlight && canArchiveOpen && openFlight.session_id === null}
+			<Modal
+				title="Archive"
+				triggerKind="tertiary"
+				submitLabel="Archive"
+				action="?/archive"
+				error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
+				onsuccess={() => toast('Flight archived.')}
+			>
+				<input type="hidden" name="flight_id" value={openFlight.id} />
+				<p>
+					The flight is left out of Flights and totals, as if it hadn’t happened. You can restore it
+					later.
+				</p>
+			</Modal>
+		{/if}
 	{/snippet}
 </PageHeader>
 
@@ -594,7 +630,15 @@
 					{columns}
 					rows={data.flights}
 					rowKey={(flight) => flight.id}
-					rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+					rowHref={(flight) =>
+						`${resolve('/flights')}${query(
+							{
+								...data.state,
+								view: 'cards',
+								period: periodOf('month', dayOf(flight.takeoff_at, data.timeZone))
+							},
+							flight.id
+						)}`}
 					sort={data.state.sort}
 					defaultSort={DEFAULT_SORT}
 					sortHref={(sort) => href({ ...data.state, page: 1, sort: sort ?? DEFAULT_SORT })}
