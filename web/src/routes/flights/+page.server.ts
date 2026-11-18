@@ -13,10 +13,21 @@ import {
 	type FlightsAround,
 	type SuggestionPage
 } from '#lib/server/backend.js';
-import { apiQuery, parse, query, showsCards } from './logbook.js';
+import { apiFilters, apiQuery, parse, query, showsCards } from './logbook.js';
+import { dayOf, days, periodOf, step } from '#lib/period.js';
 
 export async function load({ fetch, locals, url }) {
-	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
+	let state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
+	// A plain address opens the latest month with flights, not an empty one
+	// (user's decision, 2026-11-18): the last one starting before next month.
+	if (showsCards(state) && !url.searchParams.has('week') && !url.searchParams.has('month')) {
+		const upToNow = apiFilters({ ...state, ...days(step(state.period, 1)) }, timeZone(locals));
+		const { before } = await get<FlightsAround>(fetch, `/api/flights/around?${upToNow}`);
+		if (before) {
+			const month = periodOf('month', dayOf(before, timeZone(locals))).start;
+			state = { ...state, period: periodOf('month', month), defaultMonth: month };
+		}
+	}
 	const api = apiQuery(state, timeZone(locals));
 	const cards = showsCards(state);
 	// The suggestions page through suggestions; the list's first page still

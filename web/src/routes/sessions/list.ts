@@ -16,20 +16,21 @@ export interface SessionListState extends Filters {
 	view: 'cards' | 'table';
 	/** The cards' week or month; the table uses `from` and `to`. */
 	period: Period;
-	/** The current month, the default, left out of the URL. */
-	thisMonth: string;
+	/** The month a plain address opens, left out of the URL: the latest with
+	 * activity, which the load sets (user's decision, 2026-11-18), else this month. */
+	defaultMonth: string;
 }
 
 /** Serials and ids, comma-separated in the URL. */
 const list = (value: string | null) => (value ?? '').split(',').filter(Boolean);
 
 /** The cards' period: `week=2026-10-12` (a Monday) or `month=2026-10`, else this month. */
-function period(params: URLSearchParams, thisMonth: string): Period {
+function period(params: URLSearchParams, defaultMonth: string): Period {
 	const week = params.get('week');
 	if (isDay(week)) return periodOf('week', week);
 	const month = params.get('month');
 	if (month && isDay(`${month}-01`)) return periodOf('month', `${month}-01`);
-	return periodOf('month', thisMonth);
+	return periodOf('month', defaultMonth);
 }
 
 /** With `areas` false (the organisation doesn't use them), an area filter in
@@ -39,10 +40,10 @@ export function parse(params: URLSearchParams, timeZone: string, areas = true): 
 	const size = Number.parseInt(params.get('size') ?? '', 10);
 	const from = params.get('from');
 	const to = params.get('to');
-	const thisMonth = periodOf('month', today(timeZone)).start;
+	const defaultMonth = periodOf('month', today(timeZone)).start;
 	return {
-		period: period(params, thisMonth),
-		thisMonth,
+		period: period(params, defaultMonth),
+		defaultMonth,
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		view: params.get('view') === 'table' ? 'table' : 'cards',
@@ -72,7 +73,7 @@ export function query(state: SessionListState, session?: string): string {
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
 	if (state.view !== 'cards') params.set('view', state.view);
 	else if (state.period.unit === 'week') params.set('week', state.period.start);
-	else if (state.period.start !== state.thisMonth) {
+	else if (state.period.start !== state.defaultMonth) {
 		params.set('month', state.period.start.slice(0, 7));
 	}
 	if (session) params.set('session', session);

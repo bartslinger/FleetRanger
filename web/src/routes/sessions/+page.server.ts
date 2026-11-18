@@ -13,10 +13,21 @@ import {
 } from '#lib/server/backend.js';
 import { parsePilot } from '#lib/pilots.js';
 import { allPages } from '#lib/server/pages.js';
-import { listFilters, parse, PERIOD_SIZE, query } from './list.js';
+import { apiFilters, listFilters, parse, PERIOD_SIZE, query } from './list.js';
+import { dayOf, days, periodOf, step } from '#lib/period.js';
 
 export async function load({ fetch, locals, url }) {
-	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
+	let state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
+	// A plain address opens the latest month with sessions, not an empty one
+	// (user's decision, 2026-11-18): the last one starting before next month.
+	if (state.view === 'cards' && !url.searchParams.has('week') && !url.searchParams.has('month')) {
+		const upToNow = apiFilters({ ...state, ...days(step(state.period, 1)) }, timeZone(locals));
+		const { before } = await get<SessionsAround>(fetch, `/api/sessions/around?${upToNow}`);
+		if (before) {
+			const month = periodOf('month', dayOf(before, timeZone(locals))).start;
+			state = { ...state, period: periodOf('month', month), defaultMonth: month };
+		}
+	}
 	const filters = listFilters(state, timeZone(locals));
 	const api = new URLSearchParams(filters);
 	// The cards show their whole period, in as many of the backend's pages as
