@@ -338,13 +338,20 @@ pub(crate) async fn locked(
     db: &mut PgConnection,
 ) -> sqlx::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
     let mut tx = db.begin().await?;
+    lock(&mut tx).await?;
+    Ok(tx)
+}
+
+/// Takes the sessions lock of the connection's organisation until the end of
+/// the transaction it is in.
+pub(crate) async fn lock(db: &mut PgConnection) -> sqlx::Result<()> {
     sqlx::query!(
         "select pg_advisory_xact_lock($1, hashtext(coalesce(current_setting('app.organisation_id', true), '')))",
         SESSIONS_LOCK
     )
-    .execute(&mut *tx)
+    .execute(&mut *db)
     .await?;
-    Ok(tx)
+    Ok(())
 }
 
 /// The group of each of these sessions, or None if one of them doesn't
@@ -1415,6 +1422,32 @@ mod tests {
             .unwrap();
         assert_eq!(found.before, None, "nothing earlier");
         assert_eq!(found.after, Some(at("08:00")));
+        let found = around(&mut db, &everything, &period("08:00", "09:00"))
+            .await
+            .unwrap();
+        assert_eq!(found.before, None, "starting at the start is in it");
+
+        // Someone who sees none of these flights is led nowhere.
+        let b = insert_id(
+            &mut db,
+            "insert into users (name) values ('B') returning id",
+        )
+        .await;
+        let own = FlightScope {
+            all: false,
+            user_id: b,
+            group_ids: Vec::new(),
+        };
+        let found = around(&mut db, &own, &period("10:00", "11:00"))
+            .await
+            .unwrap();
+        assert_eq!(
+            found,
+            Around {
+                before: None,
+                after: None
+            }
+        );
 
         // Drone A flew in the morning and the evening, not at noon.
         let mut drone_a = period("09:00", "10:00");

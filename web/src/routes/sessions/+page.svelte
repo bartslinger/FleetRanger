@@ -679,7 +679,7 @@
 								{#snippet action()}
 									{#if cardsFiltering}
 										<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
-									{:else}
+									{:else if previousHref || nextHref}
 										<Link href={href({ ...data.state, view: 'table' })}>Show the table</Link>
 									{/if}
 								{/snippet}
