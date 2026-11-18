@@ -29,7 +29,7 @@
 		month,
 		timeSpan
 	} from '#lib/format.js';
-	import { dayOf, periodName, periodOf, step, switchTo, today, type Period } from '#lib/period.js';
+	import { dayOf, periodName, periodOf, switchTo, today, type Period } from '#lib/period.js';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -259,6 +259,13 @@
 	// The period's links: the same filters, another week or month.
 	const at = (period: Period) => href({ ...data.state, period });
 	const thisPeriod = $derived(periodOf(data.state.period.unit, today(data.timeZone)));
+	// The arrows skip weeks and months without sessions and stop at the
+	// logbook's ends (user's request, 2026-11-18): the nearest periods with
+	// sessions that pass the filters.
+	const periodHref = (start: string | null) =>
+		start ? at(periodOf(data.state.period.unit, dayOf(start, data.timeZone))) : null;
+	const previousHref = $derived(periodHref(data.around.before));
+	const nextHref = $derived(periodHref(data.around.after));
 
 	// The open session's place in the list (newest first).
 	const openedIndex = $derived(data.sessions.findIndex((session) => session.id === opened));
@@ -487,18 +494,16 @@
 				<IconButton icon={ChevronRight} size="lg" label="Later session" disabled />
 			{/if}
 		{:else}
-			<IconButton
-				icon={ChevronLeft}
-				size="lg"
-				label="Previous {unit}"
-				href={at(step(data.state.period, -1))}
-			/>
-			<IconButton
-				icon={ChevronRight}
-				size="lg"
-				label="Next {unit}"
-				href={at(step(data.state.period, 1))}
-			/>
+			{#if previousHref}
+				<IconButton icon={ChevronLeft} size="lg" label="Previous {unit}" href={previousHref} />
+			{:else}
+				<IconButton icon={ChevronLeft} size="lg" label="Previous {unit}" disabled />
+			{/if}
+			{#if nextHref}
+				<IconButton icon={ChevronRight} size="lg" label="Next {unit}" href={nextHref} />
+			{:else}
+				<IconButton icon={ChevronRight} size="lg" label="Next {unit}" disabled />
+			{/if}
 		{/if}
 		<!-- After both arrows, as in a calendar's header, so they stay put
 		     whatever the name's length (user's feedback). -->
@@ -667,12 +672,14 @@
 								title="No sessions in {periodName(data.state.period)}"
 								body={cardsFiltering
 									? 'No sessions you can see in this period have a flight that passes these filters.'
-									: 'Step to another period with the arrows, or see all sessions in the table.'}
+									: previousHref || nextHref
+										? 'Step to another period with the arrows, or see all sessions in the table.'
+										: 'No sessions yet.'}
 							>
 								{#snippet action()}
 									{#if cardsFiltering}
 										<Button kind="ghost" onclick={() => filter(NO_FILTERS)}>Clear filters</Button>
-									{:else}
+									{:else if previousHref || nextHref}
 										<Link href={href({ ...data.state, view: 'table' })}>Show the table</Link>
 									{/if}
 								{/snippet}

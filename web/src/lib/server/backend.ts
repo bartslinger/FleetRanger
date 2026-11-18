@@ -180,6 +180,12 @@ export interface SessionComment {
 	edited_at: string | null;
 }
 
+/** When the nearest sessions before and after a period start, `GET /api/sessions/around`. */
+export interface SessionsAround {
+	before: string | null;
+	after: string | null;
+}
+
 /** A session's neighbours in a list, newer and older, with their first
  * takeoff, from `GET /api/sessions/{id}/neighbours`. */
 export interface SessionNeighbours {

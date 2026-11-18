@@ -265,6 +265,69 @@ pub async fn neighbours(
     .await
 }
 
+/// When the nearest sessions outside a period start: the last before it and
+/// the first after it, so the cards' arrows skip empty weeks and months.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Around {
+    pub before: Option<DateTime<Utc>>,
+    pub after: Option<DateTime<Utc>>,
+}
+
+/// The nearest sessions in the scope's list with this filter that start
+/// before `filter.from` and at or after `filter.to`, as `list` places
+/// sessions in a period: by their first takeoff. Without `from` nothing is
+/// before, without `to` nothing after.
+pub async fn around(
+    db: &mut PgConnection,
+    scope: &FlightScope,
+    filter: &Filter,
+) -> sqlx::Result<Around> {
+    sqlx::query_as!(
+        Around,
+        r#"with listed as (
+               select min(f.takeoff_at) as start
+               from flights f
+               where f.session_id is not null
+                 and ($1
+                      or f.pilot_id = $2
+                      or f.group_id = any($11))
+                 and f.session_id in (
+                     select g.session_id from flights g
+                     where g.session_id is not null
+                       and ($1
+                            or g.pilot_id = $2
+                            or g.group_id = any($11))
+                       and ($3::text[] is null or g.aircraft_serial = any($3))
+                       and ($4::text[] is null or g.rc_serial = any($4))
+                       and ($7::uuid[] is null
+                            or g.session_id in (select id from sessions
+                                                where group_id = any($7)))
+                       and ($8::uuid[] is null or g.pilot_id = any($8)
+                            or ($9 and g.pilot_id is null))
+                       and ($10::uuid[] is null or exists (select 1 from flight_areas fa
+                                                           where fa.flight_id = g.id
+                                                             and fa.area_id = any($10))))
+               group by f.session_id
+           )
+           select max(start) filter (where start < $5) as before,
+                  min(start) filter (where start >= $6) as after
+           from listed"#,
+        scope.all,
+        scope.user_id,
+        filter.aircraft_serials.as_deref(),
+        filter.rc_serials.as_deref(),
+        filter.from,
+        filter.to,
+        filter.group_ids.as_deref(),
+        filter.pilot_ids.as_deref(),
+        filter.unknown_pilot,
+        filter.area_ids.as_deref(),
+        &scope.group_ids,
+    )
+    .fetch_one(&mut *db)
+    .await
+}
+
 /// Any constant, so that only one change to an organisation's sessions
 /// (grouping, splitting, merging) runs at a time; other organisations'
 /// don't wait for it.
@@ -275,13 +338,20 @@ pub(crate) async fn locked(
     db: &mut PgConnection,
 ) -> sqlx::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
     let mut tx = db.begin().await?;
+    lock(&mut tx).await?;
+    Ok(tx)
+}
+
+/// Takes the sessions lock of the connection's organisation until the end of
+/// the transaction it is in.
+pub(crate) async fn lock(db: &mut PgConnection) -> sqlx::Result<()> {
     sqlx::query!(
         "select pg_advisory_xact_lock($1, hashtext(coalesce(current_setting('app.organisation_id', true), '')))",
         SESSIONS_LOCK
     )
-    .execute(&mut *tx)
+    .execute(&mut *db)
     .await?;
-    Ok(tx)
+    Ok(())
 }
 
 /// The group of each of these sessions, or None if one of them doesn't
@@ -1308,6 +1378,96 @@ mod tests {
                 .await
                 .unwrap()
                 .is_none()
+        );
+    }
+
+    /// The cards' arrows go to the nearest sessions that pass the filter,
+    /// placed by their first takeoff: one starting at the period's end is in
+    /// the next period, and nothing beyond the ends.
+    #[sqlx::test]
+    async fn around_skips_to_the_nearest_sessions(pool: sqlx::PgPool) {
+        let mut db = crate::testing::db(&pool).await;
+        let a = insert_id(
+            &mut db,
+            "insert into users (name) values ('A') returning id",
+        )
+        .await;
+        let morning = upload(&mut db, a, "08:00", "08:20", "21:30").await;
+        upload(&mut db, a, "12:00", "12:20", "21:30").await;
+        let evening = upload(&mut db, a, "16:00", "16:20", "21:30").await;
+        let everything = FlightScope {
+            all: true,
+            user_id: a,
+            group_ids: Vec::new(),
+        };
+        let at =
+            |time: &str| -> DateTime<Utc> { format!("2026-10-12T{time}:00Z").parse().unwrap() };
+        let period = |from: &str, to: &str| Filter {
+            from: Some(at(from)),
+            to: Some(at(to)),
+            ..Filter::default()
+        };
+
+        let found = around(&mut db, &everything, &period("10:00", "16:00"))
+            .await
+            .unwrap();
+        assert_eq!(found.before, Some(at("08:00")));
+        assert_eq!(
+            found.after,
+            Some(at("16:00")),
+            "starting at the end is after"
+        );
+        let found = around(&mut db, &everything, &period("06:00", "07:00"))
+            .await
+            .unwrap();
+        assert_eq!(found.before, None, "nothing earlier");
+        assert_eq!(found.after, Some(at("08:00")));
+        let found = around(&mut db, &everything, &period("08:00", "09:00"))
+            .await
+            .unwrap();
+        assert_eq!(found.before, None, "starting at the start is in it");
+
+        // Someone who sees none of these flights is led nowhere.
+        let b = insert_id(
+            &mut db,
+            "insert into users (name) values ('B') returning id",
+        )
+        .await;
+        let own = FlightScope {
+            all: false,
+            user_id: b,
+            group_ids: Vec::new(),
+        };
+        let found = around(&mut db, &own, &period("10:00", "11:00"))
+            .await
+            .unwrap();
+        assert_eq!(
+            found,
+            Around {
+                before: None,
+                after: None
+            }
+        );
+
+        // Drone A flew in the morning and the evening, not at noon.
+        let mut drone_a = period("09:00", "10:00");
+        drone_a.aircraft_serials = Some(vec!["A".to_owned()]);
+        sqlx::query("update flights set aircraft_serial = 'A' where id = any($1)")
+            .bind([morning, evening])
+            .execute(&mut *db)
+            .await
+            .unwrap();
+        let found = around(&mut db, &everything, &drone_a).await.unwrap();
+        assert_eq!(found.after, Some(at("16:00")), "noon is skipped");
+        drone_a.from = Some(at("17:00"));
+        drone_a.to = Some(at("18:00"));
+        let found = around(&mut db, &everything, &drone_a).await.unwrap();
+        assert_eq!(
+            found,
+            Around {
+                before: Some(at("16:00")),
+                after: None
+            }
         );
     }
 

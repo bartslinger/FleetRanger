@@ -80,7 +80,12 @@ async fn start(args: Vec<String>) -> Result<()> {
         .connect(&config.database_url)
         .await
         .context("failed to connect to the database")?;
-    sqlx::migrate!()
+    // During a rolling update an older instance may restart after a newer
+    // one applied migrations it doesn't know; those are additive
+    // (expand/contract), so it starts anyway.
+    let mut migrator = sqlx::migrate!();
+    migrator.set_ignore_missing(true);
+    migrator
         .run(&system)
         .await
         .context("failed to run database migrations")?;
