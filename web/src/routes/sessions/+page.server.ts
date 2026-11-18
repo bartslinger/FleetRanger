@@ -12,7 +12,7 @@ import {
 	type SessionPage
 } from '#lib/server/backend.js';
 import { parsePilot } from '#lib/pilots.js';
-import { allPages } from '#lib/server/pages.js';
+import { allPages, once } from '#lib/server/pages.js';
 import { apiFilters, listFilters, parse, PERIOD_SIZE, query } from './list.js';
 import { dayOf, days, periodOf, step } from '#lib/period.js';
 
@@ -46,7 +46,7 @@ export async function load({ fetch, locals, url }) {
 	const [{ sessions, total }, choices, devices, around] = await Promise.all([
 		cards
 			? allPages<SessionPage>(fetch, '/api/sessions', api).then((pages) => ({
-					sessions: pages.flatMap((page) => page.sessions),
+					sessions: once(pages.flatMap((page) => page.sessions)),
 					total: pages[0]?.total ?? 0
 				}))
 			: get<SessionPage>(fetch, `/api/sessions?${api}`),

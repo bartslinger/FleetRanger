@@ -1,6 +1,6 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { parsePilot } from '#lib/pilots.js';
-import { allPages } from '#lib/server/pages.js';
+import { allPages, once } from '#lib/server/pages.js';
 import { sessionGroup, usesAreas } from '#lib/groups.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
@@ -41,7 +41,7 @@ export async function load({ fetch, locals, url }) {
 	const [{ flights, tracks, total }, suggestions, choices, devices, around] = await Promise.all([
 		cards
 			? allPages<FlightPage>(fetch, '/api/flights', listApi).then((pages) => ({
-					flights: pages.flatMap((page) => page.flights),
+					flights: once(pages.flatMap((page) => page.flights)),
 					tracks: pages.flatMap((page) => page.tracks ?? []),
 					total: pages[0]?.total ?? 0
 				}))

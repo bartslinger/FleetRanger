@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
@@ -250,23 +251,18 @@
 			flight.pilot_name ?? 'Unknown pilot',
 			...(showsGroups(data.account) ? [flight.group_name] : [])
 		].join(' · ');
-
-	// Opened from the cards in this tab, Back returns to them as they were
-	// (their scroll position too); opened directly, or stepped into another
+	// Opened from another page in this tab (the cards, the table, a session,
+	// a battery, a suggestion), ✕ returns to it as it was (its scroll position
+	// too); opened directly, or stepped into another week or month, ✕ replaces
+	// it with the cards of that one.
 	// week or month, ✕ replaces it with the cards of that one.
 	let cameFromList = false;
 	const periodParams = (url: URL) =>
 		`${url.searchParams.get('week')} ${url.searchParams.get('month')}`;
 	afterNavigate(({ from, to }) => {
 		if (!to?.url.searchParams.has('flight')) cameFromList = false;
+		else if (from && !from.url.searchParams.has('flight')) cameFromList = true;
 		else if (from && periodParams(from.url) !== periodParams(to.url)) cameFromList = false;
-		else if (
-			from &&
-			from.url.pathname === to.url.pathname &&
-			!from.url.searchParams.has('flight')
-		) {
-			cameFromList = true;
-		}
 	});
 	function close() {
 		if (cameFromList) history.back();
@@ -411,7 +407,7 @@
 		{#if openFlight && canArchiveOpen && openFlight.archived_at !== null}
 			<form
 				method="POST"
-				action="?/restore"
+				action={page.url.search ? `${page.url.search}&/restore` : '?/restore'}
 				use:enhance={() =>
 					async ({ result, update }) => {
 						await update();
