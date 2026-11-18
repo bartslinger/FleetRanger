@@ -18,6 +18,9 @@ pub async fn add_code(
     expires_at: DateTime<Utc>,
 ) -> sqlx::Result<Option<Uuid>> {
     let mut tx = db.begin().await?;
+    // The plan lock first, before the codes' rows, as deleting a group takes
+    // it before moving them (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     sqlx::query!("delete from pairing_codes where expires_at < now()")
         .execute(&mut *tx)
         .await?;
