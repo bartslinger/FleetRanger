@@ -292,7 +292,7 @@
 					// Counted in time, as the arrows step (the list is newest first):
 					// the newest is the last (user's feedback).
 					openedRow
-						? `${data.sessions.length - openedIndex} of ${data.sessions.length} · ${periodName(data.state.period)}`
+						? `${data.total - openedIndex} of ${data.total} · ${periodName(data.state.period)}`
 						: periodName(data.state.period)
 				]
 			: [periodName(data.state.period), sessions(data.total)]

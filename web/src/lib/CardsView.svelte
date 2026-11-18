@@ -70,7 +70,7 @@
 		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
 	}
 
-	.cards :global(ul) {
+	.cards :global(section > ul) {
 		display: grid;
 		gap: var(--cds-spacing-01);
 		margin: 0;

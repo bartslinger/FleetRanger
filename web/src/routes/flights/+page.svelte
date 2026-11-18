@@ -310,7 +310,7 @@
 			? [
 					day(openFlight.takeoff_at, data.timeZone, true),
 					openedIndex >= 0
-						? `${data.flights.length - openedIndex} of ${data.flights.length} · ${periodName(data.state.period)}`
+						? `${data.total - openedIndex} of ${data.total} · ${periodName(data.state.period)}`
 						: periodName(data.state.period)
 				]
 			: [periodName(data.state.period), flights(data.total)]
