@@ -29,7 +29,7 @@
 		month,
 		timeSpan
 	} from '#lib/format.js';
-	import { dayOf, periodName, periodOf, switchTo, today, type Period } from '#lib/period.js';
+	import { dayOf, periodName, periodOf, type Period } from '#lib/period.js';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -41,15 +41,8 @@
 	import Modal from '#lib/ui/Modal.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Pagination from '#lib/ui/Pagination.svelte';
-	import Calendar from '@carbon/icons/es/calendar/16.js';
-	import Close from '@carbon/icons/es/close/16.js';
-	import ChevronLeft from '@carbon/icons/es/chevron--left/16.js';
-	import ChevronRight from '@carbon/icons/es/chevron--right/16.js';
-	import { Tooltip } from 'bits-ui';
 	import IconButton from '#lib/ui/IconButton.svelte';
-	import TooltipContent from '#lib/ui/TooltipContent.svelte';
-	import { roving } from '#lib/ui/roving.js';
-	import OverflowMenu from '#lib/ui/OverflowMenu.svelte';
+	import PeriodToolbar from '#lib/PeriodToolbar.svelte';
 	import { toast } from '#lib/ui/toasts.svelte.js';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
@@ -258,7 +251,6 @@
 
 	// The period's links: the same filters, another week or month.
 	const at = (period: Period) => href({ ...data.state, period });
-	const thisPeriod = $derived(periodOf(data.state.period.unit, today(data.timeZone)));
 	// The arrows skip weeks and months without sessions and stop at the
 	// logbook's ends (user's request, 2026-11-18): the nearest periods with
 	// sessions that pass the filters.
@@ -287,14 +279,12 @@
 	const laterHref = $derived(
 		neighbourHref(data.neighbours?.previous ?? null, data.neighbours?.previous_start ?? null)
 	);
-	// The toolbar's two lines, the name and the count, and which are cut off:
-	// a tooltip has those in full, only those (user's feedback). Checked when
-	// the width or the text changes.
+	// The toolbar's two lines, the name and the count.
 	// Its day, from its flights: it may be outside the list's period.
 	const openedDay = $derived(
 		openSession?.flights[0] ? day(openSession.flights[0].takeoff_at, data.timeZone, true) : ''
 	);
-	const periodLines = $derived(
+	const periodLines: [string, string] = $derived(
 		openSession
 			? [
 					openedDay,
@@ -306,24 +296,6 @@
 				]
 			: [periodName(data.state.period), sessions(data.total)]
 	);
-	let periodHeading: HTMLElement | undefined = $state();
-	let cutLines: boolean[] = $state([false, false]);
-	const periodCut = $derived(cutLines.some(Boolean));
-	const periodLabel = $derived(periodLines.filter((_, line) => cutLines[line]).join(' · '));
-	$effect(() => {
-		const heading = periodHeading;
-		if (!heading) return;
-		void periodLines;
-		const check = () =>
-			(cutLines = [...heading.children].map((line) => line.scrollWidth > line.clientWidth));
-		const frame = requestAnimationFrame(check);
-		const resizes = new ResizeObserver(check);
-		resizes.observe(heading);
-		return () => {
-			cancelAnimationFrame(frame);
-			resizes.disconnect();
-		};
-	});
 	// In the cards the period isn't a filter: Clear filters leaves it.
 	const cardsFiltering = $derived(listFiltering({ ...data.state, from: null }));
 
@@ -449,127 +421,29 @@
 	]);
 </script>
 
-<!-- The list's toolbar, attached to the cards as a table's (Carbon's 48px
-     toolbar, carbon-expert's check): the period between previous and next,
-     with its count; at the end Filters, a dot while some apply, and a menu
-     for the unit and the current period, which change less often (no room
-     for a switcher in this column). Above the cards, where the pointer
-     works (user's choice, 2026-10-21). -->
 {#snippet periodToolbar()}
-	{@const unit = data.state.period.unit}
-	{@const other = unit === 'month' ? 'week' : 'month'}
-	<!-- A toolbar for screen readers, one tab stop with the arrow keys
-	     between its controls (Carbon's text toolbar, WAI-ARIA). -->
-	<div class="list-toolbar" role="toolbar" aria-label="Sessions" use:roving>
-		<!-- A session open, the same bar in the same place: the arrows step
-		     through the sessions instead, in time like the periods (‹ earlier),
-		     on into the next period, disabled at the logbook's ends; ✕ in place
-		     of the list's tools
-		     goes back to the list (user's choice, 2026-10-21). -->
-		{#if openSession}
-			<!-- Stepping replaces the history entry, so Back and ✕ return to the
-			     list; the page keeps its scroll. -->
-			{#if earlierHref}
-				<IconButton
-					icon={ChevronLeft}
-					size="lg"
-					label="Earlier session"
-					href={earlierHref}
-					data-sveltekit-replacestate
-					data-sveltekit-noscroll
-				/>
-			{:else}
-				<IconButton icon={ChevronLeft} size="lg" label="Earlier session" disabled />
-			{/if}
-			{#if laterHref}
-				<IconButton
-					icon={ChevronRight}
-					size="lg"
-					label="Later session"
-					href={laterHref}
-					data-sveltekit-replacestate
-					data-sveltekit-noscroll
-				/>
-			{:else}
-				<IconButton icon={ChevronRight} size="lg" label="Later session" disabled />
-			{/if}
-		{:else}
-			{#if previousHref}
-				<IconButton icon={ChevronLeft} size="lg" label="Previous {unit}" href={previousHref} />
-			{:else}
-				<IconButton icon={ChevronLeft} size="lg" label="Previous {unit}" disabled />
-			{/if}
-			{#if nextHref}
-				<IconButton icon={ChevronRight} size="lg" label="Next {unit}" href={nextHref} />
-			{:else}
-				<IconButton icon={ChevronRight} size="lg" label="Next {unit}" disabled />
-			{/if}
-		{/if}
-		<!-- After both arrows, as in a calendar's header, so they stay put
-		     whatever the name's length (user's feedback). -->
-		<!-- Cut off, the full name in a tooltip, on hover and keyboard focus
-		     (our rule for truncated values; user's request). -->
-		<Tooltip.Root disabled={!periodCut}>
-			<Tooltip.Trigger>
-				{#snippet child({ props })}
-					<!-- One of the toolbar's stops only while cut off, so the keyboard
-						     reaches the full name too; screen readers read the text. -->
-					<h2
-						{...props}
-						bind:this={periodHeading}
-						class="period"
-						aria-live="polite"
-						data-roving={periodCut ? 'true' : 'false'}
-					>
-						<span class="period-name">{periodLines[0]}</span>
-						<span class="period-count">{periodLines[1]}</span>
-					</h2>
-				{/snippet}
-			</Tooltip.Trigger>
-			<TooltipContent side="top">{periodLabel}</TooltipContent>
-		</Tooltip.Root>
-		<span class="tools">
-			{#if openSession}
-				<IconButton
-					icon={Close}
-					size="lg"
-					label="Back to {periodName(data.state.period)}"
-					onclick={close}
-				/>
-			{:else}
-				<ListFilters
-					toolbar
-					filters={data.state}
-					none={{ ...data.state, ...NO_FILTERS }}
-					devices={data.devices}
-					groupFilter={readsSeveralGroups(data.account)}
-					filtering={cardsFiltering}
-					onchange={filter}
-				/>
-				<OverflowMenu
-					label="Choose period"
-					variant="row"
-					icon={Calendar}
-					items={[
-						{
-							label: `Show by ${other}`,
-							// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
-							onselect: () => goto(at(switchTo(other, data.state.period, today(data.timeZone))))
-						},
-						...(data.state.period.start === thisPeriod.start
-							? []
-							: [
-									{
-										label: `Go to this ${unit}`,
-										// eslint-disable-next-line svelte/no-navigation-without-resolve -- at() resolves
-										onselect: () => goto(at(thisPeriod))
-									}
-								])
-					]}
-				/>
-			{/if}
-		</span>
-	</div>
+	<PeriodToolbar
+		label="Sessions"
+		period={data.state.period}
+		timeZone={data.timeZone}
+		{at}
+		{previousHref}
+		{nextHref}
+		lines={periodLines}
+		open={openSession ? { noun: 'session', earlierHref, laterHref, onclose: close } : null}
+	>
+		{#snippet tools()}
+			<ListFilters
+				toolbar
+				filters={data.state}
+				none={{ ...data.state, ...NO_FILTERS }}
+				devices={data.devices}
+				groupFilter={readsSeveralGroups(data.account)}
+				filtering={cardsFiltering}
+				onchange={filter}
+			/>
+		{/snippet}
+	</PeriodToolbar>
 {/snippet}
 
 <!-- A session open: its title, the breadcrumb back to the list (through the
@@ -1138,64 +1012,6 @@
 		.cards-view {
 			grid-template-columns: minmax(0, 11fr) minmax(0, 5fr);
 		}
-	}
-
-	/* Carbon's large table toolbar: 48px on the list's layer, 2px above the
-	   first card, its buttons full height. */
-	.list-toolbar {
-		display: flex;
-		align-items: center;
-		min-height: var(--cds-spacing-09);
-		/* 2px to the first card. */
-		margin-bottom: var(--cds-spacing-01);
-		background: var(--cds-layer-01);
-	}
-
-	/* The buttons keep their 48px; the name gives way, its end (the count)
-	   cut off with an ellipsis (user's feedback: the arrows were squeezed). */
-	.list-toolbar :global(.icon-button) {
-		flex: none;
-	}
-
-	/* The name, and under it the count, each line the full width so the
-	   count isn't cut off behind the name (user's choice, 2026-10-21):
-	   18px + 2px + 16px in the 48px bar. */
-	.period {
-		display: flex;
-		flex: 1;
-		flex-direction: column;
-		gap: 0.125rem;
-		min-width: 0;
-		margin: 0;
-		padding-inline: var(--cds-spacing-03);
-	}
-
-	.period-name,
-	.period-count {
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-	}
-
-	.period-name {
-		font-size: var(--cds-heading-compact-01-font-size);
-		font-weight: var(--cds-heading-compact-01-font-weight);
-		line-height: var(--cds-heading-compact-01-line-height);
-		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
-	}
-
-	.period-count {
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-label-01-font-size);
-		font-weight: var(--cds-label-01-font-weight);
-		line-height: var(--cds-label-01-line-height);
-		letter-spacing: var(--cds-label-01-letter-spacing);
-	}
-
-	.tools {
-		display: flex;
-		flex: none;
-		margin-inline-start: auto;
 	}
 
 	/* The flights under the map and facts, coming in after the facts. */
