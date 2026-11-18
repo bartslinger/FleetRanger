@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with set as (update flights set pilot_id = $2 where id = any($1)\n                        returning session_id),\n                marked as (update sessions set changed_at = now()\n                           where id in (select session_id from set))\n           select count(*) as \"changed!\" from set",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "changed!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c66c56c41706125c87b735100a1ee0c534eee953ab3ebf8b6b01c01fc04adea5"
+}

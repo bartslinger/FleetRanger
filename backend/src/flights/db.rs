@@ -891,33 +891,46 @@ pub async fn group_exists(db: &mut PgConnection, group_id: Uuid) -> sqlx::Result
 }
 
 /// Sets the pilot of these flights. They stay in their group and their
-/// session: sessions change only when someone changes them.
+/// session: sessions change only when someone changes them. Their sessions
+/// count as changed by a person, so grouping leaves them as they are.
 pub async fn set_pilot(
     db: &mut PgConnection,
     ids: &[Uuid],
     pilot_id: Option<Uuid>,
 ) -> sqlx::Result<u64> {
-    let result = sqlx::query!(
-        "update flights set pilot_id = $2 where id = any($1)",
+    let mut tx = sessions::db::locked(db).await?;
+    let changed = sqlx::query_scalar!(
+        r#"with set as (update flights set pilot_id = $2 where id = any($1)
+                        returning session_id),
+                marked as (update sessions set changed_at = now()
+                           where id in (select session_id from set))
+           select count(*) as "changed!" from set"#,
         ids,
         pilot_id,
     )
-    .execute(&mut *db)
+    .fetch_one(&mut *tx)
     .await?;
-    Ok(result.rows_affected())
+    tx.commit().await?;
+    Ok(changed.unsigned_abs())
 }
 
-/// Moves these flights to a group. They keep their pilot and
-/// their session.
+/// Moves these flights to a group. They keep their pilot and their session,
+/// which counts as changed by a person, as with `set_pilot`.
 pub async fn set_group(db: &mut PgConnection, ids: &[Uuid], group_id: Uuid) -> sqlx::Result<u64> {
-    let result = sqlx::query!(
-        "update flights set group_id = $2 where id = any($1)",
+    let mut tx = sessions::db::locked(db).await?;
+    let changed = sqlx::query_scalar!(
+        r#"with set as (update flights set group_id = $2 where id = any($1)
+                        returning session_id),
+                marked as (update sessions set changed_at = now()
+                           where id in (select session_id from set))
+           select count(*) as "changed!" from set"#,
         ids,
         group_id,
     )
-    .execute(&mut *db)
+    .fetch_one(&mut *tx)
     .await?;
-    Ok(result.rows_affected())
+    tx.commit().await?;
+    Ok(changed.unsigned_abs())
 }
 
 /// Archives these flights and returns how many weren't archived yet. Archiving
@@ -1421,6 +1434,28 @@ mod tests {
         set_group(&mut db, &[flight], north).await.unwrap();
         set_pilot(&mut db, &[flight], None).await.unwrap();
         assert_eq!(state(&mut db).await, (None, Some(north), Some(session)));
+
+        // Either is a person's change to the session: grouping leaves it.
+        let untouched = async |db: &mut PgConnection| -> bool {
+            sqlx::query_scalar("update sessions set changed_at = null where id = $1 returning true")
+                .bind(session)
+                .fetch_one(db)
+                .await
+                .unwrap()
+        };
+        let changed = async |db: &mut PgConnection| -> bool {
+            sqlx::query_scalar("select changed_at is not null from sessions where id = $1")
+                .bind(session)
+                .fetch_one(db)
+                .await
+                .unwrap()
+        };
+        assert!(untouched(&mut db).await);
+        set_pilot(&mut db, &[flight], Some(pilot)).await.unwrap();
+        assert!(changed(&mut db).await, "a pilot set");
+        assert!(untouched(&mut db).await);
+        set_group(&mut db, &[flight], south).await.unwrap();
+        assert!(changed(&mut db).await, "a group set");
     }
 
     /// Only someone active with `flights.fly_for` somewhere can be a pilot:
