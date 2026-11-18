@@ -11,7 +11,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::db::{Filter, FlightDetail, FlightSummary, Neighbours, Sort, SortKey};
+use super::db::{
+    Around, Filter, FlightDetail, FlightSummary, FlightTrack, Neighbours, Sort, SortKey,
+};
 use super::service;
 use crate::{
     auth::Actor,
@@ -35,6 +37,7 @@ where
         .route("/api/flights/choices", get(choices))
         .route("/api/flights/devices", get(devices))
         .route("/api/flights/ids", get(ids))
+        .route("/api/flights/around", get(around))
         .route("/api/flights/{id}", get(show))
         .route("/api/flights/{id}/neighbours", get(neighbours))
         .route("/api/flights/pilot", post(set_pilot))
@@ -178,6 +181,8 @@ struct ListQuery {
     /// `suggestions`: a flight's neighbours are those of its suggested
     /// session (with `session=none`).
     view: Option<String>,
+    /// `tracks=1`: the page's flights' coarse tracks too, for a map of them all.
+    tracks: Option<u8>,
     /// `true`: only archived flights, which are otherwise left out.
     archived: Option<bool>,
 }
@@ -185,6 +190,9 @@ struct ListQuery {
 #[derive(Serialize)]
 struct FlightPage {
     flights: Vec<FlightSummary>,
+    /// With `tracks=1`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tracks: Option<Vec<FlightTrack>>,
     total: i64,
 }
 
@@ -202,13 +210,37 @@ async fn list(
     }
     let (filter, sort) = filter_and_sort(&query).map_err(bad_request)?;
     let offset = i64::from(page - 1) * i64::from(size);
-    match service::list(&mut db, &actor, &filter, &sort, i64::from(size), offset).await {
-        Ok((flights, total)) => Ok(Json(FlightPage { flights, total })),
+    let page = async {
+        let (flights, total) =
+            service::list(&mut db, &actor, &filter, &sort, i64::from(size), offset).await?;
+        let tracks = match query.tracks {
+            Some(1) => Some(service::tracks(&mut db, &flights).await?),
+            _ => None,
+        };
+        Ok::<_, sqlx::Error>(FlightPage {
+            flights,
+            tracks,
+            total,
+        })
+    };
+    match page.await {
+        Ok(page) => Ok(Json(page)),
         Err(error) => {
             tracing::error!(%error, "listing flights");
             Err((StatusCode::INTERNAL_SERVER_ERROR, String::new()))
         }
     }
+}
+
+/// When the nearest flights with these filters take off before `from` and
+/// at or after `to`: where the cards' arrows go.
+async fn around(
+    actor: Actor,
+    mut db: Db,
+    Query(query): Query<ListQuery>,
+) -> ApiResult<Json<Around>> {
+    let (filter, _) = filter_and_sort(&query).map_err(ApiError::Invalid)?;
+    Ok(Json(service::around(&mut db, &actor, &filter).await?))
 }
 
 #[derive(Serialize)]

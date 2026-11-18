@@ -29,6 +29,30 @@ pub async fn list(
     Ok((flights, total))
 }
 
+/// Coarse tracks of these flights from `list`, for the cards' map.
+pub async fn tracks(
+    db: &mut PgConnection,
+    flights: &[FlightSummary],
+) -> sqlx::Result<Vec<db::FlightTrack>> {
+    let ids: Vec<Uuid> = flights.iter().map(|flight| flight.id).collect();
+    let mut tracks = db::tracks(db, &ids).await?;
+    for flight in &mut tracks {
+        flight.track = crate::sessions::service::coarse(&flight.track);
+    }
+    Ok(tracks)
+}
+
+/// When the nearest flights before and after the filter's period take off,
+/// among those the actor may see.
+pub async fn around(
+    db: &mut PgConnection,
+    actor: &Actor,
+    filter: &Filter,
+) -> ApiResult<db::Around> {
+    let scope = policy::flight_scope(actor);
+    Ok(db::around(db, &scope, filter).await?)
+}
+
 /// The ids of all flights the actor may see that pass the filter.
 pub async fn ids(db: &mut PgConnection, actor: &Actor, filter: &Filter) -> ApiResult<Vec<Uuid>> {
     let scope = policy::flight_scope(actor);
