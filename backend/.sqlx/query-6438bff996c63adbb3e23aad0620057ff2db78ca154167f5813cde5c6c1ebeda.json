@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select f.id, f.pilot_id as \"pilot_id!\", f.group_id, f.takeoff_at, f.landed_at,\n                  l.received_at\n           from flights f\n           join raw_logs l on l.id = f.raw_log_id\n           where f.raw_log_id = $1 and f.session_id is null and f.archived_at is null\n             and f.pilot_id is not null and l.pilot_id is not null",
+  "query": "select f.id, f.pilot_id, f.rc_serial, f.group_id, f.takeoff_at, f.landed_at\n           from flights f\n           where f.raw_log_id = $1 and f.session_id is null and f.archived_at is null\n             and (f.pilot_id is not null or f.rc_serial is not null)",
   "describe": {
     "columns": [
       {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "pilot_id!",
+        "name": "pilot_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "rc_serial",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "flights",
+            "name": "rc_serial"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "group_id",
         "type_info": "Uuid",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "takeoff_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -48,24 +59,13 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "landed_at",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
             "table": "flights",
             "name": "landed_at"
-          }
-        }
-      },
-      {
-        "ordinal": 5,
-        "name": "received_at",
-        "type_info": "Timestamptz",
-        "origin": {
-          "Table": {
-            "table": "raw_logs",
-            "name": "received_at"
           }
         }
       }
@@ -78,11 +78,11 @@
     "nullable": [
       false,
       true,
-      false,
+      true,
       false,
       false,
       false
     ]
   },
-  "hash": "0d4dbf374e5f970eda86c36b79db05cf865613dfc70f185d63165c10af3f8c0f"
+  "hash": "6438bff996c63adbb3e23aad0620057ff2db78ca154167f5813cde5c6c1ebeda"
 }
