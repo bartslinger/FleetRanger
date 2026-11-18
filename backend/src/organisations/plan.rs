@@ -23,7 +23,7 @@ impl Limit {
     pub fn message(self) -> String {
         match self {
             Self::Logins(max) => {
-                format!("The free plan has {max} logins. Remove a login to invite someone else.")
+                format!("The free plan has {max} logins. Archive someone or remove a login first.")
             }
             Self::Controllers(max) => format!(
                 "The free plan has {max} controllers. Unpair one in FleetRanger to pair this one."
@@ -48,7 +48,8 @@ impl Plan {
         }
     }
 
-    /// Logins, invitations not yet accepted included.
+    /// Logins of users who aren't archived, invitations not yet accepted
+    /// included.
     fn max_logins(self) -> Option<i64> {
         match self {
             Self::Free => Some(2),
@@ -88,8 +89,10 @@ pub async fn check_login(db: &mut PgConnection) -> sqlx::Result<Result<(), Limit
         return Ok(Ok(()));
     };
     let count = sqlx::query_scalar!(
-        r#"select count(*) as "count!" from logins
-           where organisation_id = current_setting('app.organisation_id', true)::uuid"#
+        r#"select count(*) as "count!" from logins l
+           join users u on u.id = l.user_id
+           where l.organisation_id = current_setting('app.organisation_id', true)::uuid
+             and u.archived_at is null"#
     )
     .fetch_one(&mut *db)
     .await?;
@@ -130,7 +133,7 @@ mod tests {
 
     use super::Limit;
     use crate::pairing::db::{add_code, unpair, use_code};
-    use crate::users::db::{UserFields, insert, update};
+    use crate::users::db::{Refused, UserFields, insert, set_archived, update};
 
     fn login(email: &str) -> UserFields<'_> {
         UserFields {
@@ -142,7 +145,8 @@ mod tests {
     }
 
     /// A free organisation takes no third login or controller; a changed
-    /// address, a controller pairing again and one unpaired take no place.
+    /// address, a controller pairing again, an archived user and an unpaired
+    /// controller take no place.
     #[sqlx::test]
     async fn the_free_plan_limits_new_logins_and_controllers(pool: sqlx::PgPool) {
         let mut db = crate::testing::db(&pool).await;
@@ -155,12 +159,10 @@ mod tests {
 
         let first = insert(&mut db, &login("test-a@example.org")).await.unwrap();
         assert!(first.is_ok());
-        assert!(
-            insert(&mut db, &login("test-b@example.org"))
-                .await
-                .unwrap()
-                .is_ok()
-        );
+        let second = insert(&mut db, &login("test-b@example.org"))
+            .await
+            .unwrap()
+            .unwrap_or_default();
         assert_eq!(
             insert(&mut db, &login("test-c@example.org"))
                 .await
@@ -175,6 +177,18 @@ mod tests {
                 .unwrap()
                 .is_ok()
         );
+        // Archiving frees a place, which unarchiving needs back.
+        assert!(set_archived(&mut db, second, true).await.unwrap().is_ok());
+        assert!(
+            insert(&mut db, &login("test-c@example.org"))
+                .await
+                .unwrap()
+                .is_ok()
+        );
+        assert!(matches!(
+            set_archived(&mut db, second, false).await.unwrap(),
+            Err(Refused::Limit(Limit::Logins(2)))
+        ));
 
         let group = crate::testing::general(&mut db).await;
         let soon = Utc::now() + Duration::hours(1);
