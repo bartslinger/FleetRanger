@@ -47,6 +47,12 @@ services:
       FLEETRANGER_API: ${FLEETRANGER_API:-}
       # Several organisations, as on the hosted service; one by default.
       FLEETRANGER_MULTI_TENANT: ${FLEETRANGER_MULTI_TENANT:-}
+      # Self-service sign-up, only with several organisations; needs the links
+      # to the terms and the privacy policy.
+      FLEETRANGER_SIGNUP: ${FLEETRANGER_SIGNUP:-}
+      FLEETRANGER_SIGNUP_CAP: ${FLEETRANGER_SIGNUP_CAP:-}
+      FLEETRANGER_TERMS_URL: ${FLEETRANGER_TERMS_URL:-}
+      FLEETRANGER_PRIVACY_URL: ${FLEETRANGER_PRIVACY_URL:-}
       # Raw logs on S3 instead of in flightlogs (see "Raw logs on S3" in
       # docs/architecture.md). Credentials may also come from an EC2 role.
       FLEETRANGER_S3_BUCKET: ${FLEETRANGER_S3_BUCKET:-}

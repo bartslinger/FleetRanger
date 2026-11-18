@@ -159,7 +159,7 @@ One install serving several organisations, for a hosted service where FleetRange
 - [x] Invitations: a login is tied to an organisation only once the person accepts; an organisation always keeps an Admin who has logged in (user, 2026-11-16; before launch; see "Invitations before launch" in [architecture.md](architecture.md))
 - [ ] Free-tier limits: 2 users who can log in, 2 controllers (hard-coded)
 - [x] Terms of use, privacy policy and processing agreement for the hosted service, as pages of the website (2026-11-18; see "Public website" in [architecture.md](architecture.md))
-- [ ] `deploy/compose.yaml` passes the sign-up settings to the backend (`FLEETRANGER_SIGNUP`, its cap, `FLEETRANGER_TERMS_URL`, `FLEETRANGER_PRIVACY_URL`), so an install can switch sign-up on
+- [x] `deploy/compose.yaml` passes the sign-up settings to the backend (`FLEETRANGER_SIGNUP`, its cap, `FLEETRANGER_TERMS_URL`, `FLEETRANGER_PRIVACY_URL`), so an install can switch sign-up on
 
 ## Before production use
 
