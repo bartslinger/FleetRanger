@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select archived_at is not null as \"archived!\" from users where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "archived!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "92db7a7ef1d9a5384968dd83e45631572f70fecc145fb09debe5d8053706e727"
+}

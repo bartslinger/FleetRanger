@@ -104,6 +104,8 @@ pub async fn insert(
     fields: &UserFields<'_>,
 ) -> sqlx::Result<Result<Uuid, Limit>> {
     let mut tx = db.begin().await?;
+    // The plan lock first, always before row locks (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let id = sqlx::query_scalar!(
         "insert into users (name) values ($1) returning id",
         fields.name,
@@ -124,6 +126,8 @@ pub async fn update(
     fields: &UserFields<'_>,
 ) -> sqlx::Result<Result<(), Refused>> {
     let mut tx = db.begin().await?;
+    // The plan lock first, always before row locks (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let admins = lock_active_admins(&mut tx).await?;
     let updated = sqlx::query!("update users set name = $2 where id = $1", id, fields.name)
         .execute(&mut *tx)
@@ -206,7 +210,15 @@ async fn set_login(
     if current.as_deref() == email {
         return Ok(Ok(()));
     }
+    // An archived user's login takes its place once they're unarchived.
+    let archived = sqlx::query_scalar!(
+        r#"select archived_at is not null as "archived!" from users where id = $1"#,
+        id
+    )
+    .fetch_one(&mut *db)
+    .await?;
     if current.is_none()
+        && !archived
         && let Err(limit) = plan::check_login(db).await?
     {
         return Ok(Err(limit));
@@ -265,9 +277,23 @@ pub async fn set_archived(
     archived: bool,
 ) -> sqlx::Result<Result<(), Refused>> {
     let mut tx = db.begin().await?;
+    // The plan lock first, always before row locks (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let admins = lock_active_admins(&mut tx).await?;
     if archived && admins == [id] {
         return Ok(Err(Refused::LastAdmin));
+    }
+    // Unarchiving gives the user's login its place back, if the plan has one.
+    let returning_login = !archived
+        && sqlx::query_scalar!(
+            r#"select exists(select 1 from users u join logins l on l.user_id = u.id
+                             where u.id = $1 and u.archived_at is not null) as "exists!""#,
+            id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+    if returning_login && let Err(limit) = plan::check_login(&mut tx).await? {
+        return Ok(Err(Refused::Limit(limit)));
     }
     let updated = sqlx::query!(
         "update users set archived_at = case when $2 then coalesce(archived_at, now()) end
@@ -295,6 +321,8 @@ pub async fn set_archived(
 /// between: its foreign key check waits for the lock.
 pub async fn delete(db: &mut PgConnection, id: Uuid) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
+    // The plan lock first, always before row locks (see `plan::lock`).
+    plan::lock(&mut tx).await?;
     let deletable = sqlx::query_scalar!(
         r#"select not exists(select 1 from flights where pilot_id = $1)
                   and not exists(select 1 from session_comments where author_id = $1)

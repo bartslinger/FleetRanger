@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select count(*) as \"count!\" from logins l\n           join users u on u.id = l.user_id\n           where l.organisation_id = current_setting('app.organisation_id', true)::uuid\n             and u.archived_at is null",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "dbdf5d109931e7fe6e51c19aa109c7d52cef99213b10d8ccddd4b8a4e2148efa"
+}
