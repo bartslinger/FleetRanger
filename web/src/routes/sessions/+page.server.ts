@@ -7,6 +7,7 @@ import {
 	timeZone,
 	type Devices,
 	type FlightChoices,
+	type SessionsAround,
 	type SessionPage
 } from '#lib/server/backend.js';
 import { parsePilot } from '#lib/pilots.js';
@@ -26,10 +27,13 @@ export async function load({ fetch, locals, url }) {
 	// sessions' own groups.
 	const options = new URLSearchParams(filters);
 	options.set('session', 'any');
-	const [{ sessions, total }, choices, devices] = await Promise.all([
+	// The cards' arrows go to the nearest periods with sessions.
+	const noneAround: SessionsAround = { before: null, after: null };
+	const [{ sessions, total }, choices, devices, around] = await Promise.all([
 		get<SessionPage>(fetch, `/api/sessions?${api}`),
 		get<FlightChoices>(fetch, '/api/flights/choices'),
-		get<Devices>(fetch, `/api/flights/devices?${options}`)
+		get<Devices>(fetch, `/api/flights/devices?${options}`),
+		cards ? get<SessionsAround>(fetch, `/api/sessions/around?${filters}`) : noneAround
 	]);
 
 	// Past the last page, e.g. after sessions were merged: go to the last one.
@@ -37,7 +41,7 @@ export async function load({ fetch, locals, url }) {
 	if (!cards && state.page > pages)
 		redirect(307, `${url.pathname}${query({ ...state, page: pages })}`);
 
-	return { sessions, total, state, choices, devices, mapboxToken: MAPBOX_ACCESS_TOKEN };
+	return { sessions, total, state, choices, devices, around, mapboxToken: MAPBOX_ACCESS_TOKEN };
 }
 
 export const actions = {
