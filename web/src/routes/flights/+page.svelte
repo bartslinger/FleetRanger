@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '#lib/ui/Button.svelte';
@@ -26,7 +28,6 @@
 	import CardsView from '#lib/CardsView.svelte';
 	import PeriodToolbar from '#lib/PeriodToolbar.svelte';
 	import ClickableTile from '#lib/ui/ClickableTile.svelte';
-	import InlineNotification from '#lib/ui/InlineNotification.svelte';
 	import Link from '#lib/ui/Link.svelte';
 	import TrackMap from '#lib/ui/TrackMap.svelte';
 	import { anywhere, may, readsSeveralGroups, type Permission } from '#lib/permissions.js';
@@ -38,14 +39,7 @@
 	} from '#lib/groups.js';
 	import SessionGroupField from '#lib/SessionGroupField.svelte';
 	import { pilotOptions } from '#lib/pilots.js';
-	import {
-		DEFAULT_SORT,
-		PAGE_SIZES,
-		PERIOD_SIZE,
-		query,
-		showsCards,
-		type LogbookState
-	} from './logbook.js';
+	import { DEFAULT_SORT, PAGE_SIZES, query, showsCards, type LogbookState } from './logbook.js';
 	import SessionChoice from './SessionChoice.svelte';
 	import Suggestions from './Suggestions.svelte';
 	import ViewSwitcher from '#lib/ui/ViewSwitcher.svelte';
@@ -246,24 +240,29 @@
 	// Back closes it, as ✕ and Esc do.
 	const openFlight = $derived(data.openFlight);
 	const opened = $derived(openFlight?.id ?? null);
+	const canArchiveOpen = $derived(
+		openFlight !== null && may(data.account, 'flights.archive', openFlight.group_id)
+	);
 	const flightHref = (id: string) => `${resolve('/flights')}${query(data.state, id)}`;
-
-	// Opened from the cards in this tab, Back returns to them as they were
-	// (their scroll position too); opened directly, or stepped into another
+	// A card's second line: who flew, and the group once there are several, as
+	// on a session's card (user's request, 2026-11-18: no drone).
+	const flightWho = (flight: Row) =>
+		[
+			flight.pilot_name ?? 'Unknown pilot',
+			...(showsGroups(data.account) ? [flight.group_name] : [])
+		].join(' · ');
+	// Opened from another page in this tab (the cards, the table, a session,
+	// a battery, a suggestion), ✕ returns to it as it was (its scroll position
+	// too); opened directly, or stepped into another week or month, ✕ replaces
+	// it with the cards of that one.
 	// week or month, ✕ replaces it with the cards of that one.
 	let cameFromList = false;
 	const periodParams = (url: URL) =>
 		`${url.searchParams.get('week')} ${url.searchParams.get('month')}`;
 	afterNavigate(({ from, to }) => {
 		if (!to?.url.searchParams.has('flight')) cameFromList = false;
+		else if (from && !from.url.searchParams.has('flight')) cameFromList = true;
 		else if (from && periodParams(from.url) !== periodParams(to.url)) cameFromList = false;
-		else if (
-			from &&
-			from.url.pathname === to.url.pathname &&
-			!from.url.searchParams.has('flight')
-		) {
-			cameFromList = true;
-		}
 	});
 	function close() {
 		if (cameFromList) history.back();
@@ -373,6 +372,7 @@
 		? [{ href: href(data.state), label: 'Flights', follow: close }]
 		: undefined}
 	crumb={openFlight ? `Flight ${dateTime(openFlight.takeoff_at, data.timeZone)}` : crumb}
+	status={openFlight?.archived_at ? 'Archived' : undefined}
 >
 	{#snippet actions()}
 		<!-- Cards and Table are the same flights; with "Without session" on,
@@ -402,6 +402,34 @@
 						: [])
 				]}
 			/>{/if}
+		<!-- A flight open: archiving it, or restoring an archived one, as its own
+		     page had them. Only a flight without a session can be archived. -->
+		{#if openFlight && canArchiveOpen && openFlight.archived_at !== null}
+			<form
+				method="POST"
+				action={page.url.search ? `${page.url.search}&/restore` : '?/restore'}
+				use:enhance={() =>
+					async ({ result, update }) => {
+						await update();
+						if (result.type === 'success') toast('Flight restored.');
+					}}
+			>
+				<input type="hidden" name="flight_id" value={openFlight.id} />
+				<Button type="submit" kind="tertiary">Restore</Button>
+			</form>
+		{:else if openFlight && canArchiveOpen && openFlight.session_id === null}
+			<Modal
+				title="Archive flight"
+				triggerKind="tertiary"
+				submitLabel="Archive"
+				action="?/archive"
+				error={form && 'archiveMessage' in form ? form.archiveMessage : undefined}
+				onsuccess={() => toast('Flight archived.')}
+			>
+				<input type="hidden" name="flight_id" value={openFlight.id} />
+				<p>The flight is left out of Flights and totals. You can restore it later.</p>
+			</Modal>
+		{/if}
 	{/snippet}
 </PageHeader>
 
@@ -455,11 +483,6 @@
 <Grid>
 	<Column narrow>
 		{#if showsCards(data.state)}
-			{#if data.total > PERIOD_SIZE}
-				<InlineNotification kind="info" title="Only the latest {PERIOD_SIZE}">
-					This {data.state.period.unit} has {data.total} flights; the table shows them all.
-				</InlineNotification>
-			{/if}
 			<!-- The map and the cards, also for a period without flights, so the
 			     layout doesn't change: the empty state takes the cards' place,
 			     under their toolbar. Below lg there's no map. -->
@@ -471,11 +494,13 @@
 				{#snippet cards()}
 					{#if data.total === 0}
 						<EmptyState
-							title="No flights in {periodName(data.state.period)}"
+							title={cardsFiltering || previousHref || nextHref
+								? `No flights in ${periodName(data.state.period)}`
+								: 'No flights yet'}
 							body={cardsFiltering
-								? 'No flights you can see in this period pass these filters.'
+								? 'No flights in this period match your filters.'
 								: previousHref || nextHref
-									? 'Step to another period with the arrows, or see all flights in the table.'
+									? 'Use the arrows to see another period, or show all flights in the table.'
 									: 'Flights appear here when flight logs from your remote controllers are imported.'}
 						>
 							{#snippet action()}
@@ -506,10 +531,7 @@
 												{daySpan(flight.takeoff_at, flight.landed_at, data.timeZone)}
 											</span>
 											<span class="card-who">
-												{flight.pilot_name ?? 'Unknown pilot'} · {flight.aircraft_name ??
-													flight.aircraft_serial ??
-													'Unknown drone'}{#if showsGroups(data.account)}
-													· {flight.group_name}{/if}
+												{flightWho(flight)}
 											</span>
 											<span class="card-numbers">
 												{duration(flight.air_time_s)} in the air · {distance(flight.distance_m)}
@@ -603,7 +625,15 @@
 					{columns}
 					rows={data.flights}
 					rowKey={(flight) => flight.id}
-					rowHref={(flight) => resolve('/flights/[id]', { id: flight.id })}
+					rowHref={(flight) =>
+						`${resolve('/flights')}${query(
+							{
+								...data.state,
+								view: 'cards',
+								period: periodOf('month', dayOf(flight.takeoff_at, data.timeZone))
+							},
+							flight.id
+						)}`}
 					sort={data.state.sort}
 					defaultSort={DEFAULT_SORT}
 					sortHref={(sort) => href({ ...data.state, page: 1, sort: sort ?? DEFAULT_SORT })}

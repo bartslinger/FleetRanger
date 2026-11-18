@@ -1,8 +1,8 @@
 <!--
 	@component
 	A flight's facts in groups: who and where, when and how far, and its
-	equipment, with Change pilot and Move to group for who may. On the
-	flight's page and on Flights with the flight open; the dialogs post to
+	equipment, with Change pilot and Move to group for who may. On Flights
+	with the flight open; the dialogs post to
 	the page's own actions with the flight's id, and the toast names what
 	the reloaded flight then has.
 -->

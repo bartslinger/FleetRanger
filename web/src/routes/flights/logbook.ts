@@ -6,7 +6,7 @@ import { isDay, nextDay, startOfDay } from '#lib/zone.js';
 
 export const PAGE_SIZES = [25, 50, 100];
 const DEFAULT_SIZE = 50;
-/** The cards show a whole week or month on one page, up to the backend's largest page. */
+/** The backend's largest page: the cards ask for their whole period in pages of it. */
 export const PERIOD_SIZE = 100;
 
 export const SORTABLE = ['takeoff_at', 'air_time_s', 'distance_m', 'aircraft_serial', 'rc_serial'];
@@ -17,8 +17,9 @@ export interface LogbookState {
 	view: 'cards' | 'table';
 	/** The cards' week or month; the table uses `from` and `to`. */
 	period: Period;
-	/** The current month, the default, left out of the URL. */
-	thisMonth: string;
+	/** The month a plain address opens, left out of the URL: the latest with
+	 * activity, which the load sets (user's decision, 2026-11-18), else this month. */
+	defaultMonth: string;
 	page: number;
 	size: number;
 	sort: { key: string; descending: boolean };
@@ -48,12 +49,12 @@ export interface LogbookState {
 const list = (value: string | null) => (value ?? '').split(',').filter(Boolean);
 
 /** The cards' period: `week=2026-10-12` (a Monday) or `month=2026-10`, else this month. */
-function period(params: URLSearchParams, thisMonth: string): Period {
+function period(params: URLSearchParams, defaultMonth: string): Period {
 	const week = params.get('week');
 	if (isDay(week)) return periodOf('week', week);
 	const month = params.get('month');
 	if (month && isDay(`${month}-01`)) return periodOf('month', `${month}-01`);
-	return periodOf('month', thisMonth);
+	return periodOf('month', defaultMonth);
 }
 
 /** With `areas` false (the organisation doesn't use them), an area filter in
@@ -66,11 +67,11 @@ export function parse(params: URLSearchParams, timeZone: string, areas = true): 
 	const from = params.get('from');
 	const to = params.get('to');
 	const archived = params.get('status') === 'archived';
-	const thisMonth = periodOf('month', today(timeZone)).start;
+	const defaultMonth = periodOf('month', today(timeZone)).start;
 	return {
 		view: params.get('view') === 'table' ? 'table' : 'cards',
-		period: period(params, thisMonth),
-		thisMonth,
+		period: period(params, defaultMonth),
+		defaultMonth,
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		sort: SORTABLE.includes(key) ? { key, descending: sort.startsWith('-') } : DEFAULT_SORT,
@@ -109,7 +110,7 @@ export function query(state: LogbookState, flight?: string): string {
 	if (state.withoutSession && state.suggestions) params.set('view', 'suggestions');
 	else if (state.view === 'table') params.set('view', 'table');
 	else if (state.period.unit === 'week') params.set('week', state.period.start);
-	else if (state.period.start !== state.thisMonth) {
+	else if (state.period.start !== state.defaultMonth) {
 		params.set('month', state.period.start.slice(0, 7));
 	}
 	if (!cards) {
@@ -167,7 +168,7 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 	return query({
 		view: 'table',
 		period: periodOf('month', '2000-01-01'),
-		thisMonth: '2000-01-01',
+		defaultMonth: '2000-01-01',
 		page: 1,
 		size: DEFAULT_SIZE,
 		sort: DEFAULT_SORT,

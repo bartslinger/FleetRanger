@@ -1,5 +1,6 @@
 import { MAPBOX_ACCESS_TOKEN } from '$app/env/private';
 import { parsePilot } from '#lib/pilots.js';
+import { allPages, once } from '#lib/server/pages.js';
 import { sessionGroup, usesAreas } from '#lib/groups.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
@@ -12,21 +13,39 @@ import {
 	type FlightsAround,
 	type SuggestionPage
 } from '#lib/server/backend.js';
-import { apiQuery, parse, query, showsCards } from './logbook.js';
+import { apiFilters, apiQuery, parse, query, showsCards } from './logbook.js';
+import { dayOf, days, periodOf, step } from '#lib/period.js';
 
 export async function load({ fetch, locals, url }) {
-	const state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
+	let state = parse(url.searchParams, timeZone(locals), usesAreas(locals.account));
+	// A plain address opens the latest month with flights, not an empty one
+	// (user's decision, 2026-11-18): the last one starting before next month.
+	if (showsCards(state) && !url.searchParams.has('week') && !url.searchParams.has('month')) {
+		const upToNow = apiFilters({ ...state, ...days(step(state.period, 1)) }, timeZone(locals));
+		const { before } = await get<FlightsAround>(fetch, `/api/flights/around?${upToNow}`);
+		if (before) {
+			const month = periodOf('month', dayOf(before, timeZone(locals))).start;
+			state = { ...state, period: periodOf('month', month), defaultMonth: month };
+		}
+	}
 	const api = apiQuery(state, timeZone(locals));
 	const cards = showsCards(state);
 	// The suggestions page through suggestions; the list's first page still
-	// counts the flights. The cards' map shows all their tracks, coarse.
+	// counts the flights. The cards show their whole period, in as many of the
+	// backend's pages as it takes, and their map all its tracks, coarse.
 	const listApi = new URLSearchParams(api);
 	if (state.suggestions) listApi.set('page', '1');
 	if (cards) listApi.set('tracks', '1');
 	// The cards' arrows go to the nearest periods with flights.
 	const noneAround: FlightsAround = { before: null, after: null };
 	const [{ flights, tracks, total }, suggestions, choices, devices, around] = await Promise.all([
-		get<FlightPage>(fetch, `/api/flights?${listApi}`),
+		cards
+			? allPages<FlightPage>(fetch, '/api/flights', listApi).then((pages) => ({
+					flights: once(pages.flatMap((page) => page.flights)),
+					tracks: pages.flatMap((page) => page.tracks ?? []),
+					total: pages[0]?.total ?? 0
+				}))
+			: get<FlightPage>(fetch, `/api/flights?${listApi}`),
 		state.suggestions ? get<SuggestionPage>(fetch, `/api/flights/suggestions?${api}`) : null,
 		get<FlightChoices>(fetch, '/api/flights/choices'),
 		// The filters' options, narrowed by the other filters.
