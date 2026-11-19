@@ -10,11 +10,16 @@
 	import OpenSource from '@carbon/pictograms/es/open-source/index.js';
 	import Servers from '@carbon/pictograms/es/servers/index.js';
 	import Button from '$ui/Button.svelte';
+	import Tag from '$ui/Tag.svelte';
 	import Column from '$ui/Column.svelte';
 	import Grid from '$ui/Grid.svelte';
 	import Icon from '$ui/Icon.svelte';
 	import Controller from '#lib/Controller.svelte';
 	import Laptop from '#lib/Laptop.svelte';
+	import mavic3 from '#lib/images/drone-mavic-3-enterprise.png';
+	import matrice4 from '#lib/images/drone-matrice-4.png';
+	import matrice30 from '#lib/images/drone-matrice-30.png';
+	import matrice300 from '#lib/images/drone-matrice-300.png';
 	import pilot640 from '#lib/images/pilot-640.webp';
 	import pilot1280 from '#lib/images/pilot-1280.webp';
 	import dark800 from '#lib/images/session-dark-800.webp';
@@ -99,6 +104,14 @@
 		}
 	];
 
+	// The drones whose logs FleetRanger reads: tested where a fleet flies
+	// them, else expected to work, as they fly with DJI Pilot 2.
+	const supported = [
+		{ name: 'Mavic 3 Enterprise series', models: '3E, 3T, 3M', image: mavic3, tested: true },
+		{ name: 'Matrice 4 series', models: '4E, 4T', image: matrice4, tested: false },
+		{ name: 'Matrice 30 series', models: 'M30, M30T', image: matrice30, tested: false },
+		{ name: 'Matrice 300, 350 and 400 RTK', models: '', image: matrice300, tested: false }
+	];
 	const features = [
 		{
 			title: 'An app on the controller',
@@ -240,6 +253,34 @@
 				</blockquote>
 				<figcaption>Drone pilot and satisfied FleetRanger user</figcaption>
 			</figure>
+		</Column>
+	</Grid>
+</section>
+
+<section id="supported" aria-labelledby="supported-title">
+	<Grid centered rowGap>
+		<Column><div class="rule"></div></Column>
+		<Column md={8} lg={4}>
+			<h2 id="supported-title">Supported drones</h2>
+		</Column>
+		<Column md={8} lg={8}>
+			<ul class="drones">
+				{#each supported as drone (drone.name)}
+					<li>
+						<img src={drone.image} alt="" width="120" height="71" loading="lazy" />
+						<span class="drone-name">
+							{drone.name}{#if drone.models}<span class="models">{drone.models}</span>{/if}
+						</span>
+						<Tag type={drone.tested ? 'green' : 'gray'}
+							>{drone.tested ? 'Tested' : 'Not tested yet'}</Tag
+						>
+					</li>
+				{/each}
+			</ul>
+			<p class="body">
+				The app runs on the DJI RC Pro Enterprise, RC Plus and RC Plus 2 Enterprise. Flying another
+				DJI Enterprise drone with DJI Pilot 2? Write to {CONTACT}.
+			</p>
 		</Column>
 	</Grid>
 </section>
@@ -623,6 +664,43 @@
 	.tiles p {
 		margin-top: var(--cds-spacing-03);
 		color: var(--cds-text-secondary);
+	}
+
+	/* The supported drones: not Carbon's structured list, built for text
+	   columns, as the photos are the point (carbon-expert's advice); a picture,
+	   the name with its
+	   models under it, and a tag for whether it is tested; Carbon's 1px rule
+	   between rows. */
+	.drones li {
+		display: flex;
+		align-items: center;
+		gap: var(--cds-spacing-05);
+		padding-block: var(--cds-spacing-03);
+		border-bottom: 1px solid var(--cds-border-subtle-01);
+	}
+
+	.drones img {
+		flex: none;
+		width: 6rem;
+		/* Product photos, most on white: all on white, also in the dark theme. */
+		background: #ffffff;
+		height: auto;
+	}
+
+	.drone-name {
+		flex: 1;
+	}
+
+	.models {
+		display: block;
+		color: var(--cds-text-secondary);
+		font-size: var(--cds-label-01-font-size);
+		line-height: var(--cds-label-01-line-height);
+		letter-spacing: var(--cds-label-01-letter-spacing);
+	}
+
+	#supported .body {
+		margin-top: var(--cds-spacing-06);
 	}
 
 	/* The pains as base tiles with a pictogram, unlike the points' open list. */
