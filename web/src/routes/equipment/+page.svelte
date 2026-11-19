@@ -5,7 +5,7 @@
 	import { KINDS, lastPilot, type Kind, type Tab } from '#lib/equipment.js';
 	import { dateTime, duration, health } from '#lib/format.js';
 	import { showsGroups } from '#lib/groups.js';
-	import { anywhere, may } from '#lib/permissions.js';
+	import { may } from '#lib/permissions.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -173,8 +173,8 @@
 
 {#snippet equipment(kind: Kind)}
 	{@const rows = kind === 'drones' ? data.drones : data.controllers}
-	{#if rows.length === 0 && kind === 'controllers' && anywhere(data.account, 'controllers.pair')}
-		<!-- A new organisation's first steps, where its admin starts (user's
+	{#if rows.length === 0 && kind === 'controllers' && may(data.account, 'controllers.pair', null)}
+		<!-- A new organisation's first steps, where its admins start (user's
 		     request, 2026-11-19: obvious, not vague): Carbon's empty state as
 		     in-line documentation, Pair a controller its one action. -->
 		<EmptyState
