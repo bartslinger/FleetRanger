@@ -5,7 +5,7 @@
 	import { KINDS, lastPilot, type Kind, type Tab } from '#lib/equipment.js';
 	import { dateTime, duration, health } from '#lib/format.js';
 	import { showsGroups } from '#lib/groups.js';
-	import { may } from '#lib/permissions.js';
+	import { anywhere, may } from '#lib/permissions.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -173,7 +173,21 @@
 
 {#snippet equipment(kind: Kind)}
 	{@const rows = kind === 'drones' ? data.drones : data.controllers}
-	{#if rows.length === 0}
+	{#if rows.length === 0 && kind === 'controllers' && anywhere(data.account, 'controllers.pair')}
+		<!-- A new organisation's first steps, where its admin starts (user's
+		     request, 2026-11-19: obvious, not vague): Carbon's empty state as
+		     in-line documentation, Pair a controller its one action. -->
+		<EmptyState
+			title="Start by pairing a controller"
+			body="Your flights upload from a DJI RC Pro Enterprise with the FleetRanger app."
+			steps={[
+				`On the controller, open ${page.url.host}/download and install the app.`,
+				'Select Pair a controller and type the code into the app.',
+				'Fly. Flight logs upload over Wi-Fi and show under Sessions.'
+			]}
+			action={pair}
+		/>
+	{:else if rows.length === 0}
 		<EmptyState
 			title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
 			body={!may(data.account, 'equipment.read', null) && showsGroups(data.account)
