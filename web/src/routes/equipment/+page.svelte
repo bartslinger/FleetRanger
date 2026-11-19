@@ -179,7 +179,7 @@
 		     in-line documentation, Pair a controller its one action. -->
 		<EmptyState
 			title="Start by pairing a controller"
-			body="Your flights upload from a DJI RC Pro Enterprise with the FleetRanger app."
+			body="Your flights upload from your DJI remote controller with the FleetRanger app."
 			steps={[
 				`On the controller, open ${page.url.host}/download and install the app.`,
 				'Select Pair a controller and type the code into the app.',
