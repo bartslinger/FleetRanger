@@ -14,13 +14,15 @@
 		/** Steps to take, in order, e.g. to get the first items in. */
 		steps?: string[];
 		action?: Snippet;
+		/** The title's heading level: 1 where it is the page's only heading. */
+		level?: 1 | 2;
 	}
 
-	let { title, body, steps, action }: Props = $props();
+	let { title, body, steps, action, level = 2 }: Props = $props();
 </script>
 
 <div class="empty">
-	<h2>{title}</h2>
+	<svelte:element this={`h${level}`} class="title">{title}</svelte:element>
 	<p>{body}</p>
 	{#if steps}
 		<ol>
@@ -40,7 +42,7 @@
 		background: var(--cds-layer-01);
 	}
 
-	h2 {
+	.title {
 		font-size: var(--cds-heading-03-font-size);
 		font-weight: var(--cds-heading-03-font-weight);
 		line-height: var(--cds-heading-03-line-height);

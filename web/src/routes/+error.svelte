@@ -24,10 +24,15 @@
 						title: 'No access',
 						body: 'You don’t have permission to see this. Ask an admin of your organisation for access.'
 					}
-				: {
-						title: 'Something went wrong',
-						body: 'FleetRanger couldn’t load this page. Try again in a moment.'
-					}
+				: status < 500
+					? {
+							title: 'Something went wrong',
+							body: 'FleetRanger couldn’t do what was asked on this page.'
+						}
+					: {
+							title: 'Something went wrong',
+							body: 'FleetRanger couldn’t load this page. Try again in a moment.'
+						}
 	);
 	// Trying again helps only when the server had a problem.
 	const retry = $derived(status >= 500);
@@ -38,7 +43,7 @@
 <div class="error">
 	<Grid>
 		<Column narrow>
-			<EmptyState title={shown.title} body={shown.body}>
+			<EmptyState level={1} title={shown.title} body={shown.body}>
 				{#snippet action()}
 					{#if retry}
 						<Button onclick={() => location.reload()}>Try again</Button>

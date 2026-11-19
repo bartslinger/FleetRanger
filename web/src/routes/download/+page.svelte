@@ -36,7 +36,8 @@
 				</p>
 				<p class="address"><code>{data.address}</code></p>
 				<p>
-					The app then asks for a pairing code. Anyone with a FleetRanger account creates one at
+					The app then asks for a pairing code. An admin, or a pilot or editor of a group, creates
+					one at
 					<a href={resolve('/pair')}>{data.server}/pair</a>.
 				</p>
 			</div>
