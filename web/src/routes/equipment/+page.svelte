@@ -173,7 +173,21 @@
 
 {#snippet equipment(kind: Kind)}
 	{@const rows = kind === 'drones' ? data.drones : data.controllers}
-	{#if rows.length === 0}
+	{#if rows.length === 0 && kind === 'controllers' && may(data.account, 'controllers.pair', null)}
+		<!-- A new organisation's first steps, where its admins start (user's
+		     request, 2026-11-19: obvious, not vague): Carbon's empty state as
+		     in-line documentation, Pair a controller its one action. -->
+		<EmptyState
+			title="Start by pairing a controller"
+			body="Your flights upload from your DJI remote controller with the FleetRanger app."
+			steps={[
+				`On the controller, open ${page.url.host}/download and install the app.`,
+				'Select Pair a controller and type the code into the app.',
+				'Fly. Flight logs upload over Wi-Fi and show under Sessions.'
+			]}
+			action={pair}
+		/>
+	{:else if rows.length === 0}
 		<EmptyState
 			title={kind === 'drones' ? 'No drones yet' : 'No remote controllers yet'}
 			body={!may(data.account, 'equipment.read', null) && showsGroups(data.account)
