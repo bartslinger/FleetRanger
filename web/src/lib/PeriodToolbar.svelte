@@ -44,6 +44,8 @@
 			earlierHref: string | null;
 			laterHref: string | null;
 			onclose: () => void;
+			/** ✕'s name; "Back to" the period by default. */
+			closeLabel?: string;
 		} | null;
 		/** The list's tools before the period menu, e.g. Filters. */
 		tools?: Snippet;
@@ -159,7 +161,7 @@
 			<IconButton
 				icon={Close}
 				size="lg"
-				label="Back to {periodName(period)}"
+				label={open.closeLabel ?? `Back to ${periodName(period)}`}
 				onclick={open.onclose}
 			/>
 		{:else}

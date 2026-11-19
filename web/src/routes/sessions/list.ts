@@ -17,8 +17,9 @@ export interface SessionListState extends Filters {
 	/** The cards' week or month; the table uses `from` and `to`. */
 	period: Period;
 	/** The month a plain address opens, left out of the URL: the latest with
-	 * activity, which the load sets (user's decision, 2026-11-18), else this month. */
-	defaultMonth: string;
+	 * activity, which the load sets (user's decision, 2026-11-18), else this month;
+	 * null when the address names a week or month, so every link names its own. */
+	defaultMonth: string | null;
 }
 
 /** Serials and ids, comma-separated in the URL. */
@@ -40,10 +41,11 @@ export function parse(params: URLSearchParams, timeZone: string, areas = true): 
 	const size = Number.parseInt(params.get('size') ?? '', 10);
 	const from = params.get('from');
 	const to = params.get('to');
-	const defaultMonth = periodOf('month', today(timeZone)).start;
+	const thisMonth = periodOf('month', today(timeZone)).start;
+	const named = params.has('week') || params.has('month');
 	return {
-		period: period(params, defaultMonth),
-		defaultMonth,
+		period: period(params, thisMonth),
+		defaultMonth: named ? null : thisMonth,
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		view: params.get('view') === 'table' ? 'table' : 'cards',
@@ -73,7 +75,8 @@ export function query(state: SessionListState, session?: string): string {
 	if (state.size !== DEFAULT_SIZE) params.set('size', String(state.size));
 	if (state.view !== 'cards') params.set('view', state.view);
 	else if (state.period.unit === 'week') params.set('week', state.period.start);
-	else if (state.period.start !== state.defaultMonth) {
+	// An open session's address names its month, so it stays the same.
+	else if (session || state.period.start !== state.defaultMonth) {
 		params.set('month', state.period.start.slice(0, 7));
 	}
 	if (session) params.set('session', session);

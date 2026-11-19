@@ -251,16 +251,16 @@
 			flight.pilot_name ?? 'Unknown pilot',
 			...(showsGroups(data.account) ? [flight.group_name] : [])
 		].join(' · ');
-	// Opened from another page in this tab (the cards, the table, a session,
-	// a battery, a suggestion), ✕ returns to it as it was (its scroll position
-	// too); opened directly, or stepped into another week or month, ✕ replaces
-	// it with the cards of that one.
-	// week or month, ✕ replaces it with the cards of that one.
+	// Opened from another page in this tab by a link (the cards, the table, a
+	// session, a battery, a suggestion), ✕ returns to it as it was (its scroll
+	// position too); opened directly, through Back or Forward, or stepped into
+	// another week or month, ✕ replaces it with the cards of that one.
 	let cameFromList = false;
 	const periodParams = (url: URL) =>
 		`${url.searchParams.get('week')} ${url.searchParams.get('month')}`;
-	afterNavigate(({ from, to }) => {
+	afterNavigate(({ from, to, type }) => {
 		if (!to?.url.searchParams.has('flight')) cameFromList = false;
+		else if (type === 'popstate' || type === 'enter') cameFromList = false;
 		else if (from && !from.url.searchParams.has('flight')) cameFromList = true;
 		else if (from && periodParams(from.url) !== periodParams(to.url)) cameFromList = false;
 	});
@@ -462,7 +462,9 @@
 		{previousHref}
 		{nextHref}
 		lines={toolbarLines}
-		open={openFlight ? { noun: 'flight', earlierHref, laterHref, onclose: close } : null}
+		open={openFlight
+			? { noun: 'flight', earlierHref, laterHref, onclose: close, closeLabel: 'Close flight' }
+			: null}
 	>
 		{#snippet tools()}
 			<ListFilters

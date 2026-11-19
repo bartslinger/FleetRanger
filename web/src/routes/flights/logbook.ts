@@ -18,8 +18,9 @@ export interface LogbookState {
 	/** The cards' week or month; the table uses `from` and `to`. */
 	period: Period;
 	/** The month a plain address opens, left out of the URL: the latest with
-	 * activity, which the load sets (user's decision, 2026-11-18), else this month. */
-	defaultMonth: string;
+	 * activity, which the load sets (user's decision, 2026-11-18), else this month;
+	 * null when the address names a week or month, so every link names its own. */
+	defaultMonth: string | null;
 	page: number;
 	size: number;
 	sort: { key: string; descending: boolean };
@@ -67,11 +68,12 @@ export function parse(params: URLSearchParams, timeZone: string, areas = true): 
 	const from = params.get('from');
 	const to = params.get('to');
 	const archived = params.get('status') === 'archived';
-	const defaultMonth = periodOf('month', today(timeZone)).start;
+	const thisMonth = periodOf('month', today(timeZone)).start;
+	const named = params.has('week') || params.has('month');
 	return {
 		view: params.get('view') === 'table' ? 'table' : 'cards',
-		period: period(params, defaultMonth),
-		defaultMonth,
+		period: period(params, thisMonth),
+		defaultMonth: named ? null : thisMonth,
 		page: page >= 1 ? page : 1,
 		size: PAGE_SIZES.includes(size) ? size : DEFAULT_SIZE,
 		sort: SORTABLE.includes(key) ? { key, descending: sort.startsWith('-') } : DEFAULT_SORT,
@@ -110,7 +112,8 @@ export function query(state: LogbookState, flight?: string): string {
 	if (state.withoutSession && state.suggestions) params.set('view', 'suggestions');
 	else if (state.view === 'table') params.set('view', 'table');
 	else if (state.period.unit === 'week') params.set('week', state.period.start);
-	else if (state.period.start !== state.defaultMonth) {
+	// An open flight's address names its month, so it stays the same.
+	else if (flight || state.period.start !== state.defaultMonth) {
 		params.set('month', state.period.start.slice(0, 7));
 	}
 	if (!cards) {
@@ -168,7 +171,7 @@ export function filtered(filters: { drone?: string; controller?: string }): stri
 	return query({
 		view: 'table',
 		period: periodOf('month', '2000-01-01'),
-		defaultMonth: '2000-01-01',
+		defaultMonth: null,
 		page: 1,
 		size: DEFAULT_SIZE,
 		sort: DEFAULT_SORT,
