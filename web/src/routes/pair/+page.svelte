@@ -134,36 +134,39 @@
 			</div>
 		{/if}
 
-		<h2 class="heading">Open codes</h2>
-		{#if data.codes.length === 0}
-			<EmptyState
-				title="No open codes"
-				body="Codes you create appear here until they’re used or expire."
-			/>
-		{:else}
-			<DataTable label="Open pairing codes" {columns} rows={data.codes} rowKey={(row) => row.id}>
-				{#snippet rowAction(row)}
-					<!-- Confirmed first (user's request), though a new code is quick to make. -->
-					<Modal
-						title="Revoke code"
-						label="Code {shown(row.code)}"
-						triggerIcon={SubtractAlt}
-						triggerLabel="Revoke code {shown(row.code)}"
-						triggerSize="md"
-						submitLabel="Revoke code"
-						danger
-						action="?/revoke"
-						error={revokeMessage}
-						onsuccess={() => toast(`Code ${shown(row.code)} revoked.`)}
-					>
-						<input type="hidden" name="id" value={row.id} />
-						<p>
-							The code stops working, also for a pilot who already has it. A controller it paired
-							stays paired.
-						</p>
-					</Modal>
-				{/snippet}
-			</DataTable>
+		<!-- Only for who can have codes: theirs, or those of groups they manage. -->
+		{#if destinations.length > 0 || data.codes.length > 0}
+			<h2 class="heading">Open codes</h2>
+			{#if data.codes.length === 0}
+				<EmptyState
+					title="No open codes"
+					body="Codes you create appear here until they’re used or expire."
+				/>
+			{:else}
+				<DataTable label="Open pairing codes" {columns} rows={data.codes} rowKey={(row) => row.id}>
+					{#snippet rowAction(row)}
+						<!-- Confirmed first (user's request), though a new code is quick to make. -->
+						<Modal
+							title="Revoke code"
+							label="Code {shown(row.code)}"
+							triggerIcon={SubtractAlt}
+							triggerLabel="Revoke code {shown(row.code)}"
+							triggerSize="md"
+							submitLabel="Revoke code"
+							danger
+							action="?/revoke"
+							error={revokeMessage}
+							onsuccess={() => toast(`Code ${shown(row.code)} revoked.`)}
+						>
+							<input type="hidden" name="id" value={row.id} />
+							<p>
+								The code stops working, also for a pilot who already has it. A controller it paired
+								stays paired.
+							</p>
+						</Modal>
+					{/snippet}
+				</DataTable>
+			{/if}
 		{/if}
 	</Column>
 </Grid>

@@ -5,7 +5,7 @@
 	import { KINDS, lastPilot, type Kind, type Tab } from '#lib/equipment.js';
 	import { dateTime, duration, health } from '#lib/format.js';
 	import { showsGroups } from '#lib/groups.js';
-	import { may } from '#lib/permissions.js';
+	import { anywhere, may } from '#lib/permissions.js';
 	import Button from '#lib/ui/Button.svelte';
 	import Column from '#lib/ui/Column.svelte';
 	import DataTable, { type Column as TableColumn } from '#lib/ui/DataTable.svelte';
@@ -124,7 +124,10 @@
      action, as "New …" on Users and Groups, or the empty state's. A link in a
      button's look, as it opens the page that does it. -->
 {#snippet pair()}
-	<Button href={resolve('/pair')}>Pair a controller</Button>
+	<!-- Only for who may pair: for others it leads nowhere. -->
+	{#if anywhere(data.account, 'controllers.pair')}
+		<Button href={resolve('/pair')}>Pair a controller</Button>
+	{/if}
 {/snippet}
 
 <PageHeader title="Equipment" />
@@ -194,8 +197,12 @@
 				? 'Drones and remote controllers appear here once your group flies them or an admin assigns them to your group.'
 				: kind === 'drones'
 					? 'Drones appear here when flight logs that use them are imported.'
-					: 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with a pairing code.'}
-			action={kind === 'controllers' ? pair : undefined}
+					: anywhere(data.account, 'controllers.pair')
+						? 'Remote controllers appear here when their flight logs are imported. To add one now, pair it with a pairing code.'
+						: 'Remote controllers appear here when their flight logs are imported.'}
+			action={kind === 'controllers' && anywhere(data.account, 'controllers.pair')
+				? pair
+				: undefined}
 		/>
 	{:else}
 		<DataTable
