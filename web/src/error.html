@@ -1,0 +1,100 @@
+<!doctype html>
+<!--
+	The fallback when even the app's shell can't load, e.g. with the backend
+	down: Carbon's error-management empty state in plain HTML, without the
+	app's styles. Plain words, no codes, and a way on (user's request,
+	2026-11-19).
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Something went wrong · FleetRanger</title>
+		<style>
+			/* Carbon's Gray 10 and Gray 100 themes, as the app follows the system. */
+			:root {
+				--background: #f4f4f4;
+				--layer: #ffffff;
+				--text: #161616;
+				--text-secondary: #525252;
+				--link: #0f62fe;
+				color-scheme: light dark;
+			}
+
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--background: #161616;
+					--layer: #262626;
+					--text: #f4f4f4;
+					--text-secondary: #c6c6c6;
+					--link: #78a9ff;
+				}
+			}
+
+			body {
+				margin: 0;
+				background: var(--background);
+				color: var(--text);
+				font-family:
+					'IBM Plex Sans',
+					system-ui,
+					-apple-system,
+					'Segoe UI',
+					sans-serif;
+			}
+
+			/* The shell's header: 48px, Gray 100. */
+			header {
+				display: flex;
+				align-items: center;
+				height: 3rem;
+				padding-inline: 1rem;
+				background: #161616;
+				color: #f4f4f4;
+				font-size: 0.875rem;
+				font-weight: 600;
+			}
+
+			main {
+				max-width: 40rem;
+				margin: 2rem 1rem;
+				padding: 3rem 1rem;
+				background: var(--layer);
+			}
+
+			h1 {
+				margin: 0;
+				font-size: 1.25rem;
+				font-weight: 400;
+				line-height: 1.4;
+			}
+
+			p {
+				margin: 0.5rem 0 0;
+				color: var(--text-secondary);
+				font-size: 0.875rem;
+				line-height: 1.43;
+			}
+
+			a {
+				display: inline-block;
+				margin-top: 1.5rem;
+				color: var(--link);
+				font-size: 0.875rem;
+				text-decoration: none;
+			}
+
+			a:hover {
+				text-decoration: underline;
+			}
+		</style>
+	</head>
+	<body>
+		<header>FleetRanger</header>
+		<main>
+			<h1>Something went wrong</h1>
+			<p>FleetRanger couldn’t load this page. Try again in a moment.</p>
+			<a href="">Try again</a>
+		</main>
+	</body>
+</html>

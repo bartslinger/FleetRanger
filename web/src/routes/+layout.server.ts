@@ -8,7 +8,8 @@ export async function load({ fetch, locals }) {
 		timeZone: timeZone(locals),
 		// Log processing progress, shown in the header to whoever manages logs.
 		processing: may(locals.account, 'logs.manage', null)
-			? await get<ProcessingStatus>(fetch, '/api/logs/processing')
+			? // Without it the header only lacks the progress: the page still opens.
+				await get<ProcessingStatus>(fetch, '/api/logs/processing').catch(() => null)
 			: null
 	};
 }
