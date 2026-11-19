@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ArrowRight from '@carbon/icons/es/arrow--right/16.js';
 	import Email from '@carbon/icons/es/email/16.js';
 	import Launch from '@carbon/icons/es/launch/16.js';
 	import Contract from '@carbon/pictograms/es/contract/index.js';
@@ -24,7 +25,7 @@
 	import light2400 from '#lib/images/session-light-2400.webp';
 	import sync640 from '#lib/images/sync-640.webp';
 	import sync1280 from '#lib/images/sync-1280.webp';
-	import { CONTACT, SOURCE } from '#lib/site.js';
+	import { APP, CONTACT, SOURCE } from '#lib/site.js';
 
 	// The session page in the web app, in each theme.
 	const session = {
@@ -134,8 +135,9 @@
 				<div>
 					<p class="intro">Open-source flight logging for DJI Enterprise, on your own server.</p>
 					<div class="actions">
-						<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
-						<Button href={SOURCE} kind="tertiary" icon={Launch}>View source code</Button>
+						<!-- The hosted free tier first, now it is open (user, 2026-11-19). -->
+						<Button href="https://{APP}/signup" icon={ArrowRight}>Try for free</Button>
+						<Button href="mailto:{CONTACT}" kind="tertiary" icon={Email}>Get in touch</Button>
 					</div>
 				</div>
 			</div>
