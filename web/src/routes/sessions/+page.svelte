@@ -173,22 +173,22 @@
 			.filter(Boolean)
 			.join(' · ');
 
-	// Opened from the list in this tab, Back returns to it as it was (its
-	// scroll position too); opened directly, or stepped into another week or
-	// month, ✕ replaces it with the list of that one.
+	// Opened from the list in this tab by a link, ✕ returns to it as it was (its
+	// scroll position too); opened directly, through Back or Forward, or stepped
+	// into another week or month, ✕ replaces it with the list of that one.
 	let cameFromList = false;
 	const periodParams = (url: URL) =>
 		`${url.searchParams.get('week')} ${url.searchParams.get('month')}`;
-	afterNavigate(({ from, to }) => {
+	afterNavigate(({ from, to, type }) => {
 		if (!to?.url.searchParams.has('session')) cameFromList = false;
-		else if (from && periodParams(from.url) !== periodParams(to.url)) cameFromList = false;
+		else if (type === 'popstate' || type === 'enter') cameFromList = false;
 		else if (
 			from &&
 			from.url.pathname === to.url.pathname &&
 			!from.url.searchParams.has('session')
 		) {
 			cameFromList = true;
-		}
+		} else if (from && periodParams(from.url) !== periodParams(to.url)) cameFromList = false;
 	});
 	function close() {
 		if (cameFromList) history.back();

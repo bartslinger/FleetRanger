@@ -13,8 +13,10 @@ import { apiFilters, parse } from './list.js';
  * The session open over the Sessions list (`?session=<id>`; user's
  * decision, 2026-10-21: one page, not a page of its own), the areas its map
  * outlines, and the sessions before and after it. Here and not in the
- * page's load, which reads only the list's own parameters: opening,
- * stepping through or closing a session loads only this, not the list again.
+ * page's load, which reads only the list's own parameters:
+ * stepping through a month loads only this, not the list again. (An open
+ * session's address names its month, so opening one from a plain address
+ * loads the list again.)
  */
 export async function load({ fetch, locals, url }) {
 	const id = url.searchParams.get('session');

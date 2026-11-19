@@ -14,7 +14,8 @@ import { apiFilters, parse } from './logbook.js';
  * over Sessions' (user's decision, 2026-11-18: Flights like Sessions), the
  * areas its map outlines, and the flights before and after it. Here and
  * not in the page's load, which reads only the list's own parameters:
- * opening, stepping through or closing a flight loads only this.
+ * stepping through a month loads only this. (An open flight's address names
+ * its month, so opening one from a plain address loads the cards again.)
  */
 export async function load({ fetch, locals, url }) {
 	const id = url.searchParams.get('flight');
