@@ -122,6 +122,7 @@ struct AppState {
     multi_tenant: organisations::MultiTenant,
     store: LogStore,
     android_apk: AndroidApk,
+    controller_settings: pairing::routes::ControllerSettings,
     oauth: OAuth,
 }
 
@@ -140,6 +141,12 @@ impl FromRef<AppState> for Changes {
 impl FromRef<AppState> for AndroidApk {
     fn from_ref(state: &AppState) -> Self {
         state.android_apk.clone()
+    }
+}
+
+impl FromRef<AppState> for pairing::routes::ControllerSettings {
+    fn from_ref(state: &AppState) -> Self {
+        state.controller_settings.clone()
     }
 }
 
@@ -248,6 +255,10 @@ async fn serve(
         android_apk: AndroidApk {
             path: config.android_apk.clone(),
             server: issuer.clone(),
+        },
+        controller_settings: pairing::routes::ControllerSettings {
+            error_reports: config.error_reports.as_ref().map(|dsn| dsn.as_str().into()),
+            support: config.support_email.as_deref().map(Into::into),
         },
         oauth: OAuth {
             issuer: issuer.clone(),

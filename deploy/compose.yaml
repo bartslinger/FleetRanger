@@ -53,6 +53,10 @@ services:
       FLEETRANGER_SIGNUP_CAP: ${FLEETRANGER_SIGNUP_CAP:-}
       FLEETRANGER_TERMS_URL: ${FLEETRANGER_TERMS_URL:-}
       FLEETRANGER_PRIVACY_URL: ${FLEETRANGER_PRIVACY_URL:-}
+      # The Sentry DSN controllers send their error reports to; none by default.
+      FLEETRANGER_ERROR_REPORTS: ${FLEETRANGER_ERROR_REPORTS:-}
+      # Whom pilots contact when the app can't get at the flight logs.
+      FLEETRANGER_SUPPORT_EMAIL: ${FLEETRANGER_SUPPORT_EMAIL:-}
       # Raw logs on S3 instead of in flightlogs (see "Raw logs on S3" in
       # docs/architecture.md). Credentials may also come from an EC2 role.
       FLEETRANGER_S3_BUCKET: ${FLEETRANGER_S3_BUCKET:-}

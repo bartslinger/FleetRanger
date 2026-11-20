@@ -87,17 +87,27 @@ class UploadService : Service() {
             uploadWaiting()
         } catch (error: Exception) {
             Log.w(TAG, "upload scan failed", error)
+            ErrorReports.report(error)
         }
         try {
             reportSync(uploaded = SyncStatus.read(this).uploaded != uploadedBefore)
         } catch (error: Exception) {
             Log.w(TAG, "sync report failed", error)
+            ErrorReports.report(error)
         }
         // This service runs all the time, so it also looks for updates daily.
         try {
             if (server.paired) updates.checkIfDue(server)
         } catch (error: Exception) {
             Log.w(TAG, "update check failed", error)
+            ErrorReports.report(error)
+        }
+        // And for where its error reports go, at start too.
+        try {
+            if (server.paired) ErrorReports.refreshIfDue(this, server)
+        } catch (error: Exception) {
+            Log.w(TAG, "fetching the settings failed", error)
+            ErrorReports.report(error)
         }
         worker.postDelayed(scan, RESCAN_MS)
     }
@@ -109,6 +119,8 @@ class UploadService : Service() {
         ) {
             return report(SyncStatus.State.NoAccess, waiting = 0)
         }
+        // Access granted, so a missing or unreadable folder is something to look into.
+        ErrorReports.folders(this, logs.check())
         val waiting = logs.all()
             .filter { it.state == FlightLogs.State.Waiting || it.state == FlightLogs.State.BeingWritten }
             .reversed()

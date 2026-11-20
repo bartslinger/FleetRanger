@@ -196,7 +196,7 @@ fun LabelledCode(label: String, code: String, modifier: Modifier = Modifier) {
 }
 
 /** The statuses of Carbon's inline notification that the app uses. */
-enum class NotificationKind { Error, Success, Warning }
+enum class NotificationKind { Error, Info, Success, Warning }
 
 /**
  * Carbon's inline notification, warning kind (low contrast), with an
@@ -223,9 +223,12 @@ fun InlineNotification(
     modifier: Modifier = Modifier,
     action: String? = null,
     onAction: () -> Unit = {},
+    /** While the action runs: Carbon's inline loading in the button's place. */
+    busy: String? = null,
 ) {
     val (background, support) = when (kind) {
         NotificationKind.Error -> Colors.notificationBackgroundError to Colors.supportError
+        NotificationKind.Info -> Colors.notificationBackgroundInfo to Colors.supportInfo
         NotificationKind.Success -> Colors.notificationBackgroundSuccess to Colors.supportSuccess
         NotificationKind.Warning -> Colors.notificationBackgroundWarning to Colors.supportWarning
     }
@@ -246,6 +249,7 @@ fun InlineNotification(
         val iconModifier = Modifier.align(Alignment.Top).padding(start = Spacing.s05, top = Spacing.s04 + 1.dp)
         when (kind) {
             NotificationKind.Error -> ErrorIcon(iconModifier)
+            NotificationKind.Info -> InformationIcon(iconModifier)
             NotificationKind.Success -> SuccessIcon(iconModifier)
             NotificationKind.Warning -> WarningIcon(iconModifier)
         }
@@ -253,7 +257,9 @@ fun InlineNotification(
             BasicText(title, style = Type.headingCompact02.copy(color = Colors.textPrimary))
             BasicText(text, style = Type.bodyCompact02.copy(color = Colors.textPrimary))
         }
-        if (action != null) {
+        if (busy != null) {
+            InlineLoading(busy, Modifier.padding(horizontal = Spacing.s05))
+        } else if (action != null) {
             Button(
                 action,
                 onAction,

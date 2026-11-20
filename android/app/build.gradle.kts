@@ -46,7 +46,7 @@ android {
             // R8: a much smaller APK to download on the controller.
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -77,5 +77,6 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.activity.compose)
     implementation(libs.core)
+    implementation(libs.sentry.android.core)
     debugImplementation(libs.compose.ui.tooling)
 }

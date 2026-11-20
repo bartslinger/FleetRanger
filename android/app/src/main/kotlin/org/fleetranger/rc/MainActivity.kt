@@ -36,6 +36,10 @@ class MainActivity : ComponentActivity() {
     private var serverUrl by mutableStateOf<String?>(null)
     private var paired by mutableStateOf(false)
     private var opensAtStartup by mutableStateOf(true)
+    /** About DJI Pilot 2's flight logs, when the app can't get at them. */
+    private var logsNotice by mutableStateOf<LogsNotice?>(null)
+    /** A search found the logs: say so until the app is left. */
+    private var foundBySearch = false
     private var pilotList by mutableStateOf(PilotList.EMPTY)
     private var last by mutableStateOf<Choice?>(null)
     private lateinit var sync: SyncSettings
@@ -149,6 +153,8 @@ class MainActivity : ComponentActivity() {
                     list = pilotList,
                     last = last,
                     opensAtStartup = opensAtStartup,
+                    logsNotice = logsNotice,
+                    onSearchLogs = ::searchLogs,
                     onChoose = ::fly,
                     onSelect = ::select,
                     onOpenStartupSettings = { DjiPilot.openSettings(this) },
@@ -178,6 +184,7 @@ class MainActivity : ComponentActivity() {
             PackageManager.PERMISSION_GRANTED
         logAccessRefused = !hasLogAccess && onboarding().getBoolean("asked_for_logs", false)
         if (paired && hasLogAccess && !choosingLogs) UploadService.start(this)
+        refreshLogsNotice()
     }
 
     private fun onboarding() = getSharedPreferences("onboarding", MODE_PRIVATE)
@@ -203,6 +210,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkWatch)
+        foundBySearch = false
         super.onStop()
     }
 
@@ -240,6 +248,51 @@ class MainActivity : ComponentActivity() {
     }
 
     // Again on every return, e.g. from the settings or from DJI Pilot 2.
+    /** Looks whether the app gets at the logs, for the main screen's notice. */
+    private fun refreshLogsNotice() {
+        if (!paired || !hasLogAccess) {
+            logsNotice = null
+            return
+        }
+        lifecycleScope.launch {
+            val check = withContext(Dispatchers.IO) { FlightLogs(this@MainActivity).check() }
+            val searching = when (val shown = logsNotice) {
+                is LogsNotice.NotFound -> shown.searching
+                is LogsNotice.NothingFound -> shown.searching
+                else -> false
+            }
+            if (searching) return@launch
+            logsNotice = if (foundBySearch && check.access == FlightLogs.Access.Found) {
+                LogsNotice.Found
+            } else {
+                LogsNotice.of(check, ErrorReports.support(this@MainActivity))
+            }
+        }
+    }
+
+    /** The pilot asked to search the controller for the logs. */
+    private fun searchLogs() {
+        logsNotice = when (val shown = logsNotice) {
+            is LogsNotice.NothingFound -> shown.copy(searching = true)
+            else -> LogsNotice.NotFound(searching = true)
+        }
+        lifecycleScope.launch {
+            val logs = FlightLogs(this@MainActivity)
+            val (found, check) = withContext(Dispatchers.IO) {
+                val found = logs.search()
+                found to logs.check()
+            }
+            ErrorReports.searched(this@MainActivity, found, check)
+            foundBySearch = found != null
+            logsNotice = if (found != null) {
+                LogsNotice.Found
+            } else {
+                LogsNotice.of(check, ErrorReports.support(this@MainActivity))
+            }
+            if (found != null) startUploads()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         opensAtStartup = DjiPilot.opensAtStartup(this)
