@@ -68,7 +68,9 @@ class FlightLogs(context: Context) {
             }
         } + ("storage" to Environment.getExternalStorageState())
         val access = when {
-            found.any { it.listFiles() == null } || places.containsValue("can't be read") -> Access.Unreadable
+            found.any { it.listFiles() == null } -> Access.Unreadable
+            // A place it can't read matters only while no logs are found elsewhere.
+            found.isEmpty() && places.containsValue("can't be read") -> Access.Unreadable
             found.isEmpty() -> Access.NotFound
             else -> Access.Found
         }
@@ -102,7 +104,8 @@ class FlightLogs(context: Context) {
 
     /**
      * DJI Pilot 2 keeps its logs in a folder named FlightRecord: on the RC
-     * Pro Enterprise in DJI/com.dji.industry.pilot on the shared storage.
+     * Pro Enterprise in DJI/com.dji.industry.pilot on the shared storage;
+     * the other places are from log viewers' and forums' guides.
      * Looking for the folder also finds it if a version moves it nearby;
      * folders a search found elsewhere count too.
      */
@@ -135,6 +138,12 @@ class FlightLogs(context: Context) {
         private val DJI_ROOTS = listOf(
             "DJI/com.dji.industry.pilot",
             "Android/data/com.dji.industry.pilot/files",
+            // The older DJI Pilot, as on the Smart Controller Enterprise.
+            "DJI/dji.pilot.pad",
+            // DJI Fly, for consumer drones (not supported yet, user, 2026-11-20:
+            // so the app needn't change if they are), in newer and older versions.
+            "Android/data/dji.go.v5/files",
+            "DJI/dji.go.v5",
         )
     }
 }
