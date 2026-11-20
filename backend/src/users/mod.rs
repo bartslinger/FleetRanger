@@ -6,7 +6,7 @@ pub mod routes;
 mod service;
 
 use anyhow::{Result, bail};
-use sqlx::PgConnection;
+use sqlx::{Connection, PgConnection};
 
 use db::UserFields;
 
@@ -41,7 +41,10 @@ pub async fn add(db: &mut PgConnection, email: &str, name: &str, admin: bool) ->
         email: Some(&email),
         invited_by: None,
     };
-    let id = match db::insert(db, &fields).await? {
+    // In one transaction, so a failure can't leave the first admin without
+    // the Pilot role while a retry finds them as an existing user.
+    let mut tx = db.begin().await?;
+    let id = match db::insert(&mut tx, &fields).await? {
         Ok(id) => id,
         Err(limit) => bail!("{} (see set-organisation --plan)", limit.message()),
     };
@@ -49,8 +52,9 @@ pub async fn add(db: &mut PgConnection, email: &str, name: &str, admin: bool) ->
     // controller app's pilot list at once, as whoever signs up is (user's
     // decision, 2026-11-20).
     if admin {
-        db::pilot_if_first(db, id).await?;
+        db::pilot_if_first(&mut tx, id).await?;
     }
+    tx.commit().await?;
     tracing::info!(
         email,
         admin,
