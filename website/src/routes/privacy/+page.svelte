@@ -93,6 +93,11 @@
 				<td>Everything the service stores</td>
 			</tr>
 			<tr>
+				<td>Hetzner</td>
+				<td>Monitoring the service, in Falkenstein, Germany</td>
+				<td>The server logs</td>
+			</tr>
+			<tr>
 				<td>Google</td>
 				<td>Logging in with a Google account</td>
 				<td>That you log in to FleetRanger, and when</td>

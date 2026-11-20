@@ -56,7 +56,7 @@
 	<ul>
 		<li>All connections to the service are encrypted (HTTPS).</li>
 		<li>The database and the stored flight logs are encrypted on disk.</li>
-		<li>Everything is kept in the European Union, in Frankfurt, Germany.</li>
+		<li>Everything is kept in the European Union, in Germany.</li>
 		<li>The database keeps each organisation's data apart from the others'.</li>
 		<li>Only the people who run the service can reach its servers.</li>
 		<li>A backup is made every day and kept for 30 days.</li>
@@ -81,6 +81,11 @@
 				<td>Amazon Web Services EMEA SARL</td>
 				<td>Servers, database and storage of flight logs</td>
 				<td>Frankfurt, Germany</td>
+			</tr>
+			<tr>
+				<td>Hetzner Online GmbH</td>
+				<td>Monitoring the service: server logs</td>
+				<td>Falkenstein, Germany</td>
 			</tr>
 		</tbody>
 	</table>
