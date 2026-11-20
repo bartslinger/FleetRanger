@@ -1,0 +1,65 @@
+# Builds a server release's images for x86_64 and arm64 and publishes them on
+# ghcr.io, for self-hosters, when a vX.Y.Z tag is pushed. Each image gets the
+# version's tag, which never moves (a version already published is refused),
+# and latest. Then it opens a draft GitHub release listing the digests, for
+# the release notes. Actions are pinned by commit; the comment names the
+# version.
+
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    env:
+      IMAGES: ghcr.io/bartslinger/fleetranger
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse a version already published
+        run: |
+          for part in backend web; do
+            if docker buildx imagetools inspect "$IMAGES-$part:$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              echo "$IMAGES-$part:$GITHUB_REF_NAME exists already; a version's images never change" >&2
+              exit 1
+            fi
+          done
+      # The stages that compile do so on the runner's own architecture for
+      # both targets; the final stages only copy, so nothing is emulated.
+      - id: backend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.IMAGES }}-backend:${{ github.ref_name }},${{ env.IMAGES }}-backend:latest
+          push: true
+      - id: web
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: web
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.IMAGES }}-web:${{ github.ref_name }},${{ env.IMAGES }}-web:latest
+          push: true
+      - name: Draft the release with the digests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BACKEND: ${{ steps.backend.outputs.digest }}
+          WEB: ${{ steps.web.outputs.digest }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "$GITHUB_REF_NAME" --notes "Images:
+
+          - $IMAGES-backend:$GITHUB_REF_NAME@$BACKEND
+          - $IMAGES-web:$GITHUB_REF_NAME@$WEB"
