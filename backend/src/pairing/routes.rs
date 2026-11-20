@@ -155,15 +155,22 @@ pub struct ErrorReports(pub Option<Arc<str>>);
 #[derive(Serialize)]
 struct Settings {
     error_reports: Option<Arc<str>>,
+    /// The controller's id, which its error reports carry: in the error
+    /// tracker it says nothing, here it leads to the controller and its
+    /// organisation.
+    controller: Uuid,
 }
 
 /// What this install asks of its controllers; the app fetches it at start
 /// and daily.
 async fn settings(
-    _controller: Controller,
+    controller: Controller,
     State(ErrorReports(error_reports)): State<ErrorReports>,
 ) -> Json<Settings> {
-    Json(Settings { error_reports })
+    Json(Settings {
+        error_reports,
+        controller: controller.id,
+    })
 }
 
 /// How far ahead of the server's clock a controller's may be, my choice: a
