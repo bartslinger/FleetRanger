@@ -42,7 +42,7 @@ Comments keep a record of what happened in a session, such as the weather or the
 
 You can edit and delete your own comments from the menu beside them. An edited comment says **Edited**.
 
-> **Note:** A session with comments isn't ended by taking out its last flight. Delete the session instead; its comments go with it.
+> **Note:** The last flight can't be taken out of a session with comments, so the comments aren't lost by accident. To get rid of such a session, delete it: its comments go with it.
 
 ## Who may do what
 

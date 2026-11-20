@@ -75,6 +75,8 @@ Once a log has been uploaded, FleetRanger reads it, which takes a moment. Admins
 
 The flight then shows under **Sessions**. Flights by the same pilot with short breaks in between form one session. See [Sessions](03-sessions.md).
 
+![A session in the web app: its flight track on a satellite map, beside the pilot, takeoff and landing times, air time and distance.](images/first-session.webp)
+
 ## Invite other people
 
 Add the people who log in or fly under [Users](05-users.md). Pilots don't need a login: a name and the **Pilot** role put them in the controller's list.
