@@ -22,8 +22,7 @@
 		</script>
 		<!-- The page's own script. The theme choice (system, light or dark)
 		     applies before the page is drawn, and a new one is remembered in this
-		     browser; with system, or without a choice, the system setting applies.
-		     Steps that scroll past a picture show theirs when they reach it. -->
+		     browser; with system, or without a choice, the system setting applies. -->
 		<script>
 			(function () {
 				var root = document.documentElement;
@@ -52,35 +51,6 @@
 					);
 					if (chosen) chosen.checked = true;
 				});
-				// The current step is the last one whose top has passed 40% of the
-				// window when the picture is beside the steps, a little above the
-				// picture's middle, or the picture's bottom when it is above them (on
-				// phones).
-				var pending = false;
-				function showSteps() {
-					pending = false;
-					document.querySelectorAll('[data-steps]').forEach(function (group) {
-						var picture = group.querySelector('[data-picture]').getBoundingClientRect();
-						var beside = picture.left > group.getBoundingClientRect().left;
-						var line = beside ? innerHeight * 0.4 : picture.bottom;
-						var current = '0';
-						group.querySelectorAll('[data-step]').forEach(function (step) {
-							if (step.getBoundingClientRect().top < line) current = step.dataset.step;
-						});
-						group.querySelectorAll('[data-shown]').forEach(function (shown) {
-							shown.classList.toggle('active', shown.dataset.shown === current);
-						});
-					});
-				}
-				addEventListener(
-					'scroll',
-					function () {
-						if (!pending) requestAnimationFrame(showSteps);
-						pending = true;
-					},
-					{ passive: true }
-				);
-				document.addEventListener('DOMContentLoaded', showSteps);
 			})();
 		</script>
 		%sveltekit.head%

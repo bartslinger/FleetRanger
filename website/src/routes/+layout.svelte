@@ -10,7 +10,7 @@
 	import Grid from '$ui/Grid.svelte';
 	import Icon from '$ui/Icon.svelte';
 	import RadioButtonGroup from '$ui/RadioButtonGroup.svelte';
-	import { CONTACT, SOURCE } from '#lib/site.js';
+	import { APP, CONTACT, SOURCE } from '#lib/site.js';
 
 	let { children } = $props();
 </script>
@@ -25,17 +25,29 @@
 
 <header class="theme-dark">
 	<a class="name" href="/"><img src={logo} alt="" width="20" height="20" />FleetRanger</a>
-	<nav aria-label="Sections">
-		<a class="section" href="/#how-it-works">How it works</a>
-		<a class="section" href="/#features">Features</a>
+	<nav aria-label="Main">
+		<a
+			class="pricing"
+			href="/pricing"
+			aria-current={page.url.pathname.startsWith('/pricing') ? 'true' : undefined}>Pricing</a
+		>
 		<a href="/docs" aria-current={page.url.pathname.startsWith('/docs') ? 'true' : undefined}
 			>Docs</a
 		>
+		<a
+			class="about"
+			href="/about"
+			aria-current={page.url.pathname.startsWith('/about') ? 'true' : undefined}>About</a
+		>
 	</nav>
-	<!-- Carbon's header action with a panel, as the app's profile panel: the
-	     theme choice, with the chosen one's icon on the button. The browser's
-	     popover opens and closes it; the script in app.html applies the choice. -->
 	<div class="actions">
+		<!-- For those who already use the hosted service: a text link, as
+		     visitors would miss an icon. Before the theme action, which keeps
+		     the far right, where Carbon puts icon actions. -->
+		<a class="login" href="https://{APP}/">Log in</a>
+		<!-- Carbon's header action with a panel, as the app's profile panel: the
+		     theme choice, with the chosen one's icon on the button. The browser's
+		     popover opens and closes it; the script in app.html applies the choice. -->
 		<button type="button" class="action" popovertarget="theme-panel" aria-label="Theme">
 			<span class="system"><Icon icon={Screen} /></span>
 			<span class="light"><Icon icon={Light} /></span>
@@ -64,6 +76,7 @@
 	<Grid centered rowGap>
 		<Column md={4} lg={4}>
 			<p class="name"><img src={logo} alt="" width="24" height="24" />FleetRanger</p>
+			<p class="links"><a href="/about">About FleetRanger</a></p>
 		</Column>
 		<Column md={4} lg={4}>
 			<p class="label">Source code</p>
@@ -142,18 +155,27 @@
 		align-items: center;
 	}
 
-	/* Tighter on phones so the links fit beside the name. Where they don't,
-	   only Docs stays: the landing page's sections follow each other anyway. */
+	/* Tighter on phones so the links fit beside the name. Only real pages:
+	   the landing page's sections follow each other anyway. */
 	nav {
 		display: flex;
 	}
 
-	nav a.section {
+	/* Pricing from 360px and About from 480px, where they fit beside Docs and
+	   Log in; the footer links to About for narrower screens. */
+	nav a.pricing,
+	nav a.about {
 		display: none;
 	}
 
+	@media (min-width: 22.5rem) {
+		nav a.pricing {
+			display: flex;
+		}
+	}
+
 	@media (min-width: 30rem) {
-		nav a.section {
+		nav a.about {
 			display: flex;
 		}
 	}
@@ -178,6 +200,18 @@
 	.actions {
 		display: flex;
 		margin-inline-start: auto;
+	}
+
+	/* Tighter on phones, as the nav links, so it stays beside them. */
+	.login {
+		padding-inline: var(--cds-spacing-03);
+		white-space: nowrap;
+	}
+
+	@media (min-width: 42rem) {
+		.login {
+			padding-inline: var(--cds-spacing-05);
+		}
 	}
 
 	/* As the app's header actions. Shown only with the script that makes the
@@ -264,6 +298,10 @@
 		font-size: var(--cds-heading-02-font-size);
 		font-weight: var(--cds-heading-02-font-weight);
 		line-height: var(--cds-heading-02-line-height);
+	}
+
+	footer .name + .links {
+		margin-top: var(--cds-spacing-05);
 	}
 
 	footer .label {

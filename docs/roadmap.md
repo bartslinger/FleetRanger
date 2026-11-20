@@ -12,7 +12,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
-**Public website** (fleetranger.org): the landing page, the legal texts and the documentation for users and self-hosters (2026-11-20) are on GitHub Pages. Release images are on ghcr.io from v0.20.1.
+**Public website** (fleetranger.org): the landing page, Pricing, About, the legal texts and the documentation for users and self-hosters (2026-11-20) are on GitHub Pages. Release images are on ghcr.io from v0.20.1.
 
 Everyone is a user, with roles in groups (and Admin on the whole organisation) and an optional login; admins manage users, groups and equipment in the web app. Sessions are the start page; the logbook of all flights is under "Flights", which sets the pilot, group and session of flights in batches. Uploaded and imported flights join a session by themselves (per pilot, or controller when there is no pilot, and group, however late they come in); the rest are grouped by hand or from suggested sessions to review. The remote controller app runs on a DJI RC Pro Enterprise: it pairs with a code from the web app, asks who's flying and for which group, opens DJI Pilot 2 and uploads the finished logs the server lacks. The audit log waits until there is a working version of the app.
 
@@ -107,6 +107,7 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - [x] Static build reusing the web app's components
 - [~] Hosting on GitHub Pages, built by a GitHub Action from main
 - [x] Documentation pages from Markdown in `website/docs/` (2026-11-20)
+- [x] Pricing and About pages, Log in to the hosted service, a shorter landing page, open source, not open contribution (2026-11-20)
 - [x] User documentation: Getting started, the controller app, a page per part of the web app, with screenshots
 - [x] Self-hosting documentation: requirements, install, configuration, the controller app, updates and backups
 - [x] Release images published to ghcr.io by GitHub Actions on every vX.Y.Z tag, pulled by every server, ours too (`ship-image.sh` removed)
