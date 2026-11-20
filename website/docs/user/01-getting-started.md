@@ -12,7 +12,7 @@ The controller app shows a list of pilots to choose from. It holds everyone with
 
 ## Install the app on the controller
 
-1. On the controller, open **Firefox** and go to your FleetRanger address followed by `/download`, such as `fleet.example.org/download`.
+1. On the controller, open **Firefox** and go to your FleetRanger address followed by `/download`, such as `app.fleetranger.org/download`.
 
    ![FleetRanger's download page in Firefox on the controller, with Download app.](images/controller-download.webp)
 
