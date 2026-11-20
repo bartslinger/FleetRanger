@@ -25,6 +25,7 @@
     </queries>
 
     <application
+        android:name=".FleetRangerApp"
         android:label="FleetRanger"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true"
@@ -59,6 +60,10 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- Error reports start in FleetRangerApp, only with the server's settings. -->
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="false" />
         <!-- Lets Android's installer read a downloaded update; nothing else. -->
         <provider
             android:name="androidx.core.content.FileProvider"

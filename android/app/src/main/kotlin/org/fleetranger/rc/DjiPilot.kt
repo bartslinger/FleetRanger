@@ -8,6 +8,13 @@ import android.provider.Settings
 object DjiPilot {
     private const val PACKAGE = "com.dji.industry.pilot"
 
+    /** DJI Pilot 2's version, for error reports; null if it isn't installed. */
+    fun version(context: Context): String? = try {
+        context.packageManager.getPackageInfo(PACKAGE, 0).versionName
+    } catch (_: Exception) {
+        null
+    }
+
     /** Opens DJI Pilot 2; false if it isn't installed. */
     fun open(context: Context): Boolean {
         val intent = context.packageManager.getLaunchIntentForPackage(PACKAGE) ?: return false

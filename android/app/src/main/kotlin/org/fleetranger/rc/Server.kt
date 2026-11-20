@@ -152,6 +152,24 @@ class Server(private val context: Context) {
         call("PUT", "$API/status", status) ?: throw IOException("the server refused the status")
     }
 
+    /** What the server asks of this controller; see [settings]. */
+    data class Settings(
+        /** The Sentry DSN for error reports; null: send none. */
+        val errorReports: String?,
+        /** This controller's id on the server, which its reports carry. */
+        val controller: String,
+    )
+
+    /** The server's settings for this controller; null if it refused the token. */
+    fun settings(): Settings? {
+        val answer = call("GET", "$API/settings") ?: return null
+        return Settings(
+            errorReports = answer.optString("error_reports").takeIf { !answer.isNull("error_reports") && it.isNotEmpty() },
+            controller = answer.optString("controller").takeIf { it.isNotEmpty() }
+                ?: throw IOException("the server's answer isn't FleetRanger's"),
+        )
+    }
+
     /** A release of this app, as the server offers it. */
     data class AppVersion(val code: Int, val name: String)
 
