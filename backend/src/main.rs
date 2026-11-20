@@ -294,6 +294,7 @@ async fn serve(
     let app = Router::new()
         .route("/healthz", get(health::check))
         .merge(apps)
+        .merge(oauth::routes::app_roles())
         .merge(areas::routes::router())
         .merge(auth::routes::router())
         .merge(batteries::routes::router())

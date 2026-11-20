@@ -28,6 +28,18 @@ use crate::{
     error::{ApiError, ApiResult},
 };
 
+/// The app roles admins give on the user and group pages: on every install,
+/// also with apps switched off, so roles given before stay visible and can be
+/// taken back.
+pub fn app_roles<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    crate::db::System: FromRef<S>,
+    crate::db::Tenants: FromRef<S>,
+{
+    Router::new().route("/api/apps/roles", get(apps::roles))
+}
+
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -55,7 +67,6 @@ where
         .route("/api/oauth/connections", get(connections))
         .route("/api/oauth/connections/{id}", delete(disconnect))
         .route("/api/apps", get(apps::list).post(apps::add))
-        .route("/api/apps/roles", get(apps::roles))
         .route("/api/apps/{id}", put(apps::update).delete(apps::remove))
 }
 
