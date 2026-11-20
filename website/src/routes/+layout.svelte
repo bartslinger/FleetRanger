@@ -10,7 +10,7 @@
 	import Grid from '$ui/Grid.svelte';
 	import Icon from '$ui/Icon.svelte';
 	import RadioButtonGroup from '$ui/RadioButtonGroup.svelte';
-	import { CONTACT, SOURCE } from '#lib/site.js';
+	import { APP, CONTACT, SOURCE } from '#lib/site.js';
 
 	let { children } = $props();
 </script>
@@ -32,10 +32,14 @@
 			>Docs</a
 		>
 	</nav>
-	<!-- Carbon's header action with a panel, as the app's profile panel: the
-	     theme choice, with the chosen one's icon on the button. The browser's
-	     popover opens and closes it; the script in app.html applies the choice. -->
 	<div class="actions">
+		<!-- For those who already use the hosted service: a text link, as
+		     visitors would miss an icon. Before the theme action, which keeps
+		     the far right, where Carbon puts icon actions. -->
+		<a class="login" href="https://{APP}/">Log in</a>
+		<!-- Carbon's header action with a panel, as the app's profile panel: the
+		     theme choice, with the chosen one's icon on the button. The browser's
+		     popover opens and closes it; the script in app.html applies the choice. -->
 		<button type="button" class="action" popovertarget="theme-panel" aria-label="Theme">
 			<span class="system"><Icon icon={Screen} /></span>
 			<span class="light"><Icon icon={Light} /></span>
@@ -178,6 +182,18 @@
 	.actions {
 		display: flex;
 		margin-inline-start: auto;
+	}
+
+	/* Tighter on phones, as the nav links, so it stays beside them. */
+	.login {
+		padding-inline: var(--cds-spacing-03);
+		white-space: nowrap;
+	}
+
+	@media (min-width: 42rem) {
+		.login {
+			padding-inline: var(--cds-spacing-05);
+		}
 	}
 
 	/* As the app's header actions. Shown only with the script that makes the
