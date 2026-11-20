@@ -152,6 +152,17 @@ pub async fn sign_up(
         // with the transaction all the same.
         return Err(sqlx::Error::RowNotFound);
     };
+    // Who signs up for the trial usually flies too, so they're in the app's
+    // pilot list at once (user's decision, 2026-11-20); the Pilot role in the
+    // first group, as the Users page gives it while there is one group.
+    sqlx::query!(
+        "insert into group_members (group_id, user_id, role)
+         select id, $1, 'pilot' from groups where organisation_id = $2 and name = 'General'",
+        user_id,
+        organisation_id,
+    )
+    .execute(&mut *tx)
+    .await?;
     sqlx::query!(
         "update logins set oidc_subject = $2 where user_id = $1",
         user_id,
@@ -230,6 +241,18 @@ mod tests {
         .await
         .unwrap();
         assert!(admin);
+        // And a pilot, so the controller app lists them.
+        let pilot: bool = sqlx::query_scalar(
+            "select exists (select 1 from group_members m join groups g on g.id = m.group_id
+                            where m.user_id = $1 and g.organisation_id = $2
+                              and g.name = 'General' and m.role = 'pilot')",
+        )
+        .bind(user_id)
+        .bind(organisation_id)
+        .fetch_one(&mut *db)
+        .await
+        .unwrap();
+        assert!(pilot);
         let found = memberships(&mut db, "test-subject-1").await.unwrap();
         assert_eq!(
             found,
