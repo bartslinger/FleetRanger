@@ -312,6 +312,7 @@ async fn serve(
             state.auth.clone(),
             auth::same_origin,
         ))
+        .layer(middleware::from_fn(log_context))
         .with_state(state);
 
     let listener = TcpListener::bind(config.bind)
@@ -333,6 +334,25 @@ async fn serve(
 }
 
 /// Resolves on Ctrl-C or SIGTERM, which is what `docker stop` sends.
+/// Every line logged while answering a request carries its method and path,
+/// and the organisation and user or controller once known (`Actor` and
+/// `Controller` add them), so failures can be found per organisation.
+async fn log_context(
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> axum::response::Response {
+    use tracing::Instrument;
+    let span = tracing::info_span!(
+        "request",
+        method = %request.method(),
+        path = request.uri().path(),
+        organisation = tracing::field::Empty,
+        user = tracing::field::Empty,
+        controller = tracing::field::Empty,
+    );
+    next.run(request).instrument(span).await
+}
+
 async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c().await.ok();

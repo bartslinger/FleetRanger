@@ -232,6 +232,13 @@ where
             tracing::error!(%error, "reading who is making a request");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+        // On this request's log lines (see `log_context` in main.rs).
+        tracing::Span::current()
+            .record(
+                "organisation",
+                tracing::field::display(actor.organisation_id),
+            )
+            .record("user", tracing::field::display(actor.user_id));
         parts
             .extensions
             .insert(RequestOrganisation(actor.organisation_id));

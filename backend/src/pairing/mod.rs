@@ -45,6 +45,13 @@ where
             StatusCode::INTERNAL_SERVER_ERROR
         })?
         .ok_or(StatusCode::UNAUTHORIZED)?;
+        // On this request's log lines (see `log_context` in main.rs).
+        tracing::Span::current()
+            .record(
+                "organisation",
+                tracing::field::display(controller.organisation_id),
+            )
+            .record("controller", tracing::field::display(controller.id));
         parts
             .extensions
             .insert(RequestOrganisation(controller.organisation_id));
