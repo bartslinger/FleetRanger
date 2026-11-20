@@ -283,7 +283,7 @@ User's decisions, 2026-10-21.
   - **The processing agreement is a short text of our own**, covering the points of GDPR's article 28(3), not the European Commission's standard clauses. It is part of the terms, so the sign-up checkbox covers it, and acceptance has no record of its own: the organisation's creation time and the dated versions in this repository show what was accepted.
   - **Notices go by email to an organisation's admins, 30 days ahead**: ending the service, closing an organisation that did nothing wrong, changes to the texts, plans, limits or prices, and a new sub-processor. An organisation that breaks the terms can be closed at once.
   - **Liability is excluded**, but for intent and deliberate recklessness, with no fallback amount.
-  - **AWS is the only sub-processor** (Frankfurt). Google (login), Mapbox (map tiles) and, for the site, Plausible and GitHub Pages are named in the privacy policy as receiving some data (my choice).
+  - **Sub-processors: AWS** (Frankfurt) for the service **and Hetzner** (Falkenstein) for monitoring, which receives the server logs (user, 2026-11-20). Google (login), Mapbox (map tiles) and, for the site, Plausible and GitHub Pages are named in the privacy policy as receiving some data (my choice).
   - **Daily backups, kept 30 days**, so deleted data is gone within a month. **Server logs are kept 90 days.** Both are promised in the texts and still to be set up for the hosted service.
   - **A data breach is reported "without undue delay"**, with no fixed number of hours.
   - **Mapture looks into an organisation's data only when needed to keep the service working and secure, or when the organisation asks.**

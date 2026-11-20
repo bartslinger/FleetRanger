@@ -13,4 +13,4 @@ export const COMPANY = {
 };
 
 /** The date the legal texts were last changed, as they show it. */
-export const LEGAL_UPDATED = '18 November 2026';
+export const LEGAL_UPDATED = '20 November 2026';
