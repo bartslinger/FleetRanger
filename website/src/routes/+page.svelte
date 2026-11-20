@@ -122,8 +122,8 @@
 			text: 'Every flight with its time in the air, distance, drone, controller and pilot. Sessions can be merged and split.'
 		},
 		{
-			title: 'Connect your own apps',
-			text: 'Apps and AI assistants sign in through OAuth and see only what their user may see. Admins add trusted apps and give their roles per person.'
+			title: 'Your own integrations',
+			text: 'On your own server, your systems and AI assistants can connect through the API, with the same logins and permissions as your users. We can build the integration for you.'
 		},
 		{
 			title: 'Groups and equipment',
@@ -307,10 +307,12 @@
 <section class="next" aria-labelledby="start-title">
 	<Grid centered>
 		<Column md={8} lg={8}>
-			<h2 id="start-title">Set it up for your fleet</h2>
+			<h2 id="start-title">Open source, not open contribution</h2>
 			<p class="body">
-				FleetRanger is free to run yourself. Need a feature for your organisation? We build it into
-				FleetRanger, so you keep getting new versions. Write to {CONTACT}.
+				FleetRanger is open source under the AGPL-3.0. You can run it, change it and keep using it,
+				whatever happens to us. We don't accept pull requests, but ideas and feature requests are
+				welcome at {CONTACT}. When an organisation funds a feature, it comes first. It ships in
+				FleetRanger itself, so everyone gets it.
 			</p>
 			<div class="actions">
 				<Button href="mailto:{CONTACT}" icon={Email}>Get in touch</Button>
