@@ -48,8 +48,10 @@ COPY migrations migrations
 COPY .sqlx .sqlx
 ENV SQLX_OFFLINE=true
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/target \
+# The caches are locked: building both architectures at once runs this twice
+# on the same machine, and two cargos unpacking into one registry collide.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/src/target,sharing=locked \
     set -eu; \
     target="$(cat /rust-target)"; \
     # No release with code that can panic ([lints.clippy] in Cargo.toml).
