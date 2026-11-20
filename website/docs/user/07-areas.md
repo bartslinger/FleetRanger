@@ -2,7 +2,7 @@
 
 Areas are named pieces of land, such as "North block" or "River section", that you draw on a map. FleetRanger then shows how long each flight and session spent in each area, and you can filter flights and sessions by the areas they flew over.
 
-Areas are off for a new organisation. An admin switches them on under [Administration](08-administration.md), with **Edit settings** and **Areas**. Only then does **Areas** appear in the menu.
+Areas are off for a new organisation. An admin switches them on under [Administration](09-administration.md), with **Edit settings** and **Areas**. Only then does **Areas** appear in the menu.
 
 ## Draw an area
 

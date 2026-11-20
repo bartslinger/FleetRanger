@@ -8,8 +8,8 @@ The **General** tab shows the organisation's settings. Select **Edit settings** 
 
 - **Name**: your organisation's name.
 - **Time zone**: all times in FleetRanger are shown in it, the same for everyone.
-- **Session gap**: in minutes. A break between flights longer than this starts a new session. See [Sessions](02-sessions.md#how-flights-form-sessions). It counts for flights that come in from then on; existing sessions stay as they are.
-- **Areas**: switches [Areas](06-areas.md) on or off.
+- **Session gap**: in minutes. A break between flights longer than this starts a new session. See [Sessions](03-sessions.md#how-flights-form-sessions). It counts for flights that come in from then on; existing sessions stay as they are.
+- **Areas**: switches [Areas](07-areas.md) on or off.
 
 If your install offers AI assistants, this is also where you allow them to query FleetRanger.
 

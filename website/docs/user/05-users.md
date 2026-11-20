@@ -10,7 +10,7 @@ Select **New user** and fill in:
 
 - **Name**: as it appears in lists and on the controller.
 - **Email (optional)**: the address of the account they log in with. Leave it empty for someone who only flies.
-- **FleetRanger roles**: what they may do. See [Roles](05-groups.md#roles).
+- **FleetRanger roles**: what they may do. See [Roles](06-groups.md#roles).
 
 Select **Create**. FleetRanger sends no email: tell the person themselves that they can log in. When they log in for the first time, they see the invitation and select **Accept**. Until then, their page says **Invited, not accepted yet**.
 

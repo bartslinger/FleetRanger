@@ -28,7 +28,7 @@ A battery's page has a chart of its full charge capacity over time, and a table 
 
 ## A device's page
 
-Select a row to open a controller, drone or battery. Its page shows its figures, with a link to its flights in [Flights](03-flights.md). Its flights, air time and cycles count all its flights, also those of other groups.
+Select a row to open a controller, drone or battery. Its page shows its figures, with a link to its flights in [Flights](04-flights.md). Its flights, air time and cycles count all its flights, also those of other groups.
 
 On the page you can give it a **Name**, such as the number painted on it, and, with several groups, move it to another **Group**. Select **Save**.
 

@@ -4,7 +4,7 @@ A session is one pilot's flights in a row, such as a morning's work. FleetRanger
 
 ## How flights form sessions
 
-When a flight log comes in, its flight joins the pilot's session if it took off less than the session gap after one of that session's flights. Otherwise it starts a new session. The session gap is 2 hours unless an admin changes it under [Administration](08-administration.md).
+When a flight log comes in, its flight joins the pilot's session if it took off less than the session gap after one of that session's flights. Otherwise it starts a new session. The session gap is 2 hours unless an admin changes it under [Administration](09-administration.md).
 
 - A flight without a pilot joins the session of its controller's other flights without a pilot.
 - Flights of different pilots never end up in one session by themselves.
@@ -21,7 +21,7 @@ Above the list you choose the days, and **Filters** opens the other filters: **P
 
 ## A session
 
-Select a card, or a row of the table, to open the session. It shows the first takeoff, last landing, duration, air time, distance and number of flights, its pilots, a map of the tracks and a table of its flights. Point at a flight in the table to see its track on the map. Select a flight to open it in [Flights](03-flights.md).
+Select a card, or a row of the table, to open the session. It shows the first takeoff, last landing, duration, air time, distance and number of flights, its pilots, a map of the tracks and a table of its flights. Point at a flight in the table to see its track on the map. Select a flight to open it in [Flights](04-flights.md).
 
 ## Change a session
 
@@ -34,7 +34,7 @@ On an open session:
 
 To merge sessions, use the **Table** view: select two or more sessions and select **Merge sessions**. Their flights become one session.
 
-To add flights to a session or make a session from flights, use [Flights](03-flights.md#organise-flights).
+To add flights to a session or make a session from flights, use [Flights](04-flights.md#organise-flights).
 
 ## Comments
 

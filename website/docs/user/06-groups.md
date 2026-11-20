@@ -2,7 +2,7 @@
 
 Groups divide an organisation's work, such as a "North team" and a "South team". Every flight, session, drone and controller is in one group, and people get their roles in groups. Only admins see this page.
 
-A new organisation has one group, **General**. While it is the only group, FleetRanger doesn't show groups anywhere else: roles are given on [Users](04-users.md), and lists, filters and pickers have no group. Groups show up once you create a second one.
+A new organisation has one group, **General**. While it is the only group, FleetRanger doesn't show groups anywhere else: roles are given on [Users](05-users.md), and lists, filters and pickers have no group. Groups show up once you create a second one.
 
 ## Roles
 
@@ -30,11 +30,11 @@ Select a group to see its members and their roles.
 - **Remove member** takes away their roles in the group. Their flights stay as they are.
 - **Edit group** renames it.
 
-Someone can be a member of several groups, with different roles in each. Their roles can also be changed from their page in [Users](04-users.md).
+Someone can be a member of several groups, with different roles in each. Their roles can also be changed from their page in [Users](05-users.md).
 
 ## Move work between groups
 
-Admins move flights, sessions and equipment to another group from their own pages: see [Flights](03-flights.md), [Sessions](02-sessions.md#change-a-session) and [Equipment](07-equipment.md). A flight's pilot and its group are separate: moving a flight doesn't change its pilot.
+Admins move flights, sessions and equipment to another group from their own pages: see [Flights](04-flights.md), [Sessions](03-sessions.md#change-a-session) and [Equipment](08-equipment.md). A flight's pilot and its group are separate: moving a flight doesn't change its pilot.
 
 ## Delete a group
 

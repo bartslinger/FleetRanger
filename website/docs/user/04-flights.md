@@ -18,7 +18,7 @@ In the **Pilots** filter, **Unknown pilot** stands for the flights without a pil
 
 ## A flight
 
-Select a card or a row to open a flight. It shows its pilot, session, takeoff and landing, air time, distance, highest point above takeoff, and the drone, controller, battery and camera it used, with its track on the map. The drone, controller and battery link to their pages in [Equipment](07-equipment.md). Use the arrows to go to the earlier or later flight.
+Select a card or a row to open a flight. It shows its pilot, session, takeoff and landing, air time, distance, highest point above takeoff, and the drone, controller, battery and camera it used, with its track on the map. The drone, controller and battery link to their pages in [Equipment](08-equipment.md). Use the arrows to go to the earlier or later flight.
 
 On an open flight, the pencil beside **Pilot** changes its pilot. With several groups, the pencil beside **Group** moves it to another group.
 

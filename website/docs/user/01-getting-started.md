@@ -8,7 +8,7 @@ Until your organisation has its first flight, FleetRanger opens on **Equipment**
 
 ## Before you start
 
-The controller app shows a list of pilots to choose from. It holds everyone with the **Pilot** role. If you fly yourself, give yourself that role first: open **Users**, select your name, select **Edit user**, tick **Pilot** and **Save**. See [Users](04-users.md) to add other pilots.
+The controller app shows a list of pilots to choose from. It holds everyone with the **Pilot** role. If you fly yourself, give yourself that role first: open **Users**, select your name, select **Edit user**, tick **Pilot** and **Save**. See [Users](05-users.md) to add other pilots.
 
 ## Install the app on the controller
 
@@ -27,34 +27,37 @@ Pairing connects the controller to your organisation. You create a code in the w
    ![Pair a controller in the web app, with a new code and its copy button.](images/pairing-code.webp)
 
 4. On the controller, type the code under **Pairing code** and select **Pair**.
+
+   ![The controller app's Pair this controller screen, with eight boxes for the code and the Pair button.](images/controller-pairing.webp)
+
 5. The app says **Paired** and which group the controller is in. Select **Continue**. If the group is wrong, select **Unpair** and pair again with a new code.
+
+   ![Paired: This controller is in the group General, with Continue and Unpair.](images/controller-paired.webp)
 
 A code pairs one controller, then stops working. Unused codes are listed under **Open codes** on the same page, where you can revoke them.
 
 ## Allow access to the flight logs
 
-The app then asks for access to the flight logs that DJI Pilot 2 keeps on the controller. Select **Continue**, and choose **Allow** when Android asks. FleetRanger only reads the flight logs.
+The first time, the app asks for access to the flight logs that DJI Pilot 2 keeps on the controller. Select **Continue**, and choose **Allow** when Android asks. FleetRanger only reads the flight logs.
 
-Next, choose **Which logs to upload**:
+Next, choose **Which logs to upload** and select **Continue**:
 
 - **All logs**: every flight already on the controller.
 - **From a date**: the logs from the chosen day on. Today is chosen to begin with.
 
-Each choice shows how many logs it covers. You can change it later in the app's **Settings**.
+Each choice shows how many logs it covers. FleetRanger skips the logs it already has. You can change the choice later in the app's [settings](02-controller-app.md#sync).
+
+![Which logs to upload: All logs, 3 logs, or From a date, with a date and Continue.](images/controller-which-logs.webp)
 
 ## Choose who's flying
 
-The app's main screen asks **Who's flying?**
+The app's main screen asks **Who's flying?** The first time, it lists every pilot, and **Not in the list** for flights whose pilot is set later in the web app. Select the pilot.
 
-![The controller app asks "Who's flying?", with the last pilot on a big tile and Other pilot beside it.](images/whos-flying.webp)
+![Who's flying? with a pilot's tile and Not in the list, below a notice that FleetRanger doesn't open at startup.](images/controller-whos-flying.webp)
 
-- The first time, select **Other pilot** and choose the pilot from the list. After that, the last pilot is shown on the big tile, so the same pilot again is one tap.
-- If the pilot isn't in the list, choose **Not in the list**. The flight then has no pilot, and an editor or admin sets it later.
-- If your organisation has several groups, the app next asks where to **Log flights under**. It offers the groups the pilot flies for.
+The pilot then shows on a big tile, with **Other pilot** beside it for someone else. Select the tile to open DJI Pilot 2. If the pilot flies for several groups, the tile first leads to **Log flights under**, where you select the group the same way. Next time, the last pilot is already on the tile, so the same pilot again is one tap. See [Controller app](02-controller-app.md) for the rest of the app.
 
-The tile that says **Open DJI Pilot 2** starts DJI Pilot 2. The choice counts until someone changes it.
-
-> **Note:** If the app shows **FleetRanger doesn't open at startup**, follow its steps so the app opens when the controller switches on.
+> **Note:** If the app shows **FleetRanger doesn't open at startup**, select **Open Android settings** and choose FleetRanger there, so the app opens when the controller switches on.
 
 ## Fly
 
@@ -64,8 +67,8 @@ Fly with DJI Pilot 2 as usual. After the flight, the app uploads the flight log 
 
 Once a log has been uploaded, FleetRanger reads it, which takes a moment. Admins see this as **Log processing** at the top of the page.
 
-The flight then shows under **Sessions**. Flights by the same pilot with short breaks in between form one session. See [Sessions](02-sessions.md).
+The flight then shows under **Sessions**. Flights by the same pilot with short breaks in between form one session. See [Sessions](03-sessions.md).
 
 ## Invite other people
 
-Add the people who log in or fly under [Users](04-users.md). Pilots don't need a login: a name and the **Pilot** role put them in the controller's list.
+Add the people who log in or fly under [Users](05-users.md). Pilots don't need a login: a name and the **Pilot** role put them in the controller's list.
