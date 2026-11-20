@@ -12,9 +12,13 @@ The controller app shows a list of pilots to choose from. It holds everyone with
 
 ## Install the app on the controller
 
-1. On the controller, open the browser and go to your FleetRanger address followed by `/download`, such as `fleet.example.org/download`. The login page links there too, under **Download the app**.
-2. Select **Download app** and install it. Android may ask you to allow installing apps from the browser first.
-3. Open FleetRanger on the controller. It knows your FleetRanger address already.
+1. On the controller, open **Firefox** and go to your FleetRanger address followed by `/download`, such as `fleet.example.org/download`.
+
+   ![FleetRanger's download page in Firefox on the controller, with Download app.](images/controller-download.webp)
+
+2. Select **Download app**. When Firefox has downloaded it, select **Open**.
+3. The first time, Android says it may not install apps from this source. Select **Settings**, turn on **Allow from this source**, and go back.
+4. Select **Install**, then **Open**. FleetRanger already knows your address.
 
 ## Pair the controller
 
