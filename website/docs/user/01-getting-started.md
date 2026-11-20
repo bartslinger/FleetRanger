@@ -44,7 +44,7 @@ So that pilots always start in FleetRanger, select **Open Android settings** in 
 
 On **Who's flying?**, choose the pilot and select their tile: the app opens DJI Pilot 2. Fly as usual: after the flight, the app uploads the flight log by itself.
 
-![Who's flying? with a pilot's tile and Not in the list.](images/controller-whos-flying.webp)
+![Who's flying? with the pilot's tile to open DJI Pilot 2, Other pilot, and the sync status.](images/controller-whos-flying.webp)
 
 ## See the flight
 

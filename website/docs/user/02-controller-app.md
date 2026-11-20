@@ -6,7 +6,7 @@ FleetRanger's app runs on the DJI remote controller. Pilots say who's flying bef
 
 The app opens on **Who's flying?** Select the pilot's tile to open DJI Pilot 2, or **Other pilot** for someone else.
 
-![Who's flying? with a pilot's tile and Not in the list.](images/controller-whos-flying.webp)
+![Who's flying? with the pilot's tile to open DJI Pilot 2, Other pilot, and the sync status.](images/controller-whos-flying.webp)
 
 At the bottom, **Sync:** says how the uploads are going.
 
