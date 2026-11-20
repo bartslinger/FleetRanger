@@ -1,6 +1,6 @@
 # Sessions
 
-A session is one pilot's flights in a row, such as a morning's work. FleetRanger opens on **Sessions**: it is where you see what was flown.
+A drone outing is rarely a single flight: a pilot flies several in a row, swapping batteries in between. A session brings those flights together, such as a morning's work. Seen as one, they show what was done on that outing, and a comment, such as the task or the weather, applies to all of it. That's why FleetRanger opens on **Sessions**.
 
 Flights join a session by themselves when they come in: a flight by the same pilot shortly after the last one joins that session, otherwise it starts a new one.
 
