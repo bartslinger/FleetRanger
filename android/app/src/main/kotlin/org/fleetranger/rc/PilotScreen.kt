@@ -90,6 +90,9 @@ fun PilotScreen(
     syncStatus: SyncStatus? = null,
     update: Server.AppVersion? = null,
     onUpdate: () -> Unit = {},
+    /** About DJI Pilot 2's flight logs, when the app can't get at them. */
+    logsNotice: LogsNotice? = null,
+    onSearchLogs: () -> Unit = {},
 ) {
     var step by rememberSaveable { mutableStateOf(Step.First) }
     // Who was chosen, by key; null for the last choice.
@@ -155,6 +158,9 @@ fun PilotScreen(
             .padding(horizontal = Spacing.s07, vertical = Spacing.s05),
         verticalArrangement = Arrangement.spacedBy(Spacing.s05),
     ) {
+        // The most severe first (carbon-expert's suggestion; Carbon has no
+        // rule for stacking inline notifications).
+        if (logsNotice is LogsNotice.Unreadable) LogsNotification(logsNotice, onSearchLogs)
         if (!opensAtStartup) {
             WarningNotification(
                 title = "FleetRanger doesn’t open at startup",
@@ -162,6 +168,9 @@ fun PilotScreen(
                 action = "Open Android settings",
                 onAction = onOpenStartupSettings,
             )
+        }
+        if (logsNotice != null && logsNotice !is LogsNotice.Unreadable) {
+            LogsNotification(logsNotice, onSearchLogs)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.s05)) {
             when (shown) {

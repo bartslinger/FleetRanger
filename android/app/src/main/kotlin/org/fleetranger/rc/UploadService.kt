@@ -120,7 +120,7 @@ class UploadService : Service() {
             return report(SyncStatus.State.NoAccess, waiting = 0)
         }
         // Access granted, so a missing or unreadable folder is something to look into.
-        ErrorReports.folderProblem(this, FlightLogs.folderProblem())
+        ErrorReports.folders(this, logs.check())
         val waiting = logs.all()
             .filter { it.state == FlightLogs.State.Waiting || it.state == FlightLogs.State.BeingWritten }
             .reversed()

@@ -55,8 +55,11 @@ object ErrorReports {
         } else {
             edit.putString("dsn", settings.errorReports).putString("controller", settings.controller)
         }
-        edit.apply()
+        edit.putString("support", settings?.support).apply()
     }
+
+    /** Whom pilots contact about the flight logs, as the server said; null: nobody named. */
+    fun support(context: Context): String? = prefs(context).getString("support", null)
 
     /** An error the app caught but didn't expect; network trouble isn't one. */
     fun report(error: Throwable) {
@@ -65,23 +68,41 @@ object ErrorReports {
     }
 
     /**
-     * Reports a problem with the log folders when it begins, not on every
-     * scan: again only after it went away, or became another one.
+     * Reports the log folders' state when it begins, not on every scan: again
+     * only after it went away or changed. Unreadable is a warning; none found
+     * is information, as a controller that never flew has none either.
      */
-    fun folderProblem(context: Context, problem: FlightLogs.FolderProblem?) {
+    fun folders(context: Context, check: FlightLogs.Check) {
         // Without reporting, it counts as not yet reported.
         if (!Sentry.isEnabled()) return
         val prefs = prefs(context)
-        val reported = prefs.getString("folder_problem", null)
-        val now = problem?.let { "${it.message} ${it.places}" }
-        if (now == reported) return
-        if (problem != null) {
-            Sentry.captureMessage(problem.message, SentryLevel.WARNING) { scope ->
-                problem.places.forEach { (place, state) -> scope.setExtra(place, state) }
-                scope.setExtra("DJI Pilot 2", DjiPilot.version(context) ?: "not installed")
-            }
+        val (message, level) = when (check.access) {
+            FlightLogs.Access.Found -> null to null
+            FlightLogs.Access.NotFound -> "No FlightRecord folder found" to SentryLevel.INFO
+            FlightLogs.Access.Unreadable -> "A flight log folder can't be read" to SentryLevel.WARNING
         }
+        val now = message?.let { "$it ${check.places}" }
+        if (now == prefs.getString("folder_problem", null)) return
+        if (message != null && level != null) send(context, message, level, check.places)
         prefs.edit().putString("folder_problem", now).apply()
+    }
+
+    /**
+     * A pilot searched the controller for the logs: where they were (so the
+     * app can look there by default), or that there were none.
+     */
+    fun searched(context: Context, found: String?, check: FlightLogs.Check) {
+        if (!Sentry.isEnabled()) return
+        val places = check.places + ("found" to (found ?: "nothing"))
+        val message = if (found != null) "Flight logs found elsewhere" else "A search found no flight logs"
+        send(context, message, SentryLevel.INFO, places)
+    }
+
+    private fun send(context: Context, message: String, level: SentryLevel, places: Map<String, String>) {
+        Sentry.captureMessage(message, level) { scope ->
+            places.forEach { (place, state) -> scope.setExtra(place, state) }
+            scope.setExtra("DJI Pilot 2", DjiPilot.version(context) ?: "not installed")
+        }
     }
 
     private fun prefs(context: Context) =

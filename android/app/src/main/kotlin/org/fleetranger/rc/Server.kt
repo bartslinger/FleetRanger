@@ -156,6 +156,8 @@ class Server(private val context: Context) {
     data class Settings(
         /** The Sentry DSN for error reports; null: send none. */
         val errorReports: String?,
+        /** Whom pilots contact about the flight logs; null: nobody named. */
+        val support: String?,
         /** This controller's id on the server, which its reports carry. */
         val controller: String,
     )
@@ -163,8 +165,10 @@ class Server(private val context: Context) {
     /** The server's settings for this controller; null if it refused the token. */
     fun settings(): Settings? {
         val answer = call("GET", "$API/settings") ?: return null
+        fun text(name: String) = answer.optString(name).takeIf { !answer.isNull(name) && it.isNotEmpty() }
         return Settings(
-            errorReports = answer.optString("error_reports").takeIf { !answer.isNull("error_reports") && it.isNotEmpty() },
+            errorReports = text("error_reports"),
+            support = text("support"),
             controller = answer.optString("controller").takeIf { it.isNotEmpty() }
                 ?: throw IOException("the server's answer isn't FleetRanger's"),
         )
