@@ -36,6 +36,7 @@
 					<ul class="included">
 						<li>On your own server</li>
 						<li>No limits on users or controllers</li>
+						<li>Integrations through the API</li>
 						<li>Open source, AGPL-3.0</li>
 						<li>Installation and support on request, paid</li>
 					</ul>
@@ -72,6 +73,26 @@
 					</div>
 				</li>
 			</ul>
+		</Column>
+		<Column md={4} lg={8}>
+			<div class="about">
+				<h2>Open source, not open contribution</h2>
+				<p>
+					FleetRanger is open source under the AGPL-3.0. You can run it, change it and keep using
+					it, whatever happens to us. We don't accept pull requests, but ideas and feature requests
+					are welcome at <a href="mailto:{CONTACT}">{CONTACT}</a>. When an organisation funds a
+					feature, it comes first. It ships in FleetRanger itself, so everyone gets it.
+				</p>
+			</div>
+		</Column>
+		<Column md={4} lg={8}>
+			<div class="about">
+				<h2>Your own integrations</h2>
+				<p>
+					On your own server, your systems can connect to FleetRanger through its API, with the same
+					logins and permissions as your users. We can build the integration for you.
+				</p>
+			</div>
 		</Column>
 	</Grid>
 </section>
@@ -165,6 +186,19 @@
 		position: absolute;
 		inset-inline-start: 0;
 		content: '–';
+	}
+
+	/* What the options share, below them: plain text with a gap above. */
+	.about {
+		max-width: 36rem;
+		margin-top: var(--cds-spacing-09);
+	}
+
+	.about p {
+		margin-top: var(--cds-spacing-04);
+		font-size: var(--cds-body-02-font-size);
+		line-height: var(--cds-body-02-line-height);
+		letter-spacing: var(--cds-body-02-letter-spacing);
 	}
 
 	/* The buttons span the tile, as Carbon has them in base tiles. */

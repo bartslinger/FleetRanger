@@ -52,7 +52,7 @@
 		{
 			pictogram: OpenSource,
 			title: 'Open source',
-			text: 'Licensed under the AGPL-3.0, so you can check what it does with your data.'
+			text: 'Licensed under the AGPL-3.0: check what it does with your data, change it, and keep using it whatever happens to us.'
 		},
 		{
 			pictogram: Drone,
