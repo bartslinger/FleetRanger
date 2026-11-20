@@ -25,9 +25,7 @@
 
 <header class="theme-dark">
 	<a class="name" href="/"><img src={logo} alt="" width="20" height="20" />FleetRanger</a>
-	<nav aria-label="Sections">
-		<a class="section" href="/#how-it-works">How it works</a>
-		<a class="section" href="/#features">Features</a>
+	<nav aria-label="Main">
 		<a
 			class="pricing"
 			href="/pricing"
@@ -151,21 +149,10 @@
 		align-items: center;
 	}
 
-	/* Tighter on phones so the links fit beside the name. Where they don't,
-	   Docs stays, and Pricing where it fits: the landing page's sections
-	   follow each other anyway. */
+	/* Tighter on phones so the links fit beside the name. Only real pages:
+	   the landing page's sections follow each other anyway. */
 	nav {
 		display: flex;
-	}
-
-	nav a.section {
-		display: none;
-	}
-
-	@media (min-width: 30rem) {
-		nav a.section {
-			display: flex;
-		}
 	}
 
 	/* Pricing from 360px, where it fits beside Docs and Log in. */
