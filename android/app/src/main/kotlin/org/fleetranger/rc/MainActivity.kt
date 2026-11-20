@@ -256,7 +256,12 @@ class MainActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             val check = withContext(Dispatchers.IO) { FlightLogs(this@MainActivity).check() }
-            if ((logsNotice as? LogsNotice.NotFound)?.searching == true) return@launch
+            val searching = when (val shown = logsNotice) {
+                is LogsNotice.NotFound -> shown.searching
+                is LogsNotice.NothingFound -> shown.searching
+                else -> false
+            }
+            if (searching) return@launch
             logsNotice = if (foundBySearch && check.access == FlightLogs.Access.Found) {
                 LogsNotice.Found
             } else {
@@ -267,7 +272,10 @@ class MainActivity : ComponentActivity() {
 
     /** The pilot asked to search the controller for the logs. */
     private fun searchLogs() {
-        logsNotice = LogsNotice.NotFound(searching = true)
+        logsNotice = when (val shown = logsNotice) {
+            is LogsNotice.NothingFound -> shown.copy(searching = true)
+            else -> LogsNotice.NotFound(searching = true)
+        }
         lifecycleScope.launch {
             val logs = FlightLogs(this@MainActivity)
             val (found, check) = withContext(Dispatchers.IO) {

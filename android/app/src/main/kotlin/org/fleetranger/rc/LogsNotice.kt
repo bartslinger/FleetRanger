@@ -17,7 +17,7 @@ sealed interface LogsNotice {
     data object Found : LogsNotice
 
     /** A search found nothing. */
-    data class NothingFound(val support: String?) : LogsNotice
+    data class NothingFound(val support: String?, val searching: Boolean = false) : LogsNotice
 
     /** A folder the app may not read: logs won't come until someone fixes it. */
     data class Unreadable(val support: String?) : LogsNotice
@@ -57,6 +57,10 @@ fun LogsNotification(notice: LogsNotice, onSearch: () -> Unit) {
             NotificationKind.Info,
             title = "No flight logs on this controller",
             text = "Flown already? ${contact(notice.support)}",
+            // DJI Pilot 2 may write its logs somewhere new after this search.
+            action = "Search again",
+            onAction = onSearch,
+            busy = if (notice.searching) "Searching…" else null,
         )
         is LogsNotice.Unreadable -> InlineNotification(
             NotificationKind.Error,
