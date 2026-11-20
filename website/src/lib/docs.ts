@@ -37,6 +37,14 @@ const files = import.meta.glob<string>('/docs/*/*.md', {
 });
 
 const FILE = /^\/docs\/([a-z-]+)\/(\d+)-([a-z0-9-]+)\.md$/;
+/** Pictures beside the pages, in docs/<section>/images/, written in a page
+ * as `![…](images/name.webp)`; the site serves them under hashed names. */
+const images = import.meta.glob<string>('/docs/*/images/*.{png,webp}', {
+	query: '?url',
+	import: 'default',
+	eager: true
+});
+
 const LINK = /^(?:\.\.\/([a-z-]+)\/)?\d+-([a-z0-9-]+)\.md(#[a-z0-9-]+)?$/;
 
 /** A heading's anchor: its text in lower case, words joined by dashes. */
@@ -49,7 +57,11 @@ function anchor(text: string): string {
 }
 
 function escape(text: string): string {
-	return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
 }
 
 function render(section: string, markdown: string): string {
@@ -62,6 +74,11 @@ function render(section: string, markdown: string): string {
 			// Focusable, so a box that scrolls sideways scrolls with the keyboard.
 			code({ text }: Tokens.Code) {
 				return `<pre tabindex="0"><code>${escape(text)}</code></pre>\n`;
+			},
+			image({ href, text }: Tokens.Image) {
+				const url = images[`/docs/${section}/${href}`];
+				if (!url) throw new Error(`docs/${section}: no picture ${href}`);
+				return `<img src="${url}" alt="${escape(text)}" loading="lazy" />`;
 			},
 			link({ href, tokens }: Tokens.Link) {
 				const text = this.parser.parseInline(tokens);

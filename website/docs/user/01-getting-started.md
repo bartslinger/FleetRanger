@@ -4,6 +4,8 @@ You have just logged in to your new organisation. These steps get the first flig
 
 Until your organisation has its first flight, FleetRanger opens on **Equipment**, which shows these steps under **Start by pairing a controller**.
 
+![Equipment for a new organisation: Start by pairing a controller, three steps and the Pair a controller button.](images/start-steps.webp)
+
 ## Before you start
 
 The controller app shows a list of pilots to choose from. It holds everyone with the **Pilot** role. If you fly yourself, give yourself that role first: open **Users**, select your name, select **Edit user**, tick **Pilot** and **Save**. See [Users](04-users.md) to add other pilots.
@@ -12,7 +14,7 @@ The controller app shows a list of pilots to choose from. It holds everyone with
 
 1. On the controller, open the browser and go to your FleetRanger address followed by `/download`, such as `fleet.example.org/download`. The login page links there too, under **Download the app**.
 2. Select **Download app** and install it. Android may ask you to allow installing apps from the browser first.
-3. Open FleetRanger on the controller. It knows your FleetRanger address already. If it asks for a **Server address**, enter the one the download page shows.
+3. Open FleetRanger on the controller. It knows your FleetRanger address already.
 
 ## Pair the controller
 
@@ -21,6 +23,9 @@ Pairing connects the controller to your organisation. You create a code in the w
 1. In the web app, open **Equipment** and select **Pair a controller**.
 2. Choose how long the code is **Valid for** (24 hours unless you change it). If your organisation has several groups, also choose the **Group** the controller joins.
 3. Select **Create code**. The code has 8 letters and digits, such as `KDW4-9TXR`.
+
+   ![Pair a controller in the web app, with a new code and its copy button.](images/pairing-code.webp)
+
 4. On the controller, type the code under **Pairing code** and select **Pair**.
 5. The app says **Paired** and which group the controller is in. Select **Continue**. If the group is wrong, select **Unpair** and pair again with a new code.
 
@@ -40,6 +45,8 @@ Each choice shows how many logs it covers. You can change it later in the app's 
 ## Choose who's flying
 
 The app's main screen asks **Who's flying?**
+
+![The controller app asks "Who's flying?", with the last pilot on a big tile and Other pilot beside it.](images/whos-flying.webp)
 
 - The first time, select **Other pilot** and choose the pilot from the list. After that, the last pilot is shown on the big tile, so the same pilot again is one tap.
 - If the pilot isn't in the list, choose **Not in the list**. The flight then has no pilot, and an editor or admin sets it later.

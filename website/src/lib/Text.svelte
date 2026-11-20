@@ -122,6 +122,7 @@
 	.prose :global(ol) {
 		margin-inline-start: var(--cds-spacing-06);
 		padding: 0;
+		list-style: decimal;
 	}
 
 	.prose :global(ol > li::before) {
@@ -167,5 +168,14 @@
 
 	.prose :global(blockquote > :first-child) {
 		margin-top: 0;
+	}
+
+	/* A screenshot: as wide as the text at most, set off from the page by a
+	   subtle border, as Carbon's tiles are. */
+	.prose :global(img) {
+		display: block;
+		max-width: 100%;
+		height: auto;
+		border: 1px solid var(--cds-border-subtle-01);
 	}
 </style>
