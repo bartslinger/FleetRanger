@@ -2,18 +2,14 @@
 	import ArrowRight from '@carbon/icons/es/arrow--right/16.js';
 	import Email from '@carbon/icons/es/email/16.js';
 	import Launch from '@carbon/icons/es/launch/16.js';
-	import Contract from '@carbon/pictograms/es/contract/index.js';
-	import Drone from '@carbon/pictograms/es/drone/index.js';
-	import Insights from '@carbon/pictograms/es/insights/index.js';
-	import Keystores from '@carbon/pictograms/es/keystores/index.js';
-	import ListCheckbox from '@carbon/pictograms/es/list--checkbox/index.js';
-	import OpenSource from '@carbon/pictograms/es/open-source/index.js';
+	import Cloud from '@carbon/pictograms/es/cloud/index.js';
 	import Servers from '@carbon/pictograms/es/servers/index.js';
 	import Button from '$ui/Button.svelte';
 	import Tag from '$ui/Tag.svelte';
 	import Column from '$ui/Column.svelte';
 	import Grid from '$ui/Grid.svelte';
 	import Icon from '$ui/Icon.svelte';
+	import Link from '$ui/Link.svelte';
 	import Controller from '#lib/Controller.svelte';
 	import Laptop from '#lib/Laptop.svelte';
 	import mavic3 from '#lib/images/drone-mavic-3-enterprise.png';
@@ -28,8 +24,6 @@
 	import light800 from '#lib/images/session-light-800.webp';
 	import light1600 from '#lib/images/session-light-1600.webp';
 	import light2400 from '#lib/images/session-light-2400.webp';
-	import sync640 from '#lib/images/sync-640.webp';
-	import sync1280 from '#lib/images/sync-1280.webp';
 	import { APP, CONTACT, SOURCE } from '#lib/site.js';
 
 	// The session page in the web app, in each theme.
@@ -38,69 +32,35 @@
 		dark: { src: dark1600, srcset: `${dark800} 800w, ${dark1600} 1600w, ${dark2400} 2400w` }
 	};
 
+	// Where it runs: on your own server first, the hosted service beside it.
 	const points = [
 		{
 			pictogram: Servers,
 			title: 'On your own premises',
-			text: 'FleetRanger runs on your own servers, on site or in your own data centre. Your flight logs are stored there only.'
+			text: 'FleetRanger runs on your own servers, on site or in your own data centre. Your flight logs are stored there only.',
+			link: { href: '/docs/self-hosting/requirements', text: 'Read the self-hosting docs' }
 		},
 		{
-			pictogram: Keystores,
-			title: 'Permissions for every team',
-			text: 'Roles per group or for the whole organisation, with your own single sign-on.'
-		},
-		{
-			pictogram: OpenSource,
-			title: 'Open source',
-			text: 'Licensed under the AGPL-3.0: check what it does with your data, change it, and keep using it whatever happens to us.'
-		},
-		{
-			pictogram: Drone,
-			title: 'Made for DJI Enterprise',
-			text: 'For drones flown with DJI Pilot 2, on controllers such as the DJI RC Pro.'
-		}
-	];
-
-	const pains = [
-		{
-			pictogram: Contract,
-			title: 'No more logging by hand',
-			text: 'Pilots just fly. Every flight is recorded without them having to write anything down.'
-		},
-		{
-			pictogram: ListCheckbox,
-			title: 'Every flight accounted for',
-			text: 'Pilots pick their name on the controller, so every flight lands in the logbook with its pilot, drone and track.'
-		},
-		{
-			pictogram: Insights,
-			title: 'Fleet insights',
-			text: 'Hours flown per drone, battery and group, and the areas where your fleet works.'
+			pictogram: Cloud,
+			title: 'Or hosted by us',
+			text: `Rather not run a server? Use the hosted service at ${APP}.`,
+			link: { href: '/pricing', text: 'See pricing' }
 		}
 	];
 
 	const moments = [
 		{
-			when: 'Before take-off',
-			text: 'The pilot picks their name on the controller, even without a connection, and FleetRanger opens DJI Pilot 2.',
+			when: 'On the controller',
+			text: 'When the controller starts, FleetRanger asks who’s flying. One press on the pilot’s name opens DJI Pilot 2. After landing, the app uploads the flight logs by itself.',
 			screen: {
 				src: pilot1280,
 				srcset: `${pilot640} 640w, ${pilot1280} 1280w`,
-				alt: 'The FleetRanger app on a DJI RC Pro, asking who’s flying, with the last pilot first.'
-			}
-		},
-		{
-			when: 'After landing',
-			text: 'The controller uploads the new flight logs to your server, over Wi-Fi networks you approve.',
-			screen: {
-				src: sync1280,
-				srcset: `${sync640} 640w, ${sync1280} 1280w`,
-				alt: 'The app’s sync settings on a DJI RC Pro: all logs uploaded.'
+				alt: 'The FleetRanger app on a DJI RC Pro, asking who’s flying, with the last pilot first and all logs in FleetRanger.'
 			}
 		},
 		{
 			when: 'At your desk',
-			text: 'Flights that follow each other are grouped into sessions, with their times, pilots, drones and tracks on a map.'
+			text: 'Every flight is in the web app with its pilot, drone, times and track, and flights flown shortly after each other form a session.'
 		}
 	];
 
@@ -114,20 +74,20 @@
 	];
 	const features = [
 		{
-			title: 'An app on the controller',
-			text: 'Pilots choose their name before each flight. Nobody logs in on a shared controller.'
-		},
-		{
 			title: 'Logbook and sessions',
 			text: 'Every flight with its time in the air, distance, drone, controller and pilot. Sessions can be merged and split.'
 		},
 		{
-			title: 'Your own integrations',
-			text: 'On your own server, your systems and AI assistants can connect through the API, with the same logins and permissions as your users. We can build the integration for you.'
+			title: 'Fleet insights',
+			text: 'Hours flown per drone, battery and group, and the areas where your fleet works.'
 		},
 		{
 			title: 'Groups and equipment',
-			text: 'Pilots work in groups, with roles per person. Drones and controllers are registered from their logs, so the fleet list keeps itself up to date.'
+			text: 'Pilots work in groups, with roles per person and your own single sign-on. Drones and controllers are registered from their logs, so the fleet list keeps itself up to date.'
+		},
+		{
+			title: 'Your own integrations',
+			text: 'On your own server, your systems and AI assistants can connect through the API, with the same logins and permissions as your users. We can build the integration for you.'
 		}
 	];
 </script>
@@ -148,9 +108,11 @@
 				<div>
 					<p class="intro">Open-source flight logging for DJI Enterprise, on your own server.</p>
 					<div class="actions">
-						<!-- The hosted free tier first, now it is open (user, 2026-11-19). -->
+						<!-- The hosted free tier first (user, 2026-11-19), then self-hosting. -->
 						<Button href="https://{APP}/signup" icon={ArrowRight}>Try for free</Button>
-						<Button href="mailto:{CONTACT}" kind="tertiary" icon={Email}>Get in touch</Button>
+						<Button href="/docs/self-hosting/requirements" kind="tertiary" icon={ArrowRight}
+							>Run it yourself</Button
+						>
 					</div>
 				</div>
 			</div>
@@ -167,19 +129,51 @@
 	</Grid>
 </section>
 
-<section aria-labelledby="pains-title">
+<section id="how-it-works" aria-labelledby="how-it-works-title">
 	<Grid centered rowGap>
 		<Column><div class="rule"></div></Column>
-		<Column>
-			<h2 id="pains-title">Less paperwork, more insight</h2>
+		<Column md={8} lg={4}>
+			<h2 id="how-it-works-title">How it works</h2>
 		</Column>
-		<Column>
-			<ul class="pains">
-				{#each pains as pain (pain.title)}
+		<Column md={8} lg={12}>
+			<ol class="steps">
+				{#each moments as moment (moment.when)}
 					<li>
-						<span class="pictogram"><Icon icon={pain.pictogram} /></span>
-						<h3>{pain.title}</h3>
-						<p>{pain.text}</p>
+						<div class="picture" class:laptop={!moment.screen}>
+							{#if moment.screen}
+								<Controller {...moment.screen} />
+							{:else}
+								<Laptop {...session} alt="The session in the web app on a laptop." />
+							{/if}
+						</div>
+						<h3>{moment.when}</h3>
+						<p>{moment.text}</p>
+					</li>
+				{/each}
+			</ol>
+			<p class="body setup">
+				A controller is set up once: install the app on it, and pair it with a code from the web
+				app.
+			</p>
+			<p class="more">
+				<Link href="/docs/user/getting-started">Getting started <Icon icon={ArrowRight} /></Link>
+			</p>
+		</Column>
+	</Grid>
+</section>
+
+<section id="features" aria-labelledby="features-title">
+	<Grid centered rowGap>
+		<Column><div class="rule"></div></Column>
+		<Column md={8} lg={4}>
+			<h2 id="features-title">Features</h2>
+		</Column>
+		<Column md={8} lg={12}>
+			<ul class="tiles">
+				{#each features as feature (feature.title)}
+					<li>
+						<h3>{feature.title}</h3>
+						<p>{feature.text}</p>
 					</li>
 				{/each}
 			</ul>
@@ -190,69 +184,22 @@
 <section aria-labelledby="points-title">
 	<Grid centered rowGap>
 		<Column><div class="rule"></div></Column>
-		<Column>
+		<Column md={8} lg={4}>
 			<h2 id="points-title">Your data stays with you</h2>
 		</Column>
-		<Column>
+		<Column md={8} lg={12}>
 			<ul class="points">
 				{#each points as point (point.title)}
 					<li>
 						<span class="pictogram"><Icon icon={point.pictogram} /></span>
 						<h3>{point.title}</h3>
 						<p>{point.text}</p>
+						<p class="more">
+							<Link href={point.link.href}>{point.link.text} <Icon icon={ArrowRight} /></Link>
+						</p>
 					</li>
 				{/each}
 			</ul>
-		</Column>
-	</Grid>
-</section>
-
-<section id="how-it-works" aria-labelledby="how-it-works-title">
-	<Grid centered>
-		<Column><div class="rule"></div></Column>
-		<Column>
-			<h2 id="how-it-works-title">How it works</h2>
-		</Column>
-		<Column>
-			<!-- The steps scroll past the picture, which stays in place and shows the
-			     step that has reached it (the script in app.html). -->
-			<div class="steps" data-steps>
-				<div class="picture" data-picture>
-					{#each moments as moment, i (moment.when)}
-						<div class="shown" class:active={i === 0} data-shown={i}>
-							{#if moment.screen}
-								<Controller {...moment.screen} />
-							{:else}
-								<Laptop {...session} alt="The session in the web app on a laptop." />
-							{/if}
-						</div>
-					{/each}
-				</div>
-				<ol class="timeline">
-					{#each moments as moment, i (moment.when)}
-						<li class:last={i === moments.length - 1} data-step={i}>
-							<h3>{moment.when}</h3>
-							<p>{moment.text}</p>
-						</li>
-					{/each}
-				</ol>
-			</div>
-		</Column>
-	</Grid>
-</section>
-
-<section class="quote" aria-label="What a pilot says">
-	<Grid centered>
-		<Column md={8} lg={8}>
-			<figure>
-				<blockquote>
-					<p>
-						Our flight logs are too sensitive for the cloud. FleetRanger keeps them on our own
-						server, and makes our operations much simpler.
-					</p>
-				</blockquote>
-				<figcaption>Drone pilot and satisfied FleetRanger user</figcaption>
-			</figure>
 		</Column>
 	</Grid>
 </section>
@@ -281,25 +228,6 @@
 				The app runs on the DJI RC Pro Enterprise, RC Plus and RC Plus 2 Enterprise. Flying another
 				DJI Enterprise drone with DJI Pilot 2? Write to {CONTACT}.
 			</p>
-		</Column>
-	</Grid>
-</section>
-
-<section id="features" aria-labelledby="features-title">
-	<Grid centered rowGap>
-		<Column><div class="rule"></div></Column>
-		<Column md={8} lg={4}>
-			<h2 id="features-title">Features</h2>
-		</Column>
-		<Column md={8} lg={12}>
-			<ul class="tiles">
-				{#each features as feature (feature.title)}
-					<li>
-						<h3>{feature.title}</h3>
-						<p>{feature.text}</p>
-					</li>
-				{/each}
-			</ul>
 		</Column>
 	</Grid>
 </section>
@@ -342,32 +270,6 @@
 	   (spacing-07) below it: the grid's row gap, or this margin without one. */
 	.rule {
 		border-top: 1px solid var(--cds-border-subtle-00);
-	}
-
-	#how-it-works .rule {
-		margin-bottom: var(--cds-spacing-07);
-	}
-
-	/* The quote breaks the rhythm: more space around it, and no rule. */
-	.quote {
-		padding-block: var(--cds-spacing-11);
-	}
-
-	@media (min-width: 66rem) {
-		.quote {
-			padding-block: var(--cds-spacing-12);
-		}
-	}
-
-	/* A full gap before the closing band, whose Gray 10 the tiles share. */
-	#features {
-		padding-bottom: var(--cds-spacing-10);
-	}
-
-	@media (min-width: 66rem) {
-		#features {
-			padding-bottom: var(--cds-spacing-11);
-		}
 	}
 
 	/* The headline: Carbon's largest expressive heading, semibold. */
@@ -448,22 +350,16 @@
 		}
 	}
 
-	/* Four points with Carbon pictograms, as on IBM's product pages. */
+	/* Points with Carbon pictograms, as on IBM's product pages, in the
+	   features' columns from lg. */
 	.points {
 		display: grid;
 		gap: var(--cds-spacing-09) var(--cds-spacing-07);
-		margin-top: var(--cds-spacing-09);
 	}
 
 	@media (min-width: 42rem) {
 		.points {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-	}
-
-	@media (min-width: 66rem) {
-		.points {
-			grid-template-columns: repeat(4, minmax(0, 1fr));
 		}
 	}
 
@@ -489,161 +385,73 @@
 		color: var(--cds-text-secondary);
 	}
 
-	/* A pilot's words in Carbon's quotation style, the opening
-	   quotation mark hanging in the margin so the text lines up. */
-	.quote blockquote p {
-		position: relative;
-		font-size: var(--cds-fluid-quotation-01-font-size);
-		font-weight: var(--cds-fluid-quotation-01-font-weight);
-		line-height: var(--cds-fluid-quotation-01-line-height);
-		letter-spacing: var(--cds-fluid-quotation-01-letter-spacing);
+	/* Carbon's standalone link with its arrow, below the point's text. */
+	.points .more {
+		margin-top: var(--cds-spacing-05);
 	}
 
-	.quote blockquote p::before {
-		content: '“';
+	.more :global(a) {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--cds-spacing-02);
 	}
 
-	/* On phones the margin is too narrow to hang it in. */
-	@media (min-width: 42rem) {
-		.quote blockquote p::before {
-			position: absolute;
-			right: 100%;
-			padding-inline-end: 0.1em;
-		}
-	}
-
-	.quote blockquote p::after {
-		content: '”';
-	}
-
-	.quote figcaption {
-		margin-top: var(--cds-spacing-07);
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-body-02-font-size);
-		line-height: var(--cds-body-02-line-height);
-	}
-
-	/* The picture stays in place while the steps scroll past it: at the top on
-	   phones, beside them from md, where it stops in the middle of the window
-	   (it is 24rem tall at most). */
+	/* Two steps side by side from md, each with its picture on top. */
 	.steps {
 		display: grid;
-		margin-top: var(--cds-spacing-07);
-	}
-
-	.picture {
-		position: sticky;
-		top: 0;
-		z-index: 1;
-		display: grid;
-		align-items: center;
-		padding-block: var(--cds-spacing-05);
-		background: var(--cds-background);
-	}
-
-	/* The pictures on top of each other; the one for the current step shows. */
-	.shown {
-		grid-area: 1 / 1;
-		max-width: 20rem;
-		opacity: 0;
-		transition: opacity 400ms cubic-bezier(0.2, 0, 0.38, 0.9);
-	}
-
-	.shown.active {
-		opacity: 1;
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.shown {
-			transition: none;
-		}
+		gap: var(--cds-spacing-09) var(--cds-spacing-07);
 	}
 
 	@media (min-width: 42rem) {
 		.steps {
-			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-			gap: var(--cds-spacing-07);
-		}
-
-		.picture {
-			grid-column: 2;
-			grid-row: 1;
-			align-self: start;
-			top: max(var(--cds-spacing-09), calc(50vh - 12rem));
-			padding-block: 0;
-			background: none;
-		}
-
-		.shown {
-			max-width: 32rem;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
 
-	/* Three moments along a line, marked like a track: a ring at take-off,
-	   dots after it. Each is tall enough to be read while its picture shows;
-	   the last one must pass the switching line at 40% of the window before
-	   the picture's bottom (12rem below the middle at most) moves on: 10vh +
-	   12rem, and some room. */
-	.timeline {
-		display: grid;
-		gap: var(--cds-spacing-05);
+	/* One height for both pictures, bottom-aligned, so the titles line up: the
+	   controller is as tall as it is 4/3 wide, the laptop, a little wider than a
+	   controller in life, 5/3. Small on phones, so the section stays in
+	   proportion with the rest. */
+	.picture {
+		display: flex;
+		align-items: flex-end;
+		height: 7.5rem;
+		max-width: 10rem;
+		margin-bottom: var(--cds-spacing-06);
 	}
 
-	.timeline li {
-		position: relative;
-		min-height: 30vh;
-		padding-inline-start: var(--cds-spacing-08);
+	.picture.laptop {
+		max-width: 12.5rem;
 	}
 
 	@media (min-width: 42rem) {
-		.timeline {
-			grid-column: 1;
-			grid-row: 1;
+		.picture {
+			height: 12rem;
+			max-width: 16rem;
 		}
 
-		.timeline li {
-			min-height: 16rem;
-		}
-
-		.timeline li.last {
-			min-height: calc(10vh + 14rem);
+		.picture.laptop {
+			max-width: 20rem;
 		}
 	}
 
-	.timeline li::before {
-		content: '';
-		position: absolute;
-		top: 0.375rem;
-		left: 0;
-		width: 0.875rem;
-		height: 0.875rem;
-		border: 3px solid var(--track);
-		border-radius: 50%;
-		background: var(--track);
-		box-sizing: border-box;
+	.picture > :global(*) {
+		width: 100%;
 	}
 
-	.timeline li:first-child::before {
-		background: var(--cds-background);
-	}
-
-	.timeline li::after {
-		content: '';
-		position: absolute;
-		top: 1.5rem;
-		bottom: calc(-1 * var(--cds-spacing-05) + 0.25rem);
-		left: calc(0.4375rem - 1px);
-		border-left: 2px solid var(--cds-border-subtle-01);
-	}
-
-	.timeline li.last::after {
-		display: none;
-	}
-
-	.timeline p {
+	.steps p {
 		max-width: 26rem;
 		margin-top: var(--cds-spacing-03);
 		color: var(--cds-text-secondary);
+	}
+
+	/* Setting up, once, below the steps: a sentence and the docs link. */
+	.setup {
+		margin-top: var(--cds-spacing-09);
+	}
+
+	#how-it-works .more {
+		margin-top: var(--cds-spacing-03);
 	}
 
 	/* Carbon tiles on the page, with the narrow grid's 16px gutter. */
@@ -703,29 +511,6 @@
 
 	#supported .body {
 		margin-top: var(--cds-spacing-06);
-	}
-
-	/* The pains as base tiles with a pictogram, unlike the points' open list. */
-	.pains {
-		display: grid;
-		gap: var(--cds-spacing-05);
-		margin-top: var(--cds-spacing-09);
-	}
-
-	@media (min-width: 66rem) {
-		.pains {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-		}
-	}
-
-	.pains li {
-		padding: var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-spacing-07);
-		background: var(--cds-layer-01);
-	}
-
-	.pains p {
-		margin-top: var(--cds-spacing-03);
-		color: var(--cds-text-secondary);
 	}
 
 	/* The next step: a Gray 10 band before the footer. */
