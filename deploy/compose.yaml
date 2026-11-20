@@ -25,9 +25,7 @@ services:
       retries: 10
 
   backend:
-    image: fleetranger-backend:${FLEETRANGER_VERSION:?}
-    # Loaded onto the server by ship-image.sh; never fetched from a registry.
-    pull_policy: never
+    image: ghcr.io/bartslinger/fleetranger-backend:${FLEETRANGER_VERSION:?}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -78,8 +76,7 @@ services:
       - 127.0.0.1:8080:8080
 
   web:
-    image: fleetranger-web:${FLEETRANGER_VERSION:?}
-    pull_policy: never
+    image: ghcr.io/bartslinger/fleetranger-web:${FLEETRANGER_VERSION:?}
     restart: unless-stopped
     depends_on:
       - backend
