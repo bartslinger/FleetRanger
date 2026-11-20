@@ -28,6 +28,11 @@
 	<nav aria-label="Sections">
 		<a class="section" href="/#how-it-works">How it works</a>
 		<a class="section" href="/#features">Features</a>
+		<a
+			class="pricing"
+			href="/pricing"
+			aria-current={page.url.pathname.startsWith('/pricing') ? 'true' : undefined}>Pricing</a
+		>
 		<a href="/docs" aria-current={page.url.pathname.startsWith('/docs') ? 'true' : undefined}
 			>Docs</a
 		>
@@ -147,7 +152,8 @@
 	}
 
 	/* Tighter on phones so the links fit beside the name. Where they don't,
-	   only Docs stays: the landing page's sections follow each other anyway. */
+	   Docs stays, and Pricing where it fits: the landing page's sections
+	   follow each other anyway. */
 	nav {
 		display: flex;
 	}
@@ -158,6 +164,17 @@
 
 	@media (min-width: 30rem) {
 		nav a.section {
+			display: flex;
+		}
+	}
+
+	/* Pricing from 360px, where it fits beside Docs and Log in. */
+	nav a.pricing {
+		display: none;
+	}
+
+	@media (min-width: 22.5rem) {
+		nav a.pricing {
 			display: flex;
 		}
 	}
