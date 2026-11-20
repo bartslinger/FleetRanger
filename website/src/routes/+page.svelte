@@ -143,7 +143,10 @@
 							{#if moment.screen}
 								<Controller {...moment.screen} />
 							{:else}
-								<Laptop {...session} alt="The session in the web app on a laptop." />
+								<Laptop
+									{...session}
+									alt="A session in the web app: its flights' tracks on a map, with the pilot, drone, times and distance."
+								/>
 							{/if}
 						</div>
 						<h3>{moment.when}</h3>
@@ -156,7 +159,7 @@
 				app.
 			</p>
 			<p class="more">
-				<Link href="/docs/user/getting-started">Getting started <Icon icon={ArrowRight} /></Link>
+				<Link href="/docs/user/getting-started" size="lg" icon={ArrowRight}>Getting started</Link>
 			</p>
 		</Column>
 	</Grid>
@@ -195,7 +198,7 @@
 						<h3>{point.title}</h3>
 						<p>{point.text}</p>
 						<p class="more">
-							<Link href={point.link.href}>{point.link.text} <Icon icon={ArrowRight} /></Link>
+							<Link href={point.link.href} size="lg" icon={ArrowRight}>{point.link.text}</Link>
 						</p>
 					</li>
 				{/each}
@@ -385,15 +388,10 @@
 		color: var(--cds-text-secondary);
 	}
 
-	/* Carbon's standalone link with its arrow, below the point's text. */
-	.points .more {
+	/* Carbon's standalone link, below the text it belongs to. */
+	.more,
+	.points p.more {
 		margin-top: var(--cds-spacing-05);
-	}
-
-	.more :global(a) {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--cds-spacing-02);
 	}
 
 	/* Two steps side by side from md, each with its picture on top. */
@@ -448,10 +446,6 @@
 	/* Setting up, once, below the steps: a sentence and the docs link. */
 	.setup {
 		margin-top: var(--cds-spacing-09);
-	}
-
-	#how-it-works .more {
-		margin-top: var(--cds-spacing-03);
 	}
 
 	/* Carbon tiles on the page, with the narrow grid's 16px gutter. */
