@@ -34,6 +34,11 @@
 		<a href="/docs" aria-current={page.url.pathname.startsWith('/docs') ? 'true' : undefined}
 			>Docs</a
 		>
+		<a
+			class="about"
+			href="/about"
+			aria-current={page.url.pathname.startsWith('/about') ? 'true' : undefined}>About</a
+		>
 	</nav>
 	<div class="actions">
 		<!-- For those who already use the hosted service: a text link, as
@@ -71,6 +76,7 @@
 	<Grid centered rowGap>
 		<Column md={4} lg={4}>
 			<p class="name"><img src={logo} alt="" width="24" height="24" />FleetRanger</p>
+			<p class="links"><a href="/about">About FleetRanger</a></p>
 		</Column>
 		<Column md={4} lg={4}>
 			<p class="label">Source code</p>
@@ -155,13 +161,21 @@
 		display: flex;
 	}
 
-	/* Pricing from 360px, where it fits beside Docs and Log in. */
-	nav a.pricing {
+	/* Pricing from 360px and About from 480px, where they fit beside Docs and
+	   Log in; the footer links to About for narrower screens. */
+	nav a.pricing,
+	nav a.about {
 		display: none;
 	}
 
 	@media (min-width: 22.5rem) {
 		nav a.pricing {
+			display: flex;
+		}
+	}
+
+	@media (min-width: 30rem) {
+		nav a.about {
 			display: flex;
 		}
 	}
@@ -284,6 +298,10 @@
 		font-size: var(--cds-heading-02-font-size);
 		font-weight: var(--cds-heading-02-font-weight);
 		line-height: var(--cds-heading-02-line-height);
+	}
+
+	footer .name + .links {
+		margin-top: var(--cds-spacing-05);
 	}
 
 	footer .label {
