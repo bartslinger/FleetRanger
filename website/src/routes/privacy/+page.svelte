@@ -95,7 +95,7 @@
 			<tr>
 				<td>Hetzner</td>
 				<td>Monitoring the service, in Falkenstein, Germany</td>
-				<td>The server logs</td>
+				<td>The server logs and the controller app's error reports</td>
 			</tr>
 			<tr>
 				<td>Google</td>

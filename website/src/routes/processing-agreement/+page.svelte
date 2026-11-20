@@ -32,7 +32,9 @@
 		<li>
 			<strong>Which data:</strong> names; the email addresses of users who log in and the identifiers
 			of the accounts they log in with; flights with their times, places and flight paths, and who flew
-			them; the serial numbers of drones, controllers and batteries; and comments your users write.
+			them; the serial numbers of drones, controllers and batteries; comments your users write; and the
+			controller app's error reports, with the controller's model, Android version and id in the
+			service, kept for 90 days.
 		</li>
 	</ul>
 
@@ -84,7 +86,7 @@
 			</tr>
 			<tr>
 				<td>Hetzner Online GmbH</td>
-				<td>Monitoring the service: server logs</td>
+				<td>Monitoring the service: server logs and the controller app's error reports</td>
 				<td>Falkenstein, Germany</td>
 			</tr>
 		</tbody>
