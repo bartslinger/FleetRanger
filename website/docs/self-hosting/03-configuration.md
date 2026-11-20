@@ -6,7 +6,7 @@ FleetRanger reads its configuration from `.env`, next to `compose.yaml`. After a
 
 | Setting                                               | What it is                                                                                            |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `FLEETRANGER_VERSION`                                 | The release to run, such as `v0.20.0`.                                                                |
+| `FLEETRANGER_VERSION`                                 | The release to run, such as `v0.20.1`.                                                                |
 | `FLEETRANGER_DATA_DIR`                                | Where the database, the flight logs and the controller app are kept.                                  |
 | `FLEETRANGER_PUBLIC_URL`                              | The address users open, such as `https://fleet.example.org`.                                          |
 | `POSTGRES_PASSWORD`, `POSTGRES_APP_PASSWORD`          | Long random values, such as from `openssl rand -hex 32`.                                              |

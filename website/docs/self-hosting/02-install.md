@@ -1,14 +1,14 @@
 # Install
 
-These steps install a release, here v0.20.0; take the latest from the [releases](https://github.com/bartslinger/FleetRanger/releases).
+These steps install a release, here v0.20.1; take the latest from the [releases](https://github.com/bartslinger/FleetRanger/releases).
 
 ## The containers
 
 In `/srv/fleetranger`, fetch the release's compose file and configuration template:
 
 ```
-curl -fLO https://raw.githubusercontent.com/bartslinger/FleetRanger/v0.20.0/deploy/compose.yaml
-curl -fL -o .env https://raw.githubusercontent.com/bartslinger/FleetRanger/v0.20.0/deploy/.env.example
+curl -fLO https://raw.githubusercontent.com/bartslinger/FleetRanger/v0.20.1/deploy/compose.yaml
+curl -fL -o .env https://raw.githubusercontent.com/bartslinger/FleetRanger/v0.20.1/deploy/.env.example
 ```
 
 Fill in `.env`, as [Configuration](03-configuration.md) describes. Then create the data directory (`FLEETRANGER_DATA_DIR`, `/srv/fleetranger/data` by default), owned by the user the backend runs as (`FLEETRANGER_UID` and `FLEETRANGER_GID`), and start FleetRanger:
