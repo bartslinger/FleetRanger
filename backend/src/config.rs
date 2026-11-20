@@ -47,6 +47,9 @@ pub struct Config {
     /// The Sentry DSN the controller app sends its error reports to
     /// (`FLEETRANGER_ERROR_REPORTS`); none by default.
     pub error_reports: Option<Url>,
+    /// Whom pilots contact when the controller app can't get at the flight
+    /// logs (`FLEETRANGER_SUPPORT_EMAIL`); none by default.
+    pub support_email: Option<String>,
 }
 
 /// Self-service sign-up.
@@ -106,6 +109,13 @@ impl Config {
             .map(|dsn| Url::parse(&dsn))
             .transpose()
             .context("FLEETRANGER_ERROR_REPORTS is not a valid DSN")?;
+        let support_email = non_empty_var("FLEETRANGER_SUPPORT_EMAIL");
+        if let Some(email) = &support_email {
+            anyhow::ensure!(
+                email.contains('@') && !email.contains(char::is_whitespace),
+                "FLEETRANGER_SUPPORT_EMAIL is not an email address"
+            );
+        }
         let mcp = switch("FLEETRANGER_MCP")?;
         let api = switch("FLEETRANGER_API")?;
         let multi_tenant = switch("FLEETRANGER_MULTI_TENANT")?;
@@ -151,6 +161,7 @@ impl Config {
             multi_tenant,
             signup,
             error_reports,
+            support_email,
         })
     }
 }

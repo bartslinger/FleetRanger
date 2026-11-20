@@ -31,7 +31,7 @@ where
     S: Clone + Send + Sync + 'static,
     crate::db::System: FromRef<S>,
     crate::db::Tenants: FromRef<S>,
-    ErrorReports: FromRef<S>,
+    ControllerSettings: FromRef<S>,
 {
     // The controller's API, see "Clients" in docs/architecture.md.
     let v1 = Router::new()
@@ -147,14 +147,22 @@ async fn pilots_v0(controller: Controller, mut db: Db) -> ApiResult<Json<PilotLi
     Ok(Json(service::pilots_v0(&mut db, &controller).await?))
 }
 
-/// Where the controller app sends its error reports: a Sentry DSN
-/// (`FLEETRANGER_ERROR_REPORTS`); none by default, so the app sends none.
+/// What the install tells its controllers, the same for all of them.
 #[derive(Clone)]
-pub struct ErrorReports(pub Option<Arc<str>>);
+pub struct ControllerSettings {
+    /// Where the controller app sends its error reports: a Sentry DSN
+    /// (`FLEETRANGER_ERROR_REPORTS`); none by default, so the app sends none.
+    pub error_reports: Option<Arc<str>>,
+    /// Whom pilots contact when the app can't get at the flight logs
+    /// (`FLEETRANGER_SUPPORT_EMAIL`); without it the app says to ask whoever
+    /// set up FleetRanger.
+    pub support: Option<Arc<str>>,
+}
 
 #[derive(Serialize)]
 struct Settings {
     error_reports: Option<Arc<str>>,
+    support: Option<Arc<str>>,
     /// The controller's id, which its error reports carry: in the error
     /// tracker it says nothing, here it leads to the controller and its
     /// organisation.
@@ -165,10 +173,11 @@ struct Settings {
 /// and daily.
 async fn settings(
     controller: Controller,
-    State(ErrorReports(error_reports)): State<ErrorReports>,
+    State(settings): State<ControllerSettings>,
 ) -> Json<Settings> {
     Json(Settings {
-        error_reports,
+        error_reports: settings.error_reports,
+        support: settings.support,
         controller: controller.id,
     })
 }
