@@ -41,8 +41,15 @@ pub async fn add(db: &mut PgConnection, email: &str, name: &str, admin: bool) ->
         email: Some(&email),
         invited_by: None,
     };
-    if let Err(limit) = db::insert(db, &fields).await? {
-        bail!("{} (see set-organisation --plan)", limit.message());
+    let id = match db::insert(db, &fields).await? {
+        Ok(id) => id,
+        Err(limit) => bail!("{} (see set-organisation --plan)", limit.message()),
+    };
+    // The organisation's first admin usually flies too, so they're in the
+    // controller app's pilot list at once, as whoever signs up is (user's
+    // decision, 2026-11-20).
+    if admin {
+        db::pilot_if_first(db, id).await?;
     }
     tracing::info!(
         email,
