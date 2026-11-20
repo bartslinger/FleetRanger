@@ -8,6 +8,8 @@ As on [Sessions](03-sessions.md), choose **Cards** or **Table** at the top right
 
 Select a flight to open it: its pilot, times, air time, distance, the drone, controller and battery it used, and its track on the map.
 
+An open flight has the same bar as an open session: the arrows go to the earlier or later flight, and **✕** goes back to the list.
+
 ## Organise flights
 
 In the **Table** view, select flights with the checkboxes, then choose **New session**, **Add to session**, or an action from the menu beside them, such as **Set pilot**.

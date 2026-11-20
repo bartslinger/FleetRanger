@@ -12,6 +12,14 @@ Choose **Cards** or **Table** at the top right. Cards show a week or a month bes
 
 Select a session to open it: its times, air time and distance, a map of the tracks, and its flights. Select a flight to open it in [Flights](04-flights.md).
 
+The bar above its figures moves you on:
+
+![The bar of an open session: arrows left and right, the date, 13 of 16 · October 2026, and a close button.](images/session-navigation.webp)
+
+- The arrows go to the previous and next session, keeping your filters, also into other weeks or months.
+- Below the date, **13 of 16** says which session of the period this is.
+- **✕** closes the session and takes you back to the list.
+
 ## Change a session
 
 Editors and admins can change a session:
