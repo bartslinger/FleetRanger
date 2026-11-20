@@ -32,6 +32,10 @@ object ErrorReports {
         SentryAndroid.init(context) { options ->
             options.dsn = dsn
             // Personal data (user, IP address) stays off: the SDK's default.
+            // It would still name an installation id as the user, and send
+            // sessions with it: neither, as the controller tag says enough.
+            options.isEnableAutoSessionTracking = false
+            options.setBeforeSend { event, _ -> event.apply { user = null } }
             options.release = "org.fleetranger.rc@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
             options.environment = if (BuildConfig.DEBUG) "debug" else "release"
             options.setTag("controller", controller)
@@ -61,10 +65,28 @@ object ErrorReports {
     /** Whom pilots contact about the flight logs, as the server said; null: nobody named. */
     fun support(context: Context): String? = prefs(context).getString("support", null)
 
+    /** Errors reported since the app started, so one that persists goes once, not every scan. */
+    private val reported = mutableSetOf<String>()
+
     /** An error the app caught but didn't expect; network trouble isn't one. */
     fun report(error: Throwable) {
         if (error is IOException) return
-        if (Sentry.isEnabled()) Sentry.captureException(error)
+        if (!Sentry.isEnabled()) return
+        val where = error.stackTrace.firstOrNull()
+        if (!reported.add("${error.javaClass.name} $where")) return
+        Sentry.captureException(error)
+    }
+
+    /**
+     * The controller unpaired, paired again or moved to another server: the
+     * old server's settings no longer apply, so reporting stops and the new
+     * server's settings are fetched on the next scan.
+     */
+    fun forget(context: Context) {
+        fetchedAt = 0L
+        reported.clear()
+        prefs(context).edit().clear().apply()
+        if (Sentry.isEnabled()) Sentry.close()
     }
 
     /**

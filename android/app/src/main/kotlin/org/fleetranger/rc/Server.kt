@@ -34,12 +34,17 @@ class Server(private val context: Context) {
         set(value) {
             if (value == url) return
             prefs.edit().putString("url", value).remove("token").putBoolean("paired", false).apply()
+            ErrorReports.forget(context)
         }
 
     /** Whether this controller is paired, as last checked. */
     var paired: Boolean
         get() = prefs.getBoolean("paired", false)
-        private set(value) = prefs.edit().putBoolean("paired", value).apply()
+        private set(value) {
+            prefs.edit().putBoolean("paired", value).apply()
+            // Unpaired by the server: its settings no longer apply.
+            if (!value) ErrorReports.forget(context)
+        }
 
     private val token: String?
         get() = prefs.getString("token", null)
@@ -65,6 +70,7 @@ class Server(private val context: Context) {
     fun pair(code: String): String? {
         val token = newToken()
         prefs.edit().putString("token", token).putBoolean("paired", false).remove("last_sync").apply()
+        ErrorReports.forget(context)
         val body = JSONObject()
             .put("code", code)
             .put("serial", serial())
@@ -204,6 +210,7 @@ class Server(private val context: Context) {
             call("DELETE", "$API/pairing")
         } finally {
             prefs.edit().remove("token").putBoolean("paired", false).apply()
+            ErrorReports.forget(context)
         }
     }
 

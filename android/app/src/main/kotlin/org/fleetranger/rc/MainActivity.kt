@@ -40,6 +40,8 @@ class MainActivity : ComponentActivity() {
     private var logsNotice by mutableStateOf<LogsNotice?>(null)
     /** A search found the logs: say so until the app is left. */
     private var foundBySearch = false
+    /** Searches started, so a look at the folders older than a search is dropped. */
+    private var searches = 0
     private var pilotList by mutableStateOf(PilotList.EMPTY)
     private var last by mutableStateOf<Choice?>(null)
     private lateinit var sync: SyncSettings
@@ -247,13 +249,13 @@ class MainActivity : ComponentActivity() {
         setUp(intent)
     }
 
-    // Again on every return, e.g. from the settings or from DJI Pilot 2.
     /** Looks whether the app gets at the logs, for the main screen's notice. */
     private fun refreshLogsNotice() {
         if (!paired || !hasLogAccess) {
             logsNotice = null
             return
         }
+        val searchesBefore = searches
         lifecycleScope.launch {
             val check = withContext(Dispatchers.IO) { FlightLogs(this@MainActivity).check() }
             val searching = when (val shown = logsNotice) {
@@ -261,7 +263,8 @@ class MainActivity : ComponentActivity() {
                 is LogsNotice.NothingFound -> shown.searching
                 else -> false
             }
-            if (searching) return@launch
+            // A search started meanwhile: its result counts, not this older look.
+            if (searching || searches != searchesBefore) return@launch
             logsNotice = if (foundBySearch && check.access == FlightLogs.Access.Found) {
                 LogsNotice.Found
             } else {
@@ -272,6 +275,7 @@ class MainActivity : ComponentActivity() {
 
     /** The pilot asked to search the controller for the logs. */
     private fun searchLogs() {
+        searches++
         logsNotice = when (val shown = logsNotice) {
             is LogsNotice.NothingFound -> shown.copy(searching = true)
             else -> LogsNotice.NotFound(searching = true)
@@ -293,6 +297,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Again on every return, e.g. from the settings or from DJI Pilot 2.
     override fun onResume() {
         super.onResume()
         opensAtStartup = DjiPilot.opensAtStartup(this)
