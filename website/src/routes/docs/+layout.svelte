@@ -46,7 +46,7 @@
 				{@render list()}
 			</nav>
 			<details class="narrow">
-				<summary>{current?.title ?? 'Documentation'}<Icon icon={ChevronDown} /></summary>
+				<summary>Documentation<Icon icon={ChevronDown} /></summary>
 				<nav aria-label="Documentation">
 					{@render list()}
 				</nav>
@@ -79,16 +79,25 @@
 		}
 	}
 
+	/* A section: Carbon's side nav sub-menu, always open, so a heading rather
+	   than a button; in primary text, as it isn't one to press. */
 	.heading {
-		padding: var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-spacing-03);
-		color: var(--cds-text-secondary);
-		font-size: var(--cds-label-01-font-size);
-		line-height: var(--cds-label-01-line-height);
-		letter-spacing: var(--cds-label-01-letter-spacing);
+		display: flex;
+		align-items: center;
+		min-height: var(--cds-spacing-08);
+		padding-inline: var(--cds-spacing-05);
+		color: var(--cds-text-primary);
+		font-size: var(--cds-heading-compact-01-font-size);
+		font-weight: var(--cds-heading-compact-01-font-weight);
+		line-height: var(--cds-heading-compact-01-line-height);
+		letter-spacing: var(--cds-heading-compact-01-letter-spacing);
 	}
 
-	.heading:first-child {
-		padding-top: 0;
+	/* Carbon's side nav divider between the sections. */
+	ul + .heading {
+		margin-top: var(--cds-spacing-03);
+		padding-top: var(--cds-spacing-03);
+		border-top: 1px solid var(--cds-border-subtle);
 	}
 
 	ul {
@@ -97,14 +106,14 @@
 		list-style: none;
 	}
 
-	/* The left panel's links: 32px, secondary text; the current page selected,
-	   with Carbon's marker at its start. */
+	/* The sub-menu's items: 32px, indented under their section, secondary text;
+	   the current page selected, with Carbon's 4px marker at its start. */
 	a {
 		display: flex;
 		align-items: center;
 		min-height: var(--cds-spacing-08);
-		padding-inline: var(--cds-spacing-05);
-		border-inline-start: 3px solid transparent;
+		padding-inline: calc(var(--cds-spacing-07) - 4px) var(--cds-spacing-05);
+		border-inline-start: 4px solid transparent;
 		color: var(--cds-text-secondary);
 		font-size: var(--cds-body-compact-01-font-size);
 		line-height: var(--cds-body-compact-01-line-height);
@@ -115,6 +124,10 @@
 	a:hover {
 		background: var(--cds-background-hover);
 		color: var(--cds-text-primary);
+	}
+
+	a:active {
+		background: var(--cds-background-active);
 	}
 
 	a[aria-current='page'] {
@@ -138,6 +151,7 @@
 	summary {
 		display: flex;
 		align-items: center;
+		background: var(--cds-layer-01);
 		justify-content: space-between;
 		min-height: var(--cds-size-large);
 		padding-inline: var(--cds-spacing-05);

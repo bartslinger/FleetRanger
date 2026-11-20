@@ -153,7 +153,7 @@
 	   button. */
 	.prose :global(:not(pre) > code) {
 		padding-inline: var(--cds-spacing-02);
-		border-radius: 2px;
+		border-radius: 4px;
 		background: var(--cds-field-01);
 		white-space: nowrap;
 	}
@@ -161,7 +161,7 @@
 	/* A note beside the text, as `> **Note:** …` in Markdown. */
 	.prose :global(blockquote) {
 		padding: var(--cds-spacing-05);
-		border-inline-start: 3px solid var(--cds-border-interactive);
+		border-inline-start: 3px solid var(--cds-support-info);
 		background: var(--cds-layer-01);
 	}
 
