@@ -68,9 +68,47 @@
 	</Grid>
 </section>
 
+<section class="ai" aria-labelledby="ai-title">
+	<Grid centered rowGap>
+		<Column><div class="rule"></div></Column>
+		<Column md={3} lg={4}>
+			<h2 id="ai-title">Built with AI</h2>
+		</Column>
+		<Column md={5} lg={8}>
+			<p class="text">
+				I build FleetRanger with AI, and I think that's worth being open about. AI can move super
+				fast, but give it one prompt and you get the typical AI slop. My approach is to keep
+				steering it in the right direction along the way, from the backend architecture to the user
+				interface. That way all that power works for me, and the result is what I actually wanted.
+				Only now it takes me days instead of months.
+			</p>
+		</Column>
+	</Grid>
+</section>
+
 <style>
 	section {
-		padding-block: var(--cds-spacing-09) var(--cds-spacing-10);
+		padding-block: var(--cds-spacing-09);
+	}
+
+	section.ai {
+		padding-bottom: var(--cds-spacing-10);
+	}
+
+	/* The section starts at a thin rule above its heading, as on the home page. */
+	.rule {
+		border-top: 1px solid var(--cds-border-subtle-00);
+	}
+
+	.ai h2 {
+		font-size: var(--cds-fluid-heading-04-font-size);
+		font-weight: var(--cds-fluid-heading-04-font-weight);
+		line-height: var(--cds-fluid-heading-04-line-height);
+		letter-spacing: var(--cds-fluid-heading-04-letter-spacing);
+	}
+
+	.ai p {
+		margin-top: 0;
 	}
 
 	h1 {
