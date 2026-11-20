@@ -12,7 +12,7 @@ Status: `[ ]` todo, `[~]` in progress, `[x]` done.
 
 **Next:** numbers at takeoffs and landings, and perhaps a colour per pilot (teal 50 a candidate second colour).
 
-**Public website** (fleetranger.org): the landing page is done and is being published on GitHub Pages; what's left is enabling Pages with the custom domain and the DNS records.
+**Public website** (fleetranger.org): the landing page and the legal texts are published on GitHub Pages. Now (2026-11-20): documentation for users and for self-hosters on the site, and release images on ghcr.io for self-hosters.
 
 Everyone is a user, with roles in groups (and Admin on the whole organisation) and an optional login; admins manage users, groups and equipment in the web app. Sessions are the start page; the logbook of all flights is under "Flights", which sets the pilot, group and session of flights in batches. Uploaded and imported flights join a session by themselves (per pilot, or controller when there is no pilot, and group, however late they come in); the rest are grouped by hand or from suggested sessions to review. The remote controller app runs on a DJI RC Pro Enterprise: it pairs with a code from the web app, asks who's flying and for which group, opens DJI Pilot 2 and uploads the finished logs the server lacks. The audit log waits until there is a working version of the app.
 
@@ -106,6 +106,11 @@ Each package leaves a working app with its tests passing. Groups are added besid
 - [x] Landing page: what FleetRanger does, for whom, self-hosted, source and contact
 - [x] Static build reusing the web app's components
 - [~] Hosting on GitHub Pages, built by a GitHub Action from main
+- [ ] Documentation pages from Markdown in `website/docs/` (2026-11-20)
+- [ ] User documentation
+- [ ] Self-hosting documentation
+- [ ] Release images published to ghcr.io, for self-hosters
+- [ ] A way to keep the documentation current (user, 2026-11-20: later)
 
 ## MCP (AI assistants)
 
