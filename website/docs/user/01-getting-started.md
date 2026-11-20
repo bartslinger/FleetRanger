@@ -2,7 +2,7 @@
 
 These steps get your first flight into FleetRanger: put the app on your DJI remote controller, pair it, and fly.
 
-Until your organisation has its first flight, FleetRanger opens on **Equipment** with these steps.
+Until your organisation has its first flight, FleetRanger opens on **Equipment** for admins, with these steps.
 
 ![Equipment for a new organisation: Start by pairing a controller, three steps and the Pair a controller button.](images/start-steps.webp)
 
@@ -36,7 +36,7 @@ Until your organisation has its first flight, FleetRanger opens on **Equipment**
 
 ## Open FleetRanger at startup
 
-So that pilots always start in FleetRanger, select **Open Android settings** in the app and choose **FleetRanger**:
+So that pilots always start in FleetRanger, select **Open Android settings** in the notice on **Who's flying?**, and choose **FleetRanger**:
 
 ![Android's Auto start application selection, with FleetRanger chosen.](images/controller-autostart.webp)
 

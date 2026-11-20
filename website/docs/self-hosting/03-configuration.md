@@ -15,16 +15,16 @@ FleetRanger reads its configuration from `.env`, next to `compose.yaml`. After a
 
 ## Optional
 
-| Setting                              | What it is                                                                                                                                |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `FLEETRANGER_UID`, `FLEETRANGER_GID` | The owner of the flight log directory, which the backend runs as. 65532 by default.                                                       |
-| `MAPBOX_ACCESS_TOKEN`                | A public Mapbox token, for the maps.                                                                                                      |
-| `FLEETRANGER_SUPPORT_EMAIL`          | Whom pilots contact when the controller app can't find the flight logs.                                                                   |
-| `FLEETRANGER_ERROR_REPORTS`          | A Sentry DSN that controllers send their crashes and errors to. None by default.                                                          |
-| `FLEETRANGER_MCP`                    | `on` lets AI assistants read summaries of flights and sessions, as the user they act for. Off by default, and then also per organisation. |
-| `FLEETRANGER_API`                    | `on` opens the public API at `/api/v1` to apps an admin trusts. Off by default.                                                           |
-| `FLEETRANGER_S3_BUCKET`              | Keep the raw logs in an S3 bucket instead of the data directory, with the usual `AWS_*` settings.                                         |
-| `RUST_LOG`                           | The backend's log level, `info` by default.                                                                                               |
+| Setting                              | What it is                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `FLEETRANGER_UID`, `FLEETRANGER_GID` | The owner of the flight log directory, which the backend runs as. 65532 by default.                                                                                                  |
+| `MAPBOX_ACCESS_TOKEN`                | A public Mapbox token, for the maps.                                                                                                                                                 |
+| `FLEETRANGER_SUPPORT_EMAIL`          | Whom pilots contact when the controller app can't find the flight logs.                                                                                                              |
+| `FLEETRANGER_ERROR_REPORTS`          | A Sentry DSN that controllers send their crashes and errors to. None by default.                                                                                                     |
+| `FLEETRANGER_MCP`                    | `on` lets AI assistants read summaries of flights and sessions, as the user they act for. Off by default, and then also per organisation.                                            |
+| `FLEETRANGER_API`                    | `on` opens the public API at `/api/v1` to apps an admin trusts. Off by default.                                                                                                      |
+| `FLEETRANGER_S3_BUCKET`              | Keep the raw logs in an S3 bucket instead of the data directory, with `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and, for another provider than AWS, `AWS_ENDPOINT`. |
+| `RUST_LOG`                           | The backend's log level, `info` by default.                                                                                                                                          |
 
 ## Organisation settings
 

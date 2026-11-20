@@ -70,7 +70,7 @@ services:
       # through), and `import` registers logs copied here before.
       - ${FLEETRANGER_DATA_DIR}/flightlogs:/data/flightlogs
       # The Android app offered on the download page: FleetRanger.apk and its
-      # output-metadata.json, from android/release.sh.
+      # FleetRanger.json, from a GitHub release android-vX.Y.Z.
       - ${FLEETRANGER_DATA_DIR}/android:/data/android:ro
     ports:
       - 127.0.0.1:8080:8080

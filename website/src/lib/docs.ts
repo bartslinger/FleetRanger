@@ -45,7 +45,7 @@ const images = import.meta.glob<string>('/docs/*/images/*.{png,webp}', {
 	eager: true
 });
 
-const LINK = /^(?:\.\.\/([a-z-]+)\/)?\d+-([a-z0-9-]+)\.md(#[a-z0-9-]+)?$/;
+const LINK = /^(?:\.\.\/([a-z-]+)\/)?(\d+-([a-z0-9-]+)\.md)(#[a-z0-9-]+)?$/;
 
 /** A heading's anchor: its text in lower case, words joined by dashes. */
 function anchor(text: string): string {
@@ -84,7 +84,12 @@ function render(section: string, markdown: string): string {
 				const text = this.parser.parseInline(tokens);
 				const page = LINK.exec(href);
 				if (page) {
-					href = `/docs/${page[1] ?? section}/${page[2]}${page[3] ?? ''}`;
+					// The file itself, so the link also works on GitHub.
+					const target = page[1] ?? section;
+					if (!files[`/docs/${target}/${page[2]}`]) {
+						throw new Error(`docs/${section}: no page ${href}`);
+					}
+					href = `/docs/${target}/${page[3]}${page[4] ?? ''}`;
 				}
 				return `<a href="${href}">${text}</a>`;
 			}

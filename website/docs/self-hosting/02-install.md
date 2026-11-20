@@ -4,14 +4,14 @@ These steps install a release, here v0.20.0; take the latest from the [releases]
 
 ## The containers
 
-In a directory of your choice, such as `/srv/fleetranger`, fetch the release's compose file and configuration template:
+In `/srv/fleetranger`, fetch the release's compose file and configuration template:
 
 ```
-curl -LO https://raw.githubusercontent.com/bartslinger/FleetRanger/v0.20.0/deploy/compose.yaml
-curl -L -o .env https://raw.githubusercontent.com/bartslinger/FleetRanger/v0.20.0/deploy/.env.example
+curl -fLO https://raw.githubusercontent.com/bartslinger/FleetRanger/v0.20.0/deploy/compose.yaml
+curl -fL -o .env https://raw.githubusercontent.com/bartslinger/FleetRanger/v0.20.0/deploy/.env.example
 ```
 
-Fill in `.env`, as [Configuration](03-configuration.md) describes. Then create the data directory, owned by the user the backend runs as (`FLEETRANGER_UID` and `FLEETRANGER_GID`), and start FleetRanger:
+Fill in `.env`, as [Configuration](03-configuration.md) describes. Then create the data directory (`FLEETRANGER_DATA_DIR`, `/srv/fleetranger/data` by default), owned by the user the backend runs as (`FLEETRANGER_UID` and `FLEETRANGER_GID`), and start FleetRanger:
 
 ```
 mkdir -p data/flightlogs data/android
@@ -23,7 +23,7 @@ The backend creates the database tables on its first start, and updates them on 
 
 ## HTTPS
 
-FleetRanger's containers listen on localhost only: the backend on port 8080 and the web app on port 3000. A reverse proxy on the host terminates HTTPS and passes requests on. [deploy/nginx.conf](https://github.com/bartslinger/FleetRanger/blob/main/deploy/nginx.conf) is the nginx configuration we run ourselves; set your domain and certificate paths in it.
+FleetRanger's containers listen on localhost only: the backend on port 8080 and the web app on port 3000. A reverse proxy on the host terminates HTTPS and passes requests on. [deploy/nginx.conf](https://github.com/bartslinger/FleetRanger/blob/main/deploy/nginx.conf) is the nginx configuration we run ourselves; set your domain and certificate paths in it. Leave out its `http2 off;` line on nginx older than 1.25.1.
 
 Another proxy works as well, as long as it does what that file does:
 
@@ -42,4 +42,4 @@ docker compose exec backend fleetranger add-organisation "Example Drones" --time
 docker compose exec backend fleetranger add-user --admin pilot@example.org "Alex Example"
 ```
 
-Then open your address and log in. Everything else, such as other users, groups and equipment, is set up in the web app; see [Getting started](../user/01-getting-started.md).
+Then open your address, log in, and accept the invitation. Everything else, such as other users, groups and equipment, is set up in the web app; see [Getting started](../user/01-getting-started.md).

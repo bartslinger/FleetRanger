@@ -7,10 +7,10 @@
 Select **New user** and fill in:
 
 - **Name**: as it appears in lists and on the controller.
-- **Email**: the address they log in with. Leave it empty for a pilot who only flies.
-- **Roles**: what they may do. A pilot needs **Pilot** to appear on the controller. See [Roles](06-groups.md#roles).
+- **Email (optional)**: the address they log in with. Leave it empty for a pilot who only flies.
+- **FleetRanger roles**: what they may do. A pilot needs **Pilot** to appear on the controller. See [Roles](06-groups.md#roles).
 
-Select **Create**, and let the person know they can log in.
+Select **Create**, and let the person know they can log in. The first time, they accept the invitation.
 
 ## Change or remove a user
 
