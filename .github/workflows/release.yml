@@ -1,0 +1,92 @@
+# Builds a server release's images for x86_64 and arm64 and publishes them on
+# ghcr.io, for self-hosters, when a vX.Y.Z tag is pushed. Both images are
+# pushed by digest first and tagged only once both are built, so a failed
+# build publishes nothing and can run again. Each gets the version's tag,
+# which never moves (a version already published is refused, and so is any
+# answer from the registry other than "not found"), and latest when it is the
+# highest version. Then it opens a draft GitHub release listing the digests.
+# Actions are pinned by commit; the comment names the version.
+
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+  packages: write
+
+# One run per tag at a time, so two can't both pass the check.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    env:
+      IMAGES: ghcr.io/bartslinger/fleetranger
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The other tags, to tell whether this is the highest version.
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse a version already published
+        run: |
+          for part in backend web; do
+            if out=$(docker buildx imagetools inspect "$IMAGES-$part:$GITHUB_REF_NAME" 2>&1); then
+              echo "$IMAGES-$part:$GITHUB_REF_NAME exists already; a version's images never change" >&2
+              exit 1
+            fi
+            # A package that doesn't exist yet may answer "denied" rather than
+            # "not found"; the push needs the same access, so that is safe.
+            case $out in
+              *"not found"* | *denied*) ;;
+              *) echo "can't tell whether $IMAGES-$part:$GITHUB_REF_NAME exists: $out" >&2; exit 1 ;;
+            esac
+          done
+      # The stages that compile do so on the runner's own architecture for
+      # both targets; the final stages only copy, so nothing is emulated.
+      - id: backend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          platforms: linux/amd64,linux/arm64
+          outputs: type=image,name=${{ env.IMAGES }}-backend,push-by-digest=true,name-canonical=true,push=true
+      - id: web
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: web
+          platforms: linux/amd64,linux/arm64
+          outputs: type=image,name=${{ env.IMAGES }}-web,push-by-digest=true,name-canonical=true,push=true
+      - name: Tag the images
+        env:
+          BACKEND: ${{ steps.backend.outputs.digest }}
+          WEB: ${{ steps.web.outputs.digest }}
+        run: |
+          highest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)
+          for part in backend web; do
+            digest=$BACKEND
+            [ "$part" = web ] && digest=$WEB
+            tags="-t $IMAGES-$part:$GITHUB_REF_NAME"
+            [ "$highest" = "$GITHUB_REF_NAME" ] && tags="$tags -t $IMAGES-$part:latest"
+            docker buildx imagetools create $tags "$IMAGES-$part@$digest"
+          done
+      - name: Draft the release with the digests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BACKEND: ${{ steps.backend.outputs.digest }}
+          WEB: ${{ steps.web.outputs.digest }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "$GITHUB_REF_NAME" --notes "Images:
+
+          - $IMAGES-backend:$GITHUB_REF_NAME@$BACKEND
+          - $IMAGES-web:$GITHUB_REF_NAME@$WEB"

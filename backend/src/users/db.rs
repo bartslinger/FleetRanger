@@ -172,6 +172,22 @@ async fn lock_active_admins(db: &mut PgConnection) -> sqlx::Result<Vec<Uuid>> {
     .await
 }
 
+/// Makes the user Pilot in the organisation's first group, if they are its only
+/// user.
+pub async fn pilot_if_first(db: &mut PgConnection, id: Uuid) -> sqlx::Result<()> {
+    sqlx::query!(
+        "insert into group_members (group_id, user_id, role)
+         select g.id, $1, 'pilot' from groups g
+         where not exists (select 1 from users u where u.id <> $1)
+         order by g.created_at, g.id
+         limit 1",
+        id,
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Makes these the user's roles on the whole organisation.
 async fn set_roles(db: &mut PgConnection, id: Uuid, roles: &[String]) -> sqlx::Result<()> {
     sqlx::query!(

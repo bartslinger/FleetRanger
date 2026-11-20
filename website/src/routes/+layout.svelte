@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '$ui/base.css';
+	import { page } from '$app/state';
 	import Asleep from '@carbon/icons/es/asleep/20.js';
 	import Launch from '@carbon/icons/es/launch/16.js';
 	import Light from '@carbon/icons/es/light/20.js';
@@ -25,8 +26,11 @@
 <header class="theme-dark">
 	<a class="name" href="/"><img src={logo} alt="" width="20" height="20" />FleetRanger</a>
 	<nav aria-label="Sections">
-		<a href="/#how-it-works">How it works</a>
-		<a href="/#features">Features</a>
+		<a class="section" href="/#how-it-works">How it works</a>
+		<a class="section" href="/#features">Features</a>
+		<a href="/docs" aria-current={page.url.pathname.startsWith('/docs') ? 'true' : undefined}
+			>Docs</a
+		>
 	</nav>
 	<!-- Carbon's header action with a panel, as the app's profile panel: the
 	     theme choice, with the chosen one's icon on the button. The browser's
@@ -138,14 +142,18 @@
 		align-items: center;
 	}
 
-	/* Tighter on phones so the links fit beside the name, and left out where
-	   they don't: the sections follow each other on the one page. */
+	/* Tighter on phones so the links fit beside the name. Where they don't,
+	   only Docs stays: the landing page's sections follow each other anyway. */
 	nav {
+		display: flex;
+	}
+
+	nav a.section {
 		display: none;
 	}
 
 	@media (min-width: 30rem) {
-		nav {
+		nav a.section {
 			display: flex;
 		}
 	}
@@ -153,6 +161,12 @@
 	nav a {
 		padding-inline: var(--cds-spacing-03);
 		white-space: nowrap;
+	}
+
+	/* The section the page is in: Carbon's selected header link. */
+	nav a[aria-current] {
+		box-shadow: inset 0 -2px 0 var(--cds-border-interactive);
+		color: var(--cds-text-primary);
 	}
 
 	@media (min-width: 42rem) {

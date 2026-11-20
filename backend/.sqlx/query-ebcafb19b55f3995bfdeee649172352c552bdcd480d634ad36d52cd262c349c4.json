@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into group_members (group_id, user_id, role)\n         select g.id, $1, 'pilot' from groups g\n         where not exists (select 1 from users u where u.id <> $1)\n         order by g.created_at, g.id\n         limit 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ebcafb19b55f3995bfdeee649172352c552bdcd480d634ad36d52cd262c349c4"
+}

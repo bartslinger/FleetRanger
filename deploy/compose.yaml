@@ -25,9 +25,7 @@ services:
       retries: 10
 
   backend:
-    image: fleetranger-backend:${FLEETRANGER_VERSION:?}
-    # Loaded onto the server by ship-image.sh; never fetched from a registry.
-    pull_policy: never
+    image: ghcr.io/bartslinger/fleetranger-backend:${FLEETRANGER_VERSION:?}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -72,14 +70,13 @@ services:
       # through), and `import` registers logs copied here before.
       - ${FLEETRANGER_DATA_DIR}/flightlogs:/data/flightlogs
       # The Android app offered on the download page: FleetRanger.apk and its
-      # output-metadata.json, from android/release.sh.
+      # FleetRanger.json, from a GitHub release android-vX.Y.Z.
       - ${FLEETRANGER_DATA_DIR}/android:/data/android:ro
     ports:
       - 127.0.0.1:8080:8080
 
   web:
-    image: fleetranger-web:${FLEETRANGER_VERSION:?}
-    pull_policy: never
+    image: ghcr.io/bartslinger/fleetranger-web:${FLEETRANGER_VERSION:?}
     restart: unless-stopped
     depends_on:
       - backend
