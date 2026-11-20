@@ -44,6 +44,9 @@ pub struct Config {
     /// (`FLEETRANGER_SIGNUP=on`), as on the hosted service; off by default.
     /// Needs `FLEETRANGER_MULTI_TENANT=on`.
     pub signup: Option<Signup>,
+    /// The Sentry DSN the controller app sends its error reports to
+    /// (`FLEETRANGER_ERROR_REPORTS`); none by default.
+    pub error_reports: Option<Url>,
 }
 
 /// Self-service sign-up.
@@ -99,6 +102,10 @@ impl Config {
             }),
             None => None,
         };
+        let error_reports = non_empty_var("FLEETRANGER_ERROR_REPORTS")
+            .map(|dsn| Url::parse(&dsn))
+            .transpose()
+            .context("FLEETRANGER_ERROR_REPORTS is not a valid DSN")?;
         let mcp = switch("FLEETRANGER_MCP")?;
         let api = switch("FLEETRANGER_API")?;
         let multi_tenant = switch("FLEETRANGER_MULTI_TENANT")?;
@@ -143,6 +150,7 @@ impl Config {
             api,
             multi_tenant,
             signup,
+            error_reports,
         })
     }
 }

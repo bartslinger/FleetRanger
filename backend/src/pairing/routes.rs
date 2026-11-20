@@ -9,6 +9,8 @@ use axum::{
     middleware,
     routing::{delete, get, post, put},
 };
+use std::sync::Arc;
+
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -29,12 +31,14 @@ where
     S: Clone + Send + Sync + 'static,
     crate::db::System: FromRef<S>,
     crate::db::Tenants: FromRef<S>,
+    ErrorReports: FromRef<S>,
 {
     // The controller's API, see "Clients" in docs/architecture.md.
     let v1 = Router::new()
         .route("/api/controller/v1/pairing", post(pair).delete(unpair_self))
         .route("/api/controller/v1/pilots", get(pilots))
         .route("/api/controller/v1/status", put(status))
+        .route("/api/controller/v1/settings", get(settings))
         .route_layer(middleware::from_fn(super::v1_errors));
     // What android-v0.3.0 calls, until no controller reports it.
     let v0 = Router::new()
@@ -141,6 +145,25 @@ async fn pilots(controller: Controller, mut db: Db) -> ApiResult<Json<Pilots>> {
 
 async fn pilots_v0(controller: Controller, mut db: Db) -> ApiResult<Json<PilotList>> {
     Ok(Json(service::pilots_v0(&mut db, &controller).await?))
+}
+
+/// Where the controller app sends its error reports: a Sentry DSN
+/// (`FLEETRANGER_ERROR_REPORTS`); none by default, so the app sends none.
+#[derive(Clone)]
+pub struct ErrorReports(pub Option<Arc<str>>);
+
+#[derive(Serialize)]
+struct Settings {
+    error_reports: Option<Arc<str>>,
+}
+
+/// What this install asks of its controllers; the app fetches it at start
+/// and daily.
+async fn settings(
+    _controller: Controller,
+    State(ErrorReports(error_reports)): State<ErrorReports>,
+) -> Json<Settings> {
+    Json(Settings { error_reports })
 }
 
 /// How far ahead of the server's clock a controller's may be, my choice: a
