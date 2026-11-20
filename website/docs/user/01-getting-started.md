@@ -57,7 +57,9 @@ The app's main screen asks **Who's flying?** The first time, it lists every pilo
 
 The pilot then shows on a big tile, with **Other pilot** beside it for someone else. Select the tile to open DJI Pilot 2. If the pilot flies for several groups, the tile first leads to **Log flights under**, where you select the group the same way. Next time, the last pilot is already on the tile, so the same pilot again is one tap. See [Controller app](02-controller-app.md) for the rest of the app.
 
-> **Note:** If the app shows **FleetRanger doesn't open at startup**, select **Open Android settings** and choose FleetRanger there, so the app opens when the controller switches on.
+**Open Android settings**, in the notice at the top, leads to this setting. Choose **FleetRanger**:
+
+![Android's Auto start application selection, with FleetRanger among the apps.](images/controller-autostart.webp)
 
 ## Fly
 
